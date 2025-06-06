@@ -15,6 +15,8 @@ import java.util.stream.Collectors;
 
 /**
  * Enum that contains all event stat names, paths, and types
+ * WE SHOULD AVOID CHANGING THE ORDER OF THESE STAT ENUMS! The ordinal is used in StreamInput/Output.
+ * Changing the order will break the mixed cluster version upgrade version case.
  */
 @Getter
 public enum EventStatName implements StatName {
@@ -104,10 +106,19 @@ public enum EventStatName implements StatName {
      * @return the StatName enum associated with that String name
      */
     public static EventStatName from(String name) {
-        if (BY_NAME.containsKey(name) == false) {
+        if (isValidName(name) == false) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Event stat not found: %s", name));
         }
         return BY_NAME.get(name);
+    }
+
+    /**
+     * Determines whether a given string is a valid stat name
+     * @param name
+     * @return whether the name is valid
+     */
+    public static boolean isValidName(String name) {
+        return BY_NAME.containsKey(name);
     }
 
     /**

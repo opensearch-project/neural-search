@@ -15,6 +15,8 @@ import java.util.stream.Collectors;
 
 /**
  * Enum that contains all info stat names, paths, and types
+ * WE SHOULD AVOID CHANGING THE ORDER OF THESE STAT ENUMS! The ordinal is used in StreamInput/Output.
+ * Changing the order will break the mixed cluster version upgrade version case.
  */
 @Getter
 public enum InfoStatName implements StatName {
@@ -59,14 +61,23 @@ public enum InfoStatName implements StatName {
     /**
      * Gets the StatName associated with a unique string name
      * @throws IllegalArgumentException if stat name does not exist
-     * @param value the string name of the stat
+     * @param name the string name of the stat
      * @return the StatName enum associated with that String name
      */
-    public static InfoStatName from(String value) {
-        if (BY_NAME.containsKey(value) == false) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Info stat not found: %s", value));
+    public static InfoStatName from(String name) {
+        if (isValidName(name) == false) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Info stat not found: %s", name));
         }
-        return BY_NAME.get(value);
+        return BY_NAME.get(name);
+    }
+
+    /**
+     * Determines whether a given string is a valid stat name
+     * @param name
+     * @return whether the name is valid
+     */
+    public static boolean isValidName(String name) {
+        return BY_NAME.containsKey(name);
     }
 
     /**

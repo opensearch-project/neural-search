@@ -8,10 +8,15 @@ import org.junit.Before;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.Version;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.processor.InferenceProcessorTestCase;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
@@ -20,6 +25,7 @@ import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
 import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.rest.BytesRestResponse;
 import org.opensearch.rest.RestChannel;
 import org.opensearch.rest.RestRequest;
@@ -40,6 +46,7 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.mockClusterService;
 
 public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
     private NodeClient client;
@@ -57,6 +64,7 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
 
         threadPool = new TestThreadPool(this.getClass().getSimpleName() + "ThreadPool");
         client = spy(new NodeClient(Settings.EMPTY, threadPool));
+        initializeClusterUtilWithVersion(Version.CURRENT);
 
         doAnswer(invocation -> {
             ActionListener<NeuralStatsResponse> actionListener = invocation.getArgument(2);
@@ -71,8 +79,9 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         client.close();
     }
 
-    public void test_execute() throws Exception {
+    public void test_execute_containsAllStats() throws Exception {
         when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+
         RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
 
         RestRequest request = getRestRequest();
@@ -81,6 +90,8 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
         verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
 
+        // Verify all stats available in current version should match all available stats
+        // If this test is failing after adding a new stat, make sure to update the version stat map in MinClusterVersionUtil.
         NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
         assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
         assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
@@ -88,6 +99,7 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
 
     public void test_handleRequest_disabledForbidden() throws Exception {
         when(settingsAccessor.isStatsEnabled()).thenReturn(false);
+
         RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
 
         RestRequest request = getRestRequest();
@@ -104,6 +116,7 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
 
     public void test_handleRequest_invalidStatParameter() throws Exception {
         when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+
         RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
 
         // Create request with invalid stat parameter
@@ -121,8 +134,98 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         verify(client, never()).execute(eq(NeuralStatsAction.INSTANCE), any(), any());
     }
 
+    public void test_execute_olderVersion() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+
+        // Set min cluster version to older version
+        initializeClusterUtilWithVersion(Version.V_3_0_0);
+
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
+
+        RestRequest request = getRestRequest();
+        restNeuralStatsAction.handleRequest(request, channel, client);
+
+        ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
+
+        NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
+        assertEquals(capturedInput.getEventStatNames(), MinClusterVersionUtil.getEventStatsAvailableInVersion(Version.V_3_0_0));
+        assertEquals(capturedInput.getInfoStatNames(), MinClusterVersionUtil.getInfoStatsAvailableInVersion(Version.V_3_0_0));
+    }
+
+    public void test_execute_statParameters() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
+
+        // Create request with stats not existing on 3.0.0
+        Map<String, String> params = new HashMap<>();
+        params.put("stat", String.join(",",
+                EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS.getNameString(),
+                EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getNameString(),
+                InfoStatName.TEXT_CHUNKING_PROCESSORS.getNameString(),
+                InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString()
+        ));
+        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY)
+                .withParams(params)
+                .build();
+
+        restNeuralStatsAction.handleRequest(request, channel, client);
+
+        ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
+
+        NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
+        assertEquals(capturedInput.getEventStatNames(), EnumSet.of(
+                EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS,
+                EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS
+        ));
+        assertEquals(capturedInput.getInfoStatNames(), EnumSet.of(
+                InfoStatName.TEXT_CHUNKING_PROCESSORS,
+                InfoStatName.TEXT_EMBEDDING_PROCESSORS
+        ));
+    }
+
+    public void test_execute_statParameters_olderVersion() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+
+        // Set min cluster version to older version
+        initializeClusterUtilWithVersion(Version.V_3_0_0);
+
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor);
+
+        // Create request with stats not existing on 3.0.0
+        Map<String, String> params = new HashMap<>();
+        params.put("stat", String.join(",",
+                EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS.getNameString(),
+                EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getNameString(),
+                InfoStatName.TEXT_CHUNKING_PROCESSORS.getNameString(),
+                InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString()
+        ));
+        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY)
+                .withParams(params)
+                .build();
+
+        restNeuralStatsAction.handleRequest(request, channel, client);
+
+        ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
+
+        NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
+        assertEquals(capturedInput.getEventStatNames(), EnumSet.of(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(capturedInput.getInfoStatNames(), EnumSet.of(InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+    }
+
     private RestRequest getRestRequest() {
         Map<String, String> params = new HashMap<>();
         return new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withParams(params).build();
+    }
+
+    private void initializeClusterUtilWithVersion(Version version) {
+        ClusterService clusterService = mockClusterService(version);
+
+        final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
     }
 }

@@ -10,6 +10,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.rest.RestStatus;
+import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
@@ -190,17 +191,19 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         for (String stat : stats) {
             // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
-            if (isValidParamString(normalizedStat) == false) {
+            if (isValidParamString(normalizedStat) == false || isValidEventOrInfoStatName(normalizedStat) == false) {
                 invalidStatNames.add(normalizedStat);
                 continue;
             }
 
-            if (EVENT_STAT_NAMES.contains(normalizedStat)) {
-                neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
-            } else if (STATE_STAT_NAMES.contains(normalizedStat)) {
+            // We want to only fetch stats that exist on the min version of the cluster to prevent a serialization error
+            EnumSet<InfoStatName> availableInfoStats = MinClusterVersionUtil.getInfoStatsAvailable();
+            EnumSet<EventStatName> availableEventStats = MinClusterVersionUtil.getEventStatsAvailable();
+
+            if (InfoStatName.isValidName(normalizedStat) && availableInfoStats.contains(InfoStatName.from(normalizedStat))) {
                 neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
-            } else {
-                invalidStatNames.add(normalizedStat);
+            } else if (EventStatName.isValidName(normalizedStat) && availableEventStats.contains(EventStatName.from(normalizedStat))) {
+                neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
             }
         }
 
@@ -214,8 +217,8 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     }
 
     private void addAllStats(NeuralStatsInput neuralStatsInput) {
-        neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
-        neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
+        neuralStatsInput.getInfoStatNames().addAll(MinClusterVersionUtil.getInfoStatsAvailable());
+        neuralStatsInput.getEventStatNames().addAll(MinClusterVersionUtil.getEventStatsAvailable());
     }
 
     private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {
@@ -225,5 +228,9 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     private boolean isValidNodeId(String nodeId) {
         // Validate node id parameter
         return isValidParamString(nodeId) && nodeId.length() == 22;
+    }
+
+    private boolean isValidEventOrInfoStatName(String statName) {
+        return InfoStatName.isValidName(statName) || EventStatName.isValidName(statName);
     }
 }
