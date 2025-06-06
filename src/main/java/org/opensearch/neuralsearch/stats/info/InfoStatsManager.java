@@ -4,8 +4,19 @@
  */
 package org.opensearch.neuralsearch.stats.info;
 
+import com.google.common.annotations.VisibleForTesting;
+import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.TextChunkingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
@@ -17,6 +28,9 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -24,10 +38,38 @@ import java.util.stream.Collectors;
  */
 public class InfoStatsManager {
     public static final String PROCESSORS_KEY = "processors";
+    public static final String PHASE_RESULTS_PROCESSORS_KEY = "phase_results_processors";
 
     private final NeuralSearchClusterUtil neuralSearchClusterUtil;
     private final NeuralSearchSettingsAccessor settingsAccessor;
     private final PipelineServiceUtil pipelineServiceUtil;
+
+    private static final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> chunkingAlgorithmIncrementers = Map.of(
+        DelimiterChunker.ALGORITHM_NAME,
+        stats -> increment(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS),
+        FixedTokenLengthChunker.ALGORITHM_NAME,
+        stats -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS)
+    );
+
+    private static final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> normTechniqueIncrementers = Map.of(
+        L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS),
+        MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_MINMAX_PROCESSORS),
+        ZScoreNormalizationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.NORM_TECHNIQUE_ZSCORE_PROCESSORS)
+    );
+
+    private static final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> combTechniqueIncrementers = Map.of(
+        ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_ARITHMETIC_PROCESSORS),
+        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_HARMONIC_PROCESSORS),
+        GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_GEOMETRIC_PROCESSORS),
+        RRFScoreCombinationTechnique.TECHNIQUE_NAME,
+        stats -> increment(stats, InfoStatName.COMB_TECHNIQUE_RRF_PROCESSORS)
+    );
 
     /**
      * Constructor
@@ -83,6 +125,9 @@ public class InfoStatsManager {
         // Parses ingest pipeline processor configs for processor info
         addIngestProcessorStats(countableInfoStats);
 
+        // Parses search pipeline processor configs for processor info
+        addSearchProcessorStats(countableInfoStats);
+
         // Helpers to parse search pipeline processor configs for processor info would go here
         return countableInfoStats;
     }
@@ -130,7 +175,7 @@ public class InfoStatsManager {
                     Map<String, Object> processorConfig = asMap(entry.getValue());
                     switch (processorType) {
                         case TextEmbeddingProcessor.TYPE:
-                            increment(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+                            countTextEmbeddingProcessorStats(stats, processorConfig);
                             break;
                         case TextChunkingProcessor.TYPE:
                             countTextChunkingProcessorStats(stats, processorConfig);
@@ -138,6 +183,19 @@ public class InfoStatsManager {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Counts text embedding processor stats based on processor config
+     * @param stats map containing the stat to increment
+     * @param processorConfig map of the processor config, parsed to add stats
+     */
+    private void countTextEmbeddingProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        increment(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+        Object skipExisting = processorConfig.get(TextEmbeddingProcessor.SKIP_EXISTING);
+        if (Objects.nonNull(skipExisting) && skipExisting.equals(Boolean.TRUE)) {
+            increment(stats, InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS);
         }
     }
 
@@ -154,12 +212,66 @@ public class InfoStatsManager {
         Map.Entry<String, Object> algorithmEntry = algorithmMap.entrySet().iterator().next();
         String algorithmKey = algorithmEntry.getKey();
 
-        switch (algorithmKey) {
-            case DelimiterChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS);
-            case FixedTokenLengthChunker.ALGORITHM_NAME -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
-            // If no algorithm is specified, the default is fixed length
-            default -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
+        // If no algorithm is specified, default case is fixed length
+        if (chunkingAlgorithmIncrementers.containsKey(algorithmKey) == false) {
+            increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
+        } else {
+            // Map is guaranteed to contain key in this block, so we can do direct map get
+            chunkingAlgorithmIncrementers.get(algorithmKey).accept(stats);
         }
+    }
+
+    /**
+     * Adds search processor info stats, mutating the input
+     * @param stats mutable map of info stats that the result will be added to
+     */
+    private void addSearchProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats) {
+        List<Map<String, Object>> pipelineConfigs = pipelineServiceUtil.getSearchPipelineConfigs();
+
+        // Iterate through all search processors and count their stats individually by calling helpers
+        for (Map<String, Object> pipelineConfig : pipelineConfigs) {
+            // Search phase results processors
+            List<Map<String, Object>> phaseResultsProcessors = asListOfMaps(pipelineConfig.get(PHASE_RESULTS_PROCESSORS_KEY));
+            for (Map<String, Object> phaseResultsProcessor : phaseResultsProcessors) {
+                for (Map.Entry<String, Object> entry : phaseResultsProcessor.entrySet()) {
+                    String processorType = entry.getKey();
+                    Map<String, Object> processorConfig = asMap(entry.getValue());
+                    switch (processorType) {
+                        case NormalizationProcessor.TYPE:
+                            countNormalizationProcessorStats(stats, processorConfig);
+                            break;
+                        case RRFProcessor.TYPE:
+                            countRRFProcessorStats(stats, processorConfig);
+                            break;
+                    }
+                }
+            }
+        }
+    }
+
+    private void countNormalizationProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        increment(stats, InfoStatName.NORMALIZATION_PROCESSORS);
+
+        String normalizationTechnique = asString(
+            asMap(processorConfig.get(NormalizationProcessorFactory.NORMALIZATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
+        );
+        String combinationTechnique = asString(
+            asMap(processorConfig.get(NormalizationProcessorFactory.COMBINATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
+        );
+
+        callNullableIncrementer(stats, normTechniqueIncrementers.get(normalizationTechnique));
+        callNullableIncrementer(stats, combTechniqueIncrementers.get(combinationTechnique));
+    }
+
+    private void countRRFProcessorStats(Map<InfoStatName, CountableInfoStatSnapshot> stats, Map<String, Object> processorConfig) {
+        increment(stats, InfoStatName.RRF_PROCESSORS);
+
+        // RRF only has combination technique
+        String combinationTechnique = asString(
+            asMap(processorConfig.get(NormalizationProcessorFactory.COMBINATION_CLAUSE)).get(NormalizationProcessorFactory.TECHNIQUE)
+        );
+
+        callNullableIncrementer(stats, combTechniqueIncrementers.get(combinationTechnique));
     }
 
     /**
@@ -167,14 +279,31 @@ public class InfoStatsManager {
      * @param stats map containing the stat to increment
      * @param infoStatName the identifier for the stat to increment
      */
-    private void increment(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName infoStatName) {
+    @VisibleForTesting
+    protected static void increment(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName infoStatName) {
         incrementBy(stats, infoStatName, 1L);
     }
 
-    private void incrementBy(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName statName, Long amount) {
+    private static void incrementBy(Map<InfoStatName, CountableInfoStatSnapshot> stats, InfoStatName statName, Long amount) {
         if (stats.containsKey(statName)) {
             stats.get(statName).incrementBy(amount);
         }
+    }
+
+    /**
+     *  Conditionally accepts a param into a consumer if the consumer is non-null
+     * In this class, used after getting a nullable stat incrementing consumer and safely incrementing it with
+     * the ongoing stats map.
+     *
+     * @param stats the ongoing stats map
+     * @param incrementer the consumer to increment the stat in the stats map
+     */
+    @VisibleForTesting
+    protected void callNullableIncrementer(
+        Map<InfoStatName, CountableInfoStatSnapshot> stats,
+        Consumer<Map<InfoStatName, CountableInfoStatSnapshot>> incrementer
+    ) {
+        Optional.ofNullable(incrementer).ifPresent(consumer -> consumer.accept(stats));
     }
 
     /**
@@ -201,6 +330,17 @@ public class InfoStatsManager {
     @SuppressWarnings("unchecked")
     private Map<String, Object> asMap(Object value) {
         return value instanceof Map ? (Map<String, Object>) value : null;
+    }
+
+    /**
+     * Helper to cast generic object into String or null
+     * Used to parse pipeline processor configs
+     * @param value the object
+     * @return the string or null if not a string
+     */
+    @SuppressWarnings("unchecked")
+    private String asString(Object value) {
+        return value instanceof String ? (String) value : null;
     }
 
     /**

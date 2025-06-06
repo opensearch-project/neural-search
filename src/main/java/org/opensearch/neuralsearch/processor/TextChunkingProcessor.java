@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -34,6 +35,8 @@ import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.DISABLED_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerWithDefault;
+import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkString;
+import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkList;
 
 /**
  * This processor is used for text chunking.
@@ -50,6 +53,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
     public static final String IGNORE_MISSING = "ignore_missing";
     public static final boolean DEFAULT_IGNORE_MISSING = false;
+
+    private static final Map<String, Runnable> chunkingAlgorithmIncrementers = Map.of(
+        DelimiterChunker.ALGORITHM_NAME,
+        () -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS),
+        FixedTokenLengthChunker.ALGORITHM_NAME,
+        () -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS)
+    );
 
     private int maxChunkLimit;
     private Chunker chunker;
@@ -272,15 +282,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
         }
     }
 
-    private List<String> chunkList(final List<String> contentList, final Map<String, Object> runTimeParameters) {
-        // flatten original output format from List<List<String>> to List<String>
-        List<String> result = new ArrayList<>();
-        for (String content : contentList) {
-            result.addAll(chunker.chunkString(content, runTimeParameters));
-        }
-        return result;
-    }
-
     @SuppressWarnings("unchecked")
     private List<String> chunkLeafType(final Object value, final Map<String, Object> runTimeParameters) {
         // leaf type means null, String or List<String>
@@ -293,18 +294,15 @@ public final class TextChunkingProcessor extends AbstractProcessor {
             if (StringUtils.isBlank(String.valueOf(value))) {
                 return result;
             }
-            result = chunker.chunkString(value.toString(), runTimeParameters);
+            result = chunkString(chunker, value.toString(), runTimeParameters);
         } else if (isListOfString(value)) {
-            result = chunkList((List<String>) value, runTimeParameters);
+            result = chunkList(chunker, (List<String>) value, runTimeParameters);
         }
         return result;
     }
 
     private void recordChunkingExecutionStats(String algorithmName) {
         EventStatsManager.increment(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS);
-        switch (algorithmName) {
-            case DelimiterChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS);
-            case FixedTokenLengthChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS);
-        }
+        Optional.ofNullable(chunkingAlgorithmIncrementers.get(algorithmName)).ifPresent(Runnable::run);
     }
 }

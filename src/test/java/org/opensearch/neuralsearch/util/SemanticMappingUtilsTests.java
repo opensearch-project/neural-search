@@ -63,7 +63,7 @@ public class SemanticMappingUtilsTests extends OpenSearchTestCase {
         );
 
         final String expectedMessage =
-            "Cannot transform the mapping for semantic fields because its depth exceeds the maximum allowed depth 1000";
+            "Cannot transform the mapping for semantic fields because its depth exceeds the maximum allowed depth 1000.";
 
         assertEquals(expectedMessage, exception.getMessage());
     }

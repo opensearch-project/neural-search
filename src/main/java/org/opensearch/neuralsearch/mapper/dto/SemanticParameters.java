@@ -18,4 +18,5 @@ public class SemanticParameters {
     private final String rawFieldType;
     private final String semanticInfoFieldName;
     private final Boolean chunkingEnabled;
+    private final String semanticFieldSearchAnalyzer;
 }
