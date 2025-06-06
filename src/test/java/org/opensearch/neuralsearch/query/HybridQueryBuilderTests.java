@@ -82,6 +82,7 @@ import org.opensearch.knn.index.mapper.KNNVectorFieldType;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     static final String VECTOR_FIELD_NAME = "vectorField";
@@ -107,6 +108,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // ./gradlew ':test' --tests "org.opensearch.knn.training.TrainingJobTests.testRun_success" and see it fails
         // but if run along with other tests this test passes.
         initKNNSettings();
+        TestUtils.initializeEventStatsManager();
     }
 
     @Override

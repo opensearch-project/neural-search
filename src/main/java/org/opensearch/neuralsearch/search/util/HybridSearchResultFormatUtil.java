@@ -70,6 +70,18 @@ public class HybridSearchResultFormatUtil {
         return new FieldDoc(docId, MAGIC_NUMBER_DELIMITER, fields);
     }
 
+    public static byte[] createCollapseValueDelimiterElementForHybridSearchResults() {
+        byte[] delimiterValueAsArray = new byte[1];
+        delimiterValueAsArray[0] = MAGIC_NUMBER_DELIMITER.byteValue();
+        return delimiterValueAsArray;
+    }
+
+    public static byte[] createCollapseValueStartStopElementForHybridSearchResults() {
+        byte[] startStopValueAsArray = new byte[1];
+        startStopValueAsArray[0] = MAGIC_NUMBER_START_STOP.byteValue();
+        return startStopValueAsArray;
+    }
+
     /**
      * Checking if passed scoreDocs object is a special element (start/stop or delimiter) in the list of hybrid query result scores
      * @param scoreDoc score doc object to check on
