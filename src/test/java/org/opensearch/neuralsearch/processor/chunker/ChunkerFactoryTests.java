@@ -30,6 +30,12 @@ public class ChunkerFactoryTests extends OpenSearchTestCase {
         assert (chunker instanceof DelimiterChunker);
     }
 
+    public void testCreate_FixedCharLength() {
+        Chunker chunker = ChunkerFactory.create(FixedCharLengthChunker.ALGORITHM_NAME, createChunkParameters());
+        assertNotNull(chunker);
+        assert (chunker instanceof FixedCharLengthChunker);
+    }
+
     public void testCreate_Invalid() {
         String invalidChunkerName = "Invalid Chunker Algorithm";
         assertThrows(NullPointerException.class, () -> ChunkerFactory.create(invalidChunkerName, createChunkParameters()));
