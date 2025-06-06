@@ -136,10 +136,26 @@ public final class MinClusterVersionUtil {
     }
 
     /**
-     * Returns all cumulatively available info stats for a given version
-     * @param version
-     * @return an EnumSet of all available stats at that version
+     * Gets all info stats available in the current cluster based on the min node version
+     * @return set of available info stats
      */
+    public static EnumSet<InfoStatName> getInfoStatsAvailable() {
+        return getInfoStatsAvailableInVersion(NeuralSearchClusterUtil.instance().getClusterMinVersion());
+    }
+
+    /**
+     * Gets all event stats available in the current cluster based on the min node version
+     * @return set of available event stats
+     */
+    public static EnumSet<EventStatName> getEventStatsAvailable() {
+        return getEventStatsAvailableInVersion(NeuralSearchClusterUtil.instance().getClusterMinVersion());
+    }
+
+    /**
+    * Returns all cumulatively available info stats for a given version
+    * @param version the version to get
+    * @return an EnumSet of all available stats at that version
+    */
     public static EnumSet<InfoStatName> getInfoStatsAvailableInVersion(Version version) {
         if (version == Version.CURRENT) {
             return EnumSet.allOf(InfoStatName.class);
@@ -156,7 +172,7 @@ public final class MinClusterVersionUtil {
 
     /**
      * Returns all cumulatively available event stats for a given version
-     * @param version
+     * @param version the version to get
      * @return an EnumSet of all available stats at that version
      */
     public static EnumSet<EventStatName> getEventStatsAvailableInVersion(Version version) {
