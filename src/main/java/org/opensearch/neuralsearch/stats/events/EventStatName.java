@@ -31,6 +31,12 @@ public enum EventStatName implements StatName {
         EventStatType.TIMESTAMPED_EVENT_COUNTER
     ),
     TEXT_CHUNKING_DELIMITER_EXECUTIONS("text_chunking_delimiter_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    SEMANTIC_FIELD_PROCESSOR_EXECUTIONS("semantic_field_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS(
+        "semantic_field_chunking_executions",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    ),
     SEMANTIC_HIGHLIGHTING_REQUEST_COUNT(
         "semantic_highlighting_request_count",
         "semantic_highlighting",
@@ -59,7 +65,21 @@ public enum EventStatName implements StatName {
     HYBRID_QUERY_REQUESTS("hybrid_query_requests", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
     HYBRID_QUERY_INNER_HITS_REQUESTS("hybrid_query_with_inner_hits_requests", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
     HYBRID_QUERY_FILTER_REQUESTS("hybrid_query_with_filter_requests", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
-    HYBRID_QUERY_PAGINATION_REQUESTS("hybrid_query_with_pagination_requests", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),;
+    HYBRID_QUERY_PAGINATION_REQUESTS("hybrid_query_with_pagination_requests", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    // Neural query stats
+    NEURAL_QUERY_REQUESTS("neural_query_requests", "query.neural", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    NEURAL_QUERY_AGAINST_KNN_REQUESTS("neural_query_against_knn_requests", "query.neural", EventStatType.TIMESTAMPED_EVENT_COUNTER),
+    NEURAL_QUERY_AGAINST_SEMANTIC_DENSE_REQUESTS(
+        "neural_query_against_semantic_dense_requests",
+        "query.neural",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    ),
+    NEURAL_QUERY_AGAINST_SEMANTIC_SPARSE_REQUESTS(
+        "neural_query_against_semantic_sparse_requests",
+        "query.neural",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER
+    ),
+    NEURAL_SPARSE_QUERY_REQUESTS("neural_sparse_query_requests", "query.neural_sparse", EventStatType.TIMESTAMPED_EVENT_COUNTER);
 
     private final String nameString;
     private final String path;
