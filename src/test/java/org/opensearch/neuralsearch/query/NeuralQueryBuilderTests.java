@@ -60,6 +60,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
@@ -90,7 +91,10 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     private static final QueryBuilder ADDITIONAL_TEST_FILTER = new TermQueryBuilder(TERM_QUERY_FIELD_NAME, TERM_QUERY_FIELD_VALUE);
 
     @Before
-    public void setup() throws Exception {}
+    public void setup() throws Exception {
+        // Initialize EventStatsManager for tests
+        TestUtils.initializeEventStatsManager();
+    }
 
     @SneakyThrows
     public void testFromXContent_whenBuiltWithDefaults_thenBuildSuccessfully() {

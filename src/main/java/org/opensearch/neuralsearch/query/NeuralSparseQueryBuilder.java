@@ -29,6 +29,8 @@ import org.apache.lucene.search.Query;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.Client;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.collect.Tuple;
@@ -256,6 +258,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
      * @throws IOException can be thrown by parser
      */
     public static NeuralSparseQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        EventStatsManager.increment(EventStatName.NEURAL_SPARSE_QUERY_REQUESTS);
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder();
         if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
             throw new ParsingException(parser.getTokenLocation(), "First token of " + NAME + "query must be START_OBJECT");
