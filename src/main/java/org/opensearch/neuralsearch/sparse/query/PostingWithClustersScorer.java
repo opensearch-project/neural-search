@@ -227,6 +227,8 @@ public class PostingWithClustersScorer extends Scorer {
                     DocumentCluster cluster = clusterIter.next();
                     while (cluster != null) {
                         if (cluster.isShouldNotSkip()) {
+                            long start = Profiling.INSTANCE.begin(Profiling.ItemId.CLUSTERSHOULDNOTSKIP);
+                            Profiling.INSTANCE.end(Profiling.ItemId.CLUSTERSHOULDNOTSKIP, start);
                             return cluster;
                         }
                         int score = cluster.getSummary().dotProduct(queryDenseVector);
@@ -234,6 +236,8 @@ public class PostingWithClustersScorer extends Scorer {
                             && score < Objects.requireNonNull(scoreHeap.peek()).getRight() / sparseQueryContext.getHeapFactor()) {
                             cluster = clusterIter.next();
                         } else {
+                            long start = Profiling.INSTANCE.begin(Profiling.ItemId.CLUSTER);
+                            Profiling.INSTANCE.end(Profiling.ItemId.CLUSTER, start);
                             return cluster;
                         }
                     }

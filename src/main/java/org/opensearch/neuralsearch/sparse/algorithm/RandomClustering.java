@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.algorithm;
 
 import lombok.AllArgsConstructor;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
+import org.opensearch.neuralsearch.sparse.common.Profiling;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
@@ -59,7 +60,9 @@ public class RandomClustering implements Clustering {
                 float score = Float.MIN_VALUE;
                 byte[] center = denseCentroids.get(i);
                 if (center != null) {
+                    long start = Profiling.INSTANCE.begin(Profiling.ItemId.CLUSTERDP);
                     score = docVector.dotProduct(center);
+                    Profiling.INSTANCE.end(Profiling.ItemId.CLUSTERDP, start);
                 }
                 if (score > maxScore) {
                     maxScore = score;
