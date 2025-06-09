@@ -107,6 +107,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // leads to failures of unit tests cases when a unit test is run separately. Try running this test:
         // ./gradlew ':test' --tests "org.opensearch.knn.training.TrainingJobTests.testRun_success" and see it fails
         // but if run along with other tests this test passes.
+        TestUtils.initializeEventStatsManager();
         initKNNSettings();
         TestUtils.initializeEventStatsManager();
     }
