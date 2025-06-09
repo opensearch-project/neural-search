@@ -11,26 +11,18 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-import org.apache.hc.core5.http.HttpHeaders;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.apache.hc.core5.http.message.BasicHeader;
 import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
-import org.opensearch.client.Response;
-import org.opensearch.common.xcontent.XContentHelper;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
-import com.google.common.collect.ImmutableList;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
@@ -100,7 +92,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING, 2);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
-        ingestBatchDocumentWithBulk("batch_", 2, Collections.emptySet(), Collections.emptySet(), List.of(INGEST_DOC1, INGEST_DOC2));
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            2,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
         assertEquals(2, getDocCount(INDEX_NAME));
 
         ingestDocument(INDEX_NAME, String.format(LOCALE, INGEST_DOC1, "success"), "1");
@@ -115,8 +115,24 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING, 2);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
-        ingestBatchDocumentWithBulk("batch_", 2, Collections.emptySet(), Collections.emptySet(), List.of(INGEST_DOC1, INGEST_DOC2));
-        ingestBatchDocumentWithBulk("batch_", 2, Collections.emptySet(), Collections.emptySet(), List.of(UPDATE_DOC1, UPDATE_DOC2));
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            2,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            2,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(UPDATE_DOC1, UPDATE_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
 
         assertEquals(2, getDocCount(INDEX_NAME));
 
@@ -298,8 +314,24 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         createPipelineProcessor(requestBody, PIPELINE_NAME, modelId, null);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         int docCount = 5;
-        ingestBatchDocumentWithBulk("batch_", docCount, Collections.emptySet(), Collections.emptySet(), List.of(INGEST_DOC1, INGEST_DOC2));
-        ingestBatchDocumentWithBulk("batch_", docCount, Collections.emptySet(), Collections.emptySet(), List.of(UPDATE_DOC1, UPDATE_DOC2));
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            docCount,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            docCount,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(UPDATE_DOC1, UPDATE_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
 
         assertEquals(5, getDocCount(INDEX_NAME));
 
@@ -333,7 +365,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         createPipelineProcessor(requestBody, PIPELINE_NAME, modelId, null);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         int docCount = 5;
-        ingestBatchDocumentWithBulk("batch_", docCount, Collections.emptySet(), Collections.emptySet(), List.of(INGEST_DOC1, INGEST_DOC2));
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            docCount,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
         assertEquals(5, getDocCount(INDEX_NAME));
 
         for (int i = 0; i < docCount; ++i) {
@@ -360,7 +400,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         createPipelineProcessor(requestBody, PIPELINE_NAME, modelId, null);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         int docCount = 5;
-        ingestBatchDocumentWithBulk("batch_", docCount, Set.of(0), Set.of(1), List.of(INGEST_DOC1, INGEST_DOC2));
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            docCount,
+            Set.of(0),
+            Set.of(1),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
         assertEquals(3, getDocCount(INDEX_NAME));
 
         for (int i = 2; i < docCount; ++i) {
@@ -416,57 +464,6 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         return registerModelGroupAndUploadModel(requestBody);
     }
 
-    private void ingestBatchDocumentWithBulk(
-        String idPrefix,
-        int docCount,
-        Set<Integer> failedIds,
-        Set<Integer> droppedIds,
-        List<String> docs
-    ) throws Exception {
-        StringBuilder payloadBuilder = new StringBuilder();
-        for (int i = 0; i < docCount; ++i) {
-            String docTemplate = docs.get(i % 2);
-            if (failedIds.contains(i)) {
-                docTemplate = String.format(LOCALE, docTemplate, "fail");
-            } else if (droppedIds.contains(i)) {
-                docTemplate = String.format(LOCALE, docTemplate, "drop");
-            } else {
-                docTemplate = String.format(LOCALE, docTemplate, "success");
-            }
-            String doc = docTemplate.replace("\n", "");
-            final String id = idPrefix + (i + 1);
-            String item = BULK_ITEM_TEMPLATE.replace("{{index}}", INDEX_NAME).replace("{{id}}", id).replace("{{doc}}", doc);
-            payloadBuilder.append(item).append("\n");
-        }
-        final String payload = payloadBuilder.toString();
-        Map<String, String> params = new HashMap<>();
-        params.put("refresh", "true");
-        Response response = makeRequest(
-            client(),
-            "POST",
-            "_bulk",
-            params,
-            toHttpEntity(payload),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, "Kibana"))
-        );
-        Map<String, Object> map = XContentHelper.convertToMap(
-            XContentType.JSON.xContent(),
-            EntityUtils.toString(response.getEntity()),
-            false
-        );
-        assertEquals(!failedIds.isEmpty(), map.get("errors"));
-        assertEquals(docCount, ((List) map.get("items")).size());
-
-        int failedDocCount = 0;
-        for (Object item : ((List) map.get("items"))) {
-            Map<String, Map<String, Object>> itemMap = (Map<String, Map<String, Object>>) item;
-            if (itemMap.get("index").get("error") != null) {
-                failedDocCount++;
-            }
-        }
-        assertEquals(failedIds.size(), failedDocCount);
-    }
-
     public void testTextEmbeddingProcessorWithReindexOperation() throws Exception {
         // create a simple index and indexing data into this index.
         String fromIndexName = "test-reindex-from";
@@ -513,7 +510,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         loadModel(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
-        ingestBatchDocumentWithBulk("batch_", 2, Collections.emptySet(), Collections.emptySet(), List.of(INGEST_DOC1, INGEST_DOC2));
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            2,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
         assertEquals(2, getDocCount(INDEX_NAME));
 
         // Get stats
