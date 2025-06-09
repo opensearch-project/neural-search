@@ -413,7 +413,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void createNeuralSparseTwoPhaseSearchProcessor(final String pipelineName) throws Exception {
-        createNeuralSparseTwoPhaseSearchProcessor(pipelineName, 0.4f, 5.0f, 10000);
+        createNeuralSparseTwoPhaseSearchProcessor(pipelineName, null);
+    }
+
+    protected void createNeuralSparseTwoPhaseSearchProcessor(final String pipelineName, final String defaultModelId) throws Exception {
+        createNeuralSparseTwoPhaseSearchProcessor(pipelineName, 0.4f, 5.0f, 10000, defaultModelId);
     }
 
     protected void createNeuralSparseTwoPhaseSearchProcessor(
@@ -422,10 +426,35 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         float expansionRate,
         int maxWindowSize
     ) throws Exception {
-        String jsonTemplate = Files.readString(
-            Path.of(Objects.requireNonNull(classLoader.getResource("processor/NeuralSparseTwoPhaseProcessorConfiguration.json")).toURI())
-        );
-        String customizedJson = String.format(Locale.ROOT, jsonTemplate, pruneRatio, expansionRate, maxWindowSize);
+        createNeuralSparseTwoPhaseSearchProcessor(pipelineName, pruneRatio, expansionRate, maxWindowSize, null);
+    }
+
+    protected void createNeuralSparseTwoPhaseSearchProcessor(
+        final String pipelineName,
+        float pruneRatio,
+        float expansionRate,
+        int maxWindowSize,
+        String defaultModelId
+    ) throws Exception {
+        String customizedJson;
+        if (defaultModelId == null) {
+            String jsonTemplate = Files.readString(
+                Path.of(
+                    Objects.requireNonNull(classLoader.getResource("processor/NeuralSparseTwoPhaseProcessorConfiguration.json")).toURI()
+                )
+            );
+            customizedJson = String.format(Locale.ROOT, jsonTemplate, pruneRatio, expansionRate, maxWindowSize);
+
+        } else {
+            String jsonTemplate = Files.readString(
+                Path.of(
+                    Objects.requireNonNull(
+                        classLoader.getResource("processor/NeuralSparseTwoPhaseAndNeuralEnrichProcessorConfiguration.json")
+                    ).toURI()
+                )
+            );
+            customizedJson = String.format(Locale.ROOT, jsonTemplate, pruneRatio, expansionRate, maxWindowSize, defaultModelId);
+        }
         Response pipelineCreateResponse = makeRequest(
             client(),
             "PUT",

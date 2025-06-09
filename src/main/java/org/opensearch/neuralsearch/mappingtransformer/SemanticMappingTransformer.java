@@ -28,6 +28,7 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMAN
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.collectSemanticField;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.extractModelIdToFieldPathMap;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getSemanticFieldSearchAnalyzer;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getProperties;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.validateModelId;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.validateSemanticInfoFieldName;
@@ -217,6 +218,7 @@ public class SemanticMappingTransformer implements MappingTransformer {
         final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(xContentRegistry);
         builder.mlModel(modelConfig, modelId);
         builder.chunkingEnabled(isChunkingEnabled(fieldConfig, fieldPath));
+        builder.semanticFieldSearchAnalyzer(getSemanticFieldSearchAnalyzer(fieldConfig, fieldPath));
         return builder.build();
     }
 
@@ -242,7 +244,6 @@ public class SemanticMappingTransformer implements MappingTransformer {
             // field so that we can set the semantic info fields config by the path.
             if (interFieldConfig == null) {
                 interFieldConfig = unflattenMapping(interFieldName, current);
-
             }
 
             // handle the case when the inter field is an object field

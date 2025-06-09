@@ -248,6 +248,84 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         assertEquals(expectedErrorMessage, capturedException.getMessage());
     }
 
+    public void testTransform_whenSearchAnalyzerWithNonRankFeaturesType_thenException() {
+        // prepare original mappings
+        final String dummyModelId = "dummyModelId";
+        final Map<String, Object> mappings = getBaseMappingsWithOneSemanticField(dummyModelId);
+
+        final Integer embeddingDimension = 768;
+        final TextEmbeddingModelConfig remoteTextEmbeddingModelConfig = TextEmbeddingModelConfig.builder()
+            .embeddingDimension(embeddingDimension)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
+            .modelType(FunctionName.TEXT_EMBEDDING.name())
+            .frameworkType(TextEmbeddingModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .build();
+        final MLModel remoteTextEmbeddingModel = MLModel.builder()
+            .algorithm(FunctionName.REMOTE)
+            .modelConfig(remoteTextEmbeddingModelConfig)
+            .build();
+
+        // mock
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(dummyModelId, remoteTextEmbeddingModel));
+            return null;
+        }).when(mlClientAccessor).getModels(any(), any(), any());
+
+        // call
+        transformer.transform(mappings, null, listener);
+
+        // Capture the exception passed to onFailure
+        final ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        // Then: Assert that the exception message is as expected
+        final Exception capturedException = exceptionCaptor.getValue();
+        final String expectedErrorMessage =
+            "Failed to transform the mapping for the semantic field at semantic_field due to Cannot build the semantic info config because the embedding field type knn_vector cannot build with semantic field search analyzer standard";
+        assertEquals(expectedErrorMessage, capturedException.getMessage());
+    }
+
+    public void testTransform_whenSearchAnalyzerWithNonStringSearchAnalyzer_thenException() {
+        // prepare original mappings
+        final String dummyModelId = "dummyModelId";
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticFiled = new HashMap<>();
+        properties.put("semantic_field", semanticFiled);
+        semanticFiled.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticFiled.put(SemanticFieldConstants.MODEL_ID, dummyModelId);
+        semanticFiled.put(SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER, false);
+
+        final MLModelConfig remoteSparseModelConfig = TextEmbeddingModelConfig.builder()
+            .embeddingDimension(0) // This is required for TextEmbeddingModelConfig even we don't need it for the remote sparse model
+            .modelType(FunctionName.SPARSE_TOKENIZE.name())
+            .frameworkType(TextEmbeddingModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .build();
+        final MLModel remoteSparseModel = MLModel.builder().algorithm(FunctionName.REMOTE).modelConfig(remoteSparseModelConfig).build();
+
+        // mock
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(dummyModelId, remoteSparseModel));
+            return null;
+        }).when(mlClientAccessor).getModels(any(), any(), any());
+
+        // call
+        transformer.transform(mappings, null, listener);
+
+        // Capture the exception passed to onFailure
+        final ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        // Then: Assert that the exception message is as expected
+        final Exception capturedException = exceptionCaptor.getValue();
+        final String expectedErrorMessage =
+            "Failed to transform the mapping for the semantic field at semantic_field due to semantic_field_search_analyzer should be a String for the semantic field at semantic_field";
+        assertEquals(expectedErrorMessage, capturedException.getMessage());
+    }
+
     public void testTransform_whenMultipleModelsNotFound_thenException() {
         // prepare original mappings
         final String notFoundModel1 = "notFoundModel1";
@@ -373,6 +451,7 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         properties.put("semantic_field", semanticFiled);
         semanticFiled.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
         semanticFiled.put(SemanticFieldConstants.MODEL_ID, modelId);
+        semanticFiled.put(SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER, "standard");
         return mappings;
     }
 }

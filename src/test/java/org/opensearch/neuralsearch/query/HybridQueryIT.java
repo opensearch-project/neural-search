@@ -40,6 +40,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-hybrid-basic-index";
@@ -878,6 +879,49 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             responseException.getMessage(),
             allOf(containsString("pagination_depth should be less than or equal to index.max_result_window setting"))
         );
+    }
+
+    @SneakyThrows
+    public void testComplexQuery_whenMultipleSubqueries_statsEnabled_thenSuccessful() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+        testComplexQuery_whenMultipleSubqueries_thenSuccessful();
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
+
+        // Verify optional stats are not incremented
+        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_INNER_HITS_REQUESTS));
+        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS));
+        assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_REQUESTS));
+
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+    }
+
+    @SneakyThrows
+    public void testPaginationOnSingleShard_statsEnabled_thenSuccessful() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS));
+
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
     @SneakyThrows

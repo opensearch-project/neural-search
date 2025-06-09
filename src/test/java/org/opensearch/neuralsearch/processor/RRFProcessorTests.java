@@ -23,9 +23,11 @@ import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.util.concurrent.AtomicArray;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.SearchShardTarget;
@@ -70,6 +72,8 @@ public class RRFProcessorTests extends OpenSearchTestCase {
         super.setUp();
         MockitoAnnotations.openMocks(this);
         rrfProcessor = new RRFProcessor(TAG, DESCRIPTION, mockNormalizationTechnique, mockCombinationTechnique, mockNormalizationWorkflow);
+        when(mockCombinationTechnique.techniqueName()).thenReturn(RRFScoreCombinationTechnique.TECHNIQUE_NAME);
+        TestUtils.initializeEventStatsManager();
     }
 
     @SneakyThrows

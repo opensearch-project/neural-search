@@ -37,6 +37,7 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNK
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.buildSemanticFieldMapperWithTextAsRawFieldType;
 import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.mockParserContext;
@@ -164,9 +165,16 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
 
     public void testBuilder_getParameters() {
         final SemanticFieldMapper.Builder builder = new SemanticFieldMapper.Builder(SemanticFieldMapperTestUtil.fieldName);
-        assertEquals(5, builder.getParameters().size());
+        assertEquals(6, builder.getParameters().size());
         List<String> actualParams = builder.getParameters().stream().map(a -> a.name).collect(Collectors.toList());
-        List<String> expectedParams = Arrays.asList(MODEL_ID, SEARCH_MODEL_ID, RAW_FIELD_TYPE, SEMANTIC_INFO_FIELD_NAME, CHUNKING);
+        List<String> expectedParams = Arrays.asList(
+            MODEL_ID,
+            SEARCH_MODEL_ID,
+            RAW_FIELD_TYPE,
+            SEMANTIC_INFO_FIELD_NAME,
+            CHUNKING,
+            SEMANTIC_FIELD_SEARCH_ANALYZER
+        );
         assertEquals(expectedParams, actualParams);
     }
 
@@ -236,6 +244,20 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
         assertEquals(expectedError, exception.getMessage());
     }
 
+    public void testFieldMapper_merge_whenTryUpdateNonNullSearchAnalyzer_thenSucceed() {
+        final SemanticFieldMapper semanticFieldMapper = buildSemanticFieldMapperWithTextAsRawFieldType(parserContext);
+
+        final Map<String, Object> updatedConfig = createFieldConfig(TextFieldMapper.CONTENT_TYPE);
+        updatedConfig.remove(SEARCH_MODEL_ID);
+        updatedConfig.put(SEMANTIC_FIELD_SEARCH_ANALYZER, "standard");
+        when(parserContext.typeParser(KeywordFieldMapper.CONTENT_TYPE)).thenReturn(KeywordFieldMapper.PARSER);
+        final SemanticFieldMapper semanticFieldMapperToMerge = buildSemanticFieldMapperWithTextAsRawFieldType(updatedConfig, parserContext);
+
+        final SemanticFieldMapper mergedSemanticFieldMapper = (SemanticFieldMapper) semanticFieldMapper.merge(semanticFieldMapperToMerge);
+
+        assertEquals("standard", mergedSemanticFieldMapper.getMergeBuilder().getSemanticParameters().getSemanticFieldSearchAnalyzer());
+    }
+
     public void testFieldMapper_merge_whenConflictWithDelegateMapperParameters_thenException() {
         final SemanticFieldMapper semanticFieldMapper = buildSemanticFieldMapperWithTextAsRawFieldType(parserContext);
 
@@ -298,5 +320,48 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
         Map<String, Object> expected = createFieldConfig(TextFieldMapper.CONTENT_TYPE);
 
         assertEquals(expected, out);
+    }
+
+    public void testFieldMapper_doXContentBody_withBothSearchModelIdAndAnalyzer_shouldFail() throws IOException {
+        final Map<String, Object> config = createFieldConfig(TextFieldMapper.CONTENT_TYPE);
+        config.put(SEMANTIC_FIELD_SEARCH_ANALYZER, "standard");
+
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> buildSemanticFieldMapperWithTextAsRawFieldType(config, parserContext)
+        );
+
+        final String expectedMessage = "search_model_id can not coexist with semantic_field_search_analyzer in semantic field testField";
+
+        assertEquals(expectedMessage, exception.getMessage());
+    }
+
+    public void testFieldMapper_doXContentBody_withEmptyAnalyzer_shouldFail() throws IOException {
+        final Map<String, Object> config = createFieldConfig(TextFieldMapper.CONTENT_TYPE);
+        config.remove(SEARCH_MODEL_ID);
+        config.put(SEMANTIC_FIELD_SEARCH_ANALYZER, "");
+
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> buildSemanticFieldMapperWithTextAsRawFieldType(config, parserContext)
+        );
+
+        final String expectedMessage = "semantic_field_search_analyzer can not be empty string in semantic field testField";
+
+        assertEquals(expectedMessage, exception.getMessage());
+    }
+
+    public void testFieldMapper_doXContentBody_withEmptySearchModelId_shouldFail() throws IOException {
+        final Map<String, Object> config = createFieldConfig(TextFieldMapper.CONTENT_TYPE);
+        config.put(SEARCH_MODEL_ID, "");
+
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> buildSemanticFieldMapperWithTextAsRawFieldType(config, parserContext)
+        );
+
+        final String expectedMessage = "search_model_id can not be empty string in semantic field testField";
+
+        assertEquals(expectedMessage, exception.getMessage());
     }
 }

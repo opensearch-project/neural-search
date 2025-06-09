@@ -53,6 +53,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARA
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessorTests.getAnalysisRegistry;
 
 public class SemanticFieldProcessorTests extends OpenSearchTestCase {
@@ -102,7 +103,16 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
         // one field enable the chunking and one field disable the chunking
         pathToFieldConfigMap = Map.of(
             FIELD_NAME_PRODUCTS + PATH_SEPARATOR + FIELD_NAME_PRODUCT_DESCRIPTION,
-            Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_1, CHUNKING, true),
+            Map.of(
+                TYPE,
+                SemanticFieldMapper.CONTENT_TYPE,
+                MODEL_ID,
+                DUMMY_MODEL_ID_1,
+                CHUNKING,
+                true,
+                SEMANTIC_FIELD_SEARCH_ANALYZER,
+                "standard"
+            ),
             FIELD_NAME_GEO_DATA,
             Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_2)
         );
