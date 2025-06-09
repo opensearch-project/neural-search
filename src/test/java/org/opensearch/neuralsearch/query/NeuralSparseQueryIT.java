@@ -5,8 +5,12 @@
 package org.opensearch.neuralsearch.query;
 
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomTokenWeightMap;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -15,6 +19,7 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.util.TestUtils;
 
 import lombok.SneakyThrows;
@@ -57,6 +62,8 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testBasicQueryUsingQueryText() {
+        // Enable stats for the test
+        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), true);
         String modelId = null;
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
         modelId = prepareSparseEncodingModel();
@@ -70,6 +77,19 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
         assertEquals("1", firstInnerHit.get("_id"));
         float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(
+            "Stats should contain the expected number of neural_sparse_query_requests",
+            1,
+            getNestedValue(allNodesStats, EventStatName.NEURAL_SPARSE_QUERY_REQUESTS)
+        );
+        // Disable stats to not impact other tests
+        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), false);
     }
 
     /**

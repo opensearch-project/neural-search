@@ -25,12 +25,20 @@ import org.junit.Before;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 public class NormalizationProcessorIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME = "test-neural-multi-doc-one-shard-index";
@@ -623,5 +631,76 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         }
         // verify that all ids are unique
         assertEquals(Set.copyOf(ids).size(), ids.size());
+    }
+
+    @SneakyThrows
+    public void testNormalizationProcessor_stats() {
+        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+
+        createSearchPipeline(
+            "pipeline1",
+            L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+            HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+            Map.of()
+        );
+        createSearchPipeline(
+            "pipeline2",
+            MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
+            GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+            Map.of()
+        );
+        createSearchPipeline(
+            "pipeline3",
+            ZScoreNormalizationTechnique.TECHNIQUE_NAME,
+            ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+            Map.of()
+        );
+
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(termQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder2);
+
+        search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline1"));
+
+        for (int i = 0; i < 2; i++) {
+            search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline2"));
+        }
+
+        for (int i = 0; i < 3; i++) {
+            search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline3"));
+        }
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(6, getNestedValue(allNodesStats, EventStatName.NORMALIZATION_PROCESSOR_EXECUTIONS));
+
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.NORM_TECHNIQUE_L2_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.NORM_TECHNIQUE_MINMAX_EXECUTIONS));
+        assertEquals(3, getNestedValue(allNodesStats, EventStatName.NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS));
+
+        assertEquals(3, getNestedValue(allNodesStats, EventStatName.COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.COMB_TECHNIQUE_HARMONIC_EXECUTIONS));
+
+        // Info stats
+        assertEquals(3, getNestedValue(stats, InfoStatName.NORMALIZATION_PROCESSORS));
+
+        assertEquals(1, getNestedValue(stats, InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.NORM_TECHNIQUE_MINMAX_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.NORM_TECHNIQUE_ZSCORE_PROCESSORS));
+
+        assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_ARITHMETIC_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_GEOMETRIC_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_HARMONIC_PROCESSORS));
+
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 }

@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.util;
 
+import lombok.AllArgsConstructor;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
@@ -12,7 +13,9 @@ import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import lombok.NonNull;
 import org.opensearch.neuralsearch.query.dto.NeuralQueryTargetFieldConfig;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -23,6 +26,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARA
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
@@ -37,52 +41,63 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SUPPORTED_TAR
 public class SemanticMappingUtils {
     private static final int MAX_DEPTH_OF_INDEX_MAPPING = 1000;
 
+    @AllArgsConstructor
+    private static class CollectSemanticFieldStackEntry {
+        Map<String, Object> mapping;
+        String path;
+        int depth;
+    }
+
     /**
      * It will recursively traverse the mapping to collect the full path to field config map for semantic fields
      * @param currentMapping current mapping
      * @param semanticFieldPathToConfigMap path to field config map for semantic fields
      */
+    @SuppressWarnings("unchecked")
     public static void collectSemanticField(
         @NonNull final Map<String, Object> currentMapping,
         @NonNull final Map<String, Map<String, Object>> semanticFieldPathToConfigMap
     ) {
-        collectSemanticField(currentMapping, "", 0, semanticFieldPathToConfigMap);
-    }
+        final Deque<CollectSemanticFieldStackEntry> semanticFieldEntryStack = new ArrayDeque<>();
+        semanticFieldEntryStack.push(new CollectSemanticFieldStackEntry(currentMapping, "", 0));
 
-    @SuppressWarnings("unchecked")
-    private static void collectSemanticField(
-        @NonNull final Map<String, Object> currentMapping,
-        @NonNull final String parentPath,
-        final int depth,
-        @NonNull final Map<String, Map<String, Object>> semanticFieldPathToConfigMap
-    ) {
-        if (depth > MAX_DEPTH_OF_INDEX_MAPPING) {
-            throw new IllegalArgumentException(
-                "Cannot transform the mapping for semantic fields because its depth exceeds the maximum allowed depth "
-                    + MAX_DEPTH_OF_INDEX_MAPPING
-            );
-        }
-        for (Map.Entry<String, Object> entry : currentMapping.entrySet()) {
-            final String fieldName = entry.getKey();
-            final Object fieldConfig = entry.getValue();
+        while (semanticFieldEntryStack.isEmpty() == false) {
+            final CollectSemanticFieldStackEntry entry = semanticFieldEntryStack.pop();
+            final Map<String, Object> mapping = entry.mapping;
+            String parentPath = entry.path;
+            int currentDepth = entry.depth;
 
-            // Build the full path for the current field
-            final String fullPath = parentPath.isEmpty() ? fieldName : parentPath + PATH_SEPARATOR + fieldName;
+            if (currentDepth > MAX_DEPTH_OF_INDEX_MAPPING) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Cannot transform the mapping for semantic fields because its depth exceeds the maximum allowed depth %d.",
+                        MAX_DEPTH_OF_INDEX_MAPPING
+                    )
+                );
+            }
 
-            if (fieldConfig instanceof Map) {
-                final Map<String, Object> fieldConfigMap = (Map<String, Object>) fieldConfig;
+            for (Map.Entry<String, Object> fieldEntry : mapping.entrySet()) {
+                final String fieldName = fieldEntry.getKey();
+                final Object fieldConfig = fieldEntry.getValue();
+                // Build the full path for the current field
+                final String fullPath = parentPath.isEmpty() ? fieldName : String.join(PATH_SEPARATOR, parentPath, fieldName);
 
-                if (isSemanticField(fieldConfigMap)) {
-                    semanticFieldPathToConfigMap.put(fullPath, fieldConfigMap);
-                }
+                if (fieldConfig instanceof Map) {
+                    final Map<String, Object> fieldConfigMap = (Map<String, Object>) fieldConfig;
 
-                // If it's an object field, recurse into the sub fields
-                if (fieldConfigMap.containsKey(MappingConstants.PROPERTIES)) {
-                    collectSemanticField(
-                        (Map<String, Object>) fieldConfigMap.get(MappingConstants.PROPERTIES),
-                        fullPath,
-                        depth + 1,
-                        semanticFieldPathToConfigMap
+                    if (isSemanticField(fieldConfigMap)) {
+                        semanticFieldPathToConfigMap.put(fullPath, fieldConfigMap);
+                    }
+
+                    // If it's an object field, recurse into the sub-fields
+                    if (fieldConfigMap.containsKey(MappingConstants.PROPERTIES)) {
+                        final Map<String, Object> subMapping = (Map<String, Object>) fieldConfigMap.get(MappingConstants.PROPERTIES);
+                        semanticFieldEntryStack.push(new CollectSemanticFieldStackEntry(subMapping, fullPath, currentDepth + 1));
+                    }
+                } else {
+                    throw new IllegalArgumentException(
+                        String.format(Locale.ROOT, "Expect the field config at the path %s should be a map.", fullPath)
                     );
                 }
             }
@@ -344,6 +359,10 @@ public class SemanticMappingUtils {
                     targetFieldConfigBuilder
                 );
                 final String embeddingFieldType = (String) embeddingFieldConfig.get(TYPE);
+                String semanticFieldSearchAnalyzer = null;
+                if (targetFieldConfig.containsKey(SEMANTIC_FIELD_SEARCH_ANALYZER)) {
+                    semanticFieldSearchAnalyzer = (String) targetFieldConfig.get(SEMANTIC_FIELD_SEARCH_ANALYZER);
+                }
                 // If we have search model id we should use it otherwise fall back to use the model id.
                 String searchModelId = (String) targetFieldConfig.get(MODEL_ID);
                 if (targetFieldConfig.containsKey(SEARCH_MODEL_ID)) {
@@ -352,6 +371,7 @@ public class SemanticMappingUtils {
                 targetFieldConfigBuilder.embeddingFieldType(embeddingFieldType);
                 targetFieldConfigBuilder.searchModelId(searchModelId);
                 targetFieldConfigBuilder.isSemanticField(Boolean.TRUE);
+                targetFieldConfigBuilder.semanticFieldSearchAnalyzer(semanticFieldSearchAnalyzer);
             } else if (KNNVectorFieldMapper.CONTENT_TYPE.equals(targetFieldType)) {
                 targetFieldConfigBuilder.isSemanticField(Boolean.FALSE);
                 targetFieldConfigBuilder.embeddingFieldType(targetFieldType);
@@ -415,5 +435,34 @@ public class SemanticMappingUtils {
         }
 
         return false;
+    }
+
+    /**
+     * Check if the semantic field search analyzer is provided in the semantic field config.
+     * If the field is not defined then return null as the default value.
+     * @param fieldConfigMap The config for a semantic field.
+     * @return if the semantic field search analyzer is provided in the semantic field config.
+     */
+    public static String getSemanticFieldSearchAnalyzer(
+        @NonNull final Map<String, Object> fieldConfigMap,
+        @NonNull final String semanticFieldPath
+    ) {
+        if (fieldConfigMap.containsKey(SEMANTIC_FIELD_SEARCH_ANALYZER)) {
+            final Object semanticFieldSearchAnalyzer = fieldConfigMap.get(SEMANTIC_FIELD_SEARCH_ANALYZER);
+            if (semanticFieldSearchAnalyzer instanceof String) {
+                return (String) semanticFieldSearchAnalyzer;
+            } else {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "%s should be a String for the semantic field at %s",
+                        SEMANTIC_FIELD_SEARCH_ANALYZER,
+                        semanticFieldPath
+                    )
+                );
+            }
+        }
+
+        return null;
     }
 }

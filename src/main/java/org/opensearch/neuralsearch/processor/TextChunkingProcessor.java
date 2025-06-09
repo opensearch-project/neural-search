@@ -11,6 +11,7 @@ import java.util.Locale;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -52,6 +53,13 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     private static final String DEFAULT_ALGORITHM = FixedTokenLengthChunker.ALGORITHM_NAME;
     public static final String IGNORE_MISSING = "ignore_missing";
     public static final boolean DEFAULT_IGNORE_MISSING = false;
+
+    private static final Map<String, Runnable> chunkingAlgorithmIncrementers = Map.of(
+        DelimiterChunker.ALGORITHM_NAME,
+        () -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS),
+        FixedTokenLengthChunker.ALGORITHM_NAME,
+        () -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS)
+    );
 
     private int maxChunkLimit;
     private Chunker chunker;
@@ -295,9 +303,6 @@ public final class TextChunkingProcessor extends AbstractProcessor {
 
     private void recordChunkingExecutionStats(String algorithmName) {
         EventStatsManager.increment(EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS);
-        switch (algorithmName) {
-            case DelimiterChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS);
-            case FixedTokenLengthChunker.ALGORITHM_NAME -> EventStatsManager.increment(EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS);
-        }
+        Optional.ofNullable(chunkingAlgorithmIncrementers.get(algorithmName)).ifPresent(Runnable::run);
     }
 }

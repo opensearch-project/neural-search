@@ -49,6 +49,7 @@ import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.index.analysis.AnalyzerScope;
 import org.opensearch.index.analysis.IndexAnalyzers;
 import org.opensearch.index.analysis.NamedAnalyzer;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;
@@ -87,8 +88,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private static final Supplier<Map<String, Float>> QUERY_TOKENS_SUPPLIER = () -> Map.of("hello", 1.f, "world", 2.f);
 
     @Before
-    public void setupClusterServiceToCurrentVersion() {
+    public void setup() {
         setUpClusterService(Version.CURRENT);
+
+        // Initialize EventStatsManager for tests
+        TestUtils.initializeEventStatsManager();
     }
 
     @SneakyThrows
@@ -842,6 +846,26 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .analyzer(ANALYZER_NAME);
         QueryBuilder queryBuilder = sparseEncodingQueryBuilder.doRewrite(null);
         assertSame(queryBuilder, sparseEncodingQueryBuilder);
+    }
+
+    @SneakyThrows
+    public void testRewrite_whenQueryTokensSupplierNull_andAnalyzerNull_thenUseDefaultAnalyzerAndReturnSelf() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME).queryText(QUERY_TEXT);
+        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) sparseEncodingQueryBuilder.doRewrite(null);
+        assertSame(queryBuilder, sparseEncodingQueryBuilder);
+        assertEquals("bert-uncased", queryBuilder.analyzer());
+    }
+
+    @SneakyThrows
+    public void testRewrite_whenQueryTokensSupplierNull_andModelIdAndAnalyzerNotNull_thenException() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .analyzer(ANALYZER_NAME)
+            .modelId(MODEL_ID);
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> sparseEncodingQueryBuilder.doRewrite(null));
+        String expectedMessage =
+            "Cannot use both [model_id: mfgfgdsfgfdgsde] and [analyzer: standard] for neural sparse query tokenization. Specify only one tokenization method. These parameters can be set either in the query or through the neural_query_enricher search processor.";
+        assertEquals(expectedMessage, exception.getMessage());
     }
 
     public void testGetQueryTokens_queryTokensSupplierNonNull() {

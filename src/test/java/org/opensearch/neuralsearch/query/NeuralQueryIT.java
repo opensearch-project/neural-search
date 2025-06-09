@@ -4,12 +4,14 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -26,6 +28,7 @@ import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.util.TestUtils;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-neural-basic-index";
@@ -108,6 +111,8 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testQueryWithBoostAndImageQueryAndRadialQuery() {
+        // Enable stats for the test
+        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), true);
         String modelId = null;
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
         modelId = prepareModel();
@@ -184,6 +189,24 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             objectToFloat(firstInnerHitWithMinScoreQuery.get("_score")),
             DELTA_FOR_SCORE_ASSERTION
         );
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(
+            "Stats should contain the expected number of neural_query_against_knn_requests",
+            4,
+            getNestedValue(allNodesStats, EventStatName.NEURAL_QUERY_AGAINST_KNN_REQUESTS)
+        );
+        assertEquals(
+            "Stats should contain the expected number of neural_query_requests",
+            4,
+            getNestedValue(allNodesStats, EventStatName.NEURAL_QUERY_REQUESTS)
+        );
+        // Disable stats to not impact other tests
+        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), false);
     }
 
     /**

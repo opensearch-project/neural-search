@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.query;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Locale;
@@ -38,6 +39,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery;
 
@@ -270,13 +273,26 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
             compoundQueryBuilder.paginationDepth(paginationDepth);
         }
+
+        boolean hasInnerHits = false;
         for (QueryBuilder query : queries) {
             if (filter == null) {
                 compoundQueryBuilder.add(query);
             } else {
                 compoundQueryBuilder.add(query.filter(filter));
             }
+
+            // Check if children have inner hits for stats
+            if (hasInnerHits == false) {
+                Map<String, InnerHitContextBuilder> innerHits = new HashMap<>();
+                InnerHitContextBuilder.extractInnerHits(query, innerHits);
+                hasInnerHits = innerHits.isEmpty() == false;
+            }
         }
+
+        boolean hasFilter = filter != null;
+        boolean hasPagination = paginationDepth != null;
+        updateQueryStats(hasFilter, hasPagination, hasInnerHits);
         return compoundQueryBuilder;
     }
 
@@ -407,6 +423,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     protected void extractInnerHitBuilders(Map<String, InnerHitContextBuilder> innerHits) {
         for (QueryBuilder queryBuilder : queries) {
             InnerHitContextBuilder.extractInnerHits(queryBuilder, innerHits);
+        }
+    }
+
+    private static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits) {
+        EventStatsManager.increment(EventStatName.HYBRID_QUERY_REQUESTS);
+        if (hasFilter) {
+            EventStatsManager.increment(EventStatName.HYBRID_QUERY_FILTER_REQUESTS);
+        }
+        if (hasPagination) {
+            EventStatsManager.increment(EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS);
+        }
+        if (hasInnerHits) {
+            EventStatsManager.increment(EventStatName.HYBRID_QUERY_INNER_HITS_REQUESTS);
         }
     }
 }
