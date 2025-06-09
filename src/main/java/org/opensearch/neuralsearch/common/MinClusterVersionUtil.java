@@ -7,11 +7,8 @@ package org.opensearch.neuralsearch.common;
 import com.google.common.collect.ImmutableMap;
 import org.opensearch.Version;
 import org.opensearch.knn.index.util.IndexUtil;
-import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
-import java.util.EnumSet;
 import java.util.Map;
 
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
@@ -37,61 +34,6 @@ public final class MinClusterVersionUtil {
         .put(MAX_DISTANCE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH)
         .put(MIN_SCORE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH)
         .put(QUERY_IMAGE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_QUERY_IMAGE_FIX)
-        .build();
-
-    /**
-     * Info stats organized by version added
-     */
-    public static final Map<Version, EnumSet<InfoStatName>> infoStatsByVersion = ImmutableMap.<Version, EnumSet<InfoStatName>>builder()
-        .put(Version.V_3_0_0, EnumSet.of(InfoStatName.CLUSTER_VERSION, InfoStatName.TEXT_EMBEDDING_PROCESSORS))
-        .put(
-            Version.V_3_1_0,
-            EnumSet.of(
-                InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS,
-                InfoStatName.TEXT_CHUNKING_PROCESSORS,
-                InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS,
-                InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS,
-                InfoStatName.NORMALIZATION_PROCESSORS,
-                InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS,
-                InfoStatName.NORM_TECHNIQUE_MINMAX_PROCESSORS,
-                InfoStatName.NORM_TECHNIQUE_ZSCORE_PROCESSORS,
-                InfoStatName.COMB_TECHNIQUE_ARITHMETIC_PROCESSORS,
-                InfoStatName.COMB_TECHNIQUE_GEOMETRIC_PROCESSORS,
-                InfoStatName.COMB_TECHNIQUE_HARMONIC_PROCESSORS,
-                InfoStatName.RRF_PROCESSORS,
-                InfoStatName.COMB_TECHNIQUE_RRF_PROCESSORS
-            )
-        )
-        .build();
-
-    /**
-     * Event stats organized by version added
-     */
-    public static final Map<Version, EnumSet<EventStatName>> eventStatsByVersion = ImmutableMap.<Version, EnumSet<EventStatName>>builder()
-        .put(Version.V_3_0_0, EnumSet.of(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS))
-        .put(
-            Version.V_3_1_0,
-            EnumSet.of(
-                EventStatName.TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS,
-                EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS,
-                EventStatName.TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS,
-                EventStatName.TEXT_CHUNKING_DELIMITER_EXECUTIONS,
-                EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT,
-                EventStatName.NORMALIZATION_PROCESSOR_EXECUTIONS,
-                EventStatName.NORM_TECHNIQUE_L2_EXECUTIONS,
-                EventStatName.NORM_TECHNIQUE_MINMAX_EXECUTIONS,
-                EventStatName.NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS,
-                EventStatName.COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS,
-                EventStatName.COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS,
-                EventStatName.COMB_TECHNIQUE_HARMONIC_EXECUTIONS,
-                EventStatName.RRF_PROCESSOR_EXECUTIONS,
-                EventStatName.COMB_TECHNIQUE_RRF_EXECUTIONS,
-                EventStatName.HYBRID_QUERY_REQUESTS,
-                EventStatName.HYBRID_QUERY_INNER_HITS_REQUESTS,
-                EventStatName.HYBRID_QUERY_FILTER_REQUESTS,
-                EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS
-            )
-        )
         .build();
 
     public static boolean isClusterOnOrAfterMinReqVersionForDefaultDenseModelIdSupport() {
@@ -133,59 +75,5 @@ public final class MinClusterVersionUtil {
      */
     public static boolean isClusterOnOrAfterMinReqVersionForSemanticFieldType() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD);
-    }
-
-    /**
-     * Gets all info stats available in the current cluster based on the min node version
-     * @return set of available info stats
-     */
-    public static EnumSet<InfoStatName> getInfoStatsAvailable() {
-        return getInfoStatsAvailableInVersion(NeuralSearchClusterUtil.instance().getClusterMinVersion());
-    }
-
-    /**
-     * Gets all event stats available in the current cluster based on the min node version
-     * @return set of available event stats
-     */
-    public static EnumSet<EventStatName> getEventStatsAvailable() {
-        return getEventStatsAvailableInVersion(NeuralSearchClusterUtil.instance().getClusterMinVersion());
-    }
-
-    /**
-    * Returns all cumulatively available info stats for a given version
-    * @param version the version to get
-    * @return an EnumSet of all available stats at that version
-    */
-    public static EnumSet<InfoStatName> getInfoStatsAvailableInVersion(Version version) {
-        if (version == Version.CURRENT) {
-            return EnumSet.allOf(InfoStatName.class);
-        }
-
-        EnumSet<InfoStatName> infoStatNames = EnumSet.noneOf(InfoStatName.class);
-        for (Map.Entry<Version, EnumSet<InfoStatName>> entry : infoStatsByVersion.entrySet()) {
-            if (entry.getKey().onOrBefore(version)) {
-                infoStatNames.addAll(entry.getValue());
-            }
-        }
-        return infoStatNames;
-    }
-
-    /**
-     * Returns all cumulatively available event stats for a given version
-     * @param version the version to get
-     * @return an EnumSet of all available stats at that version
-     */
-    public static EnumSet<EventStatName> getEventStatsAvailableInVersion(Version version) {
-        if (version == Version.CURRENT) {
-            return EnumSet.allOf(EventStatName.class);
-        }
-
-        EnumSet<EventStatName> eventStatNames = EnumSet.noneOf(EventStatName.class);
-        for (Map.Entry<Version, EnumSet<EventStatName>> entry : eventStatsByVersion.entrySet()) {
-            if (entry.getKey().onOrBefore(version)) {
-                eventStatNames.addAll(entry.getValue());
-            }
-        }
-        return eventStatNames;
     }
 }

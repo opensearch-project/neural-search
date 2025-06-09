@@ -8,15 +8,16 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.Version;
 import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.rest.BaseRestHandler;
 import org.opensearch.rest.BytesRestResponse;
 import org.opensearch.rest.RestRequest;
@@ -79,7 +80,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         .map(str -> str.toLowerCase(Locale.ROOT))
         .collect(Collectors.toSet());
 
-    private static final Set<String> STATE_STAT_NAMES = EnumSet.allOf(InfoStatName.class)
+    private static final Set<String> INFO_STAT_NAMES = EnumSet.allOf(InfoStatName.class)
         .stream()
         .map(InfoStatName::getNameString)
         .map(str -> str.toLowerCase(Locale.ROOT))
@@ -104,6 +105,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     }
 
     private NeuralSearchSettingsAccessor settingsAccessor;
+    private NeuralSearchClusterUtil clusterUtil;
 
     @Override
     public String getName() {
@@ -179,15 +181,17 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     private void processStatsRequestParameters(RestRequest request, NeuralStatsInput neuralStatsInput) {
         // Determine which stat names to retrieve based on user parameters
         Optional<String[]> optionalStats = splitCommaSeparatedParam(request, STAT_PARAM);
+        Version minClusterVersion = clusterUtil.getClusterMinVersion();
 
         if (optionalStats.isPresent() == false || optionalStats.get().length == 0) {
             // No specific stats requested, add all stats by default
-            addAllStats(neuralStatsInput);
+            addAllStats(neuralStatsInput, minClusterVersion);
             return;
         }
 
         String[] stats = optionalStats.get();
         Set<String> invalidStatNames = new HashSet<>();
+
         for (String stat : stats) {
             // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
@@ -196,14 +200,16 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 continue;
             }
 
-            // We want to only fetch stats that exist on the min version of the cluster to prevent a serialization error
-            EnumSet<InfoStatName> availableInfoStats = MinClusterVersionUtil.getInfoStatsAvailable();
-            EnumSet<EventStatName> availableEventStats = MinClusterVersionUtil.getEventStatsAvailable();
-
-            if (InfoStatName.isValidName(normalizedStat) && availableInfoStats.contains(InfoStatName.from(normalizedStat))) {
-                neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
-            } else if (EventStatName.isValidName(normalizedStat) && availableEventStats.contains(EventStatName.from(normalizedStat))) {
-                neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+            if (InfoStatName.isValidName(normalizedStat)) {
+                InfoStatName infoStatName = InfoStatName.from(normalizedStat);
+                if (infoStatName.version().onOrBefore(minClusterVersion)) {
+                    neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
+                }
+            } else if (EventStatName.isValidName(normalizedStat)) {
+                EventStatName eventStatName = EventStatName.from(normalizedStat);
+                if (eventStatName.version().onOrBefore(minClusterVersion)) {
+                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                }
             }
         }
 
@@ -211,14 +217,32 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         // non empty. So throwing this exception here without adding all covers the empty input case.
         if (invalidStatNames.isEmpty() == false) {
             throw new IllegalArgumentException(
-                unrecognized(request, invalidStatNames, Sets.union(EVENT_STAT_NAMES, STATE_STAT_NAMES), STAT_PARAM)
+                unrecognized(request, invalidStatNames, Sets.union(EVENT_STAT_NAMES, INFO_STAT_NAMES), STAT_PARAM)
             );
         }
     }
 
-    private void addAllStats(NeuralStatsInput neuralStatsInput) {
-        neuralStatsInput.getInfoStatNames().addAll(MinClusterVersionUtil.getInfoStatsAvailable());
-        neuralStatsInput.getEventStatNames().addAll(MinClusterVersionUtil.getEventStatsAvailable());
+    private void addAllStats(NeuralStatsInput neuralStatsInput, Version minVersion) {
+        if (minVersion == Version.CURRENT) {
+            neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
+            neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
+        } else {
+            // Use a separate case here to save on version comparison if not necessary
+            neuralStatsInput.getInfoStatNames()
+                .addAll(
+                    EnumSet.allOf(InfoStatName.class)
+                        .stream()
+                        .filter(statName -> statName.version().onOrBefore(minVersion))
+                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(InfoStatName.class)))
+                );
+            neuralStatsInput.getEventStatNames()
+                .addAll(
+                    EnumSet.allOf(EventStatName.class)
+                        .stream()
+                        .filter(statName -> statName.version().onOrBefore(minVersion))
+                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
+                );
+        }
     }
 
     private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {

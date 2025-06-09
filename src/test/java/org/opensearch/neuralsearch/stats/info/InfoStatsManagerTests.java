@@ -17,7 +17,9 @@ import org.opensearch.neuralsearch.util.PipelineServiceUtil;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
@@ -38,11 +40,34 @@ public class InfoStatsManagerTests extends OpenSearchTestCase {
     public void setup() {
         MockitoAnnotations.openMocks(this);
         when(mockPipelineServiceUtil.getIngestPipelineConfigs()).thenReturn(new ArrayList<>());
+        when(mockPipelineServiceUtil.getSearchPipelineConfigs()).thenReturn(new ArrayList<>());
         when(mockClusterUtil.getClusterMinVersion()).thenReturn(Version.CURRENT);
         infoStatsManager = new InfoStatsManager(mockClusterUtil, mockSettingsAccessor, mockPipelineServiceUtil);
     }
 
     public void test_getStats_returnsAllStats() {
+        Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));
+        Set<InfoStatName> allStatNames = EnumSet.allOf(InfoStatName.class);
+
+        assertEquals(allStatNames, stats.keySet());
+    }
+
+    public void test_getStats_returnsAllStats_emptyPipelineConfigs() {
+        when(mockPipelineServiceUtil.getIngestPipelineConfigs()).thenReturn(List.of(Collections.emptyMap()));
+        when(mockPipelineServiceUtil.getSearchPipelineConfigs()).thenReturn(List.of(Collections.emptyMap()));
+
+        Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));
+        Set<InfoStatName> allStatNames = EnumSet.allOf(InfoStatName.class);
+
+        assertEquals(allStatNames, stats.keySet());
+    }
+
+    public void test_getStats_returnsAllStats_partiallyEmptyPipelineConfigs() {
+        when(mockPipelineServiceUtil.getIngestPipelineConfigs()).thenReturn(List.of(Collections.emptyMap()));
+        when(mockPipelineServiceUtil.getSearchPipelineConfigs()).thenReturn(List.of(Map.of(
+                InfoStatsManager.PHASE_RESULTS_PROCESSORS_KEY, List.of(Collections.emptyMap())
+        )));
+
         Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));
         Set<InfoStatName> allStatNames = EnumSet.allOf(InfoStatName.class);
 

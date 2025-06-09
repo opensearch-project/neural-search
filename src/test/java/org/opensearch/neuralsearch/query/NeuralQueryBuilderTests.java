@@ -613,6 +613,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testHashAndEquals() {
+        setUpClusterService();
         final String fieldName2 = "field 2";
         final String queryText2 = "query text 2";
         final String queryImage2 = "query image 2";
