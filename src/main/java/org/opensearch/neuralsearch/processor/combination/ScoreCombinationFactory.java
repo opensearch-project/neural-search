@@ -25,7 +25,9 @@ public class ScoreCombinationFactory {
         HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
         params -> new HarmonicMeanScoreCombinationTechnique(params, scoreCombinationUtil),
         GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-        params -> new GeometricMeanScoreCombinationTechnique(params, scoreCombinationUtil)
+        params -> new GeometricMeanScoreCombinationTechnique(params, scoreCombinationUtil),
+            DedupCombinationTechnique.TECHNIQUE_NAME,
+            params -> new DedupCombinationTechnique()
     );
 
     /**

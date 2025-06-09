@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -15,8 +16,14 @@ import org.opensearch.action.search.QueryPhaseResultConsumer;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.neuralsearch.processor.combination.DedupCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.MaxNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.internal.SearchContext;
@@ -58,6 +65,21 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
         }
         List<QuerySearchResult> querySearchResults = getQueryPhaseSearchResults(searchPhaseResult);
         Optional<FetchSearchResult> fetchSearchResult = getFetchSearchResults(searchPhaseResult);
+
+        if (normalizationTechnique instanceof MaxNormalizationTechnique && combinationTechnique instanceof DedupCombinationTechnique){
+            HybridQueryBuilder hybridQueryBuilder = (HybridQueryBuilder) searchPhaseContext.getRequest().source().query();
+            List<QueryBuilder> subQueries = hybridQueryBuilder.queries();
+            if (subQueries.size()>2 || subQueries.size() < 2){
+                throw new IllegalArgumentException("Number of subqueries cannot be greater or lesser than 2");
+            }
+            if (subQueries.get(0) instanceof KNNQueryBuilder || subQueries.get(0) instanceof  NeuralQueryBuilder){
+                throw new IllegalArgumentException("Knn query cannot be 1st subquery");
+            }
+
+            if(subQueries.get(1) instanceof KNNQueryBuilder == false || subQueries.get(1) instanceof NeuralQueryBuilder==false){
+                throw new IllegalArgumentException("Knn query should always be 2nd subquery");
+            }
+        }
         normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
     }
 
