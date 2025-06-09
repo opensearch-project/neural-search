@@ -104,6 +104,9 @@ public class DocumentCluster implements Accountable {
             sizeInBytes += RamUsageEstimator.sizeOf(docIds);
             sizeInBytes += RamUsageEstimator.sizeOf(freqs);
         }
+        if (summary != null) {
+            sizeInBytes += summary.ramBytesUsed();
+        }
         return sizeInBytes;
     }
 
