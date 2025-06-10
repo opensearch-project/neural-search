@@ -496,15 +496,15 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
         // Parse json to get stats
         assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
-        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.SKIP_EXISTING_EXECUTIONS));
 
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
-        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.SKIP_EXISTING_PROCESSORS));
         // Reset stats
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 
-    public void testTextEmbeddingProcessor_batch__processorStats_successful() throws Exception {
+    public void testTextEmbeddingProcessor_batch_processorStats_successful() throws Exception {
         updateClusterSettings("plugins.neural_search.stats_enabled", true);
         String modelId = uploadTextEmbeddingModel();
         loadModel(modelId);
@@ -528,10 +528,10 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
         // Parse json to get stats
         assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
-        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS));
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.SKIP_EXISTING_EXECUTIONS));
 
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
-        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.SKIP_EXISTING_PROCESSORS));
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
     }
 

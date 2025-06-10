@@ -28,14 +28,8 @@ public enum EventStatName implements StatName {
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_0_0
     ),
-    /** Tracks skipped executions of the text embedding processor for existing embeddings */
-    TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS(
-        "text_embedding_skip_existing_executions",
-        "processors.ingest",
-        EventStatType.TIMESTAMPED_EVENT_COUNTER,
-        Version.V_3_1_0
-    ),
-    /** Tracks executions of the text chunking processor */
+    /** Tracks skipped executions of ingest processor for existing embeddings */
+    SKIP_EXISTING_EXECUTIONS("skip_existing_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),
     TEXT_CHUNKING_PROCESSOR_EXECUTIONS(
         "text_chunking_executions",
         "processors.ingest",

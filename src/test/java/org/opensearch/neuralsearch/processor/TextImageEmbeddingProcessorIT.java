@@ -106,12 +106,12 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testEmbeddingProcessor_whenIngestingDocumentWithOrWithoutSourceMatchingMapping_thenSuccessful_statsEnabled() {
+    public void testEmbeddingProcessor_withDocumentWithOrWithoutSourceMatchingMapping_withSkipExisting_thenSuccessful_statsEnabled() {
         enableStats();
 
         String modelId = uploadModel();
         loadModel(modelId);
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING_WITH_SKIP_EXISTING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         // verify doc with mapping
         ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
@@ -129,7 +129,9 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
         // Parse json to get stats
         assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_IMAGE_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.SKIP_EXISTING_EXECUTIONS.getFullPath()));
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_IMAGE_EMBEDDING_PROCESSORS.getFullPath()));
+        assertEquals(1, getNestedValue(stats, InfoStatName.SKIP_EXISTING_PROCESSORS.getFullPath()));
 
         // Reset stats
         updateClusterSettings("plugins.neural_search.stats_enabled", false);

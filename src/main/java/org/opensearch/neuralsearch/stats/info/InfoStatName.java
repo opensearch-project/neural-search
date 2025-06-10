@@ -25,14 +25,8 @@ public enum InfoStatName implements StatName {
     CLUSTER_VERSION("cluster_version", "", InfoStatType.INFO_STRING, Version.V_3_0_0),
     /** Counts text embedding processors in pipelines */
     TEXT_EMBEDDING_PROCESSORS("text_embedding_processors_in_pipelines", "processors.ingest", InfoStatType.INFO_COUNTER, Version.V_3_0_0),
-    /** Counts text embedding processors with skip existing embeddings enabled */
-    TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS(
-        "text_embedding_skip_existing_processors",
-        "processors.ingest",
-        InfoStatType.INFO_COUNTER,
-        Version.V_3_1_0
-    ),
-    /** Counts text chunking processors */
+    /** Counts ingest processors with skip existing embeddings enabled */
+    SKIP_EXISTING_PROCESSORS("skip_existing_processors", "processors.ingest", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
     TEXT_CHUNKING_PROCESSORS("text_chunking_processors", "processors.ingest", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
     /** Counts delimiter-based text chunking processors */
     TEXT_CHUNKING_DELIMITER_PROCESSORS(
