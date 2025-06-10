@@ -93,6 +93,71 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
         assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
         assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertFalse(capturedInput.isFlatten());
+        assertFalse(capturedInput.isIncludeMetadata());
+        assertTrue(capturedInput.isIncludeIndividualNodes());
+    }
+
+    public void test_execute_customParams_includePartial() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        when(clusterUtil.getClusterMinVersion()).thenReturn(Version.CURRENT);
+
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor, clusterUtil);
+
+        Map<String, String> params = Map.of(
+            RestNeuralStatsAction.FLATTEN_PARAM, "true",
+            RestNeuralStatsAction.INCLUDE_METADATA_PARAM, "true",
+            RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, "false",
+            RestNeuralStatsAction.INCLUDE_ALL_NODES_PARAM, "true",
+            RestNeuralStatsAction.INCLUDE_INFO_PARAM, "true"
+        );
+        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withParams(params).build();
+
+        restNeuralStatsAction.handleRequest(request, channel, client);
+
+        ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
+
+        NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
+
+        assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
+        assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertTrue(capturedInput.isFlatten());
+        assertTrue(capturedInput.isIncludeMetadata());
+        assertFalse(capturedInput.isIncludeIndividualNodes());
+        assertTrue(capturedInput.isIncludeAllNodes());
+        assertTrue(capturedInput.isIncludeInfo());
+    }
+
+    public void test_execute_customParams_includeNone() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        when(clusterUtil.getClusterMinVersion()).thenReturn(Version.CURRENT);
+
+        RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor, clusterUtil);
+
+        Map<String, String> params = new HashMap<>();
+        params.put(RestNeuralStatsAction.FLATTEN_PARAM, "true");
+        params.put(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, "true");
+        params.put(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, "false");
+        params.put(RestNeuralStatsAction.INCLUDE_ALL_NODES_PARAM, "false");
+        params.put(RestNeuralStatsAction.INCLUDE_INFO_PARAM, "false");
+        RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withParams(params).build();
+
+        restNeuralStatsAction.handleRequest(request, channel, client);
+
+        ArgumentCaptor<NeuralStatsRequest> argumentCaptor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, times(1)).execute(eq(NeuralStatsAction.INSTANCE), argumentCaptor.capture(), any());
+
+        NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
+
+        // Since we we set individual nodes and all nodes to false, we shouldn't fetch any stats
+        assertEquals(capturedInput.getEventStatNames(), EnumSet.noneOf(EventStatName.class));
+        assertEquals(capturedInput.getInfoStatNames(), EnumSet.noneOf(InfoStatName.class));
+        assertTrue(capturedInput.isFlatten());
+        assertTrue(capturedInput.isIncludeMetadata());
+        assertFalse(capturedInput.isIncludeIndividualNodes());
+        assertFalse(capturedInput.isIncludeAllNodes());
+        assertFalse(capturedInput.isIncludeInfo());
     }
 
     public void test_handleRequest_disabledForbidden() throws Exception {

@@ -22,6 +22,8 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForStatCategoryFiltering;
+
 /**
  * Entity class to hold input parameters for retrieving neural stats
  * Responsible for filtering statistics by node IDs, event statistic types, and info stat types.
@@ -60,6 +62,22 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     @Setter
     private boolean flatten;
 
+    @Setter
+    /**
+     * Controls whether the response will include individual nodes
+     */
+    private boolean includeIndividualNodes;
+    @Setter
+    /**
+     * Controls whether the response will include aggregated nodes
+     */
+    private boolean includeAllNodes;
+    @Setter
+    /**
+     * Controls whether the response will include info nodes
+     */
+    private boolean includeInfo;
+
     /**
      * Builder constructor for creating NeuralStatsInput with specific filtering parameters.
      *
@@ -75,13 +93,19 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         EnumSet<EventStatName> eventStatNames,
         EnumSet<InfoStatName> infoStatNames,
         boolean includeMetadata,
-        boolean flatten
+        boolean flatten,
+        boolean includeIndividualNodes,
+        boolean includeAllNodes,
+        boolean includeInfo
     ) {
         this.nodeIds = nodeIds;
         this.eventStatNames = eventStatNames;
         this.infoStatNames = infoStatNames;
         this.includeMetadata = includeMetadata;
         this.flatten = flatten;
+        this.includeIndividualNodes = includeIndividualNodes;
+        this.includeAllNodes = includeAllNodes;
+        this.includeInfo = includeInfo;
     }
 
     /**
@@ -94,6 +118,9 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         this.infoStatNames = EnumSet.noneOf(InfoStatName.class);
         this.includeMetadata = false;
         this.flatten = false;
+        this.includeIndividualNodes = true;
+        this.includeAllNodes = true;
+        this.includeInfo = true;
     }
 
     /**
@@ -108,6 +135,15 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         infoStatNames = input.readOptionalEnumSet(InfoStatName.class);
         includeMetadata = input.readBoolean();
         flatten = input.readBoolean();
+        if (isClusterOnOrAfterMinReqVersionForStatCategoryFiltering()) {
+            includeIndividualNodes = input.readBoolean();
+            includeAllNodes = input.readBoolean();
+            includeInfo = input.readBoolean();
+        } else {
+            includeIndividualNodes = true;
+            includeAllNodes = true;
+            includeInfo = true;
+        }
     }
 
     /**
@@ -123,6 +159,11 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         out.writeOptionalEnumSet(infoStatNames);
         out.writeBoolean(includeMetadata);
         out.writeBoolean(flatten);
+        if (isClusterOnOrAfterMinReqVersionForStatCategoryFiltering()) {
+            out.writeBoolean(includeIndividualNodes);
+            out.writeBoolean(includeAllNodes);
+            out.writeBoolean(includeInfo);
+        }
     }
 
     /**
@@ -147,7 +188,19 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         }
         builder.field(RestNeuralStatsAction.INCLUDE_METADATA_PARAM, includeMetadata);
         builder.field(RestNeuralStatsAction.FLATTEN_PARAM, flatten);
+        builder.field(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, includeIndividualNodes);
+        builder.field(RestNeuralStatsAction.INCLUDE_ALL_NODES_PARAM, includeAllNodes);
+        builder.field(RestNeuralStatsAction.INCLUDE_INFO_PARAM, includeInfo);
         builder.endObject();
         return builder;
+    }
+
+    /**
+     * Helper to determine if we should fetch event stats or if we can skip them
+     * If we exclude both individual and all nodes, then there is no need to fetch any specific stats from nodes
+     * @return whether we need to fetch event stats
+     */
+    public boolean isIncludeEvents() {
+        return this.isIncludeAllNodes() || this.isIncludeIndividualNodes();
     }
 }

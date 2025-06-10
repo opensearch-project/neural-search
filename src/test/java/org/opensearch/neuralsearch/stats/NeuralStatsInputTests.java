@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.stats;
 
+import org.junit.Before;
+import org.opensearch.Version;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -26,6 +28,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class NeuralStatsInputTests extends OpenSearchTestCase {
@@ -33,6 +36,11 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
     private static final String NODE_ID_2 = "node2";
     private static final EventStatName EVENT_STAT = EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS;
     private static final InfoStatName STATE_STAT = InfoStatName.TEXT_EMBEDDING_PROCESSORS;
+
+    @Before
+    public void setup() throws Exception {
+        setUpClusterService(Version.CURRENT);
+    }
 
     public void test_defaultConstructorEmpty() {
         NeuralStatsInput input = new NeuralStatsInput();
@@ -42,6 +50,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         assertTrue(input.getInfoStatNames().isEmpty());
         assertFalse(input.isIncludeMetadata());
         assertFalse(input.isFlatten());
+        assertTrue(input.isIncludeIndividualNodes());
+        assertTrue(input.isIncludeAllNodes());
+        assertTrue(input.isIncludeInfo());
     }
 
     public void test_builderWithAllFields() {
@@ -55,6 +66,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
             .infoStatNames(infoStats)
             .includeMetadata(true)
             .flatten(true)
+            .includeIndividualNodes(false)
+            .includeAllNodes(false)
+            .includeInfo(false)
             .build();
 
         assertEquals(nodeIds, input.getNodeIds());
@@ -69,7 +83,10 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
 
         // Have to return the readByte since readBoolean can't be mocked
         when(mockInput.readByte()).thenReturn((byte) 1)   // true for includeMetadata
-            .thenReturn((byte) 1);  // true for flatten
+            .thenReturn((byte) 1)  // true for flatten
+            .thenReturn((byte) 0)  // false for includeIndividualNodes
+            .thenReturn((byte) 0)  // false for includeAllNodes
+            .thenReturn((byte) 0);  // false for includeInfo
 
         when(mockInput.readOptionalStringList()).thenReturn(Arrays.asList(NODE_ID_1, NODE_ID_2));
         when(mockInput.readOptionalEnumSet(EventStatName.class)).thenReturn(EnumSet.of(EVENT_STAT));
@@ -82,8 +99,11 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         assertEquals(EnumSet.of(STATE_STAT), input.getInfoStatNames());
         assertTrue(input.isIncludeMetadata());
         assertTrue(input.isFlatten());
+        assertFalse(input.isIncludeIndividualNodes());
+        assertFalse(input.isIncludeAllNodes());
+        assertFalse(input.isIncludeInfo());
 
-        verify(mockInput, times(2)).readByte();
+        verify(mockInput, times(5)).readByte();
         verify(mockInput, times(1)).readOptionalStringList();
         verify(mockInput, times(2)).readOptionalEnumSet(any());
     }
@@ -99,6 +119,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
             .infoStatNames(infoStats)
             .includeMetadata(true)
             .flatten(true)
+            .includeIndividualNodes(false)
+            .includeAllNodes(false)
+            .includeInfo(false)
             .build();
 
         StreamOutput mockOutput = mock(StreamOutput.class);
@@ -108,8 +131,8 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         verify(mockOutput).writeOptionalEnumSet(eventStats);
         verify(mockOutput).writeOptionalEnumSet(infoStats);
 
-        // 2 boolean writes, 1 for flatten, 1 for include metadata
         verify(mockOutput, times(2)).writeBoolean(true);
+        verify(mockOutput, times(3)).writeBoolean(false);
     }
 
     public void test_toXContent() throws IOException {
@@ -123,6 +146,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
             .infoStatNames(infoStats)
             .includeMetadata(true)
             .flatten(true)
+            .includeIndividualNodes(false)
+            .includeAllNodes(false)
+            .includeInfo(false)
             .build();
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -134,6 +160,9 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         assertEquals(Collections.singletonList(STATE_STAT.getNameString()), responseMap.get("state_stats"));
         assertEquals(true, responseMap.get(RestNeuralStatsAction.INCLUDE_METADATA_PARAM));
         assertEquals(true, responseMap.get(RestNeuralStatsAction.FLATTEN_PARAM));
+        assertEquals(false, responseMap.get(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM));
+        assertEquals(false, responseMap.get(RestNeuralStatsAction.INCLUDE_ALL_NODES_PARAM));
+        assertEquals(false, responseMap.get(RestNeuralStatsAction.INCLUDE_INFO_PARAM));
     }
 
     public void test_writeToHandlesEmptyCollections() throws IOException {
@@ -144,8 +173,7 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
 
         verify(mockOutput).writeOptionalStringCollection(any(List.class));
         verify(mockOutput, times(2)).writeOptionalEnumSet(any(EnumSet.class));
-
-        // 4 boolean writes, 2 for each enum set, 1 for flatten, 1 for include metadata
         verify(mockOutput, times(2)).writeBoolean(false);
+        verify(mockOutput, times(3)).writeBoolean(true);
     }
 }

@@ -90,12 +90,40 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         assertTrue(response.getNodes().isEmpty());
     }
 
+    public void test_newResponse_customNeuralStatsInputParams() {
+        // Create inputs
+        NeuralStatsInput input = new NeuralStatsInput();
+        input.setIncludeInfo(false);
+        input.setIncludeAllNodes(false);
+        input.setIncludeIndividualNodes(false);
+
+        NeuralStatsRequest request = new NeuralStatsRequest(new String[] {}, input);
+        List<NeuralStatsNodeResponse> responses = new ArrayList<>();
+        List<FailedNodeException> failures = new ArrayList<>();
+
+        // Execute response
+        NeuralStatsResponse response = transportAction.newResponse(request, responses, failures);
+
+        // Validate response
+        assertNotNull(response);
+        assertEquals(clusterName, response.getClusterName());
+        assertFalse(response.isIncludeIndividualNodes());
+        assertFalse(response.isIncludeAllNodes());
+        assertFalse(response.isIncludeInfo());
+    }
+
     public void test_newResponseMultipleNodesStateAndEventStats() {
         // Create inputs
         EnumSet<EventStatName> eventStats = EnumSet.of(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);
         EnumSet<InfoStatName> infoStats = EnumSet.of(InfoStatName.TEXT_EMBEDDING_PROCESSORS);
 
-        NeuralStatsInput input = NeuralStatsInput.builder().eventStatNames(eventStats).infoStatNames(infoStats).build();
+        NeuralStatsInput input = NeuralStatsInput.builder()
+            .eventStatNames(eventStats)
+            .infoStatNames(infoStats)
+            .includeIndividualNodes(true)
+            .includeAllNodes(true)
+            .includeInfo(true)
+            .build();
         NeuralStatsRequest request = new NeuralStatsRequest(new String[] {}, input);
 
         // Create multiple nodes
@@ -179,6 +207,93 @@ public class NeuralStatsTransportActionTests extends OpenSearchTestCase {
         StatSnapshot<?> resultStateSnapshot = resultStats.get(infoStatPath);
         assertNotNull(resultStateSnapshot);
         assertEquals(2001L, resultStateSnapshot.getValue());
+    }
+
+    public void test_newResponseMultipleNodesStateAndEventStats_customParams() {
+        // Create inputs
+        EnumSet<EventStatName> eventStats = EnumSet.of(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS);
+        EnumSet<InfoStatName> infoStats = EnumSet.of(InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+
+        NeuralStatsInput input = NeuralStatsInput.builder()
+            .eventStatNames(eventStats)
+            .infoStatNames(infoStats)
+            .includeIndividualNodes(true)
+            .includeAllNodes(false) // <- exclude
+            .includeInfo(false) // <- exclude
+            .build();
+        NeuralStatsRequest request = new NeuralStatsRequest(new String[] {}, input);
+
+        // Create multiple nodes
+        DiscoveryNode node1 = mock(DiscoveryNode.class);
+        when(node1.getId()).thenReturn("test-node-1");
+        DiscoveryNode node2 = mock(DiscoveryNode.class);
+        when(node2.getId()).thenReturn("test-node-2");
+
+        // Create event stats
+        TimestampedEventStatSnapshot snapshot1 = TimestampedEventStatSnapshot.builder()
+            .statName(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
+            .value(17)
+            .minutesSinceLastEvent(3)
+            .trailingIntervalValue(5)
+            .build();
+
+        TimestampedEventStatSnapshot snapshot2 = TimestampedEventStatSnapshot.builder()
+            .statName(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS)
+            .value(33)
+            .minutesSinceLastEvent(0)
+            .trailingIntervalValue(15)
+            .build();
+
+        Map<EventStatName, TimestampedEventStatSnapshot> nodeStats1 = new HashMap<>();
+        nodeStats1.put(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, snapshot1);
+        Map<EventStatName, TimestampedEventStatSnapshot> nodeStats2 = new HashMap<>();
+        nodeStats2.put(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, snapshot2);
+
+        List<NeuralStatsNodeResponse> responses = Arrays.asList(
+            new NeuralStatsNodeResponse(node1, nodeStats1),
+            new NeuralStatsNodeResponse(node2, nodeStats2)
+        );
+
+        // Create info stats
+        CountableInfoStatSnapshot infoStatSnapshot = new CountableInfoStatSnapshot(InfoStatName.TEXT_EMBEDDING_PROCESSORS);
+        infoStatSnapshot.incrementBy(2001L);
+        Map<InfoStatName, StatSnapshot<?>> mockInfoStats = new HashMap<>();
+        mockInfoStats.put(InfoStatName.TEXT_EMBEDDING_PROCESSORS, infoStatSnapshot);
+        when(infoStatsManager.getStats(infoStats)).thenReturn(mockInfoStats);
+
+        List<FailedNodeException> failures = new ArrayList<>();
+
+        // Execute
+        NeuralStatsResponse response = transportAction.newResponse(request, responses, failures);
+
+        // Verify params
+        assertTrue(response.isIncludeIndividualNodes());
+        assertFalse(response.isIncludeAllNodes());
+        assertFalse(response.isIncludeInfo());
+
+        // Verify node level event stats
+        assertNotNull(response);
+        assertEquals(2, response.getNodes().size());
+
+        Map<String, Map<String, StatSnapshot<?>>> nodeEventStats = response.getNodeIdToNodeEventStats();
+
+        assertNotNull(nodeEventStats);
+        assertTrue(nodeEventStats.containsKey("test-node-1"));
+        assertTrue(nodeEventStats.containsKey("test-node-2"));
+
+        StatSnapshot<?> node1Stat = nodeEventStats.get("test-node-1").get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath());
+        assertEquals(17L, node1Stat.getValue());
+
+        StatSnapshot<?> node2Stat = nodeEventStats.get("test-node-2").get(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath());
+        assertEquals(33L, node2Stat.getValue());
+
+        // Validate all nodes is empty (since is excluded)
+        Map<String, StatSnapshot<?>> aggregatedNodeStats = response.getAggregatedNodeStats();
+        assertTrue(aggregatedNodeStats.isEmpty());
+
+        // Verify info stats is empty (since is excluded)
+        Map<String, StatSnapshot<?>> resultStats = response.getInfoStats();
+        assertTrue(resultStats.isEmpty());
     }
 
     public void test_nodeOperation() {
