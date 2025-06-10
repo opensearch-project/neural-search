@@ -242,9 +242,9 @@ public class InfoStatsManager {
                         Map<String, Object> processorConfig = asMap(entry.getValue());
                         switch (processorType) {
                             case TextEmbeddingProcessor.TYPE -> countTextEmbeddingProcessorStats(stats, processorConfig);
-                            case TextImageEmbeddingProcessor.TYPE -> increment(stats, InfoStatName.TEXT_IMAGE_EMBEDDING_PROCESSORS);
+                            case TextImageEmbeddingProcessor.TYPE -> countTextImageEmbeddingProcessorStats(stats, processorConfig);
                             case TextChunkingProcessor.TYPE -> countTextChunkingProcessorStats(stats, processorConfig);
-                            case SparseEncodingProcessor.TYPE -> increment(stats, InfoStatName.SPARSE_ENCODING_PROCESSORS);
+                            case SparseEncodingProcessor.TYPE -> countSparseEncodingProcessorStats(stats, processorConfig);
                         }
                     }
                 }
@@ -261,7 +261,39 @@ public class InfoStatsManager {
         increment(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS);
         Object skipExisting = processorConfig.get(TextEmbeddingProcessor.SKIP_EXISTING);
         if (Objects.nonNull(skipExisting) && skipExisting.equals(Boolean.TRUE)) {
-            increment(stats, InfoStatName.TEXT_EMBEDDING_SKIP_EXISTING_PROCESSORS);
+            increment(stats, InfoStatName.SKIP_EXISTING_PROCESSORS);
+        }
+    }
+
+    /**
+     * Counts text/image embedding processor stats based on processor config
+     * @param stats map containing the stat to increment
+     * @param processorConfig map of the processor config, parsed to add stats
+     */
+    private void countTextImageEmbeddingProcessorStats(
+        Map<InfoStatName, CountableInfoStatSnapshot> stats,
+        Map<String, Object> processorConfig
+    ) {
+        increment(stats, InfoStatName.TEXT_IMAGE_EMBEDDING_PROCESSORS);
+        Object skipExisting = processorConfig.get(TextImageEmbeddingProcessor.SKIP_EXISTING);
+        if (Objects.nonNull(skipExisting) && skipExisting.equals(Boolean.TRUE)) {
+            increment(stats, InfoStatName.SKIP_EXISTING_PROCESSORS);
+        }
+    }
+
+    /**
+     * Counts sparse encoding processor stats based on processor config
+     * @param stats map containing the stat to increment
+     * @param processorConfig map of the processor config, parsed to add stats
+     */
+    private void countSparseEncodingProcessorStats(
+        Map<InfoStatName, CountableInfoStatSnapshot> stats,
+        Map<String, Object> processorConfig
+    ) {
+        increment(stats, InfoStatName.SPARSE_ENCODING_PROCESSORS);
+        Object skipExisting = processorConfig.get(SparseEncodingProcessor.SKIP_EXISTING);
+        if (Objects.nonNull(skipExisting) && skipExisting.equals(Boolean.TRUE)) {
+            increment(stats, InfoStatName.SKIP_EXISTING_PROCESSORS);
         }
     }
 

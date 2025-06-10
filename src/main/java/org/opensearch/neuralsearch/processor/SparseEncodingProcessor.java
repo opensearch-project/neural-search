@@ -85,6 +85,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             generateAndSetMapInference(ingestDocument, processMap, inferenceList, pruneType, pruneRatio, handler);
             return;
         }
+        EventStatsManager.increment(EventStatName.SKIP_EXISTING_EXECUTIONS);
         // if skipExisting flag is turned on, eligible inference texts will be compared and filtered after embeddings are copied
         Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         Object id = ingestDocument.getSourceAndMetadata().get(ID_FIELD);

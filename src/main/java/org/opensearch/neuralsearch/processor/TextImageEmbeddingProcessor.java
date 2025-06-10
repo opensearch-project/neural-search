@@ -134,6 +134,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
                 generateAndSetInference(ingestDocument, inferenceMap, handler);
                 return;
             }
+            EventStatsManager.increment(EventStatName.SKIP_EXISTING_EXECUTIONS);
             // if skipExisting flag is turned on, eligible inference text and images will be compared and filtered after embeddings are
             // copied
             Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);

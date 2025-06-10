@@ -125,12 +125,12 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         assertEquals(4.4433594, maxScore, 1e-3);
     }
 
-    public void testSparseEncodingProcessor_statsEnabled() throws Exception {
+    public void testSparseEncodingProcessor_withSkipExisting_statsEnabled() throws Exception {
         enableStats();
 
         String modelId = null;
         modelId = prepareSparseEncodingModel();
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING_WITH_SKIP_EXISTING);
         createIndexWithPipeline(INDEX_NAME, "SparseEncodingIndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
         assertEquals(1, getDocCount(INDEX_NAME));
@@ -149,7 +149,9 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
 
         assertEquals(1, getNestedValue(allNodesStats, EventStatName.SPARSE_ENCODING_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(allNodesStats, EventStatName.SKIP_EXISTING_EXECUTIONS));
         assertEquals(1, getNestedValue(stats, InfoStatName.SPARSE_ENCODING_PROCESSORS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.SKIP_EXISTING_PROCESSORS));
 
         disableStats();
     }
