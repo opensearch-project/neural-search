@@ -12,6 +12,8 @@ import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils.SearchHitValidator;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.SearchHit;
 
 import java.io.IOException;
@@ -113,6 +115,8 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
         final Map<String, Object> rerankingContext,
         final ActionListener<List<Float>> listener
     ) {
+        EventStatsManager.increment(EventStatName.RERANK_BY_FIELD_PROCESSOR_EXECUTIONS);
+
         SearchHit[] searchHits = response.getHits().getHits();
         SearchHitValidator searchHitValidator = this::byFieldSearchHitValidator;
 

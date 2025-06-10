@@ -6,10 +6,15 @@ package org.opensearch.neuralsearch.processor;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Map;
 
+import lombok.SneakyThrows;
 import org.junit.Before;
 import org.opensearch.client.ResponseException;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 /**
  * Testing text_and_image_embedding ingest processor. We can only test text in integ tests, none of pre-built models
@@ -98,5 +103,37 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         ingestDocument(INDEX_NAME, INGEST_DOCUMENT, "1");
         updateDocument(INDEX_NAME, INGEST_DOCUMENT.replace("\"This is a good day\"", "\"This is a great day\""), "1");
         assertEquals(1, getDocCount(INDEX_NAME));
+    }
+
+    @SneakyThrows
+    public void testEmbeddingProcessor_whenIngestingDocumentWithOrWithoutSourceMatchingMapping_thenSuccessful_statsEnabled() {
+        enableStats();
+
+        String modelId = uploadModel();
+        loadModel(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_IMAGE_EMBEDDING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        // verify doc with mapping
+        ingestDocument(INDEX_NAME, INGEST_DOCUMENT);
+        assertEquals(1, getDocCount(INDEX_NAME));
+        // verify doc without mapping
+        String documentWithUnmappedFields;
+        documentWithUnmappedFields = INGEST_DOCUMENT.replace("passage_text", "random_field_1");
+        ingestDocument(INDEX_NAME, documentWithUnmappedFields);
+        assertEquals(2, getDocCount(INDEX_NAME));
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.TEXT_IMAGE_EMBEDDING_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_IMAGE_EMBEDDING_PROCESSORS.getFullPath()));
+
+        // Reset stats
+        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+
+        disableStats();
     }
 }

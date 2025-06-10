@@ -8,6 +8,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +29,8 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.info.InfoStatName;
 
 public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
 
@@ -110,6 +113,40 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         Map<String, Object> response = search(index, hybridQueryBuilder, 2);
 
         assertFalse(response.isEmpty());
+    }
+
+    @SneakyThrows
+    public void testNeuralQueryEnricherProcessor_whenNoModelIdPassed_statsEnabled_thenSuccess() {
+        enableStats();
+
+        String modelId = null;
+        initializeIndexIfNotExist(index);
+        modelId = prepareModel();
+        createSearchRequestProcessor(modelId, search_pipeline);
+        createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
+        updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText("Hello World")
+            .k(1)
+            .build();
+        Map<String, Object> response = search(index, neuralQueryBuilder, 2);
+        assertFalse(response.isEmpty());
+
+        response = search(index, neuralQueryBuilder, 2);
+        assertFalse(response.isEmpty());
+
+        // Get stats
+        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
+        Map<String, Object> stats = parseInfoStatsResponse(responseBody);
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Parse json to get stats
+        assertEquals(2, getNestedValue(allNodesStats, EventStatName.NEURAL_QUERY_ENRICHER_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(1, getNestedValue(stats, InfoStatName.NEURAL_QUERY_ENRICHER_PROCESSORS.getFullPath()));
+
+        // Reset stats
+        disableStats();
     }
 
     @SneakyThrows

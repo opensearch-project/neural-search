@@ -44,6 +44,7 @@ import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFe
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -99,6 +100,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             config,
             pipelineContext
         );
+        TestUtils.initializeEventStatsManager();
     }
 
     private void setupParams(Map<String, Object> params) {
