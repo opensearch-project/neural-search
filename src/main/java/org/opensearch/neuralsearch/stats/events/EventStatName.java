@@ -21,189 +21,221 @@ import java.util.stream.Collectors;
  */
 @Getter
 public enum EventStatName implements StatName {
+    /** Tracks executions of the text embedding processor */
     TEXT_EMBEDDING_PROCESSOR_EXECUTIONS(
         "text_embedding_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_0_0
     ),
+    /** Tracks skipped executions of the text embedding processor for existing embeddings */
     TEXT_EMBEDDING_PROCESSOR_SKIP_EXISTING_EXECUTIONS(
         "text_embedding_skip_existing_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the text chunking processor */
     TEXT_CHUNKING_PROCESSOR_EXECUTIONS(
         "text_chunking_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of fixed token length text chunking */
     TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS(
         "text_chunking_fixed_token_length_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of delimiter-based text chunking */
     TEXT_CHUNKING_DELIMITER_EXECUTIONS(
         "text_chunking_delimiter_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of fixed character length text chunking */
     TEXT_CHUNKING_FIXED_CHAR_LENGTH_EXECUTIONS(
         "text_chunking_fixed_char_length_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the semantic field processor */
     SEMANTIC_FIELD_PROCESSOR_EXECUTIONS(
         "semantic_field_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks chunking executions within the semantic field processor */
     SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS(
         "semantic_field_chunking_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts semantic highlighting requests */
     SEMANTIC_HIGHLIGHTING_REQUEST_COUNT(
         "semantic_highlighting_request_count",
         "semantic_highlighting",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the normalization processor */
     NORMALIZATION_PROCESSOR_EXECUTIONS(
         "normalization_processor_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks L2 normalization technique executions */
     NORM_TECHNIQUE_L2_EXECUTIONS(
         "norm_l2_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks min-max normalization technique executions */
     NORM_TECHNIQUE_MINMAX_EXECUTIONS(
         "norm_minmax_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks z-score normalization technique executions */
     NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS(
         "norm_zscore_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks arithmetic combination technique executions */
     COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS(
         "comb_arithmetic_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks geometric combination technique executions */
     COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS(
         "comb_geometric_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks harmonic combination technique executions */
     COMB_TECHNIQUE_HARMONIC_EXECUTIONS(
         "comb_harmonic_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks rank-based normalization processor executions */
     RRF_PROCESSOR_EXECUTIONS(
         "rank_based_normalization_processor_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks reciprocal rank fusion combination technique executions */
     COMB_TECHNIQUE_RRF_EXECUTIONS(
         "comb_rrf_executions",
         "processors.search.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts hybrid query requests */
     HYBRID_QUERY_REQUESTS("hybrid_query_requests", "query.hybrid", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),
+    /** Counts hybrid query requests with inner hits */
     HYBRID_QUERY_INNER_HITS_REQUESTS(
         "hybrid_query_with_inner_hits_requests",
         "query.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts hybrid query requests with filters */
     HYBRID_QUERY_FILTER_REQUESTS(
         "hybrid_query_with_filter_requests",
         "query.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts hybrid query requests with pagination */
     HYBRID_QUERY_PAGINATION_REQUESTS(
         "hybrid_query_with_pagination_requests",
         "query.hybrid",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts neural query requests */
     NEURAL_QUERY_REQUESTS("neural_query_requests", "query.neural", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),
+    /** Counts neural query requests against kNN */
     NEURAL_QUERY_AGAINST_KNN_REQUESTS(
         "neural_query_against_knn_requests",
         "query.neural",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts neural query requests against semantic dense fields */
     NEURAL_QUERY_AGAINST_SEMANTIC_DENSE_REQUESTS(
         "neural_query_against_semantic_dense_requests",
         "query.neural",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts neural query requests against semantic sparse fields */
     NEURAL_QUERY_AGAINST_SEMANTIC_SPARSE_REQUESTS(
         "neural_query_against_semantic_sparse_requests",
         "query.neural",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts neural sparse query requests */
     NEURAL_SPARSE_QUERY_REQUESTS(
         "neural_sparse_query_requests",
         "query.neural_sparse",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
-    // Misc processors
+    /** Tracks executions of the text-image embedding processor */
     TEXT_IMAGE_EMBEDDING_PROCESSOR_EXECUTIONS(
         "text_image_embedding_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the sparse encoding processor */
     SPARSE_ENCODING_PROCESSOR_EXECUTIONS(
         "sparse_encoding_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the neural query enricher processor */
     NEURAL_QUERY_ENRICHER_PROCESSOR_EXECUTIONS(
         "neural_query_enricher_executions",
         "processors.search",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the neural sparse two-phase processor */
     NEURAL_SPARSE_TWO_PHASE_PROCESSOR_EXECUTIONS(
         "neural_sparse_two_phase_executions",
         "processors.search",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the rerank by field processor */
     RERANK_BY_FIELD_PROCESSOR_EXECUTIONS(
         "rerank_by_field_executions",
         "processors.search",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the ML reranking processor */
     RERANK_ML_PROCESSOR_EXECUTIONS("rerank_ml_executions", "processors.search", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),;
 
     private final String nameString;
