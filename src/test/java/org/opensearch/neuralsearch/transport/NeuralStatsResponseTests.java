@@ -29,6 +29,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class NeuralStatsResponseTests extends OpenSearchTestCase {
@@ -55,6 +56,7 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         infoStats = new HashMap<>();
         aggregatedNodeStats = new HashMap<>();
         nodeIdToNodeEventStats = new HashMap<>();
+        setUpClusterService();
     }
 
     public void test_constructor() throws IOException {

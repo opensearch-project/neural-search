@@ -20,6 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForStatCategoryFiltering;
+
 /**
  * NeuralStatsResponse consists of the aggregated responses from the nodes
  */
@@ -56,9 +58,15 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         this.nodeIdToNodeEventStats = castedNodeIdToNodeEventStats;
         this.flatten = in.readBoolean();
         this.includeMetadata = in.readBoolean();
-        this.includeIndividualNodes = in.readBoolean();
-        this.includeAllNodes = in.readBoolean();
-        this.includeInfo = in.readBoolean();
+        if (isClusterOnOrAfterMinReqVersionForStatCategoryFiltering()) {
+            this.includeIndividualNodes = in.readBoolean();
+            this.includeAllNodes = in.readBoolean();
+            this.includeInfo = in.readBoolean();
+        } else {
+            includeIndividualNodes = true;
+            includeAllNodes = true;
+            includeInfo = true;
+        }
     }
 
     /**
@@ -109,9 +117,11 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         out.writeMap(downcastedNodeIdToNodeEventStats);
         out.writeBoolean(flatten);
         out.writeBoolean(includeMetadata);
-        out.writeBoolean(includeIndividualNodes);
-        out.writeBoolean(includeAllNodes);
-        out.writeBoolean(includeInfo);
+        if (isClusterOnOrAfterMinReqVersionForStatCategoryFiltering()) {
+            out.writeBoolean(includeIndividualNodes);
+            out.writeBoolean(includeAllNodes);
+            out.writeBoolean(includeInfo);
+        }
     }
 
     @Override
