@@ -33,7 +33,8 @@ public class SemanticFieldIT extends AbstractRestartUpgradeRestTestCase {
             prepareSemanticIndex(
                 getIndexNameForTest(),
                 Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
-                modelId
+                modelId,
+                null
             );
             addSemanticDoc(
                 getIndexNameForTest(),

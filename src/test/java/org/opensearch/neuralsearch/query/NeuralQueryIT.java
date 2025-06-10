@@ -496,7 +496,71 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testNeuralQuery_InSemanticField_WithSparseModel() {
         String modelId = prepareSparseEncodingModel();
-        initializeIndexIfNotExist(TEST_SEMANTIC_INDEX_SPARSE_NAME, modelId);
+        initializeIndexIfNotExist(TEST_SEMANTIC_INDEX_SPARSE_NAME, modelId, null);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_SEMANTIC_TEXT_FIELD)
+            .queryText(TEST_QUERY_TEXT)
+            .boost(2.0f)
+            .build();
+
+        Map<String, Object> searchResponseAsMap = search(TEST_SEMANTIC_INDEX_SPARSE_NAME, neuralQueryBuilder, 3);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+        assertEquals("4", firstInnerHit.get("_id"));
+        float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+    }
+
+    /**
+     * Tests basic query with boost in semantic index:
+     * {
+     *     "query": {
+     *         "neural_sparse": {
+     *             "text_sparse": {
+     *                 "query_text": "Hello world a b",
+     *                 "semantic_field_search_analyzer": "standard",
+     *                 "boost": 2
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testNeuralQuery_InSemanticField_WithSparseModelAndSearchAnalyzer() {
+        String modelId = prepareSparseEncodingModel();
+        initializeIndexIfNotExist(TEST_SEMANTIC_INDEX_SPARSE_NAME, modelId, null);
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_SEMANTIC_TEXT_FIELD)
+            .queryText(TEST_QUERY_TEXT)
+            .boost(2.0f)
+            .searchAnalyzer("standard")
+            .build();
+
+        Map<String, Object> searchResponseAsMap = search(TEST_SEMANTIC_INDEX_SPARSE_NAME, neuralQueryBuilder, 3);
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
+        assertEquals("4", firstInnerHit.get("_id"));
+        float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+        assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
+    }
+
+    /**
+     * Tests basic query with boost in semantic index:
+     * {
+     *     "query": {
+     *         "neural_sparse": {
+     *             "text_sparse": {
+     *                 "query_text": "Hello world a b",
+     *                 "boost": 2
+     *             }
+     *         }
+     *     }
+     * }
+     */
+    @SneakyThrows
+    public void testNeuralQuery_InSemanticField_WithSparseModelAndSearchAnalyzerAtIndexCreation() {
+        String modelId = prepareSparseEncodingModel();
+        initializeIndexIfNotExist(TEST_SEMANTIC_INDEX_SPARSE_NAME, modelId, "standard");
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(TEST_SEMANTIC_TEXT_FIELD)
             .queryText(TEST_QUERY_TEXT)
@@ -513,11 +577,11 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
-        initializeIndexIfNotExist(indexName, Strings.EMPTY);
+        initializeIndexIfNotExist(indexName, Strings.EMPTY, null);
     }
 
     @SneakyThrows
-    private void initializeIndexIfNotExist(String indexName, String modelId) {
+    private void initializeIndexIfNotExist(String indexName, String modelId, String semanticFieldSearchAnalyzer) {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
                 TEST_BASIC_INDEX_NAME,
@@ -592,11 +656,21 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         }
 
         if (TEST_SEMANTIC_INDEX_SPARSE_NAME.equals(indexName) && !indexExists(TEST_SEMANTIC_INDEX_SPARSE_NAME)) {
-            prepareSemanticIndex(
-                TEST_SEMANTIC_INDEX_SPARSE_NAME,
-                Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
-                modelId
-            );
+            if (semanticFieldSearchAnalyzer != null) {
+                prepareSemanticIndex(
+                    TEST_SEMANTIC_INDEX_SPARSE_NAME,
+                    Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
+                    modelId,
+                    semanticFieldSearchAnalyzer
+                );
+            } else {
+                prepareSemanticIndex(
+                    TEST_SEMANTIC_INDEX_SPARSE_NAME,
+                    Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
+                    modelId,
+                    null
+                );
+            }
             addSemanticDoc(
                 indexName,
                 "4",

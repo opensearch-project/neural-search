@@ -1421,8 +1421,17 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param modelId model ID used to create embeddings
      */
     @SneakyThrows
-    protected void prepareSemanticIndex(final String indexName, final List<SemanticFieldConfig> semanticFieldConfigs, String modelId) {
-        createSemanticIndexWithConfiguration(indexName, buildSemanticIndexConfiguration(semanticFieldConfigs, modelId, 3), Strings.EMPTY);
+    protected void prepareSemanticIndex(
+        final String indexName,
+        final List<SemanticFieldConfig> semanticFieldConfigs,
+        String modelId,
+        String semanticFieldSearchAnalyzer
+    ) {
+        createSemanticIndexWithConfiguration(
+            indexName,
+            buildSemanticIndexConfiguration(semanticFieldConfigs, modelId, 3, semanticFieldSearchAnalyzer),
+            Strings.EMPTY
+        );
     }
 
     @SneakyThrows
@@ -1596,7 +1605,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected String buildSemanticIndexConfiguration(
         final List<SemanticFieldConfig> semanticFieldConfigs,
         final String modelId,
-        final int numberOfShards
+        final int numberOfShards,
+        final String semanticFieldSearchAnalyzer
     ) {
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
@@ -1608,7 +1618,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .startObject("properties");
 
         for (SemanticFieldConfig semanticFieldConfig : semanticFieldConfigs) {
-            xContentBuilder.startObject(semanticFieldConfig.getName()).field("type", "semantic").field("model_id", modelId).endObject();
+            xContentBuilder.startObject(semanticFieldConfig.getName()).field("type", "semantic").field("model_id", modelId);
+            if (semanticFieldSearchAnalyzer != null) {
+                xContentBuilder.field("semantic_field_search_analyzer", semanticFieldSearchAnalyzer);
+            }
+            xContentBuilder.endObject();
         }
         xContentBuilder.endObject().endObject().endObject();
         return xContentBuilder.toString();
