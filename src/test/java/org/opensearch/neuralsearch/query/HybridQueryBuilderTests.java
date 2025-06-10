@@ -109,6 +109,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // but if run along with other tests this test passes.
         TestUtils.initializeEventStatsManager();
         initKNNSettings();
+        TestUtils.initializeEventStatsManager();
     }
 
     @Override

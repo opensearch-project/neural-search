@@ -31,7 +31,6 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
     // that don't have those stats.
     // TODO: There is a bug in stats api which need to be fixed before enabling following tests
     // https://github.com/opensearch-project/neural-search/issues/1368
-
     public void testStats_E2EFlow() throws Exception {
 
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);

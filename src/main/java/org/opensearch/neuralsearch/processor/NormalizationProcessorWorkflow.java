@@ -19,8 +19,11 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
+import org.opensearch.neuralsearch.processor.collapse.CollapseExecutor;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
@@ -39,7 +42,6 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
-import static org.opensearch.neuralsearch.processor.combination.ScoreCombiner.MAX_SCORE_WHEN_NO_HITS_FOUND;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
 /**
@@ -202,20 +204,46 @@ public class NormalizationProcessorWorkflow {
         final List<CompoundTopDocs> queryTopDocs = getCompoundTopDocs(combineScoresDTO, querySearchResults);
         final Sort sort = combineScoresDTO.getSort();
         int totalScoreDocsCount = 0;
-        for (int index = 0; index < querySearchResults.size(); index++) {
-            QuerySearchResult querySearchResult = querySearchResults.get(index);
-            CompoundTopDocs updatedTopDocs = queryTopDocs.get(index);
-            totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
-            TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
-                buildTopDocs(updatedTopDocs, sort),
-                maxScoreForShard(updatedTopDocs, sort != null)
-            );
-            // Fetch Phase had ran before the normalization phase, therefore update the from value in result of each shard.
-            // This will ensure the trimming of the search results.
-            if (isFetchPhaseExecuted) {
-                querySearchResult.from(combineScoresDTO.getFromValueForSingleShard());
+
+        // Get index of first non-empty CompoundTopDocs to check if collapse is enabled
+        boolean isCollapseEnabled = false;
+        int firstNonEmptyIndex = -1;
+        for (int queryTopDocIndex = 0; queryTopDocIndex < queryTopDocs.size(); queryTopDocIndex++) {
+            List<TopDocs> topDocsList = queryTopDocs.get(queryTopDocIndex).getTopDocs();
+            if (!topDocsList.isEmpty() && topDocsList.getFirst() instanceof CollapseTopFieldDocs) {
+                isCollapseEnabled = true;
+                firstNonEmptyIndex = queryTopDocIndex;
+                break;
             }
-            querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+        }
+        if (isCollapseEnabled) {
+            CollapseExecutor collapseExecutor = new CollapseExecutor();
+            CollapseDTO collapseDTO = new CollapseDTO(
+                queryTopDocs,
+                querySearchResults,
+                sort,
+                firstNonEmptyIndex,
+                isFetchPhaseExecuted,
+                combineScoresDTO
+            );
+
+            totalScoreDocsCount = collapseExecutor.executeCollapse(collapseDTO);
+        } else {
+            for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
+                QuerySearchResult querySearchResult = querySearchResults.get(shardIndex);
+                CompoundTopDocs updatedTopDocs = queryTopDocs.get(shardIndex);
+                totalScoreDocsCount += updatedTopDocs.getScoreDocs().size();
+                TopDocsAndMaxScore updatedTopDocsAndMaxScore = new TopDocsAndMaxScore(
+                    buildTopDocs(updatedTopDocs, sort),
+                    NormalizationProcessorWorkflowUtil.maxScoreForShard(updatedTopDocs, sort != null)
+                );
+                // Fetch Phase had ran before the normalization phase, therefore update the from value in result of each shard.
+                // This will ensure the trimming of the search results.
+                if (isFetchPhaseExecuted) {
+                    querySearchResult.from(combineScoresDTO.getFromValueForSingleShard());
+                }
+                querySearchResult.topDocs(updatedTopDocsAndMaxScore, querySearchResult.sortValueFormats());
+            }
         }
 
         final int from = querySearchResults.get(0).from();
@@ -239,28 +267,6 @@ public class NormalizationProcessorWorkflow {
             );
         }
         return queryTopDocs;
-    }
-
-    /**
-     * Get Max score on Shard
-     * @param updatedTopDocs updatedTopDocs compound top docs on a shard
-     * @param isSortEnabled if sort is enabled or disabled
-     * @return  max score
-     */
-    private float maxScoreForShard(CompoundTopDocs updatedTopDocs, boolean isSortEnabled) {
-        if (updatedTopDocs.getTotalHits().value() == 0 || updatedTopDocs.getScoreDocs().isEmpty()) {
-            return MAX_SCORE_WHEN_NO_HITS_FOUND;
-        }
-        if (isSortEnabled) {
-            float maxScore = MAX_SCORE_WHEN_NO_HITS_FOUND;
-            // In case of sorting iterate over score docs and deduce the max score
-            for (ScoreDoc scoreDoc : updatedTopDocs.getScoreDocs()) {
-                maxScore = Math.max(maxScore, scoreDoc.score);
-            }
-            return maxScore;
-        }
-        // If it is a normal hybrid query then first entry of score doc will have max score
-        return updatedTopDocs.getScoreDocs().get(0).score;
     }
 
     /**

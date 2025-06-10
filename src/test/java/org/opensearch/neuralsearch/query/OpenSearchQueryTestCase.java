@@ -230,6 +230,44 @@ public abstract class OpenSearchQueryTestCase extends OpenSearchTestCase {
         };
     }
 
+    protected static Scorer collapseScorer(final int[] docs, List<Float> scores, Weight weight) {
+        float[] scoresAsArray = new float[scores.size()];
+        int i = 0;
+        for (float score : scores) {
+            scoresAsArray[i++] = score;
+        }
+        return collapseScorer(docs, scoresAsArray, weight);
+    }
+
+    protected static Scorer collapseScorer(final int[] docs, final float[] scores, Weight weight) {
+        final DocIdSetIterator iterator = iterator(docs);
+        return new Scorer() {
+
+            int lastScoredDoc = -1;
+
+            public DocIdSetIterator iterator() {
+                return iterator;
+            }
+
+            @Override
+            public int docID() {
+                return iterator.docID();
+            }
+
+            @Override
+            public float score() {
+                lastScoredDoc = docID();
+                final int idx = Arrays.binarySearch(docs, docID());
+                return scores[idx];
+            }
+
+            @Override
+            public float getMaxScore(int upTo) {
+                return Float.MAX_VALUE;
+            }
+        };
+    }
+
     protected static QueryBuilderVisitor createTestVisitor(List<QueryBuilder> visitedQueries) {
         return new QueryBuilderVisitor() {
             @Override

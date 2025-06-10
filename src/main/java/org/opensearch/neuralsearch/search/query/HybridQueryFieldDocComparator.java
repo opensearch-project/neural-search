@@ -17,7 +17,7 @@ import org.apache.lucene.search.SortField;
  * Comparator class that compares two field docs as per the sorting criteria
  */
 @RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-class HybridQueryFieldDocComparator implements Comparator<FieldDoc> {
+public class HybridQueryFieldDocComparator implements Comparator<FieldDoc> {
     final SortField[] sortFields;
     final FieldComparator<?>[] comparators;
     final int[] reverseMul;

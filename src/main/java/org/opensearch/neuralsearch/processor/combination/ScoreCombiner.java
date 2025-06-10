@@ -25,6 +25,7 @@ import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
@@ -166,16 +167,33 @@ public class ScoreCombiner {
         Map<Integer, Object[]> docIdSortFieldMap = new HashMap<>();
         final List<TopDocs> topFieldDocs = compoundTopDocs.getTopDocs();
         final boolean isSortByScore = isSortOrderByScore(sort);
+        final boolean isCollapseEnabled = topFieldDocs.getFirst() instanceof CollapseTopFieldDocs;
         for (TopDocs topDocs : topFieldDocs) {
-            for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+            for (int scoreDocIndex = 0; scoreDocIndex < topDocs.scoreDocs.length; scoreDocIndex++) {
+                FieldDoc fieldDoc = (FieldDoc) topDocs.scoreDocs[scoreDocIndex];
 
                 if (docIdSortFieldMap.get(fieldDoc.doc) == null) {
                     // If sort by score then replace sort field value with normalized score.
+                    // If collapse is enabled, then we append the collapse value to the end of the sort fields
+                    // in order to more easily access it later.
                     if (isSortByScore) {
-                        docIdSortFieldMap.put(fieldDoc.doc, new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) });
+                        docIdSortFieldMap.put(
+                            fieldDoc.doc,
+                            isCollapseEnabled
+                                ? new Object[] {
+                                    combinedNormalizedScoresByDocId.get(fieldDoc.doc),
+                                    ((CollapseTopFieldDocs) topDocs).collapseValues[scoreDocIndex] }
+                                : new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) }
+                        );
                     } else {
-                        docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
+                        if (isCollapseEnabled) {
+                            Object[] fields = new Object[fieldDoc.fields.length + 1];
+                            System.arraycopy(fieldDoc.fields, 0, fields, 0, fieldDoc.fields.length);
+                            fields[fieldDoc.fields.length] = ((CollapseTopFieldDocs) topDocs).collapseValues[scoreDocIndex];
+                            docIdSortFieldMap.put(fieldDoc.doc, fields);
+                        } else {
+                            docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
+                        }
                     }
                 }
             }
