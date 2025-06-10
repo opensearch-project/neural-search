@@ -264,7 +264,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 }
             }
 
-            // If all comparisons are equal, use document ID as tie-breaker
+            // If all comparisons are equal, use score as a tie-breaker.
             return entryB.score < entryA.score;
         }
     }
