@@ -656,7 +656,12 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         }
 
         if (TEST_SEMANTIC_INDEX_SPARSE_NAME.equals(indexName) && !indexExists(TEST_SEMANTIC_INDEX_SPARSE_NAME)) {
-            if (semanticFieldSearchAnalyzer != null) {
+            prepareSemanticIndex(
+                    TEST_SEMANTIC_INDEX_SPARSE_NAME,
+                    Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
+                    modelId,
+                    semanticFieldSearchAnalyzer
+                );
                 prepareSemanticIndex(
                     TEST_SEMANTIC_INDEX_SPARSE_NAME,
                     Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
