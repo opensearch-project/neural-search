@@ -41,7 +41,6 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
     private static final String TEXT_FIELD_NAME = "field";
     private static final String INT_FIELD_NAME = "integerField";
     private static final String COLLAPSE_FIELD_NAME = "collapseField";
-    private static final int NUM_GROUPS = 10;
     private static final int TOP_N_GROUPS = 5;
     private static final int TOTAL_HITS_UP_TO = 1001;
 
@@ -89,17 +88,14 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             assertEquals(1000, collapseTopFieldDocs.totalHits.value());
-            assertEquals(NUM_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
+            assertEquals(TOP_N_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify collapse values
             Set<String> uniqueGroups = new HashSet<>();
             for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
                 uniqueGroups.add(((BytesRef) collapseValue).utf8ToString());
             }
-            assertEquals(10, uniqueGroups.size());
-            for (int j = 0; j < 10; j++) {
-                assertTrue(uniqueGroups.contains("group" + j));
-            }
+            assertEquals(5, uniqueGroups.size());
         }
 
         reader.close();
@@ -154,17 +150,14 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             assertEquals(1000, collapseTopFieldDocs.totalHits.value());
-            assertEquals(NUM_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
+            assertEquals(TOP_N_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify collapse values
             Set<Long> uniqueGroups = new HashSet<>();
             for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
                 uniqueGroups.add((Long) (collapseValue));
             }
-            assertEquals(10, uniqueGroups.size());
-            for (long i = 0; i < 10; i++) {
-                assertTrue(uniqueGroups.contains(i));
-            }
+            assertEquals(5, uniqueGroups.size());
         }
 
         reader.close();

@@ -672,12 +672,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             null,
             null,
             null,
+            null,
             null
         );
     }
 
     /**
-     * Execute a search request with all possible parameters including highlighting and source filtering
+     * Execute a search request with all possible parameters including highlighting, source filtering, and collapse
      *
      * @param index Index to search against
      * @param queryBuilder queryBuilder to produce source of query
@@ -694,6 +695,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param highlightOptions global highlight options
      * @param preTags pre tag for highlight
      * @param postTags post tag for highlight
+     * @param collapseField field to collapse results on
      * @return Search results represented as a map
      */
     @SneakyThrows
@@ -712,7 +714,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, Map<String, Object>> highlightFields,
         Map<String, Object> highlightOptions,
         List<String> preTags,
-        List<String> postTags
+        List<String> postTags,
+        String collapseField
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -726,6 +729,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             rescorer.toXContent(builder, ToXContent.EMPTY_PARAMS);
             builder.endObject().endObject();
         }
+
+        // Add collapse if specified
+        if (collapseField != null) {
+            builder.startObject("collapse").field("field", collapseField).endObject();
+        }
+
         if (Objects.nonNull(aggs)) {
             builder.startObject("aggs");
             for (Object agg : aggs) {
@@ -849,7 +858,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             highlightFields,
             highlightOptions,
             null,
-            sourceExcludes
+            sourceExcludes,
+            null
         );
     }
 
@@ -889,6 +899,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             0,
             highlightFields,
             highlightOptions,
+            null,
             null,
             null
         );
@@ -2428,6 +2439,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             highlightFields,
             highlightOptions,
             null,
+            null,
             null
         );
     }
@@ -2464,6 +2476,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             0,
             highlightFields,
             highlightOptions,
+            null,
             null,
             null
         );
@@ -2505,7 +2518,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             highlightFields,
             highlightOptions,
             Arrays.asList(preTags),
-            Arrays.asList(postTags)
+            Arrays.asList(postTags),
+            null
         );
     }
 }

@@ -163,6 +163,12 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         for (int subQueryNumber = 0; subQueryNumber < numSubQueries; subQueryNumber++) {
             GroupPriorityQueue<T> topGroupsQueue = new GroupPriorityQueue<>(numHits);
 
+            // Calculate total hits for current subquery
+            int totalHitsForSubQuery = 0;
+            for (int[] hits : collectedHitsPerSubQueryMap.values()) {
+                totalHitsForSubQuery += hits[subQueryNumber];
+            }
+
             // Collect top N groups
             for (Map.Entry<T, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> entry : groupQueueMap.entrySet()) {
                 T groupValue = entry.getKey();
@@ -174,7 +180,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
             ArrayList<ScoreDoc> fieldDocs = new ArrayList<>();
             ArrayList<T> collapseValues = new ArrayList<>();
-            int hitsOnCurrentSubQuery = 0;
 
             // Pop entries in reverse order to maintain sorting
             GroupEntry<T>[] topGroups = new GroupEntry[topGroupsQueue.size()];
@@ -182,26 +187,33 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 topGroups[j] = topGroupsQueue.pop();
             }
 
-            // Process only the top groups to add to the top docs list
+            // Process the top groups and include all docs from each group
             for (GroupEntry<T> groupEntry : topGroups) {
                 T groupValue = groupEntry.groupValue;
                 FieldValueHitQueue<FieldValueHitQueue.Entry> priorityQueue = groupEntry.queue;
                 final int n = priorityQueue.getComparators().length;
 
-                FieldValueHitQueue.Entry queueEntry = priorityQueue.top();
-                final Object[] fields = new Object[n];
-                for (int k = 0; k < n; ++k) {
-                    fields[k] = priorityQueue.getComparators()[k].value(queueEntry.slot);
+                // Get all entries from the priority queue
+                FieldValueHitQueue.Entry[] entries = new FieldValueHitQueue.Entry[priorityQueue.size()];
+                for (int i = priorityQueue.size() - 1; i >= 0; i--) {
+                    entries[i] = priorityQueue.pop();
                 }
-                fieldDocs.add(new FieldDoc(queueEntry.doc, queueEntry.score, fields));
-                collapseValues.add(groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue);
-                hitsOnCurrentSubQuery += collectedHitsPerSubQueryMap.get(groupValue)[subQueryNumber];
+
+                // Add all entries from this group
+                for (FieldValueHitQueue.Entry queueEntry : entries) {
+                    final Object[] fields = new Object[n];
+                    for (int k = 0; k < n; ++k) {
+                        fields[k] = priorityQueue.getComparators()[k].value(queueEntry.slot);
+                    }
+                    fieldDocs.add(new FieldDoc(queueEntry.doc, queueEntry.score, fields));
+                    collapseValues.add(groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue);
+                }
             }
 
             topDocsList.add(
                 new CollapseTopFieldDocs(
                     collapseField,
-                    new TotalHits(hitsOnCurrentSubQuery, totalHitsRelation),
+                    new TotalHits(totalHitsForSubQuery, totalHitsRelation),
                     fieldDocs.toArray(new FieldDoc[0]),
                     sort.getSort(),
                     collapseValues.toArray(new Object[0])

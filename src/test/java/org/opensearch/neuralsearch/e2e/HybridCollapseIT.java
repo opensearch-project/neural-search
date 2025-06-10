@@ -5,179 +5,206 @@
 package org.opensearch.neuralsearch.e2e;
 
 import org.apache.hc.core5.http.ParseException;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
-import org.opensearch.client.Request;
-import org.opensearch.client.Response;
-import org.opensearch.common.settings.Settings;
+import org.junit.Before;
 import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.neuralsearch.NeuralSearchRestTestCase;
-import org.opensearch.rest.RestRequest;
+import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.search.sort.SortBuilders;
 
 import java.io.IOException;
-import java.util.Locale;
+import java.util.List;
+import java.util.Map;
 
-public class HybridCollapseIT extends NeuralSearchRestTestCase {
+import lombok.SneakyThrows;
 
-    private final String COLLAPSE_TEST_INDEX = "collapse-test-index";
+public class HybridCollapseIT extends BaseNeuralSearchIT {
 
-    private int currentDocNumber = 1;
+    private static final String COLLAPSE_TEST_INDEX = "collapse-test-index";
+    private static final String TEST_TEXT_FIELD_1 = "item";
+    private static final String TEST_TEXT_FIELD_2 = "category";
+    private static final String TEST_FLOAT_FIELD = "price";
+    private static final String SEARCH_PIPELINE = "test-pipeline";
+
+    @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        createTestIndex();
+        indexTestDocuments();
+        createSearchPipeline(SEARCH_PIPELINE, "min_max", "arithmetic_mean", Map.of());
+    }
 
     public void testCollapse_whenE2E_thenSuccessful() throws IOException, ParseException {
-        createBasicCollapseIndex();
-        indexCollapseTestDocuments();
-        String pipelineName = createNormalizationPipeline("min_max", "arithmetic_mean");
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
 
-        final String searchRequestBody = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("query")
-            .startObject("hybrid")
-            .startArray("queries")
-            .startObject()
-            .startObject("match")
-            .field("item", "Chocolate Cake")
-            .endObject()
-            .endObject()
-            .startObject()
-            .startObject("bool")
-            .startObject("must")
-            .startObject("match")
-            .field("category", "cakes")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endArray()
-            .endObject()
-            .endObject()
-            .startObject("collapse")
-            .field("field", "item")
-            .endObject()
-            .endObject()
-            .toString();
-        final Request searchRequest = new Request(
-            RestRequest.Method.GET.name(),
-            String.format(Locale.ROOT, "%s/_search?search_pipeline=%s", COLLAPSE_TEST_INDEX, pipelineName)
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            TEST_TEXT_FIELD_1  // collapse field
         );
-        searchRequest.setJsonEntity(searchRequestBody);
-        Response searchResponse = client().performRequest(searchRequest);
-        assertOK(searchResponse);
-
-        final String responseBody = EntityUtils.toString(searchResponse.getEntity());
 
         String collapseDuplicate = "Chocolate Cake";
-        assertTrue(isCollapseDuplicateRemoved(responseBody, collapseDuplicate));
+        assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
     }
 
     public void testCollapse_whenE2E_andSortEnabled_thenSuccessful() throws IOException, ParseException {
-        createBasicCollapseIndex();
-        indexCollapseTestDocuments();
-        String pipelineName = createNormalizationPipeline("min_max", "arithmetic_mean");
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
 
-        final String searchRequestBody = XContentFactory.jsonBuilder()
-            .startObject()
-            .startObject("query")
-            .startObject("hybrid")
-            .startArray("queries")
-            .startObject()
-            .startObject("match")
-            .field("item", "Chocolate Cake")
-            .endObject()
-            .endObject()
-            .startObject()
-            .startObject("bool")
-            .startObject("must")
-            .startObject("match")
-            .field("category", "cakes")
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endArray()
-            .endObject()
-            .endObject()
-            .startObject("collapse")
-            .field("field", "item")
-            .endObject()
-            .field("sort", "price")
-            .endObject()
-            .toString();
-        final Request searchRequest = new Request(
-            RestRequest.Method.GET.name(),
-            String.format(Locale.ROOT, "%s/_search?search_pipeline=%s", COLLAPSE_TEST_INDEX, pipelineName)
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            List.of(SortBuilders.fieldSort(TEST_FLOAT_FIELD)),
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            TEST_TEXT_FIELD_1  // collapse field
         );
-        searchRequest.setJsonEntity(searchRequestBody);
-        Response searchResponse = client().performRequest(searchRequest);
-        assertOK(searchResponse);
-
-        final String responseBody = EntityUtils.toString(searchResponse.getEntity());
 
         String collapseDuplicate = "Chocolate Cake";
-        assertTrue(isCollapseDuplicateRemoved(responseBody, collapseDuplicate));
-        // Assert that the hits are sorted correctly
-        assertTrue(responseBody.indexOf("Vanilla") < responseBody.indexOf("Chocolate"));
+        assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
+        String responseString = searchResponse.toString();
+        assertTrue(responseString.indexOf("Vanilla") < responseString.indexOf("Chocolate"));
     }
 
-    private void createBasicCollapseIndex() throws IOException {
-        String mapping = XContentFactory.jsonBuilder()
+    @SneakyThrows
+    private void createTestIndex() {
+        String indexConfiguration = XContentFactory.jsonBuilder()
             .startObject()
+            .startObject("mappings")
             .startObject("properties")
-            .startObject("item")
+            .startObject(TEST_TEXT_FIELD_1)
             .field("type", "keyword")
             .endObject()
-            .startObject("category")
+            .startObject(TEST_TEXT_FIELD_2)
             .field("type", "keyword")
             .endObject()
-            .startObject("price")
+            .startObject(TEST_FLOAT_FIELD)
             .field("type", "float")
             .endObject()
             .endObject()
             .endObject()
+            .endObject()
             .toString();
-        mapping = mapping.substring(1, mapping.length() - 1);
-        Settings settings = Settings.EMPTY;
-        createIndex(COLLAPSE_TEST_INDEX, settings, mapping);
 
+        createIndexWithConfiguration(COLLAPSE_TEST_INDEX, indexConfiguration, null);
         assertTrue(indexExists(COLLAPSE_TEST_INDEX));
     }
 
-    private void indexCollapseTestDocuments() throws IOException {
-        indexCollapseDocument("Chocolate Cake", "cakes", 18);
-        indexCollapseDocument("Chocolate Cake", "cakes", 15);
-        indexCollapseDocument("Vanilla Cake", "cakes", 12);
-        indexCollapseDocument("Apple Pie", "pies", 15);
-    }
-
-    private void indexCollapseDocument(String item, String category, int price) throws IOException {
-        final String indexRequestBody = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("item", item)
-            .field("category", category)
-            .field("price", price)
-            .endObject()
-            .toString();
-        final Request indexRequest = new Request(
-            RestRequest.Method.POST.name(),
-            String.format(Locale.ROOT, "%s/_doc/%d?refresh", COLLAPSE_TEST_INDEX, currentDocNumber)
+    @SneakyThrows
+    private void indexTestDocuments() {
+        List<String> textFields = List.of(TEST_TEXT_FIELD_1, TEST_TEXT_FIELD_2);
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            "1",
+            List.of(),
+            List.of(),
+            textFields,
+            List.of("Chocolate Cake", "cakes"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of("18"),
+            null
         );
-        indexRequest.setJsonEntity(indexRequestBody);
-        assertOK(client().performRequest(indexRequest));
-        currentDocNumber++;
+
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            "2",
+            List.of(),
+            List.of(),
+            textFields,
+            List.of("Chocolate Cake", "cakes"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of("15"),
+            null
+        );
+
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            "3",
+            List.of(),
+            List.of(),
+            textFields,
+            List.of("Vanilla Cake", "cakes"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of("12"),
+            null
+        );
+
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            "4",
+            List.of(),
+            List.of(),
+            textFields,
+            List.of("Apple Pie", "pies"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of("15"),
+            null
+        );
     }
 
     private boolean isCollapseDuplicateRemoved(String responseBody, String collapseDuplicate) {
-        // Collapse field should only be present twice in the response body
-        // First occurrence should be the hit
-        // Second occurrence should be specifying that hit's collapse field
-
-        // Find first occurrence
         int firstIndex = responseBody.indexOf(collapseDuplicate);
         if (firstIndex == -1) return false;
 
-        // Find second occurrence
         int secondIndex = responseBody.indexOf(collapseDuplicate, firstIndex + 1);
         if (secondIndex == -1) return false;
 
-        // Check there isn't a third occurrence
         int thirdIndex = responseBody.indexOf(collapseDuplicate, secondIndex + 1);
         return thirdIndex == -1;
     }
