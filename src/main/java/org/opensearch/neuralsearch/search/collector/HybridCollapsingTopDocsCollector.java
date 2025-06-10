@@ -22,6 +22,7 @@ import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.search.grouping.GroupSelector;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
@@ -157,39 +158,46 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         if (collectedHitsPerSubQueryMap.isEmpty()) {
             return topDocsList;
         }
-        int numSubQueries = 0;
-        for (Map.Entry<T, int[]> entry : collectedHitsPerSubQueryMap.entrySet()) {
-            numSubQueries = entry.getValue().length;
-            break;
-        }
+        int numSubQueries = collectedHitsPerSubQueryMap.values().iterator().next().length;
 
-        // Loop through the subqueries and priority queues, creating a FieldDoc from each priority queue entry for each subquery
-        // Then, combine the field docs into a CollapseTopFieldDocs object per subquery.
-        for (int i = 0; i < numSubQueries; i++) {
+        for (int subQueryNumber = 0; subQueryNumber < numSubQueries; subQueryNumber++) {
+            GroupPriorityQueue<T> topGroupsQueue = new GroupPriorityQueue<>(numHits);
+
+            // Collect top N groups
+            for (Map.Entry<T, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> entry : groupQueueMap.entrySet()) {
+                T groupValue = entry.getKey();
+                FieldValueHitQueue<FieldValueHitQueue.Entry> queue = entry.getValue()[subQueryNumber];
+                if (queue.size() > 0) {
+                    topGroupsQueue.insertWithOverflow(new GroupEntry<>(groupValue, queue));
+                }
+            }
+
             ArrayList<ScoreDoc> fieldDocs = new ArrayList<>();
             ArrayList<T> collapseValues = new ArrayList<>();
             int hitsOnCurrentSubQuery = 0;
-            for (T groupValue : groupQueueMap.keySet()) {
-                FieldValueHitQueue<FieldValueHitQueue.Entry> priorityQueue = groupQueueMap.get(groupValue)[i];
+
+            // Pop entries in reverse order to maintain sorting
+            GroupEntry<T>[] topGroups = new GroupEntry[topGroupsQueue.size()];
+            for (int j = topGroupsQueue.size() - 1; j >= 0; j--) {
+                topGroups[j] = topGroupsQueue.pop();
+            }
+
+            // Process only the top groups to add to the top docs list
+            for (GroupEntry<T> groupEntry : topGroups) {
+                T groupValue = groupEntry.groupValue;
+                FieldValueHitQueue<FieldValueHitQueue.Entry> priorityQueue = groupEntry.queue;
                 final int n = priorityQueue.getComparators().length;
 
-                for (int j = 0; j < numHits; j++) {
-                    if (priorityQueue.size() > 0) {
-                        FieldValueHitQueue.Entry queueEntry = priorityQueue.pop();
-
-                        final Object[] fields = new Object[n];
-                        for (int k = 0; k < n; ++k) {
-                            fields[k] = priorityQueue.getComparators()[k].value(queueEntry.slot);
-                        }
-                        fieldDocs.add(new FieldDoc(queueEntry.doc, queueEntry.score, fields));
-                        collapseValues.add(groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue);
-                    } else {
-                        // Break if queue is empty
-                        break;
-                    }
+                FieldValueHitQueue.Entry queueEntry = priorityQueue.top();
+                final Object[] fields = new Object[n];
+                for (int k = 0; k < n; ++k) {
+                    fields[k] = priorityQueue.getComparators()[k].value(queueEntry.slot);
                 }
-                hitsOnCurrentSubQuery += collectedHitsPerSubQueryMap.get(groupValue)[i];
+                fieldDocs.add(new FieldDoc(queueEntry.doc, queueEntry.score, fields));
+                collapseValues.add(groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue);
+                hitsOnCurrentSubQuery += collectedHitsPerSubQueryMap.get(groupValue)[subQueryNumber];
             }
+
             topDocsList.add(
                 new CollapseTopFieldDocs(
                     collapseField,
@@ -201,6 +209,52 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             );
         }
         return topDocsList;
+    }
+
+    private static class GroupEntry<T> {
+        final T groupValue;
+        final FieldValueHitQueue<FieldValueHitQueue.Entry> queue;
+
+        GroupEntry(T groupValue, FieldValueHitQueue<FieldValueHitQueue.Entry> queue) {
+            this.groupValue = groupValue;
+            this.queue = queue;
+        }
+    }
+
+    private class GroupPriorityQueue<T> extends PriorityQueue<GroupEntry<T>> {
+        GroupPriorityQueue(int maxSize) {
+            super(maxSize);
+        }
+
+        @Override
+        protected boolean lessThan(GroupEntry<T> a, GroupEntry<T> b) {
+            FieldValueHitQueue<FieldValueHitQueue.Entry> queueA = a.queue;
+            FieldValueHitQueue<FieldValueHitQueue.Entry> queueB = b.queue;
+
+            if (queueA.size() == 0 && queueB.size() == 0) return false;
+            if (queueA.size() == 0) return true;
+            if (queueB.size() == 0) return false;
+
+            FieldValueHitQueue.Entry entryA = queueA.top();
+            FieldValueHitQueue.Entry entryB = queueB.top();
+
+            FieldComparator<?>[] comparators = queueA.getComparators();
+            int[] reverseMul = queueA.getReverseMul();
+
+            for (int i = 0; i < comparators.length; i++) {
+                FieldComparator<Object> comparator = (FieldComparator<Object>) comparators[i];
+                Object valueA = comparator.value(entryA.slot);
+                Object valueB = comparator.value(entryB.slot);
+
+                int comparison = comparator.compareValues(valueA, valueB);
+                if (comparison != 0) {
+                    return reverseMul[i] * comparison < 0;
+                }
+            }
+
+            // If all comparisons are equal, use document ID as tie-breaker
+            return entryB.score < entryA.score;
+        }
     }
 
     /**
