@@ -36,8 +36,14 @@ public enum InfoStatName implements StatName {
         InfoStatType.INFO_COUNTER,
         Version.V_3_1_0
     ),
-    TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS(
-        "text_chunking_fixed_length_processors",
+    TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS(
+        "text_chunking_fixed_token_length_processors",
+        "processors.ingest",
+        InfoStatType.INFO_COUNTER,
+        Version.V_3_1_0
+    ),
+    TEXT_CHUNKING_FIXED_CHAR_LENGTH_PROCESSORS(
+        "text_chunking_fixed_char_length_processors",
         "processors.ingest",
         InfoStatType.INFO_COUNTER,
         Version.V_3_1_0

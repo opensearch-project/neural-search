@@ -1,5 +1,5 @@
 {
-  "description": "An example cascaded pipeline with fixed token length algorithm after chunking algorithm",
+  "description": "An example cascaded pipeline with fixed character length algorithm after delimiter algorithm",
   "processors" : [
     {
       "text_chunking": {
@@ -19,8 +19,8 @@
           "body_chunk_intermediate": "body_chunk"
         },
         "algorithm": {
-          "fixed_token_length": {
-            "token_limit": 10
+          "fixed_char_length": {
+            "char_limit": 30
           }
         }
       }

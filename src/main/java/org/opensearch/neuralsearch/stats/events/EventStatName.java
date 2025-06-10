@@ -39,14 +39,20 @@ public enum EventStatName implements StatName {
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
-    TEXT_CHUNKING_FIXED_LENGTH_EXECUTIONS(
-        "text_chunking_fixed_length_executions",
+    TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS(
+        "text_chunking_fixed_token_length_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
     TEXT_CHUNKING_DELIMITER_EXECUTIONS(
         "text_chunking_delimiter_executions",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_1_0
+    ),
+    TEXT_CHUNKING_FIXED_CHAR_LENGTH_EXECUTIONS(
+        "text_chunking_fixed_char_length_executions",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0

@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationT
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
+import org.opensearch.neuralsearch.processor.chunker.FixedCharLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
@@ -48,7 +49,9 @@ public class InfoStatsManager {
         DelimiterChunker.ALGORITHM_NAME,
         stats -> increment(stats, InfoStatName.TEXT_CHUNKING_DELIMITER_PROCESSORS),
         FixedTokenLengthChunker.ALGORITHM_NAME,
-        stats -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS)
+        stats -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS),
+        FixedCharLengthChunker.ALGORITHM_NAME,
+        stats -> increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_CHAR_LENGTH_PROCESSORS)
     );
 
     private static final Map<String, Consumer<Map<InfoStatName, CountableInfoStatSnapshot>>> normTechniqueIncrementers = Map.of(
@@ -216,7 +219,7 @@ public class InfoStatsManager {
 
         // If no algorithm is specified, default case is fixed length
         if (chunkingAlgorithmIncrementers.containsKey(algorithmKey) == false) {
-            increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_LENGTH_PROCESSORS);
+            increment(stats, InfoStatName.TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS);
         } else {
             // Map is guaranteed to contain key in this block, so we can do direct map get
             chunkingAlgorithmIncrementers.get(algorithmKey).accept(stats);
