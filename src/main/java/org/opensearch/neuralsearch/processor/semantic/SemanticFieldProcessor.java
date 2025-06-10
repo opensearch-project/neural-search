@@ -20,6 +20,8 @@ import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.dto.SemanticFieldInfo;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
@@ -118,6 +120,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
      */
     @Override
     public void execute(IngestDocument ingestDocument, BiConsumer<IngestDocument, Exception> handler) {
+        EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_EXECUTIONS);
         try {
             unflattenIngestDoc(ingestDocument);
             // Collect all the semantic field info based on the path of semantic fields found in the index mapping
@@ -173,7 +176,10 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     ) {
         setModelInfo(ingestDocument, semanticFieldInfoList);
 
-        chunk(ingestDocument, semanticFieldInfoList);
+        boolean isChunked = chunk(ingestDocument, semanticFieldInfoList);
+        if (isChunked) {
+            EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
+        }
 
         generateAndSetEmbedding(ingestDocument, semanticFieldInfoList, handler);
     }
@@ -277,12 +283,13 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         return semanticFieldInfos;
     }
 
-    private void chunk(@NonNull final IngestDocument ingestDocument, @NonNull final List<SemanticFieldInfo> semanticFieldInfoList) {
+    private boolean chunk(@NonNull final IngestDocument ingestDocument, @NonNull final List<SemanticFieldInfo> semanticFieldInfoList) {
         final Map<String, Object> sourceAndMetadataMap = ingestDocument.getSourceAndMetadata();
         int maxTokenCount = getMaxTokenCount(sourceAndMetadataMap, environment.settings(), clusterService);
-
+        boolean isChunked = false;
         for (SemanticFieldInfo semanticFieldInfo : semanticFieldInfoList) {
             if (semanticFieldInfo.getChunkingEnabled()) {
+                isChunked = true;
                 if (semanticFieldInfo.getChunkers() == null || semanticFieldInfo.getChunkers().isEmpty()) {
                     semanticFieldInfo.setChunkers(List.of(defaultTextChunker));
                 }
@@ -294,6 +301,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                 semanticFieldInfo.setChunks(List.of(semanticFieldInfo.getValue()));
             }
         }
+        return isChunked;
     }
 
     private void setChunkedText(@NonNull final IngestDocument ingestDocument, @NonNull final SemanticFieldInfo semanticFieldInfo) {
@@ -386,6 +394,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
 
     @Override
     public void subBatchExecute(List<IngestDocumentWrapper> ingestDocumentWrappers, Consumer<List<IngestDocumentWrapper>> handler) {
+        EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_EXECUTIONS);
         if (ingestDocumentWrappers == null || ingestDocumentWrappers.isEmpty()) {
             handler.accept(ingestDocumentWrappers);
             return;
@@ -451,7 +460,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         @NonNull final Map<IngestDocumentWrapper, List<SemanticFieldInfo>> docToSemanticFieldInfoMap,
         @NonNull final Consumer<List<IngestDocumentWrapper>> handler
     ) {
-
+        boolean isChunked = false;
         for (Map.Entry<IngestDocumentWrapper, List<SemanticFieldInfo>> entry : docToSemanticFieldInfoMap.entrySet()) {
             final IngestDocumentWrapper ingestDocumentWrapper = entry.getKey();
             final IngestDocument ingestDocument = entry.getKey().getIngestDocument();
@@ -459,7 +468,9 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             try {
                 setModelInfo(ingestDocument, semanticFieldInfoList);
 
-                chunk(ingestDocument, semanticFieldInfoList);
+                if (chunk(ingestDocument, semanticFieldInfoList)) {
+                    isChunked = true;
+                }
             } catch (Exception e) {
                 log.error(
                     String.format(
@@ -474,6 +485,10 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                     ingestDocumentWrapper.update(ingestDocument, e);
                 }
             }
+        }
+
+        if (isChunked) {
+            EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
         }
 
         batchGenerateAndSetEmbedding(ingestDocumentWrappers, docToSemanticFieldInfoMap, handler);
