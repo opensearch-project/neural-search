@@ -16,8 +16,8 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.algorithm.BatchClusteringTask;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingRunning;
-import org.opensearch.neuralsearch.sparse.algorithm.ClusteringTask;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
@@ -28,7 +28,6 @@ import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +42,8 @@ import java.util.concurrent.CompletionException;
 @Log4j2
 public class SparsePostingsReader {
     private final MergeState mergeState;
+    // this is a magic number for now which is effective
+    private static final int BATCH_SIZE = 50;
 
     public SparsePostingsReader(MergeState state) {
         this.mergeState = state;
@@ -82,39 +83,48 @@ public class SparsePostingsReader {
             sparseTermsLuceneWriter.writeTermsSize(allTerms.size());
             clusteredPostingTermsWriter.setFieldAndMaxDoc(fieldInfo, docCount);
 
-            List<CompletableFuture<PostingClusters>> futures = new ArrayList<>(allTerms.size());
-            for (BytesRef term : allTerms) {
-                Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap = new HashMap<>();
-                List<DocFreq> docFreqs = getMergedPostingForATerm(term, fieldInfo, newToOldDocIdMap);
-                if (beta == 1) {
-                    // not run asynchronously
-                    futures.add(
-                        CompletableFuture.completedFuture(
-                            new ClusteringTask(term, docFreqs, key, alpha, beta, lambda, newToOldDocIdMap).get()
-                        )
-                    );
-                } else {
-                    futures.add(
-                        CompletableFuture.supplyAsync(
-                            new ClusteringTask(term, docFreqs, key, alpha, beta, lambda, newToOldDocIdMap),
-                            ClusterTrainingRunning.getInstance().getExecutor()
-                        )
-                    );
-                }
-            }
+            List<CompletableFuture<List<Pair<BytesRef, PostingClusters>>>> futures = new ArrayList<>(
+                Math.round((float) allTerms.size() / BATCH_SIZE)
+            );
             int i = 0;
+            List<BytesRef> termBatch = new ArrayList<>(BATCH_SIZE);
             for (BytesRef term : allTerms) {
+                termBatch.add(term);
+                if (termBatch.size() == BATCH_SIZE || i == allTerms.size() - 1) {
+                    if (beta == 1) {
+                        futures.add(
+                            CompletableFuture.completedFuture(
+                                new BatchClusteringTask(termBatch, key, alpha, beta, lambda, mergeState, fieldInfo).get()
+                            )
+                        );
+
+                    } else {
+                        futures.add(
+                            CompletableFuture.supplyAsync(
+                                new BatchClusteringTask(termBatch, key, alpha, beta, lambda, mergeState, fieldInfo),
+                                ClusterTrainingRunning.getInstance().getExecutor()
+                            )
+                        );
+                    }
+                    termBatch = new ArrayList<>(BATCH_SIZE);
+                }
+                ++i;
+            }
+            for (int j = 0; j < futures.size(); ++j) {
                 try {
-                    PostingClusters cluster = futures.get(i).join();
-                    BlockTermState state = clusteredPostingTermsWriter.write(term, cluster);
-                    sparseTermsLuceneWriter.writeTerm(term, state);
+                    List<Pair<BytesRef, PostingClusters>> clusters = futures.get(j).join();
+                    futures.set(j, null);
+                    for (Pair<BytesRef, PostingClusters> p : clusters) {
+                        BlockTermState state = clusteredPostingTermsWriter.write(p.getLeft(), p.getRight());
+                        sparseTermsLuceneWriter.writeTerm(p.getLeft(), state);
+                    }
                 } catch (CancellationException | CompletionException ex) {
-                    log.error("Thread of running clustering from term {} during merge has exception", term, ex);
+                    log.error("Thread of running clustering from {}th term batch during merge has exception", j, ex);
                 } catch (IOException ex) {
                     clusteredPostingTermsWriter.closeWithException();
                     sparseTermsLuceneWriter.closeWithException();
+                    throw ex;
                 }
-                ++i;
             }
         }
     }
@@ -142,16 +152,17 @@ public class SparsePostingsReader {
         return allTerms;
     }
 
-    private List<DocFreq> getMergedPostingForATerm(
+    public static List<DocFreq> getMergedPostingForATerm(
+        MergeState mergeState,
         BytesRef term,
         FieldInfo fieldInfo,
         Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap
     ) throws IOException {
         List<DocFreq> docFreqs = new ArrayList<>();
-        for (int i = 0; i < this.mergeState.fieldsProducers.length; i++) {
-            FieldsProducer fieldsProducer = this.mergeState.fieldsProducers[i];
+        for (int i = 0; i < mergeState.fieldsProducers.length; i++) {
+            FieldsProducer fieldsProducer = mergeState.fieldsProducers[i];
             // we need this SparseBinaryDocValuesPassThrough to get segment info
-            BinaryDocValues binaryDocValues = this.mergeState.docValuesProducers[i].getBinary(fieldInfo);
+            BinaryDocValues binaryDocValues = mergeState.docValuesProducers[i].getBinary(fieldInfo);
             if (!(binaryDocValues instanceof SparseBinaryDocValuesPassThrough)) {
                 log.error("binaryDocValues is not SparseBinaryDocValuesPassThrough, {}", binaryDocValues.getClass().getName());
                 continue;
@@ -190,7 +201,7 @@ public class SparsePostingsReader {
                         log.error("docId is -1");
                         continue;
                     }
-                    int newDocId = this.mergeState.docMaps[i].get(docIter.docID());
+                    int newDocId = mergeState.docMaps[i].get(docIter.docID());
                     if (newDocId == -1) {
                         continue;
                     }
