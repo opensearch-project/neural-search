@@ -63,6 +63,21 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     public static final String INCLUDE_METADATA_PARAM = "include_metadata";
 
     /**
+     * Query parameter name to include individual nodes data
+     */
+    public static final String INCLUDE_INDIVIDUAL_NODES_PARAM = "include_individual_nodes";
+
+    /**
+     * Query parameter name to include individual nodes data
+     */
+    public static final String INCLUDE_ALL_NODES_PARAM = "include_all_nodes";
+
+    /**
+     * Query parameter name to include individual nodes data
+     */
+    public static final String INCLUDE_INFO_PARAM = "include_info";
+
+    /**
      * Regex for valid params, containing only alphanumeric, -, or _
      */
     public static final String PARAM_REGEX = "^[A-Za-z0-9-_]+$";
@@ -93,7 +108,15 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         new Route(RestRequest.Method.GET, NEURAL_BASE_URI + "/stats/{stat}")
     );
 
-    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of(NODE_ID_PARAM, STAT_PARAM, INCLUDE_METADATA_PARAM, FLATTEN_PARAM);
+    private static final Set<String> RESPONSE_PARAMS = ImmutableSet.of(
+        NODE_ID_PARAM,
+        STAT_PARAM,
+        INCLUDE_METADATA_PARAM,
+        FLATTEN_PARAM,
+        INCLUDE_INDIVIDUAL_NODES_PARAM,
+        INCLUDE_ALL_NODES_PARAM,
+        INCLUDE_INFO_PARAM
+    );
 
     /**
      * Validates a param string if its under the max length and matches simple string pattern
@@ -172,6 +195,15 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         boolean includeMetadata = request.paramAsBoolean(INCLUDE_METADATA_PARAM, false);
         neuralStatsInput.setIncludeMetadata(includeMetadata);
 
+        boolean includeIndividualNodes = request.paramAsBoolean(INCLUDE_INDIVIDUAL_NODES_PARAM, true);
+        neuralStatsInput.setIncludeIndividualNodes(includeIndividualNodes);
+
+        boolean includeAllNodes = request.paramAsBoolean(INCLUDE_ALL_NODES_PARAM, true);
+        neuralStatsInput.setIncludeAllNodes(includeAllNodes);
+
+        boolean includeInfo = request.paramAsBoolean(INCLUDE_INFO_PARAM, true);
+        neuralStatsInput.setIncludeInfo(includeInfo);
+
         // Process requested stats parameters
         processStatsRequestParameters(request, neuralStatsInput);
 
@@ -191,6 +223,8 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
         String[] stats = optionalStats.get();
         Set<String> invalidStatNames = new HashSet<>();
+        boolean includeEvents = neuralStatsInput.isIncludeEvents();
+        boolean includeInfo = neuralStatsInput.isIncludeInfo();
 
         for (String stat : stats) {
             // Validate parameter
@@ -200,12 +234,12 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 continue;
             }
 
-            if (InfoStatName.isValidName(normalizedStat)) {
+            if (includeInfo && InfoStatName.isValidName(normalizedStat)) {
                 InfoStatName infoStatName = InfoStatName.from(normalizedStat);
                 if (infoStatName.version().onOrBefore(minClusterVersion)) {
                     neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
                 }
-            } else if (EventStatName.isValidName(normalizedStat)) {
+            } else if (includeEvents && EventStatName.isValidName(normalizedStat)) {
                 EventStatName eventStatName = EventStatName.from(normalizedStat);
                 if (eventStatName.version().onOrBefore(minClusterVersion)) {
                     neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
@@ -224,24 +258,32 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
     private void addAllStats(NeuralStatsInput neuralStatsInput, Version minVersion) {
         if (minVersion == Version.CURRENT) {
-            neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
-            neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
+            if (neuralStatsInput.isIncludeInfo()) {
+                neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
+            }
+            if (neuralStatsInput.isIncludeEvents()) {
+                neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
+            }
         } else {
             // Use a separate case here to save on version comparison if not necessary
-            neuralStatsInput.getInfoStatNames()
-                .addAll(
-                    EnumSet.allOf(InfoStatName.class)
-                        .stream()
-                        .filter(statName -> statName.version().onOrBefore(minVersion))
-                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(InfoStatName.class)))
-                );
-            neuralStatsInput.getEventStatNames()
-                .addAll(
-                    EnumSet.allOf(EventStatName.class)
-                        .stream()
-                        .filter(statName -> statName.version().onOrBefore(minVersion))
-                        .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
-                );
+            if (neuralStatsInput.isIncludeInfo()) {
+                neuralStatsInput.getInfoStatNames()
+                    .addAll(
+                        EnumSet.allOf(InfoStatName.class)
+                            .stream()
+                            .filter(statName -> statName.version().onOrBefore(minVersion))
+                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(InfoStatName.class)))
+                    );
+            }
+            if (neuralStatsInput.isIncludeEvents()) {
+                neuralStatsInput.getEventStatNames()
+                    .addAll(
+                        EnumSet.allOf(EventStatName.class)
+                            .stream()
+                            .filter(statName -> statName.version().onOrBefore(minVersion))
+                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
+                    );
+            }
         }
     }
 

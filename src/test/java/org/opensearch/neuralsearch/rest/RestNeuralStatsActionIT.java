@@ -10,6 +10,7 @@ import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.ResponseException;
 import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
@@ -86,6 +87,7 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         String responseBody;
         Map<String, Object> stats;
         List<Map<String, Object>> nodesStats;
+        Map<String, Object> aggregatedNodesStats;
 
         responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
         stats = parseInfoStatsResponse(responseBody);
@@ -93,6 +95,27 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
 
         // Parse json to get stats
         assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
+
+        // Aggregated stats should still exist even if include_individual_nodes is false
+        Map<String, String> params = new HashMap<>();
+        params.put(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, "false");
+
+        // Call stats again with custom params
+        responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>(), params);
+        stats = parseInfoStatsResponse(responseBody);
+        aggregatedNodesStats = parseAggregatedNodeStatsResponse(responseBody);
+
+        // Individual nodes shouldn't exist
+        @SuppressWarnings("unchecked")
+        Map<String, Object> individualNodesMap = (Map<String, Object>) createParser(
+            MediaTypeRegistry.getDefaultMediaType().xContent(),
+            responseBody
+        ).map().get("nodes");
+        assertNull(individualNodesMap);
+
+        // Parse aggregated nodes stats json
+        assertEquals(3, getNestedValue(aggregatedNodesStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
 
         // Reset stats
