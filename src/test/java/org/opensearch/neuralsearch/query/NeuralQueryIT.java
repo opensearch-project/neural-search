@@ -512,7 +512,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Tests basic query with boost in semantic index:
+     * Tests basic query with boost and search analyzer in query time
      * {
      *     "query": {
      *         "neural_sparse": {
@@ -545,7 +545,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Tests basic query with boost in semantic index:
+     * Tests basic query with boost and search analyzer in semantic index creation
      * {
      *     "query": {
      *         "neural_sparse": {
@@ -657,25 +657,11 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
 
         if (TEST_SEMANTIC_INDEX_SPARSE_NAME.equals(indexName) && !indexExists(TEST_SEMANTIC_INDEX_SPARSE_NAME)) {
             prepareSemanticIndex(
-                    TEST_SEMANTIC_INDEX_SPARSE_NAME,
-                    Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
-                    modelId,
-                    semanticFieldSearchAnalyzer
-                );
-                prepareSemanticIndex(
-                    TEST_SEMANTIC_INDEX_SPARSE_NAME,
-                    Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
-                    modelId,
-                    semanticFieldSearchAnalyzer
-                );
-            } else {
-                prepareSemanticIndex(
-                    TEST_SEMANTIC_INDEX_SPARSE_NAME,
-                    Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
-                    modelId,
-                    null
-                );
-            }
+                TEST_SEMANTIC_INDEX_SPARSE_NAME,
+                Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
+                modelId,
+                semanticFieldSearchAnalyzer
+            );
             addSemanticDoc(
                 indexName,
                 "4",
