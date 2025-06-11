@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor.util;
 
 import lombok.NonNull;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
@@ -14,6 +15,7 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.builder.SearchSourceBuilder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -302,6 +304,26 @@ public class ProcessorUtils {
         }
 
         return false;
+    }
+
+    /**
+     *
+     * @param searchPhaseContext the search phase context that contains the search request
+     * @return whether sort is enabled in the search request
+     */
+    public static boolean isSortEnabled(SearchPhaseContext searchPhaseContext) {
+        SearchSourceBuilder searchSourceBuilder = searchPhaseContext.getRequest().source();
+        return searchSourceBuilder.sorts() != null && !searchSourceBuilder.sorts().isEmpty();
+    }
+
+    /**
+     *
+     * @param searchPhaseContext the search phase context that contains the search request
+     * @return whether explain is enabled in the search request
+     */
+    public static boolean isExplainEnabled(SearchPhaseContext searchPhaseContext) {
+        SearchSourceBuilder searchSourceBuilder = searchPhaseContext.getRequest().source();
+        return Objects.nonNull(searchSourceBuilder.explain()) && searchSourceBuilder.explain();
     }
 
     /**
