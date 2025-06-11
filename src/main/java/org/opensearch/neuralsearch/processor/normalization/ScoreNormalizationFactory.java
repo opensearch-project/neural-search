@@ -19,8 +19,8 @@ public class ScoreNormalizationFactory {
         new MinMaxScoreNormalizationTechnique(),
         L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
         new L2ScoreNormalizationTechnique(),
-            MaxNormalizationTechnique.TECHNIQUE_NAME,
-            new MaxNormalizationTechnique()
+        MaxNormalizationTechnique.TECHNIQUE_NAME,
+        new MaxNormalizationTechnique()
     );
 
     /**

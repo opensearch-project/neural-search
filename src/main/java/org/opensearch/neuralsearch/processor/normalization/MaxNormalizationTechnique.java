@@ -2,21 +2,21 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-
 package org.opensearch.neuralsearch.processor.normalization;
 
 import lombok.ToString;
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 
 @ToString(onlyExplicitlyIncluded = true)
-public class MaxNormalizationTechnique implements ScoreNormalizationTechnique{
+@Log4j2
+public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
 
     @ToString.Include
     public static final String TECHNIQUE_NAME = "max_technique";
@@ -24,34 +24,41 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique{
     @Override
     public void normalize(List<CompoundTopDocs> queryTopDocs) {
         int numOfSubqueries = queryTopDocs.stream()
-                .filter(Objects::nonNull)
-                .filter(topDocs -> topDocs.getTopDocs().size() > 0)
-                .findAny()
-                .get()
-                .getTopDocs()
-                .size();
-        if (numOfSubqueries<2 || numOfSubqueries > 2){
+            .filter(Objects::nonNull)
+            .filter(topDocs -> topDocs.getTopDocs().size() > 0)
+            .findAny()
+            .get()
+            .getTopDocs()
+            .size();
+        if (numOfSubqueries < 2 || numOfSubqueries > 2) {
             throw new IllegalArgumentException("Number of subqueries cannot be grater or lessor than 2");
         }
 
         float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
 
         float matchQueryMaxScore = maxScoresPerSubquery[0];
+        log.info("max score of match query [{}]", matchQueryMaxScore);
         float knnQueryMaxScore = maxScoresPerSubquery[1];
+        log.info("max score of knn query [{}]", knnQueryMaxScore);
 
         float multiplier;
 
-        if ((matchQueryMaxScore==0.0f || matchQueryMaxScore == Float.MIN_VALUE) || knnQueryMaxScore==0.0f || knnQueryMaxScore == Float.MIN_VALUE){
-            multiplier=1;
-        }else {
-            multiplier= matchQueryMaxScore/knnQueryMaxScore;
+        if ((matchQueryMaxScore == 0.0f || matchQueryMaxScore == Float.MIN_VALUE)
+            || knnQueryMaxScore == 0.0f
+            || knnQueryMaxScore == Float.MIN_VALUE) {
+            multiplier = 1;
+        } else {
+            multiplier = matchQueryMaxScore / knnQueryMaxScore;
         }
+
+        log.info("Multiplier value is [{}]", multiplier);
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             TopDocs topDocsOfKnnSubquery = compoundQueryTopDocs.getTopDocs().get(1);
 
-            for (ScoreDoc scoreDoc: topDocsOfKnnSubquery.scoreDocs){
-                scoreDoc.score*=multiplier;
+            for (ScoreDoc scoreDoc : topDocsOfKnnSubquery.scoreDocs) {
+                scoreDoc.score *= multiplier;
+                log.info("docId and score are [{}] , [{}]", scoreDoc.doc, scoreDoc.score);
             }
         }
     }
@@ -66,11 +73,11 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique{
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 maxScores[j] = Math.max(
-                        maxScores[j],
-                        Arrays.stream(topDocsPerSubQuery.get(j).scoreDocs)
-                                .map(scoreDoc -> scoreDoc.score)
-                                .max(Float::compare)
-                                .orElse(Float.MIN_VALUE)
+                    maxScores[j],
+                    Arrays.stream(topDocsPerSubQuery.get(j).scoreDocs)
+                        .map(scoreDoc -> scoreDoc.score)
+                        .max(Float::compare)
+                        .orElse(Float.MIN_VALUE)
                 );
             }
         }
