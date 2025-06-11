@@ -53,16 +53,22 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         PARAM_NAME_LOWER_BOUNDS,
         Set.of(PARAM_NAME_LOWER_BOUND_MODE, PARAM_NAME_LOWER_BOUND_MIN_SCORE)
     );
+    private final boolean subQueryScores;
 
     private final Optional<List<Pair<LowerBound.Mode, Float>>> lowerBoundsOptional;
 
     public MinMaxScoreNormalizationTechnique() {
-        this(Map.of(), new ScoreNormalizationUtil());
+        this(Map.of(), new ScoreNormalizationUtil(), false);
     }
 
-    public MinMaxScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+    public MinMaxScoreNormalizationTechnique(
+        final Map<String, Object> params,
+        final ScoreNormalizationUtil scoreNormalizationUtil,
+        final boolean subQueryScores
+    ) {
         scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMETERS, NESTED_PARAMETERS);
         lowerBoundsOptional = getLowerBounds(params);
+        this.subQueryScores = subQueryScores;
     }
 
     /**
@@ -97,8 +103,13 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 LowerBound lowerBound = getLowerBound(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsPerSubQuery.size()]);
-                    scoresArray[j] = scoreDoc.score;
+                    if (subQueryScores) {
+                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
+                            scoreDoc.doc,
+                            k -> new float[topDocsPerSubQuery.size()]
+                        );
+                        scoresArray[j] = scoreDoc.score;
+                    }
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         minMaxScores.getMinScoresPerSubquery()[j],
