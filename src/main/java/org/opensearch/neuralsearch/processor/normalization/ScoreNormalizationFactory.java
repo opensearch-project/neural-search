@@ -13,7 +13,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Optional;
-import java.util.function.Function;
+import java.util.function.BiFunction;
 
 /**
  * Abstracts creation of exact score normalization method based on technique name
@@ -24,16 +24,17 @@ public class ScoreNormalizationFactory {
 
     public static final ScoreNormalizationTechnique DEFAULT_METHOD = new MinMaxScoreNormalizationTechnique();
 
-    private static final Map<String, Function<Map<String, Object>, ScoreNormalizationTechnique>> SCORE_NORMALIZATION_METHODS = Map.of(
-        MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new MinMaxScoreNormalizationTechnique(params, scoreNormalizationUtil),
-        L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new L2ScoreNormalizationTechnique(params, scoreNormalizationUtil),
-        RRFNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new RRFNormalizationTechnique(params, scoreNormalizationUtil),
-        ZScoreNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new ZScoreNormalizationTechnique()
-    );
+    private static final Map<String, BiFunction<Map<String, Object>, Boolean, ScoreNormalizationTechnique>> SCORE_NORMALIZATION_METHODS =
+        Map.of(
+            MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
+            (params, subQueryScores) -> new MinMaxScoreNormalizationTechnique(params, scoreNormalizationUtil, subQueryScores),
+            L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
+            (params, subQueryScores) -> new L2ScoreNormalizationTechnique(params, scoreNormalizationUtil, subQueryScores),
+            RRFNormalizationTechnique.TECHNIQUE_NAME,
+            (params, subQueryScores) -> new RRFNormalizationTechnique(params, scoreNormalizationUtil, subQueryScores),
+            ZScoreNormalizationTechnique.TECHNIQUE_NAME,
+            (params, subQueryScores) -> new ZScoreNormalizationTechnique(params, scoreNormalizationUtil, subQueryScores)
+        );
 
     private static final Map<String, Set<String>> COMBINATION_TECHNIQUE_FOR_NORMALIZATION_METHODS = Map.of(
         MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
@@ -64,13 +65,17 @@ public class ScoreNormalizationFactory {
      * @return instance of ScoreNormalizationMethod for technique name
      */
     public ScoreNormalizationTechnique createNormalization(final String technique) {
-        return createNormalization(technique, Map.of());
+        return createNormalization(technique, Map.of(), false);
     }
 
-    public ScoreNormalizationTechnique createNormalization(final String technique, final Map<String, Object> params) {
+    public ScoreNormalizationTechnique createNormalization(
+        final String technique,
+        final Map<String, Object> params,
+        boolean subQueryScores
+    ) {
         return Optional.ofNullable(SCORE_NORMALIZATION_METHODS.get(technique))
             .orElseThrow(() -> new IllegalArgumentException("provided normalization technique is not supported"))
-            .apply(params);
+            .apply(params, subQueryScores);
     }
 
     /**

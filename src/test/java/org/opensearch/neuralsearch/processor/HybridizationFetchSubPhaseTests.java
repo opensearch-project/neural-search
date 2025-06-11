@@ -14,6 +14,7 @@ import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.index.RandomIndexWriter;
 import org.junit.Before;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.document.DocumentField;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
@@ -21,7 +22,6 @@ import org.opensearch.search.SearchHit;
 import org.opensearch.search.fetch.FetchContext;
 import org.opensearch.search.fetch.FetchSubPhase;
 import org.opensearch.search.fetch.FetchSubPhaseProcessor;
-import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.lookup.SourceLookup;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -66,7 +66,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 searchHit = new SearchHit(docId);
                 hitContext = new FetchSubPhase.HitContext(searchHit, leafReaderContext, docId, new SourceLookup());
 
-                var mockSearchContext = mock(SearchContext.class);
+                var mockSearchContext = mock(SearchPhaseContext.class);
                 final List<CompoundTopDocs> queryTopDocs = List.of(
                     new CompoundTopDocs(
                         new TotalHits(1, TotalHits.Relation.EQUAL_TO),
@@ -112,7 +112,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 searchHit = new SearchHit(docId);
                 hitContext = new FetchSubPhase.HitContext(searchHit, leafReaderContext, docId, new SourceLookup());
 
-                var mockSearchContext = mock(SearchContext.class);
+                var mockSearchContext = mock(SearchPhaseContext.class);
 
                 NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
                     .queryTopDocs(List.of())
@@ -144,7 +144,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 searchHit = new SearchHit(docId);
                 hitContext = new FetchSubPhase.HitContext(searchHit, leafReaderContext, docId, new SourceLookup());
 
-                var mockSearchContext = mock(SearchContext.class);
+                var mockSearchContext = mock(SearchPhaseContext.class);
 
                 // docId 0 not in hit
                 final List<CompoundTopDocs> queryTopDocs = List.of(
