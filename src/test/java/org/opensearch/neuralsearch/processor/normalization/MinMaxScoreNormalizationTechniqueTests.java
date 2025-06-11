@@ -419,7 +419,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
 
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil())
+            () -> new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil(), false)
         );
 
         assertEquals(
@@ -443,7 +443,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         parameters.put("lower_bounds", lowerBounds);
         MinMaxScoreNormalizationTechnique techniqueWithBounds = new MinMaxScoreNormalizationTechnique(
             parameters,
-            new ScoreNormalizationUtil()
+            new ScoreNormalizationUtil(),
+            false
         );
         assertEquals("min_max, lower bounds [(apply, 0.2), (clip, 0.1)]", techniqueWithBounds.describe());
 
@@ -451,7 +452,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         Map<String, Object> emptyParameters = new HashMap<>();
         MinMaxScoreNormalizationTechnique techniqueWithoutBounds = new MinMaxScoreNormalizationTechnique(
             emptyParameters,
-            new ScoreNormalizationUtil()
+            new ScoreNormalizationUtil(),
+            false
         );
         assertEquals("min_max", techniqueWithoutBounds.describe());
 
@@ -463,7 +465,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         parametersMissingMode.put("lower_bounds", lowerBoundsMissingMode);
         MinMaxScoreNormalizationTechnique techniqueMissingMode = new MinMaxScoreNormalizationTechnique(
             parametersMissingMode,
-            new ScoreNormalizationUtil()
+            new ScoreNormalizationUtil(),
+            false
         );
         assertEquals("min_max, lower bounds [(apply, 0.2), (clip, 0.1)]", techniqueMissingMode.describe());
 
@@ -475,7 +478,8 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         parametersMissingScore.put("lower_bounds", lowerBoundsMissingScore);
         MinMaxScoreNormalizationTechnique techniqueMissingScore = new MinMaxScoreNormalizationTechnique(
             parametersMissingScore,
-            new ScoreNormalizationUtil()
+            new ScoreNormalizationUtil(),
+            false
         );
         assertEquals("min_max, lower bounds [(apply, 0.0), (clip, 0.1)]", techniqueMissingScore.describe());
     }
@@ -490,7 +494,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         parametersInvalidMode.put("lower_bounds", lowerBoundsInvalidMode);
         IllegalArgumentException invalidModeException = expectThrows(
             IllegalArgumentException.class,
-            () -> new MinMaxScoreNormalizationTechnique(parametersInvalidMode, new ScoreNormalizationUtil())
+            () -> new MinMaxScoreNormalizationTechnique(parametersInvalidMode, new ScoreNormalizationUtil(), false)
         );
         assertEquals("invalid mode: invalid_mode, valid values are: apply, clip, ignore", invalidModeException.getMessage());
 
@@ -503,7 +507,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         parametersInvalidScore.put("lower_bounds", lowerBoundsInvalidScore);
         IllegalArgumentException invalidScoreException = expectThrows(
             IllegalArgumentException.class,
-            () -> new MinMaxScoreNormalizationTechnique(parametersInvalidScore, new ScoreNormalizationUtil())
+            () -> new MinMaxScoreNormalizationTechnique(parametersInvalidScore, new ScoreNormalizationUtil(), false)
         );
         assertEquals("invalid format for min_score: must be a valid float value", invalidScoreException.getMessage());
     }
@@ -527,7 +531,11 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                 SEARCH_SHARD
             )
         );
-        ScoreNormalizationTechnique minMaxTechnique = new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+        ScoreNormalizationTechnique minMaxTechnique = new MinMaxScoreNormalizationTechnique(
+            parameters,
+            new ScoreNormalizationUtil(),
+            false
+        );
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(minMaxTechnique)
@@ -567,7 +575,11 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
                 SEARCH_SHARD
             )
         );
-        ScoreNormalizationTechnique minMaxTechnique = new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+        ScoreNormalizationTechnique minMaxTechnique = new MinMaxScoreNormalizationTechnique(
+            parameters,
+            new ScoreNormalizationUtil(),
+            false
+        );
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(compoundTopDocs)
             .normalizationTechnique(minMaxTechnique)
@@ -611,7 +623,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         parameters.put("lower_bounds", lowerBoundsList);
 
         try {
-            new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+            new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil(), false);
             fail("Expected IllegalArgumentException was not thrown");
         } catch (IllegalArgumentException e) {
             assertEquals("unrecognized parameters in normalization technique", e.getMessage());
@@ -623,7 +635,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         parameters.put("invalid_top_level_param", "value"); // Adding an invalid top-level parameter
 
         try {
-            new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+            new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil(), false);
             fail("Expected IllegalArgumentException was not thrown");
         } catch (IllegalArgumentException e) {
             assertEquals("unrecognized parameters in normalization technique", e.getMessage());

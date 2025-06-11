@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import org.opensearch.search.internal.SearchContext;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Map;
@@ -14,7 +14,7 @@ import static org.mockito.Mockito.mock;
 public class HybridScoreRegistryTests extends OpenSearchTestCase {
 
     public void testStoreAndGet() {
-        var mockSearchContext = mock(SearchContext.class);
+        var mockSearchContext = mock(SearchPhaseContext.class);
         int docId = 1;
         float[] scores = new float[] { 0.4f, 0.6f };
         Map<Integer, float[]> expectedScores = Map.of(docId, scores);
@@ -24,7 +24,7 @@ public class HybridScoreRegistryTests extends OpenSearchTestCase {
     }
 
     public void testRemove() {
-        var mockSearchContext = mock(SearchContext.class);
+        var mockSearchContext = mock(SearchPhaseContext.class);
         HybridScoreRegistry.store(mockSearchContext, Map.of(1, new float[] { 0.4f, 0.6f }));
         HybridScoreRegistry.remove(mockSearchContext);
         assertNull(HybridScoreRegistry.get(mockSearchContext));

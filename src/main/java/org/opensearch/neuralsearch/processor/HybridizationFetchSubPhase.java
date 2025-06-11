@@ -5,12 +5,12 @@
 package org.opensearch.neuralsearch.processor;
 
 import org.apache.lucene.index.LeafReaderContext;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.document.DocumentField;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.fetch.FetchContext;
 import org.opensearch.search.fetch.FetchSubPhase;
 import org.opensearch.search.fetch.FetchSubPhaseProcessor;
-import org.opensearch.search.internal.SearchContext;
 
 import java.io.IOException;
 import java.util.List;
@@ -23,11 +23,13 @@ import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isCluster
  */
 public class HybridizationFetchSubPhase implements FetchSubPhase {
 
-    private static final String NAME = "hybridization";
+    private static final String NAME = "hybridization_sub_query_scores";
 
     @Override
     public FetchSubPhaseProcessor getProcessor(FetchContext fetchContext) throws IOException {
-        SearchContext context = ScoreNormalizer.getSearchContext();
+        // Check if inner hits are present
+        boolean hasInnerHits = fetchContext.innerHits() != null && !fetchContext.innerHits().getInnerHits().isEmpty();
+        SearchPhaseContext context = ScoreNormalizer.getSearchPhaseContext();
 
         return new FetchSubPhaseProcessor() {
             LeafReaderContext ctx;
@@ -39,7 +41,7 @@ public class HybridizationFetchSubPhase implements FetchSubPhase {
 
             @Override
             public void process(HitContext hitContext) {
-                if (isClusterOnOrAfterMinReqVersionForSubQuerySupport()) {
+                if (isClusterOnOrAfterMinReqVersionForSubQuerySupport() && hasInnerHits == false) {
                     Map<Integer, float[]> scoreMap = HybridScoreRegistry.get(context);
                     if (scoreMap == null) {
                         return;
