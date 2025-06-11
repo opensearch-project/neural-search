@@ -45,10 +45,16 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     private static final Range<Integer> RANK_CONSTANT_RANGE = Range.of(MIN_RANK_CONSTANT, MAX_RANK_CONSTANT);
     @ToString.Include
     private final int rankConstant;
+    private final boolean subQueryScores;
 
-    public RRFNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+    public RRFNormalizationTechnique(
+        final Map<String, Object> params,
+        final ScoreNormalizationUtil scoreNormalizationUtil,
+        final boolean subQueryScores
+    ) {
         scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMS, Map.of());
         rankConstant = getRankConstant(params);
+        this.subQueryScores = subQueryScores;
     }
 
     /**
@@ -149,8 +155,10 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
             DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, searchShard);
             scoreProcessor.apply(docIdAtSearchShard, normalizedScore, topDocsIndex);
             // Initialize or update subquery scores array per doc
-            float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsSize]);
-            scoresArray[topDocsIndex] = scoreDoc.score;
+            if (subQueryScores) {
+                float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsSize]);
+                scoresArray[topDocsIndex] = scoreDoc.score;
+            }
             scoreDoc.score = normalizedScore;
         }
     }

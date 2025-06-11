@@ -25,9 +25,9 @@ import java.util.Map;
 import static org.mockito.Mockito.mock;
 
 import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.NORMALIZATION_CLAUSE;
-import static org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory.PARAMETERS;
-import static org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory.COMBINATION_CLAUSE;
-import static org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory.TECHNIQUE;
+import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.COMBINATION_CLAUSE;
+import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.TECHNIQUE;
+import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.PARAMETERS;
 
 public class RRFProcessorFactoryTests extends OpenSearchTestCase {
 
