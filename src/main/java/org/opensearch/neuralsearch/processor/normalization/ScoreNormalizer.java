@@ -10,18 +10,20 @@ import java.util.Objects;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.HybridScoreRegistry;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
-import org.opensearch.search.internal.SearchContext;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.isSortEnabled;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.isExplainEnabled;
 
 public class ScoreNormalizer {
     @Getter
     @Setter
-    private static SearchContext searchContext;
+    private static SearchPhaseContext searchPhaseContext;
 
     /**
      * Performs score normalization based on input normalization technique.
@@ -30,19 +32,24 @@ public class ScoreNormalizer {
      * from multiple shards and multiple sub-queries, scoreNormalizationTechnique exact normalization technique
      * that should be applied, and nullable rankConstant that is only used in RRF technique
      */
-    public void normalizeScores(final NormalizeScoresDTO normalizeScoresDTO, SearchContext searchContext) {
+    public void normalizeScores(final NormalizeScoresDTO normalizeScoresDTO, SearchPhaseContext searchPhaseContext) {
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         final ScoreNormalizationTechnique scoreNormalizationTechnique = normalizeScoresDTO.getNormalizationTechnique();
         if (canQueryResultsBeNormalized(queryTopDocs)) {
 
             Map<Integer, float[]> hybridizationScores = scoreNormalizationTechnique.normalize(normalizeScoresDTO);
-            // Store in registry
 
-            setSearchContext(searchContext);
-            HybridScoreRegistry.store(searchContext, hybridizationScores);
+            boolean isExplainEnabled = isExplainEnabled(searchPhaseContext);
+            boolean isSortEnabled = isSortEnabled(searchPhaseContext);
 
-            // // // Optional: clean up later via context.addReleasable()
-            // searchContext.addReleasable(() -> HybridScoreRegistry.remove(searchContext));
+            if (isExplainEnabled == false && isSortEnabled == false) {
+                // Store in registry
+                setSearchPhaseContext(searchPhaseContext);
+                HybridScoreRegistry.store(searchPhaseContext, hybridizationScores);
+
+                // clean up later via context.addReleasable()
+                searchPhaseContext.addReleasable(() -> HybridScoreRegistry.remove(searchPhaseContext));
+            }
         }
     }
 

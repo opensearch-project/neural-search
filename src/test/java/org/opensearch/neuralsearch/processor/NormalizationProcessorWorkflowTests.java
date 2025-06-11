@@ -506,6 +506,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         when(searchPhaseContext.getNumShards()).thenReturn(4);
         SearchRequest searchRequest = mock(SearchRequest.class);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         searchSourceBuilder.from(17);
         when(searchPhaseContext.getRequest()).thenReturn(searchRequest);

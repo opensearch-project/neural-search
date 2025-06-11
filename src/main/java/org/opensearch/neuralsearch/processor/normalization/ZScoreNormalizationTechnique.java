@@ -10,6 +10,7 @@ import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.Locale;
 
@@ -35,6 +36,20 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     public static final String TECHNIQUE_NAME = "z_score";
     private static final float SINGLE_RESULT_SCORE = 1.0f;
     private static final float MIN_SCORE = 0.001f;
+    private final boolean subQueryScores;
+
+    public ZScoreNormalizationTechnique() {
+        this(Map.of(), new ScoreNormalizationUtil(), false);
+    }
+
+    public ZScoreNormalizationTechnique(
+        final Map<String, Object> params,
+        final ScoreNormalizationUtil scoreNormalizationUtil,
+        final boolean subQueryScores
+    ) {
+        scoreNormalizationUtil.validateParameters(params, Set.of(), Map.of());
+        this.subQueryScores = subQueryScores;
+    }
 
     /**
      * Z-score normalization transforms the data based on its mean and standard deviation, making it more robust to outliers.
@@ -68,8 +83,13 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsPerSubQuery.size()]);
-                    scoresArray[j] = scoreDoc.score;
+                    if (subQueryScores) {
+                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
+                            scoreDoc.doc,
+                            k -> new float[topDocsPerSubQuery.size()]
+                        );
+                        scoresArray[j] = scoreDoc.score;
+                    }
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         zscores.stdPerSubquery[j],

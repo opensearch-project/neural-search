@@ -64,7 +64,7 @@ public class ScoreNormalizationFactoryTests extends OpenSearchQueryTestCase {
         parameters.put(PARAM_NAME_LOWER_BOUNDS, lowerBounds);
 
         ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
-        ScoreNormalizationTechnique normalizationTechnique = scoreNormalizationFactory.createNormalization("min_max", parameters);
+        ScoreNormalizationTechnique normalizationTechnique = scoreNormalizationFactory.createNormalization("min_max", parameters, false);
 
         assertNotNull(normalizationTechnique);
         assertTrue(normalizationTechnique instanceof MinMaxScoreNormalizationTechnique);
@@ -79,7 +79,7 @@ public class ScoreNormalizationFactoryTests extends OpenSearchQueryTestCase {
         ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> scoreNormalizationFactory.createNormalization(L2ScoreNormalizationTechnique.TECHNIQUE_NAME, parameters)
+            () -> scoreNormalizationFactory.createNormalization(L2ScoreNormalizationTechnique.TECHNIQUE_NAME, parameters, false)
         );
         assertEquals("unrecognized parameters in normalization technique", exception.getMessage());
     }

@@ -330,7 +330,7 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         parameters.put("lower_bounds", lowerBoundsList);
 
         try {
-            new L2ScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+            new L2ScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil(), false);
             fail("expected IllegalArgumentException was not thrown");
         } catch (IllegalArgumentException e) {
             assertEquals("unrecognized parameters in normalization technique", e.getMessage());
@@ -342,7 +342,7 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         parameters.put("invalid_top_level_param", "value"); // Adding an invalid top-level parameter
 
         try {
-            new L2ScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+            new L2ScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil(), false);
             fail("expected IllegalArgumentException was not thrown");
         } catch (IllegalArgumentException e) {
             assertEquals("unrecognized parameters in normalization technique", e.getMessage());

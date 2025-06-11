@@ -36,7 +36,6 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
-import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.query.QuerySearchResult;
 
@@ -57,6 +56,7 @@ public class NormalizationProcessorWorkflow {
 
     private final ScoreNormalizer scoreNormalizer;
     private final ScoreCombiner scoreCombiner;
+    private static final String NAME = "hybridization_sub_query_scores";
 
     /**
      * Start execution of this workflow
@@ -83,7 +83,7 @@ public class NormalizationProcessorWorkflow {
 
         // normalize
         log.debug("Do score normalization");
-        scoreNormalizer.normalizeScores(normalizeScoresDTO, request.getSearchContext());
+        scoreNormalizer.normalizeScores(normalizeScoresDTO, request.getSearchPhaseContext());
 
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
@@ -102,7 +102,7 @@ public class NormalizationProcessorWorkflow {
         log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(combineScoresDTO, fetchSearchResultOptional.isPresent());
         updateOriginalFetchResults(
-            request.getSearchContext(),
+            request.getSearchPhaseContext(),
             querySearchResults,
             fetchSearchResultOptional,
             unprocessedDocIds,
@@ -290,7 +290,7 @@ public class NormalizationProcessorWorkflow {
      * A workaround for a single shard case, fetch has happened, and we need to update both fetch and query results
      */
     private void updateOriginalFetchResults(
-        final SearchContext searchContext,
+        final SearchPhaseContext searchPhaseContext,
         final List<QuerySearchResult> querySearchResults,
         final Optional<FetchSearchResult> fetchSearchResultOptional,
         final List<Integer> docIds,
@@ -299,7 +299,7 @@ public class NormalizationProcessorWorkflow {
         if (fetchSearchResultOptional.isEmpty()) {
             return;
         }
-        Map<Integer, float[]> scoreMap = HybridScoreRegistry.get(searchContext);
+        Map<Integer, float[]> scoreMap = HybridScoreRegistry.get(searchPhaseContext);
         // fetch results have list of document content, that includes start/stop and
         // delimiter elements. list is in original order from query searcher. We need to:
         // 1. filter out start/stop and delimiter elements
@@ -341,14 +341,26 @@ public class NormalizationProcessorWorkflow {
             // update score to normalized/combined value (3)
             searchHit.score(scoreDoc.score);
 
-            float[] subqueryScores = scoreMap.get(scoreDoc.doc);
+            // Check if inner hits are present
+            boolean hasInnerHits = searchHit.getInnerHits() != null && !searchHit.getInnerHits().isEmpty();
+
+            float[] subqueryScores = scoreMap != null ? scoreMap.get(scoreDoc.doc) : null;
 
             Map<String, DocumentField> documentFields = searchHit.getDocumentFields();
-            if (subqueryScores != null
-                && !documentFields.containsKey("_hybridization")
-                && isClusterOnOrAfterMinReqVersionForSubQuerySupport()) {
+
+            // Check for all the conditions
+            boolean shouldAddHybridScores = subqueryScores != null
+                && documentFields.containsKey(NAME) == false
+                && isClusterOnOrAfterMinReqVersionForSubQuerySupport()
+                && hasInnerHits == false;
+
+            if (shouldAddHybridScores) {
                 // Add it as a field rather than modifying _source
-                searchHit.setDocumentField("_hybridization", new DocumentField("_hybridization", List.of(subqueryScores)));
+                List<Float> hybridScores = new ArrayList<>(subqueryScores.length);
+                for (float score : subqueryScores) {
+                    hybridScores.add(score);
+                }
+                searchHit.setDocumentField(NAME, new DocumentField(NAME, new ArrayList<Object>(hybridScores)));
             }
             updatedSearchHitArray[i] = searchHit;
         }

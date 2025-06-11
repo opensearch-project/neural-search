@@ -62,18 +62,24 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         PARAM_NAME_UPPER_BOUNDS,
         Set.of(PARAM_NAME_BOUND_MODE, PARAM_NAME_UPPER_BOUND_MAX_SCORE)
     );
+    private final boolean subQueryScores;
 
     private final Optional<List<Map<String, Object>>> lowerBoundsParamsOptional;
     private final Optional<List<Map<String, Object>>> upperBoundsParamsOptional;
 
     public MinMaxScoreNormalizationTechnique() {
-        this(Map.of(), new ScoreNormalizationUtil());
+        this(Map.of(), new ScoreNormalizationUtil(), false);
     }
 
-    public MinMaxScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+    public MinMaxScoreNormalizationTechnique(
+        final Map<String, Object> params,
+        final ScoreNormalizationUtil scoreNormalizationUtil,
+        final boolean subQueryScores
+    ) {
         scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMETERS, NESTED_PARAMETERS);
         lowerBoundsParamsOptional = getBoundsParams(params, PARAM_NAME_LOWER_BOUNDS);
         upperBoundsParamsOptional = getBoundsParams(params, PARAM_NAME_UPPER_BOUNDS);
+        this.subQueryScores = subQueryScores;
     }
 
     /**
@@ -109,8 +115,13 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 UpperBound upperBound = getUpperBound(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsPerSubQuery.size()]);
-                    scoresArray[j] = scoreDoc.score;
+                    if (subQueryScores) {
+                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
+                            scoreDoc.doc,
+                            k -> new float[topDocsPerSubQuery.size()]
+                        );
+                        scoresArray[j] = scoreDoc.score;
+                    }
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         minMaxScores.getMinScoresPerSubquery()[j],
