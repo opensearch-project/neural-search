@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.PriorityQueue;
 
+import static org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer.SCORE_RESCALE_RATIO;
+
 /**
  * A scorer that simulates the query algorithm in seismic.
  * For each query token: we get its posting with clusters. We compute score = dp(cluster_summary, query) and
@@ -200,7 +202,7 @@ public class PostingWithClustersScorer extends Scorer {
 
     @Override
     public float score() throws IOException {
-        return score;
+        return score * SCORE_RESCALE_RATIO;
     }
 
     class SingleScorer extends Scorer {

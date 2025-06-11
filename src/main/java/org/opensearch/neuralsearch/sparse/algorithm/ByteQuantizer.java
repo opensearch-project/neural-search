@@ -8,6 +8,20 @@ public final class ByteQuantizer {
 
     // The maximum float value to consider
     private static final float MAX_FLOAT_VALUE = 3.0f;
+    // Use full precision of byte (0-255)
+    private static final float MAX_UNSIGNED_BYTE_VALUE = 255.0f;
+    /**
+     * Rescaling factor to convert quantized dot product scores back to their original float scale.
+     * When vector components are quantized from float (0-3.0) to byte (0-255), dot products of these
+     * quantized vectors will have a different scale than the original float vectors. This constant
+     * provides the exact ratio needed to convert the quantized dot product back to the equivalent
+     * float dot product scale.
+     * Calculation: (MAX_FLOAT_VALUE²) / (MAX_UNSIGNED_BYTE_VALUE²)
+     * This represents the ratio between the square of the maximum float value (3.0²) and
+     * the square of the maximum byte value (255²), which is the scaling factor needed for
+     * dot products of quantized vectors.
+     */
+    public static final float SCORE_RESCALE_RATIO = MAX_FLOAT_VALUE * MAX_FLOAT_VALUE / MAX_UNSIGNED_BYTE_VALUE / MAX_UNSIGNED_BYTE_VALUE;
 
     private ByteQuantizer() {} // no instance of this utility class
 
@@ -23,7 +37,7 @@ public final class ByteQuantizer {
 
         // Scale the value to fit in the byte range (0-255)
         // Note: In Java, byte is signed (-128 to 127), but we'll use the full precision
-        value = (value * 255.0f) / MAX_FLOAT_VALUE;
+        value = (value * MAX_UNSIGNED_BYTE_VALUE) / MAX_FLOAT_VALUE;
 
         // Round to nearest integer and cast to byte
         return (byte) Math.round(value);
