@@ -1183,7 +1183,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
 
     public void test_subBatchExecute_emptyInferenceList_successful() {
         List<IngestDocumentWrapper> ingestDocumentWrappers = new ArrayList<>();
-        ingestDocumentWrappers.add(new IngestDocumentWrapper(0, null, null));
+        ingestDocumentWrappers.add(new IngestDocumentWrapper(0, 0, null, null));
         TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(1, false);
         Consumer resultHandler = mock(Consumer.class);
         processor.subBatchExecute(ingestDocumentWrappers, resultHandler);

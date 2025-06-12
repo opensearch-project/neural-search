@@ -33,7 +33,7 @@ public class InferenceProcessorTestCase extends OpenSearchTestCase {
             sourceAndMetadata.put("key1", value);
             sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
             sourceAndMetadata.put("_id", String.valueOf(i));
-            wrapperList.add(new IngestDocumentWrapper(i, new IngestDocument(sourceAndMetadata, new HashMap<>()), null));
+            wrapperList.add(new IngestDocumentWrapper(i, 0, new IngestDocument(sourceAndMetadata, new HashMap<>()), null));
         }
         return wrapperList;
     }
