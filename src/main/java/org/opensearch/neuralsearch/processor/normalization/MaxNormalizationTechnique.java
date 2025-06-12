@@ -46,7 +46,7 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
             || knnQueryMaxScore == Float.MIN_VALUE) {
             multiplier = 1;
         } else {
-            multiplier = matchQueryMaxScore / knnQueryMaxScore;
+            multiplier = Math.round((matchQueryMaxScore / knnQueryMaxScore) * 1000f) / 1000f;
         }
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
