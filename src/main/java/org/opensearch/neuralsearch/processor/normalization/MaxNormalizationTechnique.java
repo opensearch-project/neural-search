@@ -19,7 +19,7 @@ import java.util.Objects;
 public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
 
     @ToString.Include
-    public static final String TECHNIQUE_NAME = "max_technique";
+    public static final String TECHNIQUE_NAME = "max";
 
     @Override
     public void normalize(List<CompoundTopDocs> queryTopDocs) {
@@ -37,9 +37,7 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
         float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
 
         float matchQueryMaxScore = maxScoresPerSubquery[0];
-        log.info("max score of match query [{}]", matchQueryMaxScore);
         float knnQueryMaxScore = maxScoresPerSubquery[1];
-        log.info("max score of knn query [{}]", knnQueryMaxScore);
 
         float multiplier;
 
@@ -51,14 +49,12 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
             multiplier = matchQueryMaxScore / knnQueryMaxScore;
         }
 
-        log.info("Multiplier value is [{}]", multiplier);
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             TopDocs topDocsOfKnnSubquery = compoundQueryTopDocs.getTopDocs().get(1);
 
             for (ScoreDoc scoreDoc : topDocsOfKnnSubquery.scoreDocs) {
                 scoreDoc.score *= multiplier;
-                log.info("docId and score are [{}] , [{}]", scoreDoc.doc, scoreDoc.score);
             }
         }
     }

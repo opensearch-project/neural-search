@@ -19,7 +19,6 @@ public class DedupCombinationTechnique implements ScoreCombinationTechnique {
         if (scores.length < 2 || scores.length > 2) {
             throw new IllegalArgumentException("scores array length during dedup should be equal to 2");
         }
-        log.info("Score 1 and Score 2 are [{}] , [{}]", scores[0], scores[1]);
         if (scores[0] > scores[1]) {
             return scores[0];
         }
