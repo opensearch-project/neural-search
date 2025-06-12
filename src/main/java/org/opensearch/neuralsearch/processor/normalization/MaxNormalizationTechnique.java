@@ -36,18 +36,7 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
 
         float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
 
-        float knnQueryMaxScore = maxScoresPerSubquery[0];
-        float matchQueryMaxScore = maxScoresPerSubquery[1];
-
-        float multiplier;
-
-        if ((matchQueryMaxScore == 0.0f || matchQueryMaxScore == Float.MIN_VALUE)
-            || knnQueryMaxScore == 0.0f
-            || knnQueryMaxScore == Float.MIN_VALUE) {
-            multiplier = 1;
-        } else {
-            multiplier = Math.round((matchQueryMaxScore / knnQueryMaxScore) * 1000f) / 1000f;
-        }
+        float multiplier = getMultiplier(maxScoresPerSubquery);
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             TopDocs topDocsOfKnnSubquery = compoundQueryTopDocs.getTopDocs().get(0);
@@ -56,6 +45,27 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
                 scoreDoc.score *= multiplier;
             }
         }
+    }
+
+    private float getMultiplier(float[] maxScoresPerSubquery) {
+        float knnQueryMaxScore = maxScoresPerSubquery[0];
+        float matchQueryMaxScore = maxScoresPerSubquery[1];
+
+        float multiplier;
+
+        if ((matchQueryMaxScore == 0.0f || matchQueryMaxScore == Float.MIN_VALUE)
+            || knnQueryMaxScore == 0.0f
+            || knnQueryMaxScore == Float.MIN_VALUE) {
+            multiplier = 1.0f;
+        } else {
+            float ratio = matchQueryMaxScore / knnQueryMaxScore;
+            if (Float.isFinite(ratio)) {
+                multiplier = Math.round(ratio * 1000f) / 1000f;
+            } else {
+                multiplier = 1.0f; // or another appropriate fallback
+            }
+        }
+        return multiplier;
     }
 
     private float[] getMaxScores(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
