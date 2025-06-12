@@ -38,15 +38,11 @@ public class RandomClustering implements Clustering {
         int num_cluster = (int) Math.ceil((double) (size * beta) / lambda);
         int[] centers = random.ints(0, size).distinct().limit(num_cluster).toArray();
         List<List<DocFreq>> docAssignments = new ArrayList<>(num_cluster);
-        List<byte[]> denseCentroids = new ArrayList<>();
+        List<SparseVector> sparseVectors = new ArrayList<>();
         for (int i = 0; i < num_cluster; i++) {
             docAssignments.add(new ArrayList<>());
             SparseVector center = reader.read(docFreqs.get(centers[i]).getDocID());
-            if (center == null) {
-                denseCentroids.add(null);
-            } else {
-                denseCentroids.add(center.toDenseVector());
-            }
+            sparseVectors.add(center);
         }
 
         for (DocFreq docFreq : docFreqs) {
@@ -56,12 +52,13 @@ public class RandomClustering implements Clustering {
             if (docVector == null) {
                 continue;
             }
+            byte[] denseDocVector = docVector.toDenseVector();
             for (int i = 0; i < num_cluster; i++) {
                 float score = Float.MIN_VALUE;
-                byte[] center = denseCentroids.get(i);
+                SparseVector center = sparseVectors.get(i);
                 if (center != null) {
                     long start = Profiling.INSTANCE.begin(Profiling.ItemId.CLUSTERDP);
-                    score = docVector.dotProduct(center);
+                    score = center.dotProduct(denseDocVector);
                     Profiling.INSTANCE.end(Profiling.ItemId.CLUSTERDP, start);
                 }
                 if (score > maxScore) {
