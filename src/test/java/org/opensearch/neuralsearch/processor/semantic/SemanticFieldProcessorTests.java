@@ -463,7 +463,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
 
     private IngestDocumentWrapper createIngestDocWrapper(@NonNull final String id, @NonNull final Map<String, Object> source, Exception e) {
         final IngestDocument ingestDocument = new IngestDocument("index", id, "routing", 1L, VersionType.INTERNAL, source);
-        return new IngestDocumentWrapper(1, ingestDocument, e);
+        return new IngestDocumentWrapper(1, 0, ingestDocument, e);
     }
 
 }
