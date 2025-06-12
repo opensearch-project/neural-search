@@ -36,8 +36,8 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
 
         float[] maxScoresPerSubquery = getMaxScores(queryTopDocs, numOfSubqueries);
 
-        float matchQueryMaxScore = maxScoresPerSubquery[0];
-        float knnQueryMaxScore = maxScoresPerSubquery[1];
+        float knnQueryMaxScore = maxScoresPerSubquery[0];
+        float matchQueryMaxScore = maxScoresPerSubquery[1];
 
         float multiplier;
 
@@ -49,9 +49,8 @@ public class MaxNormalizationTechnique implements ScoreNormalizationTechnique {
             multiplier = matchQueryMaxScore / knnQueryMaxScore;
         }
 
-
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
-            TopDocs topDocsOfKnnSubquery = compoundQueryTopDocs.getTopDocs().get(1);
+            TopDocs topDocsOfKnnSubquery = compoundQueryTopDocs.getTopDocs().get(0);
 
             for (ScoreDoc scoreDoc : topDocsOfKnnSubquery.scoreDocs) {
                 scoreDoc.score *= multiplier;

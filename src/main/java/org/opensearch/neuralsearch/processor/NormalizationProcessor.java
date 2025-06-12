@@ -71,12 +71,12 @@ public class NormalizationProcessor implements SearchPhaseResultsProcessor {
             if (subQueries.size() > 2 || subQueries.size() < 2) {
                 throw new IllegalArgumentException("Number of subqueries cannot be greater or lesser than 2");
             }
-            if (subQueries.get(0) instanceof KNNQueryBuilder || subQueries.get(0) instanceof NeuralQueryBuilder) {
-                throw new IllegalArgumentException("Knn query cannot be 1st subquery");
+            if (subQueries.get(0) instanceof KNNQueryBuilder == false && subQueries.get(0) instanceof NeuralQueryBuilder == false) {
+                throw new IllegalArgumentException("Knn query should always be 1st subquery");
             }
 
-            if (subQueries.get(1) instanceof KNNQueryBuilder == false && subQueries.get(1) instanceof NeuralQueryBuilder == false) {
-                throw new IllegalArgumentException("Knn query should always be 2nd subquery");
+            if (subQueries.get(1) instanceof KNNQueryBuilder || subQueries.get(1) instanceof NeuralQueryBuilder) {
+                throw new IllegalArgumentException("Knn query cannot be 2nd subquery");
             }
         }
         normalizationWorkflow.execute(querySearchResults, fetchSearchResult, normalizationTechnique, combinationTechnique);
