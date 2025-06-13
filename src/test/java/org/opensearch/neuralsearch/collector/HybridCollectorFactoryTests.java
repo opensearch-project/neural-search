@@ -31,6 +31,7 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
         HybridCollectorFactoryDTO mockDTO = mock(HybridCollectorFactoryDTO.class);
         when(mockDTO.getCollapseContext()).thenReturn(collapseContext);
         when(mockDTO.getSearchContext()).thenReturn(searchContext);
+        when(mockDTO.getNumHits()).thenReturn(5);
 
         Collector collector = HybridCollectorFactory.createCollector(mockDTO);
         assertTrue(collector instanceof HybridCollapsingTopDocsCollector);
@@ -47,6 +48,7 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
         HybridCollectorFactoryDTO mockDTO = mock(HybridCollectorFactoryDTO.class);
         when(mockDTO.getCollapseContext()).thenReturn(collapseContext);
         when(mockDTO.getSearchContext()).thenReturn(searchContext);
+        when(mockDTO.getNumHits()).thenReturn(5);
 
         Collector collector = HybridCollectorFactory.createCollector(mockDTO);
         assertTrue(collector instanceof HybridCollapsingTopDocsCollector);
