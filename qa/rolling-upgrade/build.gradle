@@ -85,13 +85,13 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     // Excluding stats tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.RestNeuralStatsActionIT.*"
         }
     }
     // Excluding semantic field tests because we introduce this feature in 3.1
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.SemanticFieldIT.*"
         }
     }
 }
@@ -123,14 +123,14 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     // Excluding stats tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.test.RestNeuralStatsActionIT.*"
         }
     }
 
     // Excluding semantic field tests because we introduce this feature in 3.1
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.SemanticFieldIT.*"
         }
     }
 }
@@ -161,14 +161,14 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     // Excluding stats tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.RestNeuralStatsActionIT.*"
         }
     }
 
     // Excluding semantic field tests because we introduce this feature in 3.1
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.SemanticFieldIT.*"
         }
     }
 }
@@ -199,14 +199,14 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     // Excluding stats tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.RestNeuralStatsActionIT.*"
         }
     }
 
     // Excluding semantic field tests because we introduce this feature in 3.1
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.test.SemanticFieldIT.*"
         }
     }
 }

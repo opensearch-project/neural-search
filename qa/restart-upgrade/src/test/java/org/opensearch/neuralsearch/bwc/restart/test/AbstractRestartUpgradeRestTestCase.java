@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.restart;
+package org.opensearch.neuralsearch.bwc.restart.test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +19,9 @@ import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
+
+    private static String sparseEncodingModelId = null;
+    private static String textEmbeddingModelId = null;
 
     @Before
     protected String getIndexNameForTest() {
@@ -76,6 +79,17 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
         return registerModelGroupAndGetModelId(requestBody);
     }
 
+    protected String uploadAndDeployTextEmbeddingModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
+        textEmbeddingModelId = registerModelGroupAndGetModelId(requestBody);
+        loadModel(textEmbeddingModelId);
+        return textEmbeddingModelId;
+    }
+
+    protected String getTextEmbeddingModelId() {
+        return textEmbeddingModelId;
+    }
+
     protected String registerModelGroupAndGetModelId(final String requestBody) throws Exception {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
@@ -94,6 +108,19 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
         return registerModelGroupAndGetModelId(requestBody);
+    }
+
+    protected String uploadAndDeploySparseEncodingModel() throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
+        );
+        sparseEncodingModelId = registerModelGroupAndGetModelId(requestBody);
+        loadModel(sparseEncodingModelId);
+        return sparseEncodingModelId;
+    }
+
+    protected String getSparseEncodingModelId() {
+        return sparseEncodingModelId;
     }
 
     protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName) throws Exception {

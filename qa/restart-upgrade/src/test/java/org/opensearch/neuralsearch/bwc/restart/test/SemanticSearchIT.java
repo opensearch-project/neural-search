@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.bwc.restart;
+package org.opensearch.neuralsearch.bwc.restart.test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -10,6 +10,7 @@ import java.util.Map;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import static org.opensearch.neuralsearch.util.TestUtils.TEXT_EMBEDDING_PROCESSOR;
+
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
 public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {

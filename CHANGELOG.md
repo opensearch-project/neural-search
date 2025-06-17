@@ -18,3 +18,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Maintenance
 
 ### Refactoring
+- Share model resources across bwc tests to optimize bwc tests ([#1389](https://github.com/opensearch-project/neural-search/pull/1389))

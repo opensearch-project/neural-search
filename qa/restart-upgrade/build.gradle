@@ -68,11 +68,30 @@ def versionsBelow2_20 = versionsBelow2_19 + "2.19"
 def versionsBelow3_0 = versionsBelow2_20 + "2.20"
 def versionsBelow3_1 = versionsBelow3_0 + "3.0"
 
-// Task to run BWC tests against the old cluster
-task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
+task testSetup(type: StandaloneRestIntegTestTask) {
     if(!ext.bwcBundleTest){
         dependsOn "zipBwcPlugin"
     }
+    useCluster testClusters."${baseName}"
+    systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
+    systemProperty 'tests.is_old_cluster', 'true'
+    systemProperty 'tests.skip_delete_model_index', 'true'
+    systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
+
+    filter {
+        excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.cleanup.*"
+        excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.*"
+    }
+
+    nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
+    nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
+    systemProperty 'tests.security.manager', 'false'
+}
+
+// Task to run BWC tests against the old cluster
+task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
+    dependsOn "testSetup"
+    dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.is_old_cluster', 'true'
@@ -83,55 +102,60 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     // because these features were released in 2.11 version.
     if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.MultiModalSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralSparseSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
     // Excluding the these tests because we introduce them in 2.13
     if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.TextChunkingProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.TextChunkingProcessorIT.*"
         }
     }
 
     // Excluding the k-NN radial search tests because we introduce this feature in 2.14
     if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.KnnRadialSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.KnnRadialSearchIT.*"
         }
     }
 
     // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseTwoPhaseProcessorIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchWithRescoreIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.HybridSearchWithRescoreIT.*"
         }
     }
 
     // Excluding the batching processor tests because we introduce this feature in 2.16
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.BatchIngestionIT.*"
         }
     }
 
     // Excluding stats tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.RestNeuralStatsActionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.RestNeuralStatsActionIT.*"
         }
     }
 
     // Excluding semantic field tests because we introduce this feature in 3.1
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.SemanticFieldIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.SemanticFieldIT.*"
         }
+    }
+
+    filter {
+        excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.cleanup.*"
+        excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.setup.*"
     }
 
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
@@ -162,55 +186,60 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     // because these features were released in 2.11 version.
     if (versionsBelow2_11.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.MultiModalSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseSearchIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.MultiModalSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.HybridSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralSparseSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralQueryEnricherProcessorIT.*"
         }
     }
 
     // Excluding these tests because we introduce them in 2.13
     if (versionsBelow2_13.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.TextChunkingProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralQueryEnricherProcessorIT.testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.TextChunkingProcessorIT.*"
         }
     }
 
     // Excluding the k-NN radial search tests because we introduce this feature in 2.14
     if (versionsBelow2_14.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.KnnRadialSearchIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.KnnRadialSearchIT.*"
         }
     }
 
     // Excluding the NeuralSparseQuery two-phase search pipeline tests because we introduce this feature in 2.15
     if (versionsBelow2_15.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.NeuralSparseTwoPhaseProcessorIT.*"
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchWithRescoreIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.NeuralSparseTwoPhaseProcessorIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.HybridSearchWithRescoreIT.*"
         }
     }
 
     // Excluding the batch processor tests because we introduce this feature in 2.16
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.BatchIngestionIT.*"
         }
     }
 
     // Excluding stats tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.RestNeuralStatsActionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.RestNeuralStatsActionIT.*"
         }
     }
 
     // Excluding semantic field tests because we introduce this feature in 3.1
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.SemanticFieldIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.test.SemanticFieldIT.*"
         }
+    }
+
+    filter {
+        excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.cleanup.*"
+        excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.setup.*"
     }
 
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
