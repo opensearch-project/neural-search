@@ -10,6 +10,7 @@ import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.Locale;
 
@@ -36,6 +37,14 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     private static final float SINGLE_RESULT_SCORE = 1.0f;
     private static final float MIN_SCORE = 0.001f;
 
+    public ZScoreNormalizationTechnique() {
+        this(Map.of(), new ScoreNormalizationUtil());
+    }
+
+    public ZScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
+        scoreNormalizationUtil.validateParameters(params, Set.of(), Map.of());
+    }
+
     /**
      * Z-score normalization transforms the data based on its mean and standard deviation, making it more robust to outliers.
      * This technique preserves the shape of the original distribution while ensuring that all features contribute equally to the analysis,
@@ -52,7 +61,8 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
      * and nullable rankConstant that is only used in RRF technique
      */
     @Override
-    public void normalize(NormalizeScoresDTO normalizeScoresDTO) {
+    public Map<Integer, float[]> normalize(NormalizeScoresDTO normalizeScoresDTO) {
+        Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
         List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
 
         ZScores zscores = getZScoreResults(queryTopDocs);
@@ -66,6 +76,14 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
+                    // Initialize or update subquery scores array per doc
+                    if (normalizeScoresDTO.isSubQueryScores()) {
+                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
+                            scoreDoc.doc,
+                            k -> new float[topDocsPerSubQuery.size()]
+                        );
+                        scoresArray[j] = scoreDoc.score;
+                    }
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         zscores.stdPerSubquery[j],
@@ -76,6 +94,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
                 }
             }
         }
+        return docIdToSubqueryScores;
     }
 
     @Override
