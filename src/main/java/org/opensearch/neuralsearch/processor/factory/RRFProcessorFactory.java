@@ -74,8 +74,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
             if (combinationClause.containsKey(rankConstantParam)) {
                 normalizationTechnique = scoreNormalizationFactory.createNormalization(
                     RRFNormalizationTechnique.TECHNIQUE_NAME,
-                    Map.of(rankConstantParam, combinationClause.get(rankConstantParam)),
-                    subQueryScores
+                    Map.of(rankConstantParam, combinationClause.get(rankConstantParam))
                 );
             }
             Map<String, Object> params = readOptionalMap(RRFProcessor.TYPE, tag, combinationClause, PARAMETERS);

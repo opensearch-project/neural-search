@@ -53,22 +53,16 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         PARAM_NAME_LOWER_BOUNDS,
         Set.of(PARAM_NAME_LOWER_BOUND_MODE, PARAM_NAME_LOWER_BOUND_MIN_SCORE)
     );
-    private final boolean subQueryScores;
 
     private final Optional<List<Pair<LowerBound.Mode, Float>>> lowerBoundsOptional;
 
     public MinMaxScoreNormalizationTechnique() {
-        this(Map.of(), new ScoreNormalizationUtil(), false);
+        this(Map.of(), new ScoreNormalizationUtil());
     }
 
-    public MinMaxScoreNormalizationTechnique(
-        final Map<String, Object> params,
-        final ScoreNormalizationUtil scoreNormalizationUtil,
-        final boolean subQueryScores
-    ) {
+    public MinMaxScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
         scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMETERS, NESTED_PARAMETERS);
         lowerBoundsOptional = getLowerBounds(params);
-        this.subQueryScores = subQueryScores;
     }
 
     /**
@@ -103,7 +97,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 LowerBound lowerBound = getLowerBound(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    if (subQueryScores) {
+                    if (normalizeScoresDTO.isSubQueryScores()) {
                         float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
                             scoreDoc.doc,
                             k -> new float[topDocsPerSubQuery.size()]

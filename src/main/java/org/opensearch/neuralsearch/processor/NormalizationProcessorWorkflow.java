@@ -79,6 +79,7 @@ public class NormalizationProcessorWorkflow {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(request.getNormalizationTechnique())
+            .subQueryScores(request.isSubQueryScores())
             .build();
 
         // normalize
