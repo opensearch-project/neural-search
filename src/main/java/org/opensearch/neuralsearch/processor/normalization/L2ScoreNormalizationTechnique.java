@@ -33,19 +33,13 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
     @ToString.Include
     public static final String TECHNIQUE_NAME = "l2";
     private static final float MIN_SCORE = 0.0f;
-    private final boolean subQueryScores;
 
     public L2ScoreNormalizationTechnique() {
-        this(Map.of(), new ScoreNormalizationUtil(), false);
+        this(Map.of(), new ScoreNormalizationUtil());
     }
 
-    public L2ScoreNormalizationTechnique(
-        final Map<String, Object> params,
-        final ScoreNormalizationUtil scoreNormalizationUtil,
-        final boolean subQueryScores
-    ) {
+    public L2ScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
         scoreNormalizationUtil.validateParameters(params, Set.of(), Map.of());
-        this.subQueryScores = subQueryScores;
     }
 
     /**
@@ -72,7 +66,7 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    if (subQueryScores) {
+                    if (normalizeScoresDTO.isSubQueryScores()) {
                         float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
                             scoreDoc.doc,
                             k -> new float[topDocsPerSubQuery.size()]

@@ -45,16 +45,10 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     private static final Range<Integer> RANK_CONSTANT_RANGE = Range.of(MIN_RANK_CONSTANT, MAX_RANK_CONSTANT);
     @ToString.Include
     private final int rankConstant;
-    private final boolean subQueryScores;
 
-    public RRFNormalizationTechnique(
-        final Map<String, Object> params,
-        final ScoreNormalizationUtil scoreNormalizationUtil,
-        final boolean subQueryScores
-    ) {
+    public RRFNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
         scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMS, Map.of());
         rankConstant = getRankConstant(params);
-        this.subQueryScores = subQueryScores;
     }
 
     /**
@@ -71,9 +65,15 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     @Override
     public Map<Integer, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
         Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
+        boolean isSubQueryScores = normalizeScoresDTO.isSubQueryScores();
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
-            docIdToSubqueryScores = processTopDocs(compoundQueryTopDocs, (docId, score, subQueryIndex) -> {}, docIdToSubqueryScores);
+            docIdToSubqueryScores = processTopDocs(
+                compoundQueryTopDocs,
+                isSubQueryScores,
+                (docId, score, subQueryIndex) -> {},
+                docIdToSubqueryScores
+            );
         }
         return docIdToSubqueryScores;
     }
@@ -101,6 +101,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
             int numberOfSubQueries = topDocsPerSubQuery.size();
             processTopDocs(
                 compoundQueryTopDocs,
+                false,
                 (docId, score, subQueryIndex) -> ScoreNormalizationUtil.setNormalizedScore(
                     normalizedScores,
                     docId,
@@ -117,6 +118,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
 
     private Map<Integer, float[]> processTopDocs(
         CompoundTopDocs compoundQueryTopDocs,
+        boolean subQueryScores,
         TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
         Map<Integer, float[]> docIdToSubqueryScores
     ) {
@@ -132,6 +134,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
                 topDocsList.get(topDocsIndex),
                 searchShard,
                 topDocsIndex,
+                subQueryScores,
                 scoreProcessor,
                 topDocsList.size(),
                 docIdToSubqueryScores
@@ -144,6 +147,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         TopDocs topDocs,
         SearchShard searchShard,
         int topDocsIndex,
+        boolean subQueryScores,
         TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
         int topDocsSize,
         Map<Integer, float[]> docIdToSubqueryScores

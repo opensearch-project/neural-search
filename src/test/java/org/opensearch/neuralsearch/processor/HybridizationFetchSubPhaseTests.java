@@ -13,12 +13,15 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.index.RandomIndexWriter;
-import org.junit.Before;
 import org.opensearch.action.search.SearchPhaseContext;
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.document.DocumentField;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.FetchContext;
 import org.opensearch.search.fetch.FetchSubPhase;
 import org.opensearch.search.fetch.FetchSubPhaseProcessor;
@@ -30,24 +33,21 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 
 public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
 
-    private ScoreNormalizer scoreNormalizer;
-    private HybridScoreRegistry hybridScoreRegistry;
+    private final ScoreNormalizer scoreNormalizer = new ScoreNormalizer();
     private FetchContext mockFetchContext;
     private SearchHit searchHit;
     private FetchSubPhase.HitContext hitContext;
     private static final SearchShard SEARCH_SHARD = new SearchShard("my_index", 0, "12345678");
-
-    @Before
-    public void setUpMocks() {
-        mockFetchContext = mock(FetchContext.class);
-        scoreNormalizer = new ScoreNormalizer();
-        hybridScoreRegistry = new HybridScoreRegistry();
-    }
+    private NeuralSearchClusterUtil clusterUtil;
 
     public void testHybridizationScoreFieldIsSet() throws IOException {
+        setUpClusterService();
+        mockFetchContext = mock(FetchContext.class);
         try (Directory directory = newDirectory()) {
             // Create dummy Lucene doc
             try (RandomIndexWriter writer = new RandomIndexWriter(random(), directory)) {
@@ -66,7 +66,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 searchHit = new SearchHit(docId);
                 hitContext = new FetchSubPhase.HitContext(searchHit, leafReaderContext, docId, new SourceLookup());
 
-                var mockSearchContext = mock(SearchPhaseContext.class);
+                SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
                 final List<CompoundTopDocs> queryTopDocs = List.of(
                     new CompoundTopDocs(
                         new TotalHits(1, TotalHits.Relation.EQUAL_TO),
@@ -78,18 +78,30 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
                     .queryTopDocs(queryTopDocs)
                     .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+                    .subQueryScores(true)
                     .build();
-                scoreNormalizer.normalizeScores(normalizeScoresDTO, mockSearchContext);
+
+                SearchRequest searchRequest = mock(SearchRequest.class);
+                when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                when(searchPhaseContext.getRequest().source()).thenReturn(searchSourceBuilder);
+
+                ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
+                ScoreNormalizationTechnique normalizationTechnique = scoreNormalizationFactory.createNormalization("min_max", Map.of());
+
+                normalizationTechnique.normalize(normalizeScoresDTO);
+
+                scoreNormalizer.normalizeScores(normalizeScoresDTO, searchPhaseContext);
 
                 float[] scores = new float[] { 0.4f, 0.6f };
-                hybridScoreRegistry.store(mockSearchContext, Map.of(docId, scores));
+                HybridScoreRegistry.store(searchPhaseContext, Map.of(docId, scores));
 
                 // Run processor
                 FetchSubPhaseProcessor processor = subPhase.getProcessor(mockFetchContext);
                 processor.setNextReader(leafReaderContext);
                 processor.process(hitContext);
 
-                DocumentField field = hitContext.hit().field("_hybridization");
+                DocumentField field = hitContext.hit().field("hybridization_sub_query_scores");
                 assertNotNull(String.valueOf(field), "Expected _hybridization field to be present");
                 assertEquals(1, field.getValues().size());
                 assertSame(scores, field.getValues().get(0));  // Check reference
@@ -98,10 +110,14 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
     }
 
     public void testNoHybridizationFieldWhenMapIsNull() throws IOException {
+        setUpClusterService();
+        mockFetchContext = mock(FetchContext.class);
         try (Directory directory = newDirectory()) {
             try (RandomIndexWriter writer = new RandomIndexWriter(random(), directory)) {
                 writer.addDocument(new Document());
             }
+
+            SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
 
             HybridizationFetchSubPhase subPhase = new HybridizationFetchSubPhase();
 
@@ -112,24 +128,43 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 searchHit = new SearchHit(docId);
                 hitContext = new FetchSubPhase.HitContext(searchHit, leafReaderContext, docId, new SourceLookup());
 
-                var mockSearchContext = mock(SearchPhaseContext.class);
-
+                final List<CompoundTopDocs> queryTopDocs = List.of(
+                    new CompoundTopDocs(
+                        new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+                        List.of(new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(1, 2.0f) })),
+                        false,
+                        SEARCH_SHARD
+                    )
+                );
                 NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
-                    .queryTopDocs(List.of())
+                    .queryTopDocs(queryTopDocs)
                     .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+                    .subQueryScores(true)
                     .build();
-                scoreNormalizer.normalizeScores(normalizeScoresDTO, mockSearchContext);
+
+                SearchRequest searchRequest = mock(SearchRequest.class);
+                when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                when(searchPhaseContext.getRequest().source()).thenReturn(searchSourceBuilder);
+
+                ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
+                ScoreNormalizationTechnique normalizationTechnique = scoreNormalizationFactory.createNormalization("min_max", Map.of());
+
+                normalizationTechnique.normalize(normalizeScoresDTO);
+
+                scoreNormalizer.normalizeScores(normalizeScoresDTO, searchPhaseContext);
 
                 FetchSubPhaseProcessor processor = subPhase.getProcessor(mockFetchContext);
                 processor.setNextReader(leafReaderContext);
                 processor.process(hitContext);
 
-                assertNull(hitContext.hit().field("_hybridization"));
+                assertNull(hitContext.hit().field("hybridization_sub_query_scores"));
             }
         }
     }
 
     public void testNoHybridizationFieldWhenDocIdNotInMap() throws IOException {
+        mockFetchContext = mock(FetchContext.class);
         try (Directory directory = newDirectory()) {
             try (RandomIndexWriter writer = new RandomIndexWriter(random(), directory)) {
                 writer.addDocument(new Document());
@@ -144,7 +179,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 searchHit = new SearchHit(docId);
                 hitContext = new FetchSubPhase.HitContext(searchHit, leafReaderContext, docId, new SourceLookup());
 
-                var mockSearchContext = mock(SearchPhaseContext.class);
+                SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
 
                 // docId 0 not in hit
                 final List<CompoundTopDocs> queryTopDocs = List.of(
@@ -158,11 +193,17 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
                     .queryTopDocs(queryTopDocs)
                     .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+                    .subQueryScores(true)
                     .build();
-                scoreNormalizer.normalizeScores(normalizeScoresDTO, mockSearchContext);
+
+                SearchRequest searchRequest = mock(SearchRequest.class);
+                when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+                SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+                when(searchPhaseContext.getRequest().source()).thenReturn(searchSourceBuilder);
+                scoreNormalizer.normalizeScores(normalizeScoresDTO, searchPhaseContext);
 
                 float[] scores = new float[] { 0.4f, 0.6f };
-                hybridScoreRegistry.store(mockSearchContext, Map.of(1, scores));
+                HybridScoreRegistry.store(searchPhaseContext, Map.of(1, scores));
 
                 FetchSubPhaseProcessor processor = subPhase.getProcessor(mockFetchContext);
                 processor.setNextReader(leafReaderContext);
@@ -171,7 +212,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 // Check hit context has docId 0 set
                 assertEquals(0, hitContext.hit().docId());
                 // Check hit does not have _hybridization field as there are no subquery scores for doc 0
-                assertNull(hitContext.hit().field("_hybridization"));
+                assertNull(hitContext.hit().field("hybridization_sub_query_scores"));
             }
         }
     }

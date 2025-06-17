@@ -64,11 +64,7 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
                 MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME
             );
             Map<String, Object> normalizationParams = readOptionalMap(NormalizationProcessor.TYPE, tag, normalizationClause, PARAMETERS);
-            normalizationTechnique = scoreNormalizationFactory.createNormalization(
-                normalizationTechniqueName,
-                normalizationParams,
-                subQueryScores
-            );
+            normalizationTechnique = scoreNormalizationFactory.createNormalization(normalizationTechniqueName, normalizationParams);
         }
 
         Map<String, Object> combinationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
@@ -105,7 +101,8 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             description,
             normalizationTechnique,
             scoreCombinationTechnique,
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            subQueryScores
         );
     }
 }

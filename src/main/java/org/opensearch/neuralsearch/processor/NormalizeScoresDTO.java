@@ -23,4 +23,6 @@ public class NormalizeScoresDTO {
     private List<CompoundTopDocs> queryTopDocs;
     @NonNull
     private ScoreNormalizationTechnique normalizationTechnique;
+    @NonNull
+    private boolean subQueryScores;
 }
