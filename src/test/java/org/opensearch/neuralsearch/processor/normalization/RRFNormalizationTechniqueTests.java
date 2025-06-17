@@ -35,16 +35,16 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
 
     public void testDescribe() {
         // verify with default values for parameters
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil, false);
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         assertEquals("rrf, rank_constant [60]", normalizationTechnique.describe());
 
         // verify when parameter values are set
-        normalizationTechnique = new RRFNormalizationTechnique(Map.of("rank_constant", 25), scoreNormalizationUtil, false);
+        normalizationTechnique = new RRFNormalizationTechnique(Map.of("rank_constant", 25), scoreNormalizationUtil);
         assertEquals("rrf, rank_constant [25]", normalizationTechnique.describe());
     }
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil, false);
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         float[] scores = { 0.5f, 0.2f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
             new CompoundTopDocs(
@@ -86,7 +86,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     public void testNormalization_whenResultFromOneShardMultipleSubQueries_thenSuccessful() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil, false);
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         float[] scoresQuery1 = { 0.5f, 0.2f };
         float[] scoresQuery2 = { 0.9f, 0.7f, 0.1f };
         List<CompoundTopDocs> compoundTopDocs = List.of(
@@ -141,7 +141,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     public void testNormalization_whenResultFromMultipleShardsMultipleSubQueries_thenSuccessful() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil, false);
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         float[] scoresShard1Query1 = { 0.5f, 0.2f };
         float[] scoresShard1and2Query3 = { 0.9f, 0.7f, 0.1f, 0.8f, 0.7f, 0.6f, 0.5f };
         float[] scoresShard2Query2 = { 2.9f, 0.7f };
@@ -278,7 +278,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
             searchShard
         );
 
-        RRFNormalizationTechnique normalizer = new RRFNormalizationTechnique(Map.of(), new ScoreNormalizationUtil(), false);
+        RRFNormalizationTechnique normalizer = new RRFNormalizationTechnique(Map.of(), new ScoreNormalizationUtil());
         Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(Collections.singletonList(compoundTopDocs));
 
         // Verify results
@@ -326,7 +326,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     public void testExplainWithEmptyAndNullList() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil, false);
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         normalizationTechnique.explain(List.of());
 
         List<CompoundTopDocs> compoundTopDocs = new ArrayList<>();
@@ -335,7 +335,7 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     public void testExplainWithSingleTopDocs() {
-        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil, false);
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
         CompoundTopDocs topDocs = createCompoundTopDocs(new float[] { 0.8f }, 1);
         List<CompoundTopDocs> queryTopDocs = Collections.singletonList(topDocs);
 
