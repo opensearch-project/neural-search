@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
 import org.apache.lucene.search.Query;
+import org.opensearch.Version;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -19,7 +20,7 @@ import org.opensearch.knn.index.query.parser.KNNQueryBuilderParser;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
 import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
-import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
+import org.opensearch.knn.index.util.IndexUtil;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.core.common.ParsingException;
 
@@ -340,9 +341,10 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      */
     @Override
     public void doWriteTo(StreamOutput out) throws IOException {
-        KNNQueryBuilderParser.streamOutput(out, knnQueryBuilder, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
+        KNNQueryBuilderParser.streamOutput(out, knnQueryBuilder, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
 
-        if (MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(out.getVersion())) {
+        // Neural-search specific version check for originalQueryText field
+        if (out.getVersion().onOrAfter(Version.V_3_0_0)) {
             out.writeOptionalString(originalQueryText);
         }
     }
@@ -355,7 +357,7 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      */
     public NeuralKNNQueryBuilder(StreamInput in) throws IOException {
         super(in);
-        KNNQueryBuilder.Builder builder = KNNQueryBuilderParser.streamInput(in, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
+        KNNQueryBuilder.Builder builder = KNNQueryBuilderParser.streamInput(in, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
 
         // Radial search queries (with min_score/max_distance) have null k, which gets serialized as 0.
         // We need to rebuild the query to properly handle this case.
@@ -376,7 +378,8 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
 
         this.knnQueryBuilder = finalBuilder.build();
 
-        if (MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(in.getVersion())) {
+        // Neural-search specific version check for originalQueryText field
+        if (in.getVersion().onOrAfter(Version.V_3_0_0)) {
             this.originalQueryText = in.readOptionalString();
         } else {
             this.originalQueryText = null;
