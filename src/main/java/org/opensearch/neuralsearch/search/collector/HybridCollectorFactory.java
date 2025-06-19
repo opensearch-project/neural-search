@@ -46,7 +46,7 @@ public class HybridCollectorFactory {
                     collapseContext.getFieldName(),
                     fieldType,
                     sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    searchContext.size(),
+                    numHits,
                     hitsThresholdChecker
                 );
             } else if (fieldType instanceof NumberFieldMapper.NumberFieldType) {
@@ -54,7 +54,7 @@ public class HybridCollectorFactory {
                     collapseContext.getFieldName(),
                     fieldType,
                     sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    searchContext.size(),
+                    numHits,
                     hitsThresholdChecker
                 );
             } else {
