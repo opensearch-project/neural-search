@@ -157,9 +157,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             IllegalArgumentException.class,
             () -> NeuralQueryBuilder.fromXContent(contentParser)
         );
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Target field is a KNN "
-            + "field using a dense model. semantic_field_search_analyzer "
-            + "is not supported since it is for the sparse model.";
+        final String expectedMessage = "Invalid neural query: Target field is a KNN field using a dense model."
+            + " semantic_field_search_analyzer is not supported since it is for the sparse model.";
         assertEquals(expectedMessage, exception.getMessage());
     }
 
