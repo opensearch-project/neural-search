@@ -32,6 +32,7 @@ Compatible with OpenSearch 3.1.0
 - Add validation for invalid nested hybrid query ([#1305](https://github.com/opensearch-project/neural-search/pull/1305))
 - Use stack to collect semantic fields to avoid stack overflow ([#1357](https://github.com/opensearch-project/neural-search/pull/1357))
 - Filter requested stats based on minimum cluster version to fix BWC tests for stats API ([#1373](https://github.com/opensearch-project/neural-search/pull/1373))
+- Fix neural radial search serialization in multi-node clusters ([#1393](https://github.com/opensearch-project/neural-search/pull/1393)))
 
 ### Infrastructure
 - [3.0] Update neural-search for OpenSearch 3.0 beta compatibility ([#1245](https://github.com/opensearch-project/neural-search/pull/1245))
