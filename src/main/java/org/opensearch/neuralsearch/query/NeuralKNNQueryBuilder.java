@@ -316,15 +316,14 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
     }
 
     /**
-     * Constructor for deserialization from stream input.
+     * Constructs a NeuralKNNQueryBuilder from a StreamInput.
+     * Used for deserializing the query from a stream, such as during cluster communication.
      *
-     * @param in The stream input to read from
+     * @param in The StreamInput to read from
      * @throws IOException If an I/O error occurs
      */
     public NeuralKNNQueryBuilder(StreamInput in) throws IOException {
-        super(in);
-        KNNQueryBuilder.Builder builder = KNNQueryBuilderParser.streamInput(in, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
-        this.knnQueryBuilder = builder.build();
+        this.knnQueryBuilder = new KNNQueryBuilder(in);
         if (MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(in.getVersion())) {
             this.originalQueryText = in.readOptionalString();
         } else {

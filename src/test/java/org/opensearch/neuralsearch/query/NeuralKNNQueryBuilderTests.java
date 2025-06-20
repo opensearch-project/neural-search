@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.query;
 
 import org.apache.lucene.search.Query;
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.test.OpenSearchTestCase;
@@ -199,5 +201,118 @@ public class NeuralKNNQueryBuilderTests extends OpenSearchTestCase {
         Query query = queryBuilder.doToQuery(mockContext);
         assertNotNull("Query should not be null", query);
         assertTrue("Query should be instance of NeuralKNNQuery", query instanceof NeuralKNNQuery);
+    }
+
+    public void testSerialization_withMinScoreParameter() throws IOException {
+        // Test serialization/deserialization with min_score (radial search parameter)
+        String originalQueryText = "test query for radial search";
+        Float minScore = 0.7f;
+
+        NeuralKNNQueryBuilder originalBuilder = NeuralKNNQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .vector(VECTOR)
+            .minScore(minScore)
+            .originalQueryText(originalQueryText)
+            .build();
+
+        // Serialize to StreamOutput
+        org.opensearch.common.io.stream.BytesStreamOutput streamOutput = new org.opensearch.common.io.stream.BytesStreamOutput();
+        streamOutput.setVersion(org.opensearch.Version.CURRENT);
+        originalBuilder.writeTo(streamOutput);
+
+        // Deserialize from StreamInput
+        org.opensearch.core.common.io.stream.StreamInput streamInput = streamOutput.bytes().streamInput();
+        streamInput.setVersion(org.opensearch.Version.CURRENT);
+        NeuralKNNQueryBuilder deserializedBuilder = new NeuralKNNQueryBuilder(streamInput);
+
+        // Verify the deserialized builder matches the original
+        assertEquals(
+            "Original query text should match",
+            originalBuilder.getOriginalQueryText(),
+            deserializedBuilder.getOriginalQueryText()
+        );
+        assertEquals(
+            "Min score should match",
+            originalBuilder.getKnnQueryBuilder().getMinScore(),
+            deserializedBuilder.getKnnQueryBuilder().getMinScore()
+        );
+
+        // Verify builders are equal (this checks all internal fields including field name and vector)
+        assertEquals("Serialized and deserialized builders should be equal", originalBuilder, deserializedBuilder);
+        assertEquals("Hash codes should match", originalBuilder.hashCode(), deserializedBuilder.hashCode());
+    }
+
+    public void testSerialization_withMaxDistanceParameter() throws IOException {
+        // Test serialization/deserialization with max_distance (radial search parameter)
+        String originalQueryText = "test query for distance-based search";
+        Float maxDistance = 0.5f;
+
+        NeuralKNNQueryBuilder originalBuilder = NeuralKNNQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .vector(VECTOR)
+            .maxDistance(maxDistance)
+            .originalQueryText(originalQueryText)
+            .build();
+
+        // Serialize to StreamOutput
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        streamOutput.setVersion(Version.CURRENT);
+        originalBuilder.writeTo(streamOutput);
+
+        // Deserialize from StreamInput
+        StreamInput streamInput = streamOutput.bytes().streamInput();
+        streamInput.setVersion(Version.CURRENT);
+        NeuralKNNQueryBuilder deserializedBuilder = new NeuralKNNQueryBuilder(streamInput);
+
+        // Verify the deserialized builder matches the original
+        assertEquals(
+            "Original query text should match",
+            originalBuilder.getOriginalQueryText(),
+            deserializedBuilder.getOriginalQueryText()
+        );
+        assertEquals(
+            "Max distance should match",
+            originalBuilder.getKnnQueryBuilder().getMaxDistance(),
+            deserializedBuilder.getKnnQueryBuilder().getMaxDistance()
+        );
+
+        // Verify builders are equal (this checks all internal fields including field name and vector)
+        assertEquals("Serialized and deserialized builders should be equal", originalBuilder, deserializedBuilder);
+        assertEquals("Hash codes should match", originalBuilder.hashCode(), deserializedBuilder.hashCode());
+    }
+
+    public void testSerialization_withKParameter() throws IOException {
+        // Test serialization/deserialization with standard k parameter (non-radial search)
+        String originalQueryText = "test query for standard k-NN search";
+        Integer k = 5;
+
+        NeuralKNNQueryBuilder originalBuilder = NeuralKNNQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .vector(VECTOR)
+            .k(k)
+            .originalQueryText(originalQueryText)
+            .build();
+
+        // Serialize to StreamOutput
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        streamOutput.setVersion(Version.CURRENT);
+        originalBuilder.writeTo(streamOutput);
+
+        // Deserialize from StreamInput
+        StreamInput streamInput = streamOutput.bytes().streamInput();
+        streamInput.setVersion(Version.CURRENT);
+        NeuralKNNQueryBuilder deserializedBuilder = new NeuralKNNQueryBuilder(streamInput);
+
+        // Verify the deserialized builder matches the original
+        assertEquals(
+            "Original query text should match",
+            originalBuilder.getOriginalQueryText(),
+            deserializedBuilder.getOriginalQueryText()
+        );
+        assertEquals("K should match", originalBuilder.getKnnQueryBuilder().getK(), deserializedBuilder.getKnnQueryBuilder().getK());
+
+        // Verify builders are equal (this checks all internal fields including field name and vector)
+        assertEquals("Serialized and deserialized builders should be equal", originalBuilder, deserializedBuilder);
+        assertEquals("Hash codes should match", originalBuilder.hashCode(), deserializedBuilder.hashCode());
     }
 }
