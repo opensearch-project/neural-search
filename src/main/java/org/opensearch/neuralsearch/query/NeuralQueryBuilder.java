@@ -49,7 +49,6 @@ import java.util.stream.Collectors;
 
 import lombok.NonNull;
 import org.apache.commons.lang.StringUtils;
-import org.opensearch.core.common.Strings;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
@@ -331,44 +330,45 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 queryTokensMapSupplier,
                 modelIdToQueryTokensSupplierMap,
                 searchAnalyzer
-
             ).boost(boost).queryName(queryName);
 
-            List<String> errors = new ArrayList<>();
+            validateNeuralQueryBuilder(neuralQueryBuilder, buildStage, isSemanticField, embeddingFieldType);
 
-            // Try to build the neural query builder in fromXContent function
-            if (buildStage == null || NeuralQueryBuildStage.FROM_X_CONTENT.equals(buildStage)) {
-                // Before semantic field we only support query against a knn field so validate for that case
-                // If we can support the semantic field we will delay the validation to COORDINATE_REWRITE where we
-                // have more info to do the validation.
-                if (isClusterOnOrAfterMinReqVersionForSemanticFieldType() == false) {
-                    errors = validateNeuralQueryForKnn(neuralQueryBuilder, buildStage);
-                }
-            } else if (NeuralQueryBuildStage.REWRITE.equals(buildStage)) {
-                if (isSemanticField == null || isSemanticField == false) {
-                    // Currently if the target field is not a semantic field we will assume the target field should be a knn
-                    // field. In the future we can add the support for the case when the target field is a rank_features.
-                    errors = validateNeuralQueryForKnn(neuralQueryBuilder, buildStage);
-                } else if (KNNVectorFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
-                    errors = validateNeuralQueryForSemanticDense(neuralQueryBuilder);
-                } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
-                    errors = validateNeuralQueryForSemanticSparse(neuralQueryBuilder);
-                } else {
-                    throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "Unsupported embedding field type: %s", embeddingFieldType)
-                    );
-                }
+            return neuralQueryBuilder;
+        }
+    }
+
+    private static void validateNeuralQueryBuilder(
+        @NonNull final NeuralQueryBuilder neuralQueryBuilder,
+        final NeuralQueryBuildStage buildStage,
+        final Boolean isSemanticField,
+        final String embeddingFieldType
+    ) {
+        List<String> errors = new ArrayList<>();
+        // Try to build the neural query builder in fromXContent function
+        if (buildStage == null || NeuralQueryBuildStage.FROM_X_CONTENT.equals(buildStage)) {
+            // Before semantic field we only support query against a knn field so validate for that case
+            // If we can support the semantic field we will delay the validation to COORDINATE_REWRITE where we
+            // have more info to do the validation.
+            if (isClusterOnOrAfterMinReqVersionForSemanticFieldType() == false) {
+                errors = validateNeuralQueryForKnn(neuralQueryBuilder, buildStage);
             }
-
-            if (errors.isEmpty() == false) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "Failed to build the NeuralQueryBuilder: %s", String.join("; ", errors))
-                );
+        } else if (NeuralQueryBuildStage.REWRITE.equals(buildStage)) {
+            if (isSemanticField == null || isSemanticField == false) {
+                // Currently if the target field is not a semantic field we will assume the target field should be a knn
+                // field. In the future we can add the support for the case when the target field is a rank_features.
+                errors = validateNeuralQueryForKnn(neuralQueryBuilder, buildStage);
+            } else if (KNNVectorFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+                errors = validateNeuralQueryForSemanticDense(neuralQueryBuilder);
+            } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+                errors = validateNeuralQueryForSemanticSparse(neuralQueryBuilder);
             } else {
-                return neuralQueryBuilder;
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "Unsupported embedding field type: %s", embeddingFieldType));
             }
         }
-
+        if (errors.isEmpty() == false) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "Invalid neural query: %s", String.join("; ", errors)));
+        }
     }
 
     public static NeuralQueryBuilder.Builder builder() {
@@ -528,6 +528,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (Objects.nonNull(queryTokensMapSupplier) && Objects.nonNull(queryTokensMapSupplier.get())) {
             xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensMapSupplier.get());
         }
+        if (Objects.nonNull(searchAnalyzer)) {
+            xContentBuilder.field(SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD.getPreferredName(), searchAnalyzer);
+        }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
         xContentBuilder.endObject();
@@ -677,24 +680,47 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             // dense model. But in the future we can add the logic to also support the sparse model.
             return rewriteQueryAgainstKnnField(queryRewriteContext);
         } else {
-            // If it is not null it means we already start the async actions in the previous rewrite.
-            // Current rewrite happens after all the async actions done so simply return this to end the rewrite.
-            if (modelIdToVectorSupplierMap != null
-                || modelIdToQueryTokensSupplierMap != null
+            // validate the query builder once we know the semantic field config
+            validateNeuralQueryBuilder(this, NeuralQueryBuildStage.REWRITE, Boolean.TRUE, firstTargetFieldConfig.getEmbeddingFieldType());
+
+            final boolean isModelGeneratedEmbeddingAvailable = modelIdToVectorSupplierMap != null
+                || modelIdToQueryTokensSupplierMap != null;
+
+            final boolean canUseSearchAnalyzerForSingleTargetIndex = queryTokensMapSupplier == null
+                && modelId == null
+                && getSearchAnalyzer(firstTargetFieldConfig) != null;
+            final boolean canRewriteSingleTargetIndex = isModelGeneratedEmbeddingAvailable
                 || queryTokensMapSupplier != null
-                || searchAnalyzer != null) {
-                // If we only have one target index it means we know the path to the target embedding feild so we can
-                // continue the rewrite
-                if (indexToTargetFieldConfigMap.size() == 1) {
-                    return rewriteQueryForSemanticField(firstTargetFieldConfig);
-                }
-                // If we have more than one target index we need QueryShardContext to know the target index so simply
-                // return this to end the rewrite. Will do rewrite later on the shard level with QueryShardContext.
+                || canUseSearchAnalyzerForSingleTargetIndex;
+
+            // If we only have one target index it means we know the path to the target embedding field so we can
+            // continue the rewrite
+            if (indexToTargetFieldConfigMap.size() == 1 && canRewriteSingleTargetIndex) {
+                return rewriteQueryForSemanticField(firstTargetFieldConfig);
+            }
+
+            // If model generated embeddings are not null it means we already start the async actions in the previous rewrite.
+            // Or if we have the raw tokens or analyzer we also can skip the inference and return this to end the rewrite.
+            // Since we have more than one target index we need the QueryShardContext to know the target index so simply
+            // return this to end the rewrite. Will do rewrite later on the shard level with QueryShardContext.
+            final boolean canUseAnalyzerForAllTargetIndices = searchAnalyzer != null
+                || (queryTokensMapSupplier == null
+                    && modelId == null
+                    && indexToTargetFieldConfigMap.values()
+                        .stream()
+                        .filter(config -> config.getSemanticFieldSearchAnalyzer() == null)
+                        .toList()
+                        .isEmpty());
+            final boolean canSkipInference = isModelGeneratedEmbeddingAvailable
+                || queryTokensMapSupplier != null
+                || canUseAnalyzerForAllTargetIndices;
+            if (canSkipInference) {
                 return this;
             }
 
             final Set<String> modelIds = indexToTargetFieldConfigMap.values()
                 .stream()
+                .filter(config -> config.getSemanticFieldSearchAnalyzer() == null)
                 .map(NeuralQueryTargetFieldConfig::getSearchModelId)
                 .collect(Collectors.toSet());
 
@@ -729,13 +755,17 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
             EventStatsManager.increment(EventStatName.NEURAL_QUERY_AGAINST_SEMANTIC_SPARSE_REQUESTS);
             Supplier<Map<String, Float>> queryTokensSupplier = queryTokensMapSupplier;
-            // If the raw token is not provided or no search analyzer provided
-            // then try to find the token generated by the ml model
-            if (queryTokensSupplier == null && searchAnalyzer == null && semanticFieldSearchAnalyzer == null) {
+
+            // If the model ID is explicitly provided in the query,
+            // or if neither a raw token nor a search analyzer is provided (implying we’ll use the model ID defined in the semantic field),
+            // then attempt to retrieve the token generated by the ML model.
+            final boolean useModelGeneratedEmbedding = modelId != null
+                || (queryTokensMapSupplier == null && semanticFieldSearchAnalyzer == null);
+            if (useModelGeneratedEmbedding) {
                 if (modelIdToQueryTokensSupplierMap == null || modelIdToQueryTokensSupplierMap.get(searchModelId) == null) {
                     throw new RuntimeException(
                         getErrorMessageWithBaseErrorForSemantic(
-                            "Not able to find the sparse embedding when try to rewrite it neural sparse query."
+                            "Not able to find the sparse embedding when try to rewrite it to neural sparse query."
                         )
                     );
                 }
@@ -743,10 +773,16 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             }
 
             NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldPath);
-            if (Strings.isNullOrEmpty(semanticFieldSearchAnalyzer) == false) {
-                neuralSparseQueryBuilder = neuralSparseQueryBuilder.analyzer(this.searchAnalyzer).queryText(this.queryText);
-            } else {
+            if (queryTokensSupplier != null) {
                 neuralSparseQueryBuilder = neuralSparseQueryBuilder.queryTokensSupplier(queryTokensSupplier);
+            } else if (semanticFieldSearchAnalyzer != null) {
+                neuralSparseQueryBuilder = neuralSparseQueryBuilder.analyzer(semanticFieldSearchAnalyzer).queryText(this.queryText);
+            } else {
+                throw new IllegalStateException(
+                    getErrorMessageWithBaseErrorForSemantic(
+                        "Not able to find the embedding or tokenizer when try to rewrite it to neural sparse query."
+                    )
+                );
             }
             if (Boolean.TRUE.equals(chunkingEnabled)) {
                 return new NestedQueryBuilder(chunksPath, neuralSparseQueryBuilder, ScoreMode.Max);
@@ -948,10 +984,15 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         final String embeddingFieldTypeName = embeddingFieldType.typeName();
 
         final NeuralQueryTargetFieldConfig targetFieldConfig = targetFieldConfigBuilder.embeddingFieldType(embeddingFieldTypeName).build();
+        // validate the query builder once we know the semantic field config
+        validateNeuralQueryBuilder(this, NeuralQueryBuildStage.REWRITE, Boolean.TRUE, embeddingFieldTypeName);
 
         // In PercolatorFieldMapper we can try to rewrite the neural query with QueryShardContext directly. In that case
-        // we need to generate the embedding on the shard level.
-        if (modelIdToVectorSupplierMap == null && modelIdToQueryTokensSupplierMap == null) {
+        // if raw tokens or search analyzer are not provided we should use the model to generate the embedding.
+        if (modelIdToVectorSupplierMap == null
+            && modelIdToQueryTokensSupplierMap == null
+            && queryTokensMapSupplier == null
+            && getSearchAnalyzer(targetFieldConfig) == null) {
             return inferenceForSemanticField(shardContext, Set.of(targetFieldConfig.getSearchModelId()), embeddingFieldTypeName);
         }
 
