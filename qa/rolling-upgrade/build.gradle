@@ -94,6 +94,14 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
         }
     }
+
+    // Excluding KnnRadialSearchIT for 3.0.0 due to known radial search shard failure issue
+    // https://github.com/opensearch-project/neural-search/issues/1392
+    if (ext.neural_search_bwc_version == "3.0.0") {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
+        }
+    }
 }
 
 // Part of rolling upgrade. Upgrades one node of the old cluster to new OpenSearch version with upgraded plugin version
@@ -131,6 +139,14 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
+        }
+    }
+
+    // Excluding KnnRadialSearchIT for 3.0.0 due to known radial search shard failure issue
+    // https://github.com/opensearch-project/neural-search/issues/1392
+    if (ext.neural_search_bwc_version == "3.0.0") {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
         }
     }
 }
@@ -171,6 +187,14 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
         }
     }
+
+    // Excluding KnnRadialSearchIT for 3.0.0 due to known radial search shard failure issue
+    // https://github.com/opensearch-project/neural-search/issues/1392
+    if (ext.neural_search_bwc_version == "3.0.0") {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
+        }
+    }
 }
 
 // Part of rolling upgrade. Upgrades the third node to new OpenSearch version with upgraded plugin version after the
@@ -207,6 +231,14 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
+        }
+    }
+
+    // Excluding KnnRadialSearchIT for 3.0.0 due to known radial search shard failure issue
+    // https://github.com/opensearch-project/neural-search/issues/1392
+    if (ext.neural_search_bwc_version == "3.0.0") {
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
         }
     }
 }

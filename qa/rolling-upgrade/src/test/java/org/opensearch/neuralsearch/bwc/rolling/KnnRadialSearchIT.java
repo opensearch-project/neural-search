@@ -123,6 +123,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         assertFalse("Response should not contain errors for " + queryType, response.containsKey("error"));
 
         // Verify shard information - critical for multi-node BWC tests
+        @SuppressWarnings("unchecked")
         Map<String, Object> shards = (Map<String, Object>) response.get("_shards");
         assertNotNull("Shards info should not be null for " + queryType, shards);
 
@@ -145,6 +146,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         assertEquals(String.format(Locale.ROOT, "No shards should fail for %s. Failed: %d", queryType, failedShards), 0, failedShards);
 
         // Verify hits structure
+        @SuppressWarnings("unchecked")
         Map<String, Object> hits = (Map<String, Object>) response.get("hits");
         assertNotNull("Hits should not be null for " + queryType, hits);
 
@@ -153,6 +155,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         int totalHits;
         if (totalObj instanceof Map) {
             // New format: {"value": N, "relation": "eq"}
+            @SuppressWarnings("unchecked")
             Map<String, Object> total = (Map<String, Object>) totalObj;
             totalHits = (int) total.get("value");
         } else {
@@ -166,6 +169,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         );
 
         // Verify actual documents returned
+        @SuppressWarnings("unchecked")
         List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hits.get("hits");
         assertNotNull("Hits list should not be null for " + queryType, hitsList);
         assertFalse("Should return actual documents for " + queryType, hitsList.isEmpty());
