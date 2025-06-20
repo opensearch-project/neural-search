@@ -65,6 +65,8 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
 
+import static org.junit.Assert.assertArrayEquals;
+
 public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
     private static final String FIELD_NAME = "testField";
@@ -1026,5 +1028,166 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
         assertEquals(FIELD_NAME, neuralQueryBuilder.fieldName());
         assertEquals(Map.of("key1", 1.0f), neuralQueryBuilder.queryTokensMapSupplier().get());
+    }
+
+    @SneakyThrows
+    public void testCreateKNNQueryBuilder_whenClusterSupportsNeuralKNNQueryBuilder_thenReturnsNeuralKNNQueryBuilder() {
+        setUpClusterService(Version.V_3_0_0);
+
+        // Create a NeuralQueryBuilder instance
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .build();
+
+        // Use reflection to test the private createKNNQueryBuilder method
+        float[] testVector = new float[] { 1.0f, 2.0f, 3.0f };
+
+        try {
+            // Access the private method using reflection
+            java.lang.reflect.Method createKNNQueryBuilderMethod = NeuralQueryBuilder.class.getDeclaredMethod(
+                "createKNNQueryBuilder",
+                String.class,
+                float[].class
+            );
+            createKNNQueryBuilderMethod.setAccessible(true);
+
+            QueryBuilder result = (QueryBuilder) createKNNQueryBuilderMethod.invoke(neuralQueryBuilder, FIELD_NAME, testVector);
+
+            // Verify the result is NeuralKNNQueryBuilder
+            assertNotNull("Result should not be null", result);
+            assertTrue("Result should be NeuralKNNQueryBuilder", result instanceof NeuralKNNQueryBuilder);
+
+            // Verify the properties are set correctly
+            NeuralKNNQueryBuilder neuralKNNQueryBuilder = (NeuralKNNQueryBuilder) result;
+            assertEquals("Original query text should match", QUERY_TEXT, neuralKNNQueryBuilder.getOriginalQueryText());
+
+        } catch (Exception e) {
+            fail("Failed to test createKNNQueryBuilder: " + e.getMessage());
+        }
+    }
+
+    @SneakyThrows
+    public void testCreateKNNQueryBuilder_whenClusterDoesNotSupportNeuralKNNQueryBuilder_thenReturnsNeuralQueryBuilder() {
+        // Set cluster version to 2.19.0 which doesn't support NeuralKNNQueryBuilder
+        setUpClusterService(Version.V_2_19_0);
+
+        // Create a NeuralQueryBuilder instance
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .build();
+
+        // Use reflection to test the private createKNNQueryBuilder method
+        float[] testVector = new float[] { 1.0f, 2.0f, 3.0f };
+
+        try {
+            // Access the private method using reflection
+            java.lang.reflect.Method createKNNQueryBuilderMethod = NeuralQueryBuilder.class.getDeclaredMethod(
+                "createKNNQueryBuilder",
+                String.class,
+                float[].class
+            );
+            createKNNQueryBuilderMethod.setAccessible(true);
+
+            QueryBuilder result = (QueryBuilder) createKNNQueryBuilderMethod.invoke(neuralQueryBuilder, FIELD_NAME, testVector);
+
+            // Verify the result is NeuralQueryBuilder (not NeuralKNNQueryBuilder)
+            assertNotNull("Result should not be null", result);
+            assertTrue("Result should be NeuralQueryBuilder", result instanceof NeuralQueryBuilder);
+            assertFalse("Result should NOT be NeuralKNNQueryBuilder", result instanceof NeuralKNNQueryBuilder);
+
+            // Verify the vector supplier is set
+            NeuralQueryBuilder returnedNeuralQueryBuilder = (NeuralQueryBuilder) result;
+            assertNotNull("Vector supplier should be set", returnedNeuralQueryBuilder.vectorSupplier());
+            assertArrayEquals("Vector should match", testVector, returnedNeuralQueryBuilder.vectorSupplier().get(), 0.0f);
+
+        } catch (Exception e) {
+            fail("Failed to test createKNNQueryBuilder: " + e.getMessage());
+        }
+    }
+
+    @SneakyThrows
+    public void testCreateKNNQueryBuilder_withRadialSearchParameters_whenClusterSupportsNeuralKNNQueryBuilder() {
+        setUpClusterService(Version.V_3_0_0);
+
+        // Test with min_score (radial search)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .minScore(MIN_SCORE)
+            .build();
+
+        float[] testVector = new float[] { 1.0f, 2.0f, 3.0f };
+
+        try {
+            // Access the private method using reflection
+            java.lang.reflect.Method createKNNQueryBuilderMethod = NeuralQueryBuilder.class.getDeclaredMethod(
+                "createKNNQueryBuilder",
+                String.class,
+                float[].class
+            );
+            createKNNQueryBuilderMethod.setAccessible(true);
+
+            QueryBuilder result = (QueryBuilder) createKNNQueryBuilderMethod.invoke(neuralQueryBuilder, FIELD_NAME, testVector);
+
+            // Verify the result is NeuralKNNQueryBuilder with radial search parameters
+            assertNotNull("Result should not be null", result);
+            assertTrue("Result should be NeuralKNNQueryBuilder", result instanceof NeuralKNNQueryBuilder);
+
+            NeuralKNNQueryBuilder neuralKNNQueryBuilder = (NeuralKNNQueryBuilder) result;
+            assertEquals("Min score should match", MIN_SCORE, neuralKNNQueryBuilder.getKnnQueryBuilder().getMinScore());
+            // When using radial search (minScore), k should either be null or 0
+            // KNNQueryBuilder may convert null k to 0 internally
+            Integer actualK = neuralKNNQueryBuilder.getKnnQueryBuilder().getK();
+            assertTrue("K should be null or 0 for radial search, but was: " + actualK, actualK == null || actualK == 0);
+
+        } catch (Exception e) {
+            fail("Failed to test createKNNQueryBuilder with radial search: " + e.getMessage());
+        }
+    }
+
+    @SneakyThrows
+    public void testCreateKNNQueryBuilder_withRadialSearchParameters_whenClusterDoesNotSupportNeuralKNNQueryBuilder() {
+        // Set cluster version to 2.19.0
+        setUpClusterService(Version.V_2_19_0);
+
+        // Test with max_distance (radial search)
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .maxDistance(MAX_DISTANCE)
+            .build();
+
+        float[] testVector = new float[] { 1.0f, 2.0f, 3.0f };
+
+        try {
+            // Access the private method using reflection
+            java.lang.reflect.Method createKNNQueryBuilderMethod = NeuralQueryBuilder.class.getDeclaredMethod(
+                "createKNNQueryBuilder",
+                String.class,
+                float[].class
+            );
+            createKNNQueryBuilderMethod.setAccessible(true);
+
+            QueryBuilder result = (QueryBuilder) createKNNQueryBuilderMethod.invoke(neuralQueryBuilder, FIELD_NAME, testVector);
+
+            // Verify it returns NeuralQueryBuilder for backward compatibility
+            assertNotNull("Result should not be null", result);
+            assertTrue("Result should be NeuralQueryBuilder", result instanceof NeuralQueryBuilder);
+
+            NeuralQueryBuilder returnedNeuralQueryBuilder = (NeuralQueryBuilder) result;
+            assertEquals("Max distance should be preserved", MAX_DISTANCE, returnedNeuralQueryBuilder.maxDistance());
+            assertNull("K should be null", returnedNeuralQueryBuilder.k());
+
+        } catch (Exception e) {
+            fail("Failed to test createKNNQueryBuilder with radial search on old version: " + e.getMessage());
+        }
     }
 }
