@@ -59,8 +59,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         Set.of(PARAM_NAME_BOUND_MODE, PARAM_NAME_UPPER_BOUND_MAX_SCORE)
     );
 
-    private final Optional<List<Pair<LowerBound.Mode, Float>>> lowerBoundsOptional;
-    private final Optional<List<Pair<UpperBound.Mode, Float>>> upperBoundsOptional;
+    private final Optional<List<Pair<BoundMode, Float>>> lowerBoundsOptional;
+    private final Optional<List<Pair<BoundMode, Float>>> upperBoundsOptional;
 
     public MinMaxScoreNormalizationTechnique() {
         this(Map.of(), new ScoreNormalizationUtil());
@@ -309,11 +309,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     }
 
     private boolean isScoreBelowEffectiveMin(float score, float effectiveMinScore, LowerBound lowerBound) {
-        return lowerBound.isEnabled() && lowerBound.getMode() == LowerBound.Mode.CLIP && score < effectiveMinScore;
+        return lowerBound.isEnabled() && lowerBound.getMode() == BoundMode.CLIP && score < effectiveMinScore;
     }
 
     private boolean isScoreAboveEffectiveMax(float score, float effectiveMaxScore, UpperBound upperBound) {
-        return upperBound.isEnabled() && upperBound.getMode() == UpperBound.Mode.CLIP && score > effectiveMaxScore;
+        return upperBound.isEnabled() && upperBound.getMode() == BoundMode.CLIP && score > effectiveMaxScore;
     }
 
     private float calculateNormalizedScore(float score, float effectiveMinScore, float effectiveMaxScore) {
@@ -321,11 +321,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
     }
 
-    private Optional<List<Pair<LowerBound.Mode, Float>>> getLowerBounds(final Map<String, Object> params) {
+    private Optional<List<Pair<BoundMode, Float>>> getLowerBounds(final Map<String, Object> params) {
         return getBounds(params, PARAM_NAME_LOWER_BOUNDS, this::parseLowerBound);
     }
 
-    private Optional<List<Pair<UpperBound.Mode, Float>>> getUpperBounds(final Map<String, Object> params) {
+    private Optional<List<Pair<BoundMode, Float>>> getUpperBounds(final Map<String, Object> params) {
         return getBounds(params, PARAM_NAME_UPPER_BOUNDS, this::parseUpperBound);
     }
 
@@ -367,7 +367,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * @param boundObj lower bound item provided by the client
      * @return a single pair of mode and min score
      */
-    private Pair<LowerBound.Mode, Float> parseLowerBound(Object boundObj) {
+    private Pair<BoundMode, Float> parseLowerBound(Object boundObj) {
         if ((boundObj instanceof Map) == false) {
             throw new IllegalArgumentException("each lower bound must be a map");
         }
@@ -375,7 +375,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         Map<String, Object> lowerBound = (Map<String, Object>) boundObj;
 
         String lowerBoundModeValue = Objects.toString(lowerBound.get(PARAM_NAME_BOUND_MODE), "");
-        LowerBound.Mode mode = LowerBound.Mode.fromString(lowerBoundModeValue);
+        BoundMode mode = BoundMode.fromString(lowerBoundModeValue);
         float minScore = extractAndValidateScore(lowerBound, PARAM_NAME_LOWER_BOUND_MIN_SCORE, LowerBound.DEFAULT_LOWER_BOUND_SCORE);
 
         return ImmutablePair.of(mode, minScore);
@@ -387,7 +387,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * @return a single pair of mode and max score
      */
     @SuppressWarnings("unchecked")
-    private Pair<UpperBound.Mode, Float> parseUpperBound(Object boundObj) {
+    private Pair<BoundMode, Float> parseUpperBound(Object boundObj) {
         if (!(boundObj instanceof Map)) {
             throw new IllegalArgumentException("each upper bound must be a map");
         }
@@ -395,7 +395,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         Map<String, Object> upperBound = (Map<String, Object>) boundObj;
 
         String upperBoundModeValue = Objects.toString(upperBound.get(PARAM_NAME_BOUND_MODE), "");
-        UpperBound.Mode mode = UpperBound.Mode.fromString(upperBoundModeValue);
+        BoundMode mode = BoundMode.fromString(upperBoundModeValue);
         float maxScore = extractAndValidateScore(upperBound, PARAM_NAME_UPPER_BOUND_MAX_SCORE, UpperBound.DEFAULT_UPPER_BOUND_SCORE);
 
         return ImmutablePair.of(mode, maxScore);
@@ -434,6 +434,39 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         float[] maxScoresPerSubquery;
     }
 
+    protected enum BoundMode {
+        APPLY,
+        CLIP,
+        IGNORE;
+
+        public static final BoundMode DEFAULT = APPLY;
+
+        public static String getValidValues() {
+            return Arrays.stream(values()).map(mode -> mode.name().toLowerCase(Locale.ROOT)).collect(Collectors.joining(", "));
+        }
+
+        public static BoundMode fromString(String value) {
+            if (Objects.isNull(value)) {
+                throw new IllegalArgumentException("mode value cannot be null or empty");
+            }
+            if (value.trim().isEmpty()) {
+                return DEFAULT;
+            }
+            try {
+                return valueOf(value.toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "invalid mode: %s, valid values are: %s", value, getValidValues())
+                );
+            }
+        }
+
+        @Override
+        public String toString() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+    }
+
     /**
      * Result class to hold lower bound for each sub query
      */
@@ -444,54 +477,22 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         static final float DEFAULT_LOWER_BOUND_SCORE = 0.0f;
 
         private final boolean enabled;
-        private final Mode mode;
+        private final BoundMode mode;
         private final float minScore;
 
         LowerBound() {
-            this(false, Mode.DEFAULT, DEFAULT_LOWER_BOUND_SCORE);
+            this(false, BoundMode.DEFAULT, DEFAULT_LOWER_BOUND_SCORE);
         }
 
-        LowerBound(boolean enabled, Mode mode, float minScore) {
+        LowerBound(boolean enabled, BoundMode mode, float minScore) {
             this.enabled = enabled;
             this.mode = mode;
             this.minScore = minScore;
         }
-
-        protected enum Mode {
-            APPLY,
-            CLIP,
-            IGNORE;
-
-            public static final Mode DEFAULT = APPLY;
-            public static final String VALID_VALUES = Arrays.stream(values())
-                .map(mode -> mode.name().toLowerCase(Locale.ROOT))
-                .collect(Collectors.joining(", "));
-
-            public static Mode fromString(String value) {
-                if (Objects.isNull(value)) {
-                    throw new IllegalArgumentException("mode value cannot be null or empty");
-                }
-                if (value.trim().isEmpty()) {
-                    return DEFAULT;
-                }
-                try {
-                    return valueOf(value.toUpperCase(Locale.ROOT));
-                } catch (IllegalArgumentException e) {
-                    throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "invalid mode: %s, valid values are: %s", value, VALID_VALUES)
-                    );
-                }
-            }
-
-            @Override
-            public String toString() {
-                return name().toLowerCase(Locale.ROOT);
-            }
-        }
     }
 
     /**
-     * Result class to hold lower bound for each sub query
+     * Result class to hold upper bound for each sub query
      */
     @Getter
     static class UpperBound {
@@ -500,49 +501,17 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         static final float DEFAULT_UPPER_BOUND_SCORE = 1.0f;
 
         private final boolean enabled;
-        private final Mode mode;
+        private final BoundMode mode;
         private final float maxScore;
 
         UpperBound() {
-            this(false, Mode.DEFAULT, DEFAULT_UPPER_BOUND_SCORE);
+            this(false, BoundMode.DEFAULT, DEFAULT_UPPER_BOUND_SCORE);
         }
 
-        UpperBound(boolean enabled, Mode mode, float maxScore) {
+        UpperBound(boolean enabled, BoundMode mode, float maxScore) {
             this.enabled = enabled;
             this.mode = mode;
             this.maxScore = maxScore;
-        }
-
-        protected enum Mode {
-            APPLY,
-            CLIP,
-            IGNORE;
-
-            public static final Mode DEFAULT = APPLY;
-            public static final String VALID_VALUES = Arrays.stream(values())
-                .map(mode -> mode.name().toLowerCase(Locale.ROOT))
-                .collect(Collectors.joining(", "));
-
-            public static Mode fromString(String value) {
-                if (Objects.isNull(value)) {
-                    throw new IllegalArgumentException("mode value cannot be null or empty");
-                }
-                if (value.trim().isEmpty()) {
-                    return DEFAULT;
-                }
-                try {
-                    return valueOf(value.toUpperCase(Locale.ROOT));
-                } catch (IllegalArgumentException e) {
-                    throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "invalid mode: %s, valid values are: %s", value, VALID_VALUES)
-                    );
-                }
-            }
-
-            @Override
-            public String toString() {
-                return name().toLowerCase(Locale.ROOT);
-            }
         }
     }
 }

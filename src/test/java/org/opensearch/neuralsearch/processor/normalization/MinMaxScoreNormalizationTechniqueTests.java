@@ -282,29 +282,17 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     }
 
     public void testLowerBoundsModeFromString_whenValidValues_thenSuccessful() {
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.APPLY,
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.fromString("apply")
-        );
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.CLIP,
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.fromString("clip")
-        );
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.IGNORE,
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.fromString("ignore")
-        );
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.APPLY, MinMaxScoreNormalizationTechnique.BoundMode.fromString("apply"));
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.CLIP, MinMaxScoreNormalizationTechnique.BoundMode.fromString("clip"));
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.IGNORE, MinMaxScoreNormalizationTechnique.BoundMode.fromString("ignore"));
         // Case insensitive check
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.APPLY,
-            MinMaxScoreNormalizationTechnique.LowerBound.Mode.fromString("APPLY")
-        );
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.APPLY, MinMaxScoreNormalizationTechnique.BoundMode.fromString("APPLY"));
     }
 
     public void testMode_fromString_invalidValues() {
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> MinMaxScoreNormalizationTechnique.LowerBound.Mode.fromString("invalid")
+            () -> MinMaxScoreNormalizationTechnique.BoundMode.fromString("invalid")
         );
         assertEquals("invalid mode: invalid, valid values are: apply, clip, ignore", exception.getMessage());
     }
@@ -312,7 +300,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     public void testLowerBoundsModeFromString_whenNullOrEmpty_thenFail() {
         IllegalArgumentException nullException = expectThrows(
             IllegalArgumentException.class,
-            () -> MinMaxScoreNormalizationTechnique.LowerBound.Mode.fromString(null)
+            () -> MinMaxScoreNormalizationTechnique.BoundMode.fromString(null)
         );
         assertEquals("mode value cannot be null or empty", nullException.getMessage());
     }
@@ -461,7 +449,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     }
 
     public void testLowerBoundsMode_whenDefaultValue_thenSuccessful() {
-        assertEquals(MinMaxScoreNormalizationTechnique.LowerBound.Mode.APPLY, MinMaxScoreNormalizationTechnique.LowerBound.Mode.DEFAULT);
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.APPLY, MinMaxScoreNormalizationTechnique.BoundMode.DEFAULT);
     }
 
     public void testLowerBounds_whenExceedsMaxSubQueries_thenFail() {
@@ -698,29 +686,17 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     }
 
     public void testUpperBoundsModeFromString_whenValidValues_thenSuccessful() {
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.APPLY,
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("apply")
-        );
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.CLIP,
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("clip")
-        );
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.IGNORE,
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("ignore")
-        );
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.APPLY, MinMaxScoreNormalizationTechnique.BoundMode.fromString("apply"));
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.CLIP, MinMaxScoreNormalizationTechnique.BoundMode.fromString("clip"));
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.IGNORE, MinMaxScoreNormalizationTechnique.BoundMode.fromString("ignore"));
         // Case insensitive check
-        assertEquals(
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.APPLY,
-            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("APPLY")
-        );
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.APPLY, MinMaxScoreNormalizationTechnique.BoundMode.fromString("APPLY"));
     }
 
     public void testUpperBoundMode_fromString_invalidValues() {
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
-            () -> MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("invalid")
+            () -> MinMaxScoreNormalizationTechnique.BoundMode.fromString("invalid")
         );
         assertEquals("invalid mode: invalid, valid values are: apply, clip, ignore", exception.getMessage());
     }
@@ -871,7 +847,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
     }
 
     public void testUpperBoundsMode_whenDefaultValue_thenSuccessful() {
-        assertEquals(MinMaxScoreNormalizationTechnique.UpperBound.Mode.APPLY, MinMaxScoreNormalizationTechnique.UpperBound.Mode.DEFAULT);
+        assertEquals(MinMaxScoreNormalizationTechnique.BoundMode.APPLY, MinMaxScoreNormalizationTechnique.BoundMode.DEFAULT);
     }
 
     public void testUpperBounds_whenExceedsMaxSubQueries_thenFail() {
