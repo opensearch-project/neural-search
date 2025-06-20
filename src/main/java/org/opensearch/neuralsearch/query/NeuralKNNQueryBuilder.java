@@ -19,6 +19,7 @@ import org.opensearch.knn.index.query.parser.KNNQueryBuilderParser;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
 import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
+import org.opensearch.knn.index.util.IndexUtil;
 import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.core.common.ParsingException;
@@ -60,12 +61,6 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
     public static final String ORIGINAL_QUERY_TEXT_FIELD = "original_query_text";
 
     /**
-     * When k is null (for radial search), it gets serialized as 0.
-     * We detect this during deserialization to properly handle radial search queries.
-     */
-    private static final int SERIALIZED_NULL_K_VALUE = 0;
-
-    /**
      * The underlying KNN query builder that handles the vector search functionality
      */
     private final KNNQueryBuilder knnQueryBuilder;
@@ -82,32 +77,6 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      */
     public static Builder builder() {
         return new Builder();
-    }
-
-    /**
-     * Helper method to apply radial search parameters to a KNN query builder.
-     * This method handles the conditional setting of k, maxDistance, and minScore parameters
-     * to properly support both regular k-NN queries and radial search queries.
-     *
-     * @param builder The KNN query builder to configure
-     * @param k The number of nearest neighbors (null or 0 for radial search)
-     * @param maxDistance The maximum distance threshold for radial search
-     * @param minScore The minimum score threshold for radial search
-     */
-    private static void applySearchParameters(KNNQueryBuilder.Builder builder, Integer k, Float maxDistance, Float minScore) {
-        // Only set k if it's not null and greater than 0
-        // k=0 indicates radial search after deserialization
-        if (k != null && k > SERIALIZED_NULL_K_VALUE) {
-            builder.k(k);
-        }
-
-        // Set radial search parameters if provided
-        if (maxDistance != null) {
-            builder.maxDistance(maxDistance);
-        }
-        if (minScore != null) {
-            builder.minScore(minScore);
-        }
     }
 
     /**
@@ -305,18 +274,17 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
          * @return A new NeuralKNNQueryBuilder instance
          */
         public NeuralKNNQueryBuilder build() {
-            KNNQueryBuilder.Builder knnBuilderInstance = KNNQueryBuilder.builder()
+            KNNQueryBuilder knnBuilder = KNNQueryBuilder.builder()
                 .fieldName(fieldName)
                 .vector(vector)
+                .k(k)
                 .filter(filter)
+                .maxDistance(maxDistance)
+                .minScore(minScore)
                 .expandNested(expandNested)
                 .methodParameters(methodParameters)
-                .rescoreContext(rescoreContext);
-
-            // Apply k and radial search parameters using the helper method
-            applySearchParameters(knnBuilderInstance, k, maxDistance, minScore);
-
-            KNNQueryBuilder knnBuilder = knnBuilderInstance.build();
+                .rescoreContext(rescoreContext)
+                .build();
             return new NeuralKNNQueryBuilder(knnBuilder, originalQueryText);
         }
     }
@@ -340,7 +308,7 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      */
     @Override
     public void doWriteTo(StreamOutput out) throws IOException {
-        KNNQueryBuilderParser.streamOutput(out, knnQueryBuilder, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
+        KNNQueryBuilderParser.streamOutput(out, knnQueryBuilder, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
 
         if (MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(out.getVersion())) {
             out.writeOptionalString(originalQueryText);
@@ -355,26 +323,8 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      */
     public NeuralKNNQueryBuilder(StreamInput in) throws IOException {
         super(in);
-        KNNQueryBuilder.Builder builder = KNNQueryBuilderParser.streamInput(in, MinClusterVersionUtil::isClusterOnOrAfterMinReqVersion);
-
-        // Radial search queries (with min_score/max_distance) have null k, which gets serialized as 0.
-        // We need to rebuild the query to properly handle this case.
-        // Performance impact is minimal as this only affects cross-node queries.
-        KNNQueryBuilder tempKnn = builder.build();
-
-        // Rebuild the KNN query builder with proper parameter handling
-        KNNQueryBuilder.Builder finalBuilder = KNNQueryBuilder.builder()
-            .fieldName(tempKnn.fieldName())
-            .vector((float[]) tempKnn.vector())
-            .filter(tempKnn.getFilter())
-            .methodParameters(tempKnn.getMethodParameters())
-            .rescoreContext(tempKnn.getRescoreContext());
-
-        // Apply search parameters with proper k=0 handling for radial search
-        applySearchParameters(finalBuilder, tempKnn.getK(), tempKnn.getMaxDistance(), tempKnn.getMinScore());
-
-        this.knnQueryBuilder = finalBuilder.build();
-
+        KNNQueryBuilder.Builder builder = KNNQueryBuilderParser.streamInput(in, IndexUtil::isClusterOnOrAfterMinRequiredVersion);
+        this.knnQueryBuilder = builder.build();
         if (MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(in.getVersion())) {
             this.originalQueryText = in.readOptionalString();
         } else {
