@@ -25,6 +25,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
+import static org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique.MAX_SCORE;
 import static org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique.MIN_SCORE;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
@@ -322,25 +323,47 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         float maxScore = 0.8f;
         float lowerBoundScore = 0.3f;
 
-        float normalizedScore = MinMaxScoreNormalizationTechnique.LowerBound.Mode.APPLY.normalize(
-            score,
-            minScore,
-            maxScore,
-            lowerBoundScore
+        Map<String, Object> params = Map.of("lower_bounds", List.of(Map.of("mode", "apply", "min_score", lowerBoundScore)));
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            new ScoreDoc(1, score),    // 0.5f
+                            new ScoreDoc(2, minScore), // 0.1f
+                            new ScoreDoc(3, maxScore)  // 0.8f
+                        }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
         );
+
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(technique)
+            .build();
+        technique.normalize(normalizeScoresDTO);
+
         // we expect score as 0.5 - 0.3 / 0.8 - 0.3 = 0.2 / 0.5 = 0.4
-        assertEquals(0.4f, normalizedScore, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.4f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
 
         // Test when score is below lower bound
         float lowScore = 0.2f;
-        float normalizedLowScore = MinMaxScoreNormalizationTechnique.LowerBound.Mode.APPLY.normalize(
-            lowScore,
-            minScore,
-            maxScore,
-            lowerBoundScore
-        );
-        // we expect score as 0.2 - 0.1 / 0.8 - 0.1 = 0.1 / 0.7 = 0.1
-        assertEquals(0.143f, normalizedLowScore, DELTA_FOR_SCORE_ASSERTION);
+        ScoreDoc[] lowScoreDocs = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs;
+        lowScoreDocs[0] = new ScoreDoc(1, lowScore); // 0.2f
+        lowScoreDocs[1] = new ScoreDoc(2, minScore); // 0.1f
+        lowScoreDocs[2] = new ScoreDoc(3, maxScore); // 0.8f
+
+        technique.normalize(normalizeScoresDTO);
+
+        // we expect score as 0.2 - 0.1 / 0.8 - 0.1 = 0.1 / 0.7 = 0.143
+        assertEquals(0.143f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
     }
 
     public void testLowerBounds_whenModeIsClip_thenSuccessful() {
@@ -349,23 +372,45 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         float maxScore = 0.8f;
         float lowerBoundScore = 0.3f;
 
-        float normalizedScore = MinMaxScoreNormalizationTechnique.LowerBound.Mode.CLIP.normalize(
-            score,
-            minScore,
-            maxScore,
-            lowerBoundScore
+        Map<String, Object> params = Map.of("lower_bounds", List.of(Map.of("mode", "clip", "min_score", lowerBoundScore)));
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            new ScoreDoc(1, score),    // 0.5f
+                            new ScoreDoc(2, minScore), // 0.2f
+                            new ScoreDoc(3, maxScore)  // 0.8f
+                        }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
         );
-        assertEquals(0.4f, normalizedScore, DELTA_FOR_SCORE_ASSERTION);
+
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(technique)
+            .build();
+        technique.normalize(normalizeScoresDTO);
+
+        assertEquals(0.4f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
 
         // Test when score is below min score
         float lowScore = 0.1f;
-        float normalizedLowScore = MinMaxScoreNormalizationTechnique.LowerBound.Mode.CLIP.normalize(
-            lowScore,
-            minScore,
-            maxScore,
-            lowerBoundScore
-        );
-        assertEquals(0.0f, normalizedLowScore, DELTA_FOR_SCORE_ASSERTION);
+        ScoreDoc[] lowScoreDocs = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs;
+        lowScoreDocs[0] = new ScoreDoc(1, lowScore); // 0.1f
+        lowScoreDocs[1] = new ScoreDoc(2, minScore); // 0.2f
+        lowScoreDocs[2] = new ScoreDoc(3, maxScore); // 0.8f
+
+        technique.normalize(normalizeScoresDTO);
+
+        assertEquals(0.0f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
     }
 
     public void testLowerBounds_whenModeIsIgnore_thenSuccessful() {
@@ -374,23 +419,45 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         float maxScore = 0.8f;
         float lowerBoundScore = 0.3f;
 
-        float normalizedScore = MinMaxScoreNormalizationTechnique.LowerBound.Mode.IGNORE.normalize(
-            score,
-            minScore,
-            maxScore,
-            lowerBoundScore
+        Map<String, Object> params = Map.of("lower_bounds", List.of(Map.of("mode", "ignore", "min_score", lowerBoundScore)));
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            new ScoreDoc(1, score),    // 0.5f
+                            new ScoreDoc(2, minScore), // 0.2f
+                            new ScoreDoc(3, maxScore)  // 0.8f
+                        }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
         );
-        assertEquals(0.5f, normalizedScore, DELTA_FOR_SCORE_ASSERTION);
+
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(technique)
+            .build();
+        technique.normalize(normalizeScoresDTO);
+
+        assertEquals(0.5f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
 
         // Test when normalized score would be 0
         float lowScore = 0.2f;
-        float normalizedLowScore = MinMaxScoreNormalizationTechnique.LowerBound.Mode.IGNORE.normalize(
-            lowScore,
-            minScore,
-            maxScore,
-            lowerBoundScore
-        );
-        assertEquals(MIN_SCORE, normalizedLowScore, DELTA_FOR_SCORE_ASSERTION);
+        ScoreDoc[] lowScoreDocs = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs;
+        lowScoreDocs[0] = new ScoreDoc(1, lowScore); // 0.2f
+        lowScoreDocs[1] = new ScoreDoc(2, minScore); // 0.2f
+        lowScoreDocs[2] = new ScoreDoc(3, maxScore); // 0.8f
+
+        technique.normalize(normalizeScoresDTO);
+
+        assertEquals(MIN_SCORE, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
     }
 
     public void testLowerBoundsMode_whenDefaultValue_thenSuccessful() {
@@ -539,7 +606,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         );
 
         assertEquals(
-            "expected lower bounds array to contain 2 elements matching the number of sub-queries, but found a mismatch",
+            "expected bounds array to contain 2 elements matching the number of sub-queries, but found a mismatch",
             exception.getMessage()
         );
     }
@@ -628,6 +695,390 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         } catch (IllegalArgumentException e) {
             assertEquals("unrecognized parameters in normalization technique", e.getMessage());
         }
+    }
+
+    public void testUpperBoundsModeFromString_whenValidValues_thenSuccessful() {
+        assertEquals(
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.APPLY,
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("apply")
+        );
+        assertEquals(
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.CLIP,
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("clip")
+        );
+        assertEquals(
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.IGNORE,
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("ignore")
+        );
+        // Case insensitive check
+        assertEquals(
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.APPLY,
+            MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("APPLY")
+        );
+    }
+
+    public void testUpperBoundMode_fromString_invalidValues() {
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> MinMaxScoreNormalizationTechnique.UpperBound.Mode.fromString("invalid")
+        );
+        assertEquals("invalid mode: invalid, valid values are: apply, clip, ignore", exception.getMessage());
+    }
+
+    public void testUpperBounds_whenModeIsApply_thenSuccessful() {
+        float score = 0.5f;
+        float minScore = 0.1f;
+        float maxScore = 0.8f;
+        float upperBoundScore = 0.6f;
+
+        Map<String, Object> params = Map.of("upper_bounds", List.of(Map.of("mode", "apply", "max_score", upperBoundScore)));
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            new ScoreDoc(1, score),    // 0.5f
+                            new ScoreDoc(2, minScore), // 0.1f
+                            new ScoreDoc(3, maxScore)  // 0.8f
+                        }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(technique)
+            .build();
+        technique.normalize(normalizeScoresDTO);
+
+        // (0.5 - 0.1) / (0.6 - 0.1) = 0.4 / 0.5 = 0.8
+        assertEquals(0.8f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+
+        // Test when score is above upper bound
+        float highScore = 0.7f;
+        ScoreDoc[] highScoreDocs = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs;
+        highScoreDocs[0] = new ScoreDoc(1, highScore); // 0.7f
+        highScoreDocs[1] = new ScoreDoc(2, minScore);  // 0.1f
+        highScoreDocs[2] = new ScoreDoc(3, maxScore);  // 0.8f
+
+        technique.normalize(normalizeScoresDTO);
+
+        // (0.7 - 0.1) / (0.8 - 0.1) = 0.6 / 0.7 ≈ 0.857
+        assertEquals(0.857f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testUpperBounds_whenModeIsClip_thenSuccessful() {
+        float score = 0.5f;
+        float minScore = 0.2f;
+        float maxScore = 0.8f;
+        float upperBoundScore = 0.6f;
+
+        Map<String, Object> params = Map.of("upper_bounds", List.of(Map.of("mode", "clip", "max_score", upperBoundScore)));
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            new ScoreDoc(1, score),    // 0.5f
+                            new ScoreDoc(2, minScore), // 0.2f
+                            new ScoreDoc(3, maxScore)  // 0.8f
+                        }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(technique)
+            .build();
+        technique.normalize(normalizeScoresDTO);
+
+        // (0.5 - 0.2) / (0.6 - 0.2) = 0.3 / 0.4 = 0.75
+        assertEquals(0.75f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+
+        // Test when score is above max score
+        float highScore = 0.7f;
+        ScoreDoc[] highScoreDocs = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs;
+        highScoreDocs[0] = new ScoreDoc(1, highScore); // 0.7f
+        highScoreDocs[1] = new ScoreDoc(2, minScore);  // 0.2f
+        highScoreDocs[2] = new ScoreDoc(3, maxScore);  // 0.8f
+
+        technique.normalize(normalizeScoresDTO);
+
+        // Score is above upperBoundScore, so it should be clipped to 1.0
+        assertEquals(1.0f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testUpperBounds_whenModeIsIgnore_thenSuccessful() {
+        float score = 0.5f;
+        float minScore = 0.2f;
+        float maxScore = 0.8f;
+        float upperBoundScore = 0.6f;
+
+        Map<String, Object> params = Map.of("upper_bounds", List.of(Map.of("mode", "ignore", "max_score", upperBoundScore)));
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            new ScoreDoc(1, score),    // 0.5f
+                            new ScoreDoc(2, minScore), // 0.2f
+                            new ScoreDoc(3, maxScore)  // 0.8f
+                        }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(technique)
+            .build();
+        technique.normalize(normalizeScoresDTO);
+
+        assertEquals(0.5f, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+
+        // Test when normalized score would be 1
+        float highScore = 0.8f;
+        ScoreDoc[] highScoreDocs = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs;
+        highScoreDocs[0] = new ScoreDoc(1, highScore); // 0.8f
+        highScoreDocs[1] = new ScoreDoc(2, minScore);  // 0.2f
+        highScoreDocs[2] = new ScoreDoc(3, maxScore);  // 0.8f
+
+        technique.normalize(normalizeScoresDTO);
+
+        assertEquals(MAX_SCORE, compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testUpperBoundsMode_whenDefaultValue_thenSuccessful() {
+        assertEquals(MinMaxScoreNormalizationTechnique.UpperBound.Mode.APPLY, MinMaxScoreNormalizationTechnique.UpperBound.Mode.DEFAULT);
+    }
+
+    public void testUpperBounds_whenExceedsMaxSubQueries_thenFail() {
+        List<Map<String, Object>> upperBounds = new ArrayList<>();
+
+        for (int i = 0; i <= 100; i++) {
+            Map<String, Object> bound = new HashMap<>();
+            if (i % 3 == 0) {
+                bound.put("mode", "apply");
+                bound.put("max_score", 0.9f);
+            } else if (i % 3 == 1) {
+                bound.put("mode", "clip");
+                bound.put("max_score", 0.9f);
+            } else {
+                bound.put("mode", "ignore");
+            }
+            upperBounds.add(bound);
+        }
+
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("upper_bounds", upperBounds);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil())
+        );
+
+        assertEquals(
+            String.format(
+                Locale.ROOT,
+                "upper_bounds size %d should be less than or equal to %d",
+                upperBounds.size(),
+                MAX_NUMBER_OF_SUB_QUERIES
+            ),
+            exception.getMessage()
+        );
+    }
+
+    public void testDescribe_whenUpperBoundsArePresent_thenSuccessful() {
+        Map<String, Object> parameters = new HashMap<>();
+        List<Map<String, Object>> upperBounds = Arrays.asList(
+            Map.of("mode", "apply", "max_score", 0.8),
+            Map.of("mode", "clip", "max_score", 0.9)
+        );
+        parameters.put("upper_bounds", upperBounds);
+        MinMaxScoreNormalizationTechnique techniqueWithBounds = new MinMaxScoreNormalizationTechnique(
+            parameters,
+            new ScoreNormalizationUtil()
+        );
+        assertEquals("min_max, upper bounds [(apply, 0.8), (clip, 0.9)]", techniqueWithBounds.describe());
+
+        // Test case 2: without upper bounds
+        Map<String, Object> emptyParameters = new HashMap<>();
+        MinMaxScoreNormalizationTechnique techniqueWithoutBounds = new MinMaxScoreNormalizationTechnique(
+            emptyParameters,
+            new ScoreNormalizationUtil()
+        );
+        assertEquals("min_max", techniqueWithoutBounds.describe());
+
+        Map<String, Object> parametersMissingMode = new HashMap<>();
+        List<Map<String, Object>> upperBoundsMissingMode = Arrays.asList(
+            Map.of("max_score", 0.8),
+            Map.of("mode", "clip", "max_score", 0.9)
+        );
+        parametersMissingMode.put("upper_bounds", upperBoundsMissingMode);
+        MinMaxScoreNormalizationTechnique techniqueMissingMode = new MinMaxScoreNormalizationTechnique(
+            parametersMissingMode,
+            new ScoreNormalizationUtil()
+        );
+        assertEquals("min_max, upper bounds [(apply, 0.8), (clip, 0.9)]", techniqueMissingMode.describe());
+
+        Map<String, Object> parametersMissingScore = new HashMap<>();
+        List<Map<String, Object>> upperBoundsMissingScore = Arrays.asList(
+            Map.of("mode", "apply"),
+            Map.of("mode", "clip", "max_score", 0.9)
+        );
+        parametersMissingScore.put("upper_bounds", upperBoundsMissingScore);
+        MinMaxScoreNormalizationTechnique techniqueMissingScore = new MinMaxScoreNormalizationTechnique(
+            parametersMissingScore,
+            new ScoreNormalizationUtil()
+        );
+        assertEquals("min_max, upper bounds [(apply, 1.0), (clip, 0.9)]", techniqueMissingScore.describe());
+    }
+
+    public void testUpperBounds_whenInvalidInput_thenFail() {
+        // Test case 1: Invalid mode value
+        Map<String, Object> parametersInvalidMode = new HashMap<>();
+        List<Map<String, Object>> upperBoundsInvalidMode = Arrays.asList(
+            Map.of("mode", "invalid_mode", "max_score", 0.8),
+            Map.of("mode", "clip", "max_score", 0.9)
+        );
+        parametersInvalidMode.put("upper_bounds", upperBoundsInvalidMode);
+        IllegalArgumentException invalidModeException = expectThrows(
+            IllegalArgumentException.class,
+            () -> new MinMaxScoreNormalizationTechnique(parametersInvalidMode, new ScoreNormalizationUtil())
+        );
+        assertEquals("invalid mode: invalid_mode, valid values are: apply, clip, ignore", invalidModeException.getMessage());
+
+        // Test case 4: Invalid max_score type
+        Map<String, Object> parametersInvalidScore = new HashMap<>();
+        List<Map<String, Object>> upperBoundsInvalidScore = Arrays.asList(
+            Map.of("mode", "apply", "max_score", "not_a_number"),
+            Map.of("mode", "clip", "max_score", 0.9)
+        );
+        parametersInvalidScore.put("upper_bounds", upperBoundsInvalidScore);
+        IllegalArgumentException invalidScoreException = expectThrows(
+            IllegalArgumentException.class,
+            () -> new MinMaxScoreNormalizationTechnique(parametersInvalidScore, new ScoreNormalizationUtil())
+        );
+        assertEquals("invalid format for max_score: must be a valid float value", invalidScoreException.getMessage());
+    }
+
+    public void testUpperBoundsValidation_whenUpperBoundsAndSubQueriesCountMismatch_thenFail() {
+        Map<String, Object> parameters = new HashMap<>();
+        List<Map<String, Object>> upperBounds = Arrays.asList(Map.of("mode", "clip", "max_score", 0.9));
+        parameters.put("upper_bounds", upperBounds);
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    ),
+                    new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(3, 0.1f) })
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+        ScoreNormalizationTechnique minMaxTechnique = new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(minMaxTechnique)
+            .build();
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> minMaxTechnique.normalize(normalizeScoresDTO)
+        );
+
+        assertEquals(
+            "expected bounds array to contain 2 elements matching the number of sub-queries, but found a mismatch",
+            exception.getMessage()
+        );
+    }
+
+    public void testUpperBoundsValidation_whenTopDocsIsEmpty_thenSuccessful() {
+        Map<String, Object> parameters = new HashMap<>();
+        List<Map<String, Object>> upperBounds = Arrays.asList(
+            Map.of("mode", "clip", "max_score", 0.9),
+            Map.of("mode", "apply", "max_score", 1.0)
+        );
+        parameters.put("upper_bounds", upperBounds);
+
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), List.of(), false, SEARCH_SHARD),
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    ),
+                    new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(3, 0.1f) })
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+
+        ScoreNormalizationTechnique minMaxTechnique = new MinMaxScoreNormalizationTechnique(parameters, new ScoreNormalizationUtil());
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(minMaxTechnique)
+            .build();
+
+        minMaxTechnique.normalize(normalizeScoresDTO);
+
+        CompoundTopDocs expectedCompoundDocsZero = new CompoundTopDocs(
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+            List.of(),
+            false,
+            SEARCH_SHARD
+        );
+
+        CompoundTopDocs expectedCompoundDocsOne = new CompoundTopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopDocs(
+                    new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] { new ScoreDoc(2, 0.42857146f), new ScoreDoc(4, 0.001f) }
+                ),
+                new TopDocs(new TotalHits(1, TotalHits.Relation.EQUAL_TO), new ScoreDoc[] { new ScoreDoc(3, 1.0f) })
+            ),
+            false,
+            SEARCH_SHARD
+        );
+        expectedCompoundDocsOne.setScoreDocs(List.of(new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f)));
+
+        assertNotNull(compoundTopDocs);
+        assertEquals(2, compoundTopDocs.size());
+        CompoundTopDocs compoundTopDocsZero = compoundTopDocs.get(0);
+        assertEquals(expectedCompoundDocsZero, compoundTopDocsZero);
+        CompoundTopDocs compoundTopDocsOne = compoundTopDocs.get(1);
+        assertEquals(expectedCompoundDocsOne, compoundTopDocsOne);
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {
