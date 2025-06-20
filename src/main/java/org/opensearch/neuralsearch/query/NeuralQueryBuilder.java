@@ -76,6 +76,7 @@ import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
 import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
@@ -835,7 +836,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return neuralQueryBuilder;
     }
 
-    private QueryBuilder createKNNQueryBuilder(String fieldName, float[] vector) {
+    QueryBuilder createKNNQueryBuilder(String fieldName, float[] vector) {
         // Check if cluster supports NeuralKNNQueryBuilder (introduced in 3.0.0)
         if (MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForNeuralKNNQueryBuilder()) {
             // Use NeuralKNNQueryBuilder for version 3.0.0 and later
@@ -846,22 +847,26 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 .expandNested(expandNested())
                 .methodParameters(methodParameters())
                 .rescoreContext(rescoreContext())
-                .originalQueryText(queryText());
-
-            // Only set k if it's not a radial search (i.e., when minScore and maxDistance are null)
-            if (minScore() == null && maxDistance() == null) {
-                builder.k(k());
-            }
-
-            // Set radial search parameters if present
-            builder.maxDistance(maxDistance());
-            builder.minScore(minScore());
+                .originalQueryText(queryText())
+                .k(k())
+                .maxDistance(maxDistance())
+                .minScore(minScore());
 
             return builder.build();
         } else {
-            // For versions before 3.0.0 (like 2.19.0), return NeuralQueryBuilder
+            // For versions before 3.0.0 (like 2.19.0), return KNNQueryBuilder
             // to maintain backward compatibility during rolling upgrades
-            return createNeuralQueryBuilder(KNNVectorFieldMapper.CONTENT_TYPE, () -> vector, false);
+            return KNNQueryBuilder.builder()
+                .fieldName(fieldName)
+                .vector(vector)
+                .filter(filter())
+                .maxDistance(maxDistance())
+                .minScore(minScore())
+                .expandNested(expandNested())
+                .k(k())
+                .methodParameters(methodParameters())
+                .rescoreContext(rescoreContext())
+                .build();
         }
     }
 
