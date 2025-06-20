@@ -76,6 +76,7 @@ import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.knn.index.query.parser.MethodParametersParser;
 import org.opensearch.knn.index.query.parser.RescoreParser;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
@@ -719,11 +720,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 );
             }
             final float[] vector = modelIdToVectorSupplierMap.get(searchModelId).get();
-            final NeuralKNNQueryBuilder neuralKNNQueryBuilder = createKNNQueryBuilder(embeddingFieldPath, vector);
+            final QueryBuilder knnQueryBuilder = createKNNQueryBuilder(embeddingFieldPath, vector);
             if (Boolean.TRUE.equals(chunkingEnabled)) {
-                return new NestedQueryBuilder(chunksPath, neuralKNNQueryBuilder, ScoreMode.Max);
+                return new NestedQueryBuilder(chunksPath, knnQueryBuilder, ScoreMode.Max);
             } else {
-                return neuralKNNQueryBuilder;
+                return knnQueryBuilder;
             }
         } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
             EventStatsManager.increment(EventStatName.NEURAL_QUERY_AGAINST_SEMANTIC_SPARSE_REQUESTS);
@@ -835,19 +836,38 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return neuralQueryBuilder;
     }
 
-    private NeuralKNNQueryBuilder createKNNQueryBuilder(String fieldName, float[] vector) {
-        return NeuralKNNQueryBuilder.builder()
-            .fieldName(fieldName)
-            .vector(vector)
-            .k(k())
-            .filter(filter())
-            .maxDistance(maxDistance())
-            .minScore(minScore())
-            .expandNested(expandNested())
-            .methodParameters(methodParameters())
-            .rescoreContext(rescoreContext())
-            .originalQueryText(queryText())
-            .build();
+    QueryBuilder createKNNQueryBuilder(String fieldName, float[] vector) {
+        // Check if cluster supports NeuralKNNQueryBuilder (introduced in 3.0.0)
+        if (MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForNeuralKNNQueryBuilder()) {
+            // Use NeuralKNNQueryBuilder for version 3.0.0 and later
+            NeuralKNNQueryBuilder.Builder builder = NeuralKNNQueryBuilder.builder()
+                .fieldName(fieldName)
+                .vector(vector)
+                .filter(filter())
+                .expandNested(expandNested())
+                .methodParameters(methodParameters())
+                .rescoreContext(rescoreContext())
+                .originalQueryText(queryText())
+                .k(k())
+                .maxDistance(maxDistance())
+                .minScore(minScore());
+
+            return builder.build();
+        } else {
+            // For versions before 3.0.0 (like 2.19.0), return KNNQueryBuilder
+            // to maintain backward compatibility during rolling upgrades
+            return KNNQueryBuilder.builder()
+                .fieldName(fieldName)
+                .vector(vector)
+                .filter(filter())
+                .maxDistance(maxDistance())
+                .minScore(minScore())
+                .expandNested(expandNested())
+                .k(k())
+                .methodParameters(methodParameters())
+                .rescoreContext(rescoreContext())
+                .build();
+        }
     }
 
     private NeuralQueryBuilder createNeuralQueryBuilder(
