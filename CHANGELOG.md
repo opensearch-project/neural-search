@@ -10,7 +10,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
-- Fix neural radial search serialization in multi-node clusters ([#1393](https://github.com/opensearch-project/neural-search/pull/1393))
 
 ### Infrastructure
 

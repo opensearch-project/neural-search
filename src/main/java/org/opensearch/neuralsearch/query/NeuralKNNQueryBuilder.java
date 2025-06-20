@@ -367,7 +367,6 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
             .fieldName(tempKnn.fieldName())
             .vector((float[]) tempKnn.vector())
             .filter(tempKnn.getFilter())
-            .expandNested(tempKnn.getExpandNested())
             .methodParameters(tempKnn.getMethodParameters())
             .rescoreContext(tempKnn.getRescoreContext());
 
