@@ -4,6 +4,9 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import lombok.Builder;
+import lombok.Data;
+import lombok.NonNull;
 import lombok.SneakyThrows;
 import org.junit.Before;
 import org.opensearch.Version;
@@ -24,7 +27,6 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.knn.index.mapper.KNNVectorFieldType;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
@@ -70,17 +72,11 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
     private static final String IMAGE_TEXT = "base641234567890";
     private static final String MODEL_ID = "mfgfgdsfgfdgsde";
     private static final Integer K = 10;
-    private static final Float MAX_DISTANCE = 1.0f;
-    private static final Float MIN_SCORE = 0.985f;
-    private static final float BOOST = 1.8f;
-    private static final String QUERY_NAME = "queryName";
-    private static final String TERM_QUERY_FIELD_NAME = "termQueryFiledName";
-    private static final String TERM_QUERY_FIELD_VALUE = "termQueryFiledValue";
+    private static final String SEARCH_ANALYZER = "standard";
 
     private static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[10];
 
     private static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
-    private static final QueryBuilder ADDITIONAL_TEST_FILTER = new TermQueryBuilder(TERM_QUERY_FIELD_NAME, TERM_QUERY_FIELD_VALUE);
 
     private static final String REMOTE_INDEX_NAME = "remote:nlp-index";
     private static final String LOCAL_INDEX_NAME = "nlp-index";
@@ -344,7 +340,16 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null, true)),
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(KNNVectorFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                )
+            ),
             indicesRequest
         );
 
@@ -390,6 +395,46 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         );
     }
 
+    public void testRewriteTargetSemanticKnn_whenSearchAnalyzerInQuery_thenException() {
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(KNNVectorFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                )
+            ),
+            indicesRequest
+        );
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .k(K)
+            .searchAnalyzer(SEARCH_ANALYZER)
+            .build();
+
+        // first rewrite on the coordinate level
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> neuralQueryBuilder.doRewrite(queryCoordinatorContext)
+        );
+
+        final String expectedError = "Invalid neural query: Target field is a semantic field using a dense model."
+            + " semantic_field_search_analyzer is not supported since it is for the sparse model.";
+        assertEquals(expectedError, exception.getMessage());
+
+    }
+
     private List<BiConsumer<Client, ActionListener<Void>>> mockRegisterAsyncAction(QueryRewriteContext queryRewriteContext) {
         final List<BiConsumer<Client, ActionListener<Void>>> asyncActions = new ArrayList<>();
         doAnswer(invocation -> {
@@ -409,9 +454,22 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         mockIndexMapping(
             Map.of(
                 LOCAL_INDEX_NAME,
-                createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null, true),
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(KNNVectorFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                ),
                 LOCAL_INDEX_NAME_2,
-                createIndexMappingWithSemanticField(MODEL_ID_2, KNNVectorFieldMapper.CONTENT_TYPE, CUSTOM_SEMANTIC_INFO_FIELD_NAME, false)
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_2)
+                        .embeddingFieldType(KNNVectorFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(false)
+                        .semanticInfoName(CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+                        .build()
+                )
             ),
             indicesRequest
         );
@@ -492,7 +550,16 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, KNNVectorFieldMapper.CONTENT_TYPE, null, true)),
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(KNNVectorFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                )
+            ),
             indicesRequest
         );
 
@@ -631,7 +698,16 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, true)),
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                )
+            ),
             indicesRequest
         );
 
@@ -683,9 +759,22 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         mockIndexMapping(
             Map.of(
                 LOCAL_INDEX_NAME,
-                createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, false),
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(false)
+                        .build()
+                ),
                 LOCAL_INDEX_NAME_2,
-                createIndexMappingWithSemanticField(MODEL_ID_2, RankFeaturesFieldMapper.CONTENT_TYPE, CUSTOM_SEMANTIC_INFO_FIELD_NAME, true)
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_2)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .semanticInfoName(CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+                        .build()
+                )
             ),
             indicesRequest
         );
@@ -736,6 +825,9 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
 
         // prepare data for rewrite on the shard level for the first index LOCAL_INDEX_NAME
         final QueryShardContext queryShardContext = mock(QueryShardContext.class);
+        final Index index = mock(Index.class);
+        when(queryShardContext.index()).thenReturn(index);
+        when(index.getName()).thenReturn(LOCAL_INDEX_NAME);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType = mock(SemanticFieldMapper.SemanticFieldType.class);
         final RankFeaturesFieldMapper.RankFeaturesFieldType rankFeaturesFieldType = new RankFeaturesFieldMapper.RankFeaturesFieldType(
             FIELD_NAME,
@@ -744,6 +836,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         );
         when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType);
         when(queryShardContext.fieldMapper(FIELD_NAME + "_semantic_info.embedding")).thenReturn(rankFeaturesFieldType);
+
         when(semanticFieldType.getSemanticParameters()).thenReturn(
             SemanticParameters.builder().modelId(MODEL_ID_1).rawFieldType(TextFieldMapper.CONTENT_TYPE).build()
         );
@@ -760,6 +853,142 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
 
         // prepare data for rewrite on the shard level for the second index LOCAL_INDEX_NAME_2
         final QueryShardContext queryShardContext2 = mock(QueryShardContext.class);
+        final Index index2 = mock(Index.class);
+        when(queryShardContext2.index()).thenReturn(index2);
+        when(index2.getName()).thenReturn(LOCAL_INDEX_NAME_2);
+        final SemanticFieldMapper.SemanticFieldType semanticFieldType2 = mock(SemanticFieldMapper.SemanticFieldType.class);
+        when(queryShardContext2.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType2);
+        when(queryShardContext2.fieldMapper(CUSTOM_SEMANTIC_INFO_FIELD_NAME + ".chunks.embedding")).thenReturn(rankFeaturesFieldType);
+        when(semanticFieldType2.getSemanticParameters()).thenReturn(
+            SemanticParameters.builder()
+                .modelId(MODEL_ID_2)
+                .rawFieldType(TextFieldMapper.CONTENT_TYPE)
+                .semanticInfoFieldName(CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+                .chunkingEnabled(true)
+                .build()
+        );
+        when(semanticFieldType2.name()).thenReturn(FIELD_NAME);
+        when(semanticFieldType2.typeName()).thenReturn(SemanticFieldMapper.CONTENT_TYPE);
+        when(semanticFieldType2.getSemanticInfoFieldPath()).thenReturn(CUSTOM_SEMANTIC_INFO_FIELD_NAME);
+
+        QueryBuilder rewritten4 = ((NeuralQueryBuilder) rewritten2).doRewrite(queryShardContext2);
+
+        // verify the query should be rewritten as NeuralSparseQueryBuilder in a NestedQueryBuilder
+        assertTrue(rewritten4 instanceof NestedQueryBuilder);
+        assertTrue(((NestedQueryBuilder) rewritten4).query() instanceof NeuralSparseQueryBuilder);
+        assertEquals(expectedTokens2, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten4).query()).queryTokensSupplier().get());
+    }
+
+    public void testRewriteTargetSemanticRankFeatures_whenMultipleTargetIndicesOneWithAnalyzer_thenSuccess() {
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME, LOCAL_INDEX_NAME_2).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(false)
+                        .searchAnalyzer(SEARCH_ANALYZER)
+                        .build()
+                ),
+                LOCAL_INDEX_NAME_2,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_2)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .semanticInfoName(CUSTOM_SEMANTIC_INFO_FIELD_NAME)
+                        .build()
+                )
+            ),
+            indicesRequest
+        );
+
+        final List<BiConsumer<Client, ActionListener<Void>>> asyncActions = mockRegisterAsyncAction(queryCoordinatorContext);
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).build();
+
+        // first rewrite on the coordinate level
+        QueryBuilder rewritten1 = neuralQueryBuilder.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // first rewrite we start one async action to generate the embedding since the one target index is using search
+        // analyzer and another is using the model. Then return a new neural query instance with the same parameters
+        // and vector supplier is set.
+        assertTrue(rewritten1 instanceof NeuralQueryBuilder);
+        assertNotNull(((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap());
+        assertNull(((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap().get(MODEL_ID_1));
+        assertNull(((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap().get(MODEL_ID_2).get());
+        assertEquals(1, ((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap().size());
+        assertEquals(1, asyncActions.size());
+
+        // mock async action is done
+        doAnswer(invocation -> {
+            final TextInferenceRequest inferenceRequest = (TextInferenceRequest) invocation.getArguments()[0];
+            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[1];
+            if (MODEL_ID_1.equals(inferenceRequest.getModelId())) {
+                listener.onResponse(TEST_QUERY_TOKENS);
+            } else if (MODEL_ID_2.equals(inferenceRequest.getModelId())) {
+                listener.onResponse(TEST_QUERY_TOKENS_2);
+            }
+            return null;
+        }).when(mlClient).inferenceSentencesWithMapResult(any(), any());
+
+        asyncActions.get(0).accept(mock(Client.class), mock(ActionListener.class));
+
+        // verify the vector is set
+        final Map<String, Float> expectedTokens2 = Map.of("key1", 2.0f, "key2", 1.0f);
+        assertEquals(expectedTokens2, ((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap().get(MODEL_ID_2).get());
+
+        // second rewrite on the coordinate level
+        QueryBuilder rewritten2 = ((NeuralQueryBuilder) rewritten1).doRewrite(queryCoordinatorContext);
+
+        // verify no rewrite
+        assertEquals(rewritten1, rewritten2);
+
+        // prepare data for rewrite on the shard level for the first index LOCAL_INDEX_NAME
+        final QueryShardContext queryShardContext = mock(QueryShardContext.class);
+        final Index index = mock(Index.class);
+        when(queryShardContext.index()).thenReturn(index);
+        when(index.getName()).thenReturn(LOCAL_INDEX_NAME);
+        final SemanticFieldMapper.SemanticFieldType semanticFieldType = mock(SemanticFieldMapper.SemanticFieldType.class);
+        final RankFeaturesFieldMapper.RankFeaturesFieldType rankFeaturesFieldType = new RankFeaturesFieldMapper.RankFeaturesFieldType(
+            FIELD_NAME,
+            new HashMap<>(),
+            true
+        );
+        when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType);
+        when(queryShardContext.fieldMapper(FIELD_NAME + "_semantic_info.embedding")).thenReturn(rankFeaturesFieldType);
+
+        when(semanticFieldType.getSemanticParameters()).thenReturn(
+            SemanticParameters.builder()
+                .modelId(MODEL_ID_1)
+                .rawFieldType(TextFieldMapper.CONTENT_TYPE)
+                .semanticFieldSearchAnalyzer(SEARCH_ANALYZER)
+                .build()
+        );
+        when(semanticFieldType.name()).thenReturn(FIELD_NAME);
+        when(semanticFieldType.typeName()).thenReturn(SemanticFieldMapper.CONTENT_TYPE);
+        when(semanticFieldType.getSemanticInfoFieldPath()).thenReturn(FIELD_NAME + "_semantic_info");
+
+        QueryBuilder rewritten3 = ((NeuralQueryBuilder) rewritten2).doRewrite(queryShardContext);
+
+        // verify the query should be rewritten as NeuralSparseQueryBuilder since the chunking is disabled
+        assertTrue(rewritten3 instanceof NeuralSparseQueryBuilder);
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) rewritten3;
+        assertEquals(SEARCH_ANALYZER, neuralSparseQueryBuilder.analyzer());
+
+        // prepare data for rewrite on the shard level for the second index LOCAL_INDEX_NAME_2
+        final QueryShardContext queryShardContext2 = mock(QueryShardContext.class);
+        final Index index2 = mock(Index.class);
+        when(queryShardContext2.index()).thenReturn(index2);
+        when(index2.getName()).thenReturn(LOCAL_INDEX_NAME_2);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType2 = mock(SemanticFieldMapper.SemanticFieldType.class);
         when(queryShardContext2.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType2);
         when(queryShardContext2.fieldMapper(CUSTOM_SEMANTIC_INFO_FIELD_NAME + ".chunks.embedding")).thenReturn(rankFeaturesFieldType);
@@ -791,7 +1020,16 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, true)),
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                )
+            ),
             indicesRequest
         );
 
@@ -814,7 +1052,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         );
     }
 
-    public void testRewriteTargetSemanticRankFeatures_whenWithRawTokensAndSearchAnalyzer_thenNestedNeuralSparseQueryBuilder() {
+    public void testRewriteTargetSemanticRankFeatures_whenSearchAnalyzerInQuery_thenNestedNeuralSparseQueryBuilder() {
         // prepare data to rewrite on coordinate level
         final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
         final IndicesRequest indicesRequest = mock(IndicesRequest.class);
@@ -822,14 +1060,23 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
         when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
         mockIndexMapping(
-            Map.of(LOCAL_INDEX_NAME, createIndexMappingWithSemanticField(MODEL_ID_1, RankFeaturesFieldMapper.CONTENT_TYPE, null, true)),
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                )
+            ),
             indicesRequest
         );
 
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(FIELD_NAME)
-            .queryTokensMapSupplier(() -> Map.of("key1", 1.0f))
-            .searchAnalyzer("standard")
+            .queryText(QUERY_TEXT)
+            .searchAnalyzer(SEARCH_ANALYZER)
             .build();
 
         // first rewrite on the coordinate level
@@ -840,7 +1087,121 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // tokens and only target one index
         assertTrue(rewritten1 instanceof NestedQueryBuilder);
         assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
-        assertEquals("standard", ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
+        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
+    }
+
+    public void testRewriteTargetSemanticRankFeatures_whenSearchAnalyzerInMapping_thenNestedNeuralSparseQueryBuilder() {
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .searchAnalyzer(SEARCH_ANALYZER)
+                        .build()
+                )
+            ),
+            indicesRequest
+        );
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).build();
+
+        // first rewrite on the coordinate level
+        QueryBuilder rewritten1 = neuralQueryBuilder.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // first rewrite will directly rewrite it as NeuralKNNQueryBuilder in a NestedQueryBuilder since we have query
+        // tokens and only target one index
+        assertTrue(rewritten1 instanceof NestedQueryBuilder);
+        assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
+        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
+    }
+
+    public void testRewriteTargetSemanticRankFeatures_whenBothModelIdAndSearchAnalyzerAreProvidedInQuery_thenException() {
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .build()
+                )
+            ),
+            indicesRequest
+        );
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .searchAnalyzer(SEARCH_ANALYZER)
+            .build();
+
+        // first rewrite on the coordinate level
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> neuralQueryBuilder.doRewrite(queryCoordinatorContext)
+        );
+
+        final String expectedError = "Invalid neural query: query_tokens, model_id and semantic_field_search_analyzer can not coexist";
+        assertEquals(expectedError, exception.getMessage());
+    }
+
+    public
+        void
+        testRewriteTargetSemanticRankFeatures_whenBothModelIdAndSearchAnalyzerAreProvidedAcrossQueryAndMapping_thenUseTokenizerInQuery() {
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .chunkingEnabled(true)
+                        .searchModelId(MODEL_ID_2)
+                        .build()
+                )
+            ),
+            indicesRequest
+        );
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .searchAnalyzer(SEARCH_ANALYZER)
+            .build();
+
+        // first rewrite on the coordinate level
+        QueryBuilder rewritten1 = neuralQueryBuilder.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // first rewrite will directly rewrite it as NeuralKNNQueryBuilder in a NestedQueryBuilder since we have query
+        // tokens and only target one index
+        assertTrue(rewritten1 instanceof NestedQueryBuilder);
+        assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
+        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
     }
 
     private void mockIndexMapping(final Map<String, Map<String, Object>> indexToMappingMap, final IndicesRequest indicesRequest) {
@@ -885,25 +1246,37 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         assertEquals(rewritten, neuralQueryBuilder);
     }
 
-    private Map<String, Object> createIndexMappingWithSemanticField(
-        final String modelId,
-        final String embeddingFieldType,
-        final String semanticInfoName,
-        final Boolean chunkingEnabled
-    ) {
+    @Builder
+    @Data
+    static class TestSemanticFieldConfig {
+        final String modelId;
+        final String embeddingFieldType;
+        final String semanticInfoName;
+        final Boolean chunkingEnabled;
+        final String searchAnalyzer;
+        final String searchModelId;
+    }
+
+    private Map<String, Object> createIndexMappingWithSemanticField(@NonNull final TestSemanticFieldConfig config) {
         String semanticInfoFieldName = FIELD_NAME + "_semantic_info";
         final Map<String, Object> semanticFieldConfig = new HashMap<>();
         semanticFieldConfig.put(TYPE, SemanticFieldMapper.CONTENT_TYPE);
-        semanticFieldConfig.put(SemanticFieldConstants.MODEL_ID, modelId);
-        if (Boolean.TRUE.equals(chunkingEnabled)) {
+        semanticFieldConfig.put(SemanticFieldConstants.MODEL_ID, config.modelId);
+        if (Boolean.TRUE.equals(config.chunkingEnabled)) {
             semanticFieldConfig.put(SemanticFieldConstants.CHUNKING, Boolean.TRUE);
         }
-        if (semanticInfoName != null) {
-            semanticInfoFieldName = semanticInfoName;
-            semanticFieldConfig.put(SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME, semanticInfoName);
+        if (config.semanticInfoName != null) {
+            semanticInfoFieldName = config.semanticInfoName;
+            semanticFieldConfig.put(SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME, config.semanticInfoName);
+        }
+        if (config.searchAnalyzer != null) {
+            semanticFieldConfig.put(SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER, config.searchAnalyzer);
+        }
+        if (config.searchModelId != null) {
+            semanticFieldConfig.put(SemanticFieldConstants.SEARCH_MODEL_ID, config.searchModelId);
         }
 
-        if (Boolean.TRUE.equals(chunkingEnabled)) {
+        if (Boolean.TRUE.equals(config.chunkingEnabled)) {
             return Map.of(
                 PROPERTIES,
                 Map.of(
@@ -918,7 +1291,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
                                 TYPE,
                                 ObjectMapper.NESTED_CONTENT_TYPE,
                                 PROPERTIES,
-                                Map.of(SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME, Map.of(TYPE, embeddingFieldType))
+                                Map.of(SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME, Map.of(TYPE, config.embeddingFieldType))
                             )
                         )
                     )
@@ -931,7 +1304,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
                     FIELD_NAME,
                     semanticFieldConfig,
                     semanticInfoFieldName,
-                    Map.of(PROPERTIES, Map.of(SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME, Map.of(TYPE, embeddingFieldType)))
+                    Map.of(PROPERTIES, Map.of(SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME, Map.of(TYPE, config.embeddingFieldType)))
                 )
             );
         }

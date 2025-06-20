@@ -55,7 +55,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
             () -> NeuralQueryBuilder.builder().fieldName(FIELD_NAME).k(K).maxDistance(MAX_DISTANCE).build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Either query_text or query_image must"
+        final String expectedMessage = "Invalid neural query: Either query_text or query_image must"
             + " be provided.; Only one of k, max_distance, or min_score can be provided";
         assertEquals(expectedMessage, exception.getMessage());
     }
@@ -68,7 +68,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
             () -> NeuralQueryBuilder.builder().fieldName(FIELD_NAME).k(K).maxDistance(MAX_DISTANCE).build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Either query_text or query_image must"
+        final String expectedMessage = "Invalid neural query: Either query_text or query_image must"
             + " be provided.; Only one of k, max_distance, or min_score can be provided; model_id must be provided.";
         assertEquals(expectedMessage, exception.getMessage());
     }
@@ -81,7 +81,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
             () -> NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryTokensMapSupplier(TEST_QUERY_TOKENS_MAP_SUPPLIER).build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Either query_text or query_image must "
+        final String expectedMessage = "Invalid neural query: Either query_text or query_image must "
             + "be provided.; model_id must be provided.; Target field is a KNN field using a dense model. "
             + "query_tokens is not supported since it is for the sparse model.";
         assertEquals(expectedMessage, exception.getMessage());
@@ -204,7 +204,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: query_tokens, model_id and "
+        final String expectedMessage = "Invalid neural query: query_tokens, model_id and "
             + "semantic_field_search_analyzer can not coexist; Target field is a semantic field using a sparse model. "
             + "[filter, query_image, k, expand_nested_docs] are not supported since they are for the dense model.";
         assertEquals(expectedMessage, exception.getMessage());
@@ -233,7 +233,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Target field is a semantic field"
+        final String expectedMessage = "Invalid neural query: Target field is a semantic field"
             + " using a dense model. query_tokens is not supported since it is for the sparse model.";
         assertEquals(expectedMessage, exception.getMessage());
     }
@@ -261,7 +261,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Target field is a semantic field"
+        final String expectedMessage = "Invalid neural query: Target field is a semantic field"
             + " using a dense model. semantic_field_search_analyzer is not supported since it is for the sparse model.";
         assertEquals(expectedMessage, exception.getMessage());
     }
@@ -284,7 +284,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: query_tokens, model_id and "
+        final String expectedMessage = "Invalid neural query: query_tokens, model_id and "
             + "semantic_field_search_analyzer can not coexist";
         assertEquals(expectedMessage, exception.getMessage());
     }
@@ -306,7 +306,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: " + "semantic_field_search_analyzer field can not be empty";
+        final String expectedMessage = "Invalid neural query: " + "semantic_field_search_analyzer field can not be empty";
         assertEquals(expectedMessage, exception.getMessage());
     }
 
@@ -327,7 +327,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: " + "model_id field can not be empty";
+        final String expectedMessage = "Invalid neural query: " + "model_id field can not be empty";
         assertEquals(expectedMessage, exception.getMessage());
     }
 
@@ -349,8 +349,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage =
-            "Failed to build the NeuralQueryBuilder: query_tokens, model_id and semantic_field_search_analyzer can not coexist";
+        final String expectedMessage = "Invalid neural query: query_tokens, model_id and semantic_field_search_analyzer can not coexist";
         assertEquals(expectedMessage, exception.getMessage());
     }
 
@@ -370,7 +369,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
                 .build()
         );
 
-        final String expectedMessage = "Failed to build the NeuralQueryBuilder: Target field is a semantic field"
+        final String expectedMessage = "Invalid neural query: Target field is a semantic field"
             + " using a dense model. semantic_field_search_analyzer is not supported since it is for the sparse model.";
         assertEquals(expectedMessage, exception.getMessage());
     }
