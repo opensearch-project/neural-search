@@ -43,8 +43,7 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
+            String modelId = uploadAndLoadTextEmbeddingModel();
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),

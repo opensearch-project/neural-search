@@ -37,8 +37,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .queryText(TEXT_1);
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
+            String modelId = uploadAndLoadSparseEncodingModel();
             sparseEncodingQueryBuilderWithModelId.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -86,7 +85,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             .build();
 
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
+            String modelId = uploadAndLoadTextEmbeddingModel();
             loadModel(modelId);
             neuralQueryBuilderWithModelId.modelId(modelId);
             createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);

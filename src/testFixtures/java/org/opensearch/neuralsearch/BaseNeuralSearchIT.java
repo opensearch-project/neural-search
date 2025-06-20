@@ -2286,15 +2286,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         if (searchPipeline != null) {
             deleteSearchPipeline(searchPipeline);
         }
-        if (modelId != null) {
-            try {
-                deleteModel(modelId);
-            } catch (AssertionError e) {
-                // sometimes we have flaky test that the model state doesn't change after call undeploy api
-                // for this case we can call undeploy api one more time
-                deleteModel(modelId);
-            }
-        }
         if (indexName != null) {
             deleteIndex(indexName);
         }
