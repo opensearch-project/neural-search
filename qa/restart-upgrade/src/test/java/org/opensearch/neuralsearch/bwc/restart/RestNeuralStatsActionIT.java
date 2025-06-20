@@ -42,8 +42,7 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
         // Once other stats are implemented, it may be smarter to use those instead of text embedding processor
         // to avoid having to upload a model and run inference.
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
+            String modelId = uploadAndLoadTextEmbeddingModel();
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),

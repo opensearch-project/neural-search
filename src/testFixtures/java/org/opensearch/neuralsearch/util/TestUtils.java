@@ -64,7 +64,7 @@ public class TestUtils {
     public static final String TEXT_EMBEDDING_PROCESSOR = "text_embedding";
     public static final String TEXT_IMAGE_EMBEDDING_PROCESSOR = "text_image_embedding";
     public static final int MAX_TASK_RETRIES = 30;
-    public static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 1000;
+    public static final int DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND = 10000;
     public static final String DEFAULT_USER_AGENT = "Kibana";
     public static final String DEFAULT_NORMALIZATION_METHOD = "min_max";
     public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";

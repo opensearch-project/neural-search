@@ -27,8 +27,8 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
+            String modelId = uploadAndLoadSparseEncodingModel();
+            System.out.println("MODEL ID: " + modelId + " | MODEL STATE: " + getModelState(getModel(modelId)).toString());
             neuralSparseQueryBuilder.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, NEURAL_SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(

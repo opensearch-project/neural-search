@@ -33,8 +33,8 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
     public void testSparseEncodingProcessor_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
-            String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
+            String modelId = uploadAndLoadSparseEncodingModel();
+            System.out.println("MODEL ID: " + modelId + " | MODEL STATE: " + getModelState(getModel(modelId)).toString());
             createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
