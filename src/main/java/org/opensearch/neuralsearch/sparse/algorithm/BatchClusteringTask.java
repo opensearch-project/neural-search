@@ -79,8 +79,7 @@ public class BatchClusteringTask implements Supplier<List<Pair<BytesRef, Posting
                             return vector;
                         }
                         return null;
-                    }),
-                    beta
+                    })
                 );
                 List<DocumentCluster> clusters = postingClustering.cluster(docFreqs);
                 postingClusters.add(Pair.of(term, new PostingClusters(clusters)));

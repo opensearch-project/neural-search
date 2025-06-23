@@ -24,10 +24,6 @@ import java.util.stream.Collectors;
  */
 public class PostingsProcessor {
 
-    public static List<DocFreq> pruneBySize(List<DocFreq> postings, int size) {
-        return postings.subList(0, Math.min(postings.size(), size));
-    }
-
     public static List<DocFreq> getTopK(List<DocFreq> postings, int K) {
         if (K >= postings.size()) {
             return postings;

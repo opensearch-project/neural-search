@@ -89,8 +89,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
                 alpha,
                 clusterUntilDocCountReach > 0 ? 1 : beta,
                 (docId) -> index.getForwardIndexReader().readSparseVector(docId)
-            ),
-            clusterUntilDocCountReach > 0 ? 1 : beta
+            )
         );
     }
 

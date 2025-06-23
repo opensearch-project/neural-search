@@ -55,7 +55,7 @@ public class ClusteringTask implements Supplier<PostingClusters> {
                 return vector;
             }
             return null;
-        }), beta);
+        }));
     }
 
     public ClusteringTask(BytesRef term, Collection<DocFreq> docs, InMemoryKey.IndexKey key, PostingClustering postingClustering) {

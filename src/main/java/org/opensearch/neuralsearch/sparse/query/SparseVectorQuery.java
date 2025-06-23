@@ -62,6 +62,6 @@ public class SparseVectorQuery extends Query {
 
     @Override
     public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        return new SparseQueryWeight(this);
+        return new SparseQueryWeight(this, boost);
     }
 }

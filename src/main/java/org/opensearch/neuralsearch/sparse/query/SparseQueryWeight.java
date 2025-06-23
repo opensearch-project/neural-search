@@ -19,6 +19,7 @@ import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.Bits;
+import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.codec.InMemorySparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.codec.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
@@ -31,9 +32,11 @@ import java.io.IOException;
  */
 @Log4j2
 public class SparseQueryWeight extends Weight {
+    private final float boost;
 
-    public SparseQueryWeight(SparseVectorQuery query) {
+    public SparseQueryWeight(SparseVectorQuery query, float boost) {
         super(query);
+        this.boost = boost;
     }
 
     @Override
@@ -72,9 +75,10 @@ public class SparseQueryWeight extends Weight {
             query.getFieldName(),
             query.getQueryContext(),
             query.getQueryVector(),
-            context,
+            context.reader(),
             context.reader().getLiveDocs(),
-            sparseReader
+            sparseReader,
+            ByteQuantizer.getSimScorer(boost)
         );
         return new ScorerSupplier() {
             @Override

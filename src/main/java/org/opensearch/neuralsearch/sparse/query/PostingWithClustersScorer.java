@@ -8,12 +8,12 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.LongBitSet;
@@ -33,8 +33,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.PriorityQueue;
 
-import static org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer.SCORE_RESCALE_RATIO;
-
 /**
  * A scorer that simulates the query algorithm in seismic.
  * For each query token: we get its posting with clusters. We compute score = dp(cluster_summary, query) and
@@ -46,7 +44,6 @@ public class PostingWithClustersScorer extends Scorer {
 
     private final String fieldName;
     private final SparseQueryContext sparseQueryContext;
-    private final SparseVector queryVector;
     private final byte[] queryDenseVector;
     // The heap to maintain docId and its similarity score with query
     private final PriorityQueue<Pair<Integer, Float>> scoreHeap = new PriorityQueue<>((a, b) -> Float.compare(a.getRight(), b.getRight()));
@@ -57,23 +54,25 @@ public class PostingWithClustersScorer extends Scorer {
     private float score;
     private final Bits acceptedDocs;
     private float heapThreshold = Float.MIN_VALUE;
+    private final Similarity.SimScorer simScorer;
 
     public PostingWithClustersScorer(
         String fieldName,
         SparseQueryContext sparseQueryContext,
         SparseVector queryVector,
-        LeafReaderContext context,
+        LeafReader leafReader,
         Bits acceptedDocs,
-        SparseVectorReader reader
+        SparseVectorReader reader,
+        Similarity.SimScorer simScorer
     ) throws IOException {
         this.sparseQueryContext = sparseQueryContext;
         this.fieldName = fieldName;
-        this.queryVector = queryVector;
         this.queryDenseVector = queryVector.toDenseVector();
-        this.visitedDocId = new LongBitSet(context.reader().maxDoc());
+        this.visitedDocId = new LongBitSet(leafReader.maxDoc());
         this.acceptedDocs = acceptedDocs;
         this.reader = reader;
-        initialize(context.reader());
+        this.simScorer = simScorer;
+        initialize(leafReader);
     }
 
     private void initialize(LeafReader leafReader) throws IOException {
@@ -91,12 +90,6 @@ public class PostingWithClustersScorer extends Scorer {
                 log.error("posting enum is not SparsePostingsEnum, actual type: {}", postingsEnum.getClass().getName());
                 return;
             }
-            log.debug(
-                "query token: {}, posting doc size: {}, cluster size: {}",
-                token,
-                sparsePostingsEnum.size(),
-                sparsePostingsEnum.getClusters().getClusters().size()
-            );
             if (null == reader) {
                 SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(sparsePostingsEnum.getIndexKey());
                 if (index != null) {
@@ -122,7 +115,7 @@ public class PostingWithClustersScorer extends Scorer {
 
     @Override
     public int docID() {
-        return iterator().docID();
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -202,7 +195,7 @@ public class PostingWithClustersScorer extends Scorer {
 
     @Override
     public float score() throws IOException {
-        return score * SCORE_RESCALE_RATIO;
+        return this.simScorer.score(score, 0);
     }
 
     class SingleScorer extends Scorer {
@@ -248,6 +241,9 @@ public class PostingWithClustersScorer extends Scorer {
 
                 @Override
                 public int docID() {
+                    if (docs == null) {
+                        return -1;
+                    }
                     return docs.docID();
                 }
 
