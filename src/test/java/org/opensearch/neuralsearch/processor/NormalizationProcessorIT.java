@@ -22,6 +22,7 @@ import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.Range;
 import org.junit.Before;
+import org.opensearch.common.document.DocumentField;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -268,6 +269,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -335,6 +337,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
 
@@ -385,6 +388,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -452,6 +456,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
 
@@ -469,6 +474,37 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_3_QUERIES)
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 1.0f));
+    }
+
+    @SneakyThrows
+    public void testSubQueryScoresWithSingleShard_thenSuccessful() {
+        String modelId = null;
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
+        modelId = prepareModel();
+        createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true, false);
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(5)
+            .build();
+
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        assertQueryResults(searchResponseAsMap, 5, false);
+        assertHybridizationSubQueryScores(searchResponseAsMap, 5);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {
@@ -633,6 +669,37 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         assertEquals(Set.copyOf(ids).size(), ids.size());
     }
 
+    private void assertHybridizationSubQueryScores(Map<String, Object> searchResponseAsMap, int expectedSubQueryCount) {
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+
+        for (Map<String, Object> hit : hitsNestedList) {
+            // Get fields map from hit
+            @SuppressWarnings("unchecked")
+
+            Map<String, DocumentField> fields = hit.getFields();
+            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
+
+            assertNotNull("Fields should not be null", fields);
+
+            // Get hybridization_sub_query_scores from fields - corrected casting
+            @SuppressWarnings("unchecked")
+            List<Double> subQueryScores = ((List<List<Double>>) fields.get("hybridization_sub_query_scores")).get(0);
+
+            assertNotNull("Hybridization sub query scores should not be null", subQueryScores);
+            assertFalse("Hybridization sub query scores should not be empty", subQueryScores.isEmpty());
+
+            // Verify number of scores
+            assertEquals("Should have expected number of sub-query scores", expectedSubQueryCount, subQueryScores.size());
+
+            // Verify all scores are within valid range [0.0, 1.0]
+            for (Double score : subQueryScores) {
+                assertNotNull("Sub-query score should not be null", score);
+                assertTrue("Sub-query score should be >= 0.0", score >= 0.0);
+                assertTrue("Sub-query score should be <= 1.0", score <= 1.0);
+            }
+        }
+    }
+
     @SneakyThrows
     public void testNormalizationProcessor_stats() {
         enableStats();
@@ -642,19 +709,22 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             "pipeline1",
             L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
             HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            Map.of()
+            Map.of(),
+            false
         );
         createSearchPipeline(
             "pipeline2",
             MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
             GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            Map.of()
+            Map.of(),
+            false
         );
         createSearchPipeline(
             "pipeline3",
             ZScoreNormalizationTechnique.TECHNIQUE_NAME,
             ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            Map.of()
+            Map.of(),
+            false
         );
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);

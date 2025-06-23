@@ -1810,7 +1810,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void createSearchPipelineWithResultsPostProcessor(final String pipelineId) {
-        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+        createSearchPipeline(pipelineId, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
     }
 
     @SneakyThrows
@@ -1818,9 +1818,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String pipelineId,
         final String normalizationMethod,
         String combinationMethod,
-        final Map<String, String> combinationParams
+        final Map<String, String> combinationParams,
+        boolean subQueryScores
     ) {
-        createSearchPipeline(pipelineId, normalizationMethod, Map.of(), combinationMethod, combinationParams, false);
+        createSearchPipeline(pipelineId, normalizationMethod, Map.of(), combinationMethod, combinationParams, subQueryScores, false);
     }
 
     @SneakyThrows
@@ -1830,6 +1831,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final Map<String, Object> normalizationParams,
         final String combinationMethod,
         final Map<String, String> combinationParams,
+        boolean subQueryScores,
         boolean addExplainResponseProcessor
     ) {
         StringBuilder stringBuilderForContentBody = new StringBuilder();
@@ -1864,7 +1866,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             }
             stringBuilderForContentBody.append(" }");
         }
-        stringBuilderForContentBody.append("},").append("\"combination\": {").append("\"technique\": \"%s\"");
+        stringBuilderForContentBody.append("}");
+        if (subQueryScores) {
+            stringBuilderForContentBody.append(", \"sub-query-scores\": true");
+        }
+        stringBuilderForContentBody.append(", ").append("\"combination\": {").append("\"technique\": \"%s\"");
         if (Objects.nonNull(combinationParams) && !combinationParams.isEmpty()) {
             stringBuilderForContentBody.append(", \"parameters\": {");
             if (combinationParams.containsKey(PARAM_NAME_WEIGHTS)) {
