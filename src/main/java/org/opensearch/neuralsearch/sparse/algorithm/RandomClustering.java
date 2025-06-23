@@ -5,8 +5,8 @@
 package org.opensearch.neuralsearch.sparse.algorithm;
 
 import lombok.AllArgsConstructor;
+import lombok.NonNull;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
-import org.opensearch.neuralsearch.sparse.common.Profiling;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
@@ -24,10 +24,14 @@ public class RandomClustering implements Clustering {
     private final int lambda;
     private final float alpha;
     private final int beta;
+    @NonNull
     private final SparseVectorReader reader;
 
     @Override
     public List<DocumentCluster> cluster(List<DocFreq> docFreqs) throws IOException {
+        if (docFreqs.isEmpty()) {
+            return List.of();
+        }
         if (beta == 1) {
             DocumentCluster cluster = new DocumentCluster(null, docFreqs, true);
             return List.of(cluster);
@@ -36,6 +40,8 @@ public class RandomClustering implements Clustering {
         // generate beta unique random centers
         Random random = new Random();
         int num_cluster = (int) Math.ceil((double) (size * beta) / lambda);
+        // Ensure num_cluster doesn't exceed the available document count
+        num_cluster = Math.min(num_cluster, size);
         int[] centers = random.ints(0, size).distinct().limit(num_cluster).toArray();
         List<List<DocFreq>> docAssignments = new ArrayList<>(num_cluster);
         List<SparseVector> sparseVectors = new ArrayList<>();
@@ -57,9 +63,7 @@ public class RandomClustering implements Clustering {
                 float score = Float.MIN_VALUE;
                 SparseVector center = sparseVectors.get(i);
                 if (center != null) {
-                    long start = Profiling.INSTANCE.begin(Profiling.ItemId.CLUSTERDP);
                     score = center.dotProduct(denseDocVector);
-                    Profiling.INSTANCE.end(Profiling.ItemId.CLUSTERDP, start);
                 }
                 if (score > maxScore) {
                     maxScore = score;

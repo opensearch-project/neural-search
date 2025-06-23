@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.sparse.algorithm;
 
+import org.apache.lucene.search.similarities.Similarity;
+
 public final class ByteQuantizer {
 
     // The maximum float value to consider
@@ -63,7 +65,7 @@ public final class ByteQuantizer {
     public static int compareUnsignedByte(byte x, byte y) {
         // Convert to unsigned integers (0-255) and compare directly
         // This is more efficient than the branching approach
-        return Integer.compare(getUnsignedByte(x), getUnsignedByte(y));
+        return (x & 0xFF) - (y & 0xFF);
     }
 
     /**
@@ -76,6 +78,15 @@ public final class ByteQuantizer {
      * @return The product of the two unsigned byte values as an integer (0-65025)
      */
     public static int multiplyUnsignedByte(byte x, byte y) {
-        return getUnsignedByte(x) * getUnsignedByte(y);
+        return (x & 0xFF) * (y & 0xFF);
+    }
+
+    public static Similarity.SimScorer getSimScorer(float boost) {
+        return new Similarity.SimScorer() {
+            @Override
+            public float score(float freq, long norm) {
+                return boost * freq * SCORE_RESCALE_RATIO;
+            }
+        };
     }
 }
