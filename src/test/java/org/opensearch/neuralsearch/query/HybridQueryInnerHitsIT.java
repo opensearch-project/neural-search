@@ -75,7 +75,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
     private void testInnerHits_whenMultipleSubqueriesOnNestedFields_thenSuccessful(String indexName) {
         initializeIndexIfNotExist(indexName);
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Avg);
         nestedQueryBuilder1.innerHit(new InnerHitBuilder());
@@ -110,7 +110,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
     public void testInnerHits_whenMultipleSubqueriesOnParentChildFields_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_PARENT_CHILD_INDEX_NAME);
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         HasChildQueryBuilder hasChildQueryBuilder = new HasChildQueryBuilder(
             "child",
@@ -139,7 +139,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testInnerHits_whenMultipleSubqueriesOnNestedAndParentChildFields_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_PARENT_CHILD_INDEX_NAME);
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
         NestedQueryBuilder nestedQueryBuilder = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Avg);
         nestedQueryBuilder.innerHit(new InnerHitBuilder());
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -174,7 +174,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testInnerHits_withSortingAndPagination_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME);
-        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of());
+        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), false);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Avg);
 
@@ -233,7 +233,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            true
+            true,
+            false
         );
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Max);

@@ -104,7 +104,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
                 DocumentField field = hitContext.hit().field("hybridization_sub_query_scores");
                 assertNotNull(String.valueOf(field), "Expected _hybridization field to be present");
                 assertEquals(1, field.getValues().size());
-                assertSame(scores, field.getValues().get(0));  // Check reference
+                assertSame(scores, field.getValues().get(0));
             }
         }
     }
