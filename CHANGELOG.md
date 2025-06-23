@@ -8,7 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 - [Hybrid] Support Sub Query Scores for Hybrid Search ([#1369](https://github.com/opensearch-project/neural-search/pull/1369))
 
-
 ### Enhancements
 
 ### Bug Fixes
