@@ -602,6 +602,86 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         assertEquals(expectedCompoundDocsOne, compoundTopDocsOne);
     }
 
+    public void testSubQueryScores_whenSubQueryScoreIsEnabled_thenSuccessful() {
+        MinMaxScoreNormalizationTechnique normalizationTechnique = new MinMaxScoreNormalizationTechnique();
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .subQueryScores(true)
+            .build();
+        Map<Integer, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
+
+        CompoundTopDocs expectedCompoundDocs = new CompoundTopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopDocs(
+                    new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] { new ScoreDoc(2, 1.0f), new ScoreDoc(4, DELTA_FOR_SCORE_ASSERTION) }
+                )
+            ),
+            false,
+            SEARCH_SHARD
+        );
+
+        Map<Integer, float[]> expectedDocIdToSubqueryScores = Map.ofEntries(
+            Map.entry(2, new float[] { 0.5f }),
+            Map.entry(4, new float[] { 0.2f })
+        );
+        assertEquals(expectedDocIdToSubqueryScores.size(), docIdToSubqueryScores.size());
+        for (Map.Entry<Integer, float[]> entry : expectedDocIdToSubqueryScores.entrySet()) {
+            int docId = entry.getKey();
+            float[] expectedScores = entry.getValue();
+            float[] actualScores = docIdToSubqueryScores.get(docId);
+
+            assertArrayEquals("Scores don't match for docId: " + docId, expectedScores, actualScores, 0.0001f);
+        }
+        assertNotNull(compoundTopDocs);
+        assertEquals(1, compoundTopDocs.size());
+        assertNotNull(compoundTopDocs.get(0).getTopDocs());
+        assertCompoundTopDocs(
+            new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs().toArray(new ScoreDoc[0])),
+            compoundTopDocs.get(0).getTopDocs().get(0)
+        );
+    }
+
+    public void testSubQueryScores_whenSubQueryScoreIsDisabled_thenSuccessful() {
+        MinMaxScoreNormalizationTechnique normalizationTechnique = new MinMaxScoreNormalizationTechnique();
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .subQueryScores(false)
+            .build();
+        Map<Integer, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
+
+        assertTrue(docIdToSubqueryScores.isEmpty());
+    }
+
     public void testInvalidParameters() {
         Map<String, Object> parameters = new HashMap<>();
         List<Map<String, Object>> lowerBoundsList = List.of(
