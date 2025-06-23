@@ -109,6 +109,11 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
             this.queryTokensSupplier = () -> queryTokens;
         }
+
+        this.queryCut = in.readOptionalInt();
+        this.k = in.readOptionalInt();
+        this.heapFactor = in.readOptionalFloat();
+
         // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
         // after supporting query by tokens, queryText and modelId can be null. here we write an empty String instead
         if (StringUtils.EMPTY.equals(this.queryText)) {
@@ -136,6 +141,10 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         } else {
             out.writeBoolean(false);
         }
+
+        out.writeOptionalInt(this.queryCut);
+        out.writeOptionalInt(this.k);
+        out.writeOptionalFloat(this.heapFactor);
     }
 
     @Override
