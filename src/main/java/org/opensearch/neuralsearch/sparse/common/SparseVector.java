@@ -15,8 +15,9 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
 
 import java.io.ByteArrayInputStream;
+import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.ObjectInputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -71,11 +72,14 @@ public class SparseVector implements Accountable {
             ByteArrayInputStream bais = new ByteArrayInputStream(
                 ArrayUtil.copyOfSubArray(bytesRef.bytes, bytesRef.offset, bytesRef.length)
             );
-            ObjectInputStream objectInputStream = new ObjectInputStream(bais)
+            DataInputStream dis = new DataInputStream(bais)
         ) {
             while (bais.available() > 0) {
-                String key = (String) objectInputStream.readObject();
-                float value = objectInputStream.readFloat();
+                int stringLength = dis.readInt();
+                byte[] stringBytes = new byte[stringLength];
+                dis.readFully(stringBytes);
+                String key = new String(stringBytes, StandardCharsets.UTF_8);
+                float value = dis.readFloat();
                 map.put(key, value);
             }
         } catch (Exception e) {

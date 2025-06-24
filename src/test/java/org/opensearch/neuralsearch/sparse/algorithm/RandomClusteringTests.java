@@ -42,9 +42,9 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
     }
 
     @Test
-    public void testClusterWithBetaOne() throws IOException {
+    public void testClusterWithClusterRatio0() throws IOException {
         // Create RandomClustering with beta=1 (single cluster)
-        RandomClustering clustering = new RandomClustering(10, 1.0f, 1, reader);
+        RandomClustering clustering = new RandomClustering(1.0f, 0, reader);
 
         // Call cluster method
         List<DocumentCluster> clusters = clustering.cluster(docFreqs);
@@ -83,15 +83,13 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         when(reader.read(3)).thenReturn(vector3);
         when(reader.read(4)).thenReturn(vector4);
 
-        // Create RandomClustering with beta=2 (multiple clusters)
-        // lambda=2, alpha=0.5, beta=2
-        RandomClustering clustering = new RandomClustering(2, 0.5f, 2, reader);
+        RandomClustering clustering = new RandomClustering(1f, 0.5f, reader);
 
         // Call cluster method
         List<DocumentCluster> clusters = clustering.cluster(docFreqs);
 
         // Verify that multiple clusters are returned
-        assertEquals(5, clusters.size());
+        assertEquals(3, clusters.size());
 
         // Verify that each cluster has a summary
         for (DocumentCluster cluster : clusters) {
@@ -110,7 +108,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
     @Test
     public void testClusterWithEmptyDocFreqs() throws IOException {
         // Create RandomClustering
-        RandomClustering clustering = new RandomClustering(10, 1.0f, 2, reader);
+        RandomClustering clustering = new RandomClustering(1.0f, 0.1f, reader);
 
         // Call cluster method with empty list
         List<DocumentCluster> clusters = clustering.cluster(Collections.emptyList());
@@ -123,7 +121,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
     @Test(expected = NullPointerException.class)
     public void testClusterWithNullReader() throws IOException {
         // Create RandomClustering with null reader
-        new RandomClustering(10, 1.0f, 2, null);
+        new RandomClustering(10, 1.0f, null);
     }
 
     @Test
@@ -136,7 +134,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         when(reader.read(4)).thenReturn(createVector(5, 50));
 
         // Create RandomClustering
-        RandomClustering clustering = new RandomClustering(2, 0.5f, 2, reader);
+        RandomClustering clustering = new RandomClustering(2, 0.5f, reader);
 
         // Call cluster method
         List<DocumentCluster> clusters = clustering.cluster(docFreqs);
@@ -166,17 +164,17 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         }
 
         // Test with different lambda values
-        RandomClustering clustering1 = new RandomClustering(5, 0.5f, 2, reader);
+        RandomClustering clustering1 = new RandomClustering(5, 0.5f, reader);
         List<DocumentCluster> clusters1 = clustering1.cluster(docFreqs);
 
-        RandomClustering clustering2 = new RandomClustering(10, 0.5f, 2, reader);
+        RandomClustering clustering2 = new RandomClustering(10, 0.5f, reader);
         List<DocumentCluster> clusters2 = clustering2.cluster(docFreqs);
 
         // Higher lambda should result in fewer clusters
         assertTrue(clusters1.size() >= clusters2.size());
 
         // Test with different alpha values
-        RandomClustering clustering3 = new RandomClustering(5, 0.3f, 2, reader);
+        RandomClustering clustering3 = new RandomClustering(5, 0.3f, reader);
         List<DocumentCluster> clusters3 = clustering3.cluster(docFreqs);
 
         // Verify that clusters are created with different alpha
@@ -200,7 +198,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         when(reader.read(4)).thenReturn(vector4);
 
         // Create clustering with 3 clusters
-        RandomClustering clustering = new RandomClustering(2, 1.0f, 3000, reader);
+        RandomClustering clustering = new RandomClustering(2, 1.0f, reader);
         List<DocumentCluster> clusters = clustering.cluster(docFreqs);
 
         // Verify that we have clusters

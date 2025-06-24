@@ -8,14 +8,11 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.codec.InMemoryClusteredPosting;
-import org.opensearch.neuralsearch.sparse.codec.InMemorySparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
-import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -27,36 +24,6 @@ public class ClusteringTask implements Supplier<PostingClusters> {
     private final PostingClustering postingClustering;
     private final InMemoryKey.IndexKey key;
     private Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap;
-
-    public ClusteringTask(
-        BytesRef term,
-        Collection<DocFreq> docs,
-        InMemoryKey.IndexKey key,
-        float alpha,
-        int beta,
-        int lambda,
-        Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap
-    ) {
-        this.docs = docs.stream().toList();
-        this.term = BytesRef.deepCopyOf(term);
-        this.key = key;
-        this.newToOldDocIdMap = Collections.unmodifiableMap(newToOldDocIdMap);
-        this.postingClustering = new PostingClustering(lambda, new RandomClustering(lambda, alpha, beta, (newDocId) -> {
-            Pair<Integer, InMemoryKey.IndexKey> oldDocId = this.newToOldDocIdMap.get(newDocId);
-            if (oldDocId != null) {
-                InMemorySparseVectorForwardIndex oldIndex = InMemorySparseVectorForwardIndex.get(oldDocId.getRight());
-                if (oldIndex != null) {
-                    return oldIndex.getForwardIndexReader().readSparseVector(oldDocId.getLeft());
-                }
-            }
-            InMemorySparseVectorForwardIndex newIndex = InMemorySparseVectorForwardIndex.get(this.key);
-            if (newIndex != null) {
-                SparseVector vector = newIndex.getForwardIndexReader().readSparseVector(newDocId);
-                return vector;
-            }
-            return null;
-        }));
-    }
 
     public ClusteringTask(BytesRef term, Collection<DocFreq> docs, InMemoryKey.IndexKey key, PostingClustering postingClustering) {
         this.docs = docs.stream().toList();

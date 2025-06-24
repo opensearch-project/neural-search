@@ -17,16 +17,16 @@ import java.util.List;
 public class PostingClustering {
 
     private final static int MINIMAL_DOC_SIZE_TO_CLUSTER = 10;
-    private final int lambda;
+    private final int nPostings;
     private final Clustering clustering;
 
-    public PostingClustering(int lambda, Clustering clustering) {
-        this.lambda = lambda;
+    public PostingClustering(int nPostings, Clustering clustering) {
+        this.nPostings = nPostings;
         this.clustering = clustering;
     }
 
     private List<DocFreq> preprocess(List<DocFreq> postings) {
-        return PostingsProcessor.getTopK(postings, lambda);
+        return PostingsProcessor.getTopK(postings, nPostings);
     }
 
     public List<DocumentCluster> cluster(List<DocFreq> postings) throws IOException {

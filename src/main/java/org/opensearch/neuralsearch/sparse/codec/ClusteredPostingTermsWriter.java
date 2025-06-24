@@ -19,7 +19,7 @@ import org.apache.lucene.store.DataOutput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.IOUtils;
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusteringTask;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
@@ -30,7 +30,6 @@ import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.ValueEncoder;
-import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -38,6 +37,10 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
 
 /**
  * ClusteredPostingTermsWriter is used to write postings for each segment.
@@ -78,18 +81,12 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         key = new InMemoryKey.IndexKey(this.segmentInfo, fieldInfo);
         SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.getOrCreate(key, maxDoc);
         assert (index != null);
-        int beta = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.BETA_FIELD));
-        int lambda = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.LAMBDA_FIELD));
-        float alpha = Float.parseFloat(fieldInfo.attributes().get(SparseMethodContext.ALPHA_FIELD));
-        int clusterUntilDocCountReach = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.CLUSTER_UNTIL_FIELD));
+        float cluster_ratio = Float.parseFloat(fieldInfo.attributes().get(CLUSTER_RATIO_FIELD));
+        int nPostings = Integer.parseInt(fieldInfo.attributes().get(N_POSTINGS_FIELD));
+        float summaryPruneRatio = Float.parseFloat(fieldInfo.attributes().get(SUMMARY_PRUNE_RATIO_FIELD));
         this.postingClustering = new PostingClustering(
-            lambda,
-            new RandomClustering(
-                lambda,
-                alpha,
-                clusterUntilDocCountReach > 0 ? 1 : beta,
-                (docId) -> index.getForwardIndexReader().readSparseVector(docId)
-            )
+            nPostings,
+            new RandomClustering(summaryPruneRatio, cluster_ratio, (docId) -> index.getForwardIndexReader().readSparseVector(docId))
         );
     }
 

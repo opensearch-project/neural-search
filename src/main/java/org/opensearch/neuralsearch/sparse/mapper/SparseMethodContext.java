@@ -16,7 +16,12 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.mapper.MapperParsingException;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.NAME_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
 
 /**
  * SparseMethodContext is responsible for handling the parameters of sparse method.
@@ -26,55 +31,34 @@ import java.util.Map;
 @Getter
 @EqualsAndHashCode
 public class SparseMethodContext implements ToXContentFragment, Writeable {
-    private static final String NAME_FIELD = "name";
-    public static final String LAMBDA_FIELD = "lambda";
-    public static final String ALPHA_FIELD = "alpha";
-    public static final String BETA_FIELD = "beta";
-    public static final String CLUSTER_UNTIL_FIELD = "cluster_until_doc_count_reach";
-
     private final String name;
-    private final int lambda;
-    private final float alpha;
-    private final int beta;
-    private final int clusterUntilDocCountReach;
+    private final MethodComponentContext methodComponentContext;
 
     public SparseMethodContext(StreamInput in) throws IOException {
         this.name = in.readString();
-        this.lambda = in.readOptionalInt();
-        this.alpha = in.readOptionalFloat();
-        this.beta = in.readOptionalInt();
-        this.clusterUntilDocCountReach = in.readOptionalInt();
+        this.methodComponentContext = new MethodComponentContext(in);
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         out.writeString(this.name);
-        out.writeOptionalInt(this.lambda);
-        out.writeOptionalFloat(this.alpha);
-        out.writeOptionalInt(this.beta);
-        out.writeOptionalInt(this.clusterUntilDocCountReach);
+        this.methodComponentContext.writeTo(out);
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(NAME_FIELD, this.name);
-        builder.field(LAMBDA_FIELD, this.lambda);
-        builder.field(ALPHA_FIELD, this.alpha);
-        builder.field(BETA_FIELD, this.beta);
-        builder.field(CLUSTER_UNTIL_FIELD, this.clusterUntilDocCountReach);
+        builder = methodComponentContext.toXContent(builder, params);
         return builder;
     }
 
+    @SuppressWarnings("unchecked")
     public static SparseMethodContext parse(Object in) {
         if (!(in instanceof Map<?, ?>)) {
             throw new MapperParsingException("Unable to parse mapping into SparseMethodContext. Object not of type \"Map\"");
         }
         Map<String, Object> methodMap = (Map<String, Object>) in;
         String name = "";
-        int lambda = 6000;
-        float alpha = 0.4f;
-        int beta = 400;
-        int clusterUntilDocCountReach = 0;
+        Map<String, Object> parameters = new HashMap<>();
         String key;
         Object value;
         for (Map.Entry<String, Object> methodEntry : methodMap.entrySet()) {
@@ -82,14 +66,29 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
             value = methodEntry.getValue();
             if (NAME_FIELD.equals(key)) {
                 name = (String) value;
-            } else if (LAMBDA_FIELD.equals(key)) {
-                lambda = (int) value;
-            } else if (ALPHA_FIELD.equals(key)) {
-                alpha = ((Double) value).floatValue();
-            } else if (BETA_FIELD.equals(key)) {
-                beta = (int) value;
-            } else if (CLUSTER_UNTIL_FIELD.equals(key)) {
-                clusterUntilDocCountReach = (int) value;
+            } else if (PARAMETERS_FIELD.equals(key)) {
+                if (value == null) {
+                    parameters = null;
+                    continue;
+                }
+
+                if (!(value instanceof Map)) {
+                    throw new MapperParsingException("Unable to parse parameters for main method component");
+                }
+
+                // Interpret all map parameters as sub-MethodComponentContexts
+                @SuppressWarnings("unchecked")
+                Map<String, Object> parametersTemp = ((Map<String, Object>) value).entrySet()
+                    .stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, e -> {
+                        Object v = e.getValue();
+                        if (v instanceof Map) {
+                            return MethodComponentContext.parse(v);
+                        }
+                        return v;
+                    }));
+
+                parameters = parametersTemp;
             } else {
                 throw new MapperParsingException("Invalid parameter: " + key);
             }
@@ -97,6 +96,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
         if (name.isEmpty()) {
             throw new MapperParsingException(NAME_FIELD + " needs to be set");
         }
-        return new SparseMethodContext(name, lambda, alpha, beta, clusterUntilDocCountReach);
+        MethodComponentContext methodComponentContext = new MethodComponentContext(name, parameters);
+        return new SparseMethodContext(name, methodComponentContext);
     }
 }

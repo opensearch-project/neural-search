@@ -322,6 +322,11 @@ public class NeuralSearch extends Plugin
     }
 
     @Override
+    public Map<String, Mapper.TypeParser> getMappers() {
+        return Collections.singletonMap(SparseTokensFieldMapper.CONTENT_TYPE, new SparseTokensFieldMapper.SparseTypeParser());
+    }
+
+    @Override
     public Optional<CodecServiceFactory> getCustomCodecServiceFactory(IndexSettings indexSettings) {
         if (indexSettings.getValue(SparseSettings.IS_SPARSE_INDEX_SETTING)) {
             return Optional.of((config) -> new SparseCodecService(config, indexSettings));

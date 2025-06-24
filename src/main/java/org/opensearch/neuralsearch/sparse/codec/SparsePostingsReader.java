@@ -24,7 +24,6 @@ import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
-import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -35,6 +34,11 @@ import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ALGO_TRIGGER_DOC_COUNT_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
 
 /**
  * Merge sparse postings
@@ -69,13 +73,13 @@ public class SparsePostingsReader {
             sparseTermsLuceneWriter.writeFieldNumber(fieldInfo.number);
 
             InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(mergeState.segmentInfo, fieldInfo);
-            int beta = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.BETA_FIELD));
-            int lambda = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.LAMBDA_FIELD));
-            float alpha = Float.parseFloat(fieldInfo.attributes().get(SparseMethodContext.ALPHA_FIELD));
-            int clusterUtilDocCountReach = Integer.parseInt(fieldInfo.attributes().get(SparseMethodContext.CLUSTER_UNTIL_FIELD));
+            float clusterRatio = Float.parseFloat(fieldInfo.attributes().get(CLUSTER_RATIO_FIELD));
+            int nPostings = Integer.parseInt(fieldInfo.attributes().get(N_POSTINGS_FIELD));
+            float summaryPruneRatio = Float.parseFloat(fieldInfo.attributes().get(SUMMARY_PRUNE_RATIO_FIELD));
+            int clusterUtilDocCountReach = Integer.parseInt(fieldInfo.attributes().get(ALGO_TRIGGER_DOC_COUNT_FIELD));
 
             if (clusterUtilDocCountReach > 0 && docCount < clusterUtilDocCountReach) {
-                beta = 1;
+                clusterRatio = 0;
             }
 
             // get all terms of old segments from InMemoryClusteredPosting
@@ -91,17 +95,18 @@ public class SparsePostingsReader {
             for (BytesRef term : allTerms) {
                 termBatch.add(term);
                 if (termBatch.size() == BATCH_SIZE || i == allTerms.size() - 1) {
-                    if (beta == 1) {
+                    if (clusterRatio == 0) {
                         futures.add(
                             CompletableFuture.completedFuture(
-                                new BatchClusteringTask(termBatch, key, alpha, beta, lambda, mergeState, fieldInfo).get()
+                                new BatchClusteringTask(termBatch, key, summaryPruneRatio, clusterRatio, nPostings, mergeState, fieldInfo)
+                                    .get()
                             )
                         );
 
                     } else {
                         futures.add(
                             CompletableFuture.supplyAsync(
-                                new BatchClusteringTask(termBatch, key, alpha, beta, lambda, mergeState, fieldInfo),
+                                new BatchClusteringTask(termBatch, key, summaryPruneRatio, clusterRatio, nPostings, mergeState, fieldInfo),
                                 ClusterTrainingRunning.getInstance().getExecutor()
                             )
                         );
