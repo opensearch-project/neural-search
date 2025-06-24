@@ -328,7 +328,7 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Mapper.TypeParser> getMappers() {
-        return Collections.singletonMap(SparseTokensFieldMapper.CONTENT_TYPE, SparseTokensFieldMapper.PARSER);
+        return Collections.singletonMap(SparseTokensFieldMapper.CONTENT_TYPE, new SparseTokensFieldMapper.SparseTypeParser());
     }
 
     @Override

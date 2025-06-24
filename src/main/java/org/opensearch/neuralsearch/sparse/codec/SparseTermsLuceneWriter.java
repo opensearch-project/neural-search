@@ -9,7 +9,7 @@ import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.IOUtils;
+import org.opensearch.common.util.io.IOUtils;
 
 import java.io.IOException;
 

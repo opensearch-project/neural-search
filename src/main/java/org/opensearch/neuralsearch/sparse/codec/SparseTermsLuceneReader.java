@@ -13,7 +13,7 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.IOUtils;
+import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
@@ -21,7 +21,6 @@ import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -149,7 +148,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
     public Set<BytesRef> getTerms(String field) {
         Map<BytesRef, Long> termsMapping = fieldToTerms.get(field);
         if (termsMapping == null) {
-            return Collections.EMPTY_SET;
+            return Set.of();
         }
         return termsMapping.keySet();
     }

@@ -27,26 +27,26 @@ import java.util.function.Supplier;
 public class BatchClusteringTask implements Supplier<List<Pair<BytesRef, PostingClusters>>> {
     private final List<BytesRef> terms;
     private final InMemoryKey.IndexKey key;
-    private final float alpha;
-    private final int beta;
-    private final int lambda;
+    private final float summaryPruneRatio;
+    private final float clusterRatio;
+    private final int nPostings;
     private final MergeState mergeState;
     private final FieldInfo fieldInfo;
 
     public BatchClusteringTask(
         List<BytesRef> terms,
         InMemoryKey.IndexKey key,
-        float alpha,
-        int beta,
-        int lambda,
+        float summaryPruneRatio,
+        float clusterRatio,
+        int nPostings,
         MergeState mergeState,
         FieldInfo fieldInfo
     ) {
         this.terms = terms;
         this.key = key;
-        this.alpha = alpha;
-        this.beta = beta;
-        this.lambda = lambda;
+        this.summaryPruneRatio = summaryPruneRatio;
+        this.clusterRatio = clusterRatio;
+        this.nPostings = nPostings;
         this.mergeState = mergeState;
         this.fieldInfo = fieldInfo;
     }
@@ -64,8 +64,8 @@ public class BatchClusteringTask implements Supplier<List<Pair<BytesRef, Posting
                     newToOldDocIdMap
                 );
                 PostingClustering postingClustering = new PostingClustering(
-                    lambda,
-                    new RandomClustering(lambda, alpha, beta, (newDocId) -> {
+                    nPostings,
+                    new RandomClustering(summaryPruneRatio, clusterRatio, (newDocId) -> {
                         Pair<Integer, InMemoryKey.IndexKey> oldDocId = newToOldDocIdMap.get(newDocId);
                         if (oldDocId != null) {
                             InMemorySparseVectorForwardIndex oldIndex = InMemorySparseVectorForwardIndex.get(oldDocId.getRight());

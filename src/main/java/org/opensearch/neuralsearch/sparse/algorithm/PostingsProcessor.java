@@ -38,7 +38,7 @@ public class PostingsProcessor {
         return new ArrayList<>(pq);
     }
 
-    public static void summarize(DocumentCluster cluster, SparseVectorReader reader, float alpha) throws IOException {
+    public static void summarize(DocumentCluster cluster, SparseVectorReader reader, float summaryPruneRatio) throws IOException {
         Map<Integer, Integer> summary = new HashMap<>();
         DocFreqIterator iterator = cluster.getDisi();
         while (iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
@@ -64,7 +64,7 @@ public class PostingsProcessor {
             .collect(Collectors.toList());
         // count total freq of items
         double totalFreq = items.stream().mapToDouble(SparseVector.Item::getIntFreq).sum();
-        int freqThreshold = (int) Math.floor(totalFreq * alpha);
+        int freqThreshold = (int) Math.floor(totalFreq * summaryPruneRatio);
         int freqSum = 0;
         int idx = 0;
         for (SparseVector.Item item : items) {

@@ -14,7 +14,7 @@ import org.opensearch.index.mapper.ValueFetcher;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.lookup.SearchLookup;
 
-import java.util.Collections;
+import java.util.Map;
 import java.util.function.Supplier;
 
 /**
@@ -27,7 +27,7 @@ public class SparseTokensFieldType extends MappedFieldType {
     protected boolean hasDocValues;
 
     public SparseTokensFieldType(String name, SparseMethodContext sparseMethodContext, boolean stored, boolean hasDocValues) {
-        super(name, false, stored, hasDocValues, TextSearchInfo.NONE, Collections.EMPTY_MAP);
+        super(name, false, stored, hasDocValues, TextSearchInfo.NONE, Map.of());
         this.sparseMethodContext = sparseMethodContext;
         this.stored = stored;
         this.hasDocValues = hasDocValues;

@@ -10,10 +10,11 @@ import org.opensearch.neuralsearch.sparse.common.DocFreq;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
+import org.opensearch.common.Randomness;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 /**
  * Random clustering algorithm
@@ -21,9 +22,8 @@ import java.util.Random;
 @AllArgsConstructor
 public class RandomClustering implements Clustering {
 
-    private final int lambda;
-    private final float alpha;
-    private final int beta;
+    private final float summaryPruneRatio;
+    private final float clusterRatio;
     @NonNull
     private final SparseVectorReader reader;
 
@@ -32,17 +32,14 @@ public class RandomClustering implements Clustering {
         if (docFreqs.isEmpty()) {
             return List.of();
         }
-        if (beta == 1) {
+        if (clusterRatio == 0) {
             DocumentCluster cluster = new DocumentCluster(null, docFreqs, true);
             return List.of(cluster);
         }
         int size = docFreqs.size();
         // generate beta unique random centers
-        Random random = new Random();
-        int num_cluster = (int) Math.ceil((double) (size * beta) / lambda);
-        // Ensure num_cluster doesn't exceed the available document count
-        num_cluster = Math.min(num_cluster, size);
-        int[] centers = random.ints(0, size).distinct().limit(num_cluster).toArray();
+        int num_cluster = Math.min(size, Math.max(1, (int) Math.ceil(size * clusterRatio)));
+        int[] centers = Randomness.get().ints(0, size).distinct().limit(num_cluster).toArray();
         List<List<DocFreq>> docAssignments = new ArrayList<>(num_cluster);
         List<SparseVector> sparseVectors = new ArrayList<>();
         for (int i = 0; i < num_cluster; i++) {
@@ -76,7 +73,7 @@ public class RandomClustering implements Clustering {
         for (int i = 0; i < num_cluster; ++i) {
             if (docAssignments.get(i).isEmpty()) continue;
             DocumentCluster cluster = new DocumentCluster(null, docAssignments.get(i), false);
-            PostingsProcessor.summarize(cluster, this.reader, this.alpha);
+            PostingsProcessor.summarize(cluster, this.reader, this.summaryPruneRatio);
             clusters.add(cluster);
         }
         return clusters;

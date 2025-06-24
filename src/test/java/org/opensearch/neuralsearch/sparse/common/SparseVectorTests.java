@@ -10,8 +10,9 @@ import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
 
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -263,14 +264,16 @@ public class SparseVectorTests extends AbstractSparseTestBase {
 
     private BytesRef serializeMap(Map<String, Float> map) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        DataOutputStream dos = new DataOutputStream(baos);
 
         for (Map.Entry<String, Float> entry : map.entrySet()) {
-            oos.writeObject(entry.getKey());
-            oos.writeFloat(entry.getValue());
+            byte[] keyBytes = entry.getKey().getBytes(StandardCharsets.UTF_8);
+            dos.writeInt(keyBytes.length);
+            dos.write(keyBytes);
+            dos.writeFloat(entry.getValue());
         }
 
-        oos.flush();
+        dos.flush();
         byte[] bytes = baos.toByteArray();
         return new BytesRef(bytes);
     }
