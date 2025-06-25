@@ -93,8 +93,7 @@ public class PostingWithClustersScorer extends Scorer {
             if (null == reader) {
                 SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(sparsePostingsEnum.getIndexKey());
                 if (index != null) {
-                    SparseVectorForwardIndex.SparseVectorForwardIndexReader indexReader = index.getForwardIndexReader();
-                    reader = indexReader::readSparseVector;
+                    reader = index.getReader();
                 } else {
                     reader = (docId) -> { return null; };
                 }

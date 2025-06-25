@@ -8,6 +8,7 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.codecs.BlockTermState;
 import org.apache.lucene.codecs.FieldsConsumer;
 import org.apache.lucene.codecs.NormsProducer;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.Fields;
 import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.IndexFileNames;
@@ -20,6 +21,7 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
 import org.opensearch.neuralsearch.sparse.common.MergeHelper;
+import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -132,10 +134,12 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         List<String> nonSparseFields = new ArrayList<>();
         List<String> sparseFields = new ArrayList<>();
         for (String field : fields) {
-            if (!SparseTokensField.isSparseField(this.state.fieldInfos.fieldInfo(field))) {
-                nonSparseFields.add(field);
-            } else {
+            FieldInfo fieldInfo = this.state.fieldInfos.fieldInfo(field);
+            if (SparseTokensField.isSparseField(fieldInfo)
+                && PredicateUtils.shouldRunSeisPredicate.test(this.state.segmentInfo, fieldInfo)) {
                 sparseFields.add(field);
+            } else {
+                nonSparseFields.add(field);
             }
         }
         if (!nonSparseFields.isEmpty()) {
@@ -147,9 +151,8 @@ public class SparsePostingsConsumer extends FieldsConsumer {
             };
             this.delegate.write(maskedFields, norms);
         }
-
         // if this is not a merge, write the sparse fields, if it's from merge, we handle it from merge()
-        if (!this.fromMerge) {
+        if (!this.fromMerge && !sparseFields.isEmpty()) {
             writeSparseTerms(fields, norms, sparseFields);
         }
     }

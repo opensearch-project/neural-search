@@ -17,6 +17,7 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.MergeHelper;
+import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 
 import java.io.IOException;
@@ -51,11 +52,13 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
     }
 
     private void addBinary(FieldInfo field, DocValuesProducer valuesProducer, boolean isMerge) throws IOException {
+        if (!PredicateUtils.shouldRunSeisPredicate.test(this.state.segmentInfo, field)) {
+            return;
+        }
         BinaryDocValues binaryDocValues = valuesProducer.getBinary(field);
         InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(this.state.segmentInfo, field);
         int docCount = this.state.segmentInfo.maxDoc();
-        SparseVectorForwardIndex.SparseVectorForwardIndexWriter writer = InMemorySparseVectorForwardIndex.getOrCreate(key, docCount)
-            .getForwardIndexWriter();
+        SparseVectorForwardIndex.SparseVectorWriter writer = InMemorySparseVectorForwardIndex.getOrCreate(key, docCount).getWriter();
         if (writer == null) {
             throw new IllegalStateException("Forward index writer is null");
         }

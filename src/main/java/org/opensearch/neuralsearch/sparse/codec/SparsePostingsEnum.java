@@ -8,6 +8,7 @@ import lombok.Getter;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.BytesRef;
+import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
 import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
@@ -44,7 +45,8 @@ public class SparsePostingsEnum extends PostingsEnum {
 
     @Override
     public int freq() throws IOException {
-        throw new UnsupportedOperationException();
+        assert this.currentDocFreq != null;
+        return ByteQuantizer.getUnsignedByte(this.currentDocFreq.freq());
     }
 
     @Override

@@ -10,6 +10,7 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
 import java.util.Map;
@@ -52,19 +53,21 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
 
     // private final Map<Integer, SparseVector> sparseVectorMap = new ConcurrentHashMap<>();
     private final SparseVector[] sparseVectors;
+    private final SparseVectorReader reader = new InMemorySparseVectorReader();
+    private final SparseVectorWriter writer = new InMemorySparseVectorWriter();
 
     public InMemorySparseVectorForwardIndex(int docCount) {
         sparseVectors = new SparseVector[docCount];
     }
 
     @Override
-    public SparseVectorForwardIndexReader getForwardIndexReader() {
-        return new InMemorySparseVectorForwardIndexReader();
+    public SparseVectorReader getReader() {
+        return reader;
     }
 
     @Override
-    public SparseVectorForwardIndexWriter getForwardIndexWriter() {
-        return new InMemorySparseVectorForwardIndexWriter();
+    public SparseVectorWriter getWriter() {
+        return writer;
     }
 
     @Override
@@ -77,21 +80,15 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         return ramUsed;
     }
 
-    private class InMemorySparseVectorForwardIndexReader implements SparseVectorForwardIndexReader {
-
+    private class InMemorySparseVectorReader implements SparseVectorReader {
         @Override
-        public SparseVector readSparseVector(int docId) {
+        public SparseVector read(int docId) throws IOException {
             assert docId < sparseVectors.length : "docId " + docId + " is out of bounds";
             return sparseVectors[docId];
         }
-
-        @Override
-        public BytesRef read(int docId) {
-            throw new UnsupportedOperationException();
-        }
     }
 
-    private class InMemorySparseVectorForwardIndexWriter implements SparseVectorForwardIndexWriter {
+    private class InMemorySparseVectorWriter implements SparseVectorWriter {
 
         @Override
         public void write(int docId, SparseVector vector) {
@@ -103,8 +100,5 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         public void write(int docId, BytesRef doc) throws IOException {
             write(docId, new SparseVector(doc));
         }
-
-        @Override
-        public void close() {}
     }
 }
