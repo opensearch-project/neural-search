@@ -48,13 +48,19 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew check -x integTest"
+          su `id -un 1000` -c "./gradlew check --parallel && ./gradlew jacocoTestReport && cp -v build/reports/jacoco/test/jacocoTestReport.xml ./jacocoTestReport.xml"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ matrix.os }} == "ubuntu-latest"
+        with:
+          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
+          path: ./jacocoTestReport.xml
 
       - name: Upload Coverage Report
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./jacocoTestReport.xml
 
   Check-neural-search-windows:
     strategy:
@@ -152,7 +158,7 @@ jobs:
           distribution: temurin
       - name: Build and Run Tests
         run: |
-          ./gradlew integTest
+          su `id -un 1000` -c "./gradlew precommit -x integTest"
 
   integMultiNodeTest:
     needs: Precommit-neural-search-linux
