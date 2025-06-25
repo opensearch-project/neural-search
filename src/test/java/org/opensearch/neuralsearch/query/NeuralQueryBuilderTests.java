@@ -884,6 +884,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testRewrite_whenVectorSupplierAndVectorSet_thenReturnKNNQueryBuilder() {
+        setUpClusterService(Version.CURRENT);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
@@ -911,6 +912,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testRewrite_whenFilterSet_thenKNNQueryBuilderFilterSet() {
+        setUpClusterService(Version.CURRENT);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)

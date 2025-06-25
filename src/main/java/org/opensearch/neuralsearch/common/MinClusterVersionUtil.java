@@ -26,6 +26,10 @@ public final class MinClusterVersionUtil {
     private static final Version MINIMAL_SUPPORTED_VERSION_QUERY_IMAGE_FIX = Version.V_2_19_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_PAGINATION_IN_HYBRID_QUERY = Version.V_2_19_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_ORIGINAL_QUERY_TEXT = Version.V_3_0_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER = Version.V_3_0_0;
+
+    // Constant for neural_knn_query version check
+    public static final String NEURAL_KNN_QUERY = "neural_knn_query";
 
     // Note this minimal version will act as a override
     private static final Map<String, Version> MINIMAL_VERSION_NEURAL = ImmutableMap.<String, Version>builder()
@@ -33,6 +37,7 @@ public final class MinClusterVersionUtil {
         .put(MAX_DISTANCE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH)
         .put(MIN_SCORE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_RADIAL_SEARCH)
         .put(QUERY_IMAGE_FIELD.getPreferredName(), MINIMAL_SUPPORTED_VERSION_QUERY_IMAGE_FIX)
+        .put(NEURAL_KNN_QUERY, MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER)
         .build();
 
     public static boolean isClusterOnOrAfterMinReqVersionForDefaultModelIdSupport() {
@@ -65,5 +70,14 @@ public final class MinClusterVersionUtil {
      */
     public static boolean isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(Version version) {
         return version.onOrAfter(MINIMAL_SUPPORTED_VERSION_NEURAL_ORIGINAL_QUERY_TEXT);
+    }
+
+    /**
+     * Checks if the cluster min version supports NeuralKNNQueryBuilder
+     *
+     * @return true if the cluster version supports NeuralKNNQueryBuilder
+     */
+    public static boolean isClusterOnOrAfterMinReqVersionForNeuralKNNQueryBuilder() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER);
     }
 }
