@@ -16,6 +16,9 @@ import java.util.function.Supplier;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.lucene.document.FeatureField;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.Version;
 import org.opensearch.neuralsearch.query.ModelInferenceQueryBuilder;
@@ -355,8 +358,20 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             .heapFactor(heapFactor == null ? DEFAULT_HEAP_FACTOR : heapFactor)
             .k((k == null || k == 0) ? DEFAULT_TOP_K : k)
             .build();
+
         SparseVectorQuery.SparseVectorQueryBuilder builder = new SparseVectorQuery.SparseVectorQueryBuilder();
-        builder.fieldName(fieldName).queryContext(sparseQueryContext).queryVector(new SparseVector(queryTokens));
+        builder.fieldName(fieldName)
+            .queryContext(sparseQueryContext)
+            .queryVector(new SparseVector(queryTokens))
+            .originalQuery(constructRankFeaturesQuery(queryTokens));
+        return builder.build();
+    }
+
+    private Query constructRankFeaturesQuery(Map<String, Float> queryTokens) {
+        BooleanQuery.Builder builder = new BooleanQuery.Builder();
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
+            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
+        }
         return builder.build();
     }
 

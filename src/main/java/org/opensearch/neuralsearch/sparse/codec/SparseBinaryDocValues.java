@@ -10,6 +10,7 @@ import org.apache.lucene.index.DocIDMerger;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
 
@@ -71,9 +72,9 @@ public class SparseBinaryDocValues extends BinaryDocValues {
         if (key == null) return null;
         InMemorySparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
         if (index == null) return null;
-        InMemorySparseVectorForwardIndex.SparseVectorForwardIndexReader reader = index.getForwardIndexReader();
+        SparseVectorReader reader = index.getReader();
         int oldDocId = this.current.getDocId();
-        return reader.readSparseVector(oldDocId);
+        return reader.read(oldDocId);
     }
 
     /**

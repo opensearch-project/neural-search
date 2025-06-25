@@ -86,7 +86,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         float summaryPruneRatio = Float.parseFloat(fieldInfo.attributes().get(SUMMARY_PRUNE_RATIO_FIELD));
         this.postingClustering = new PostingClustering(
             nPostings,
-            new RandomClustering(summaryPruneRatio, cluster_ratio, (docId) -> index.getForwardIndexReader().readSparseVector(docId))
+            new RandomClustering(summaryPruneRatio, cluster_ratio, (docId) -> index.getReader().read(docId))
         );
     }
 

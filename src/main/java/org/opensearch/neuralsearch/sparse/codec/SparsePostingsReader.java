@@ -17,19 +17,18 @@ import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.SparseTokensField;
 import org.opensearch.neuralsearch.sparse.algorithm.BatchClusteringTask;
+import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingRunning;
-import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.algorithm.PostingClusters;
 import org.opensearch.neuralsearch.sparse.common.DocFreq;
-import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
-import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
+import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
+import org.opensearch.neuralsearch.sparse.common.ValueEncoder;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -62,7 +61,8 @@ public class SparsePostingsReader {
         log.debug("Merge total doc: {}", docCount);
         List<FieldInfo> sparseFieldInfos = new ArrayList<>();
         for (FieldInfo fieldInfo : mergeState.mergeFieldInfos) {
-            if (SparseTokensField.isSparseField(fieldInfo)) {
+            if (SparseTokensField.isSparseField(fieldInfo)
+                && PredicateUtils.shouldRunSeisPredicate.test(mergeState.segmentInfo, fieldInfo)) {
                 sparseFieldInfos.add(fieldInfo);
             }
         }
@@ -90,11 +90,11 @@ public class SparsePostingsReader {
             List<CompletableFuture<List<Pair<BytesRef, PostingClusters>>>> futures = new ArrayList<>(
                 Math.round((float) allTerms.size() / BATCH_SIZE)
             );
-            int i = 0;
+            int index = 0;
             List<BytesRef> termBatch = new ArrayList<>(BATCH_SIZE);
             for (BytesRef term : allTerms) {
                 termBatch.add(term);
-                if (termBatch.size() == BATCH_SIZE || i == allTerms.size() - 1) {
+                if (termBatch.size() == BATCH_SIZE || index == allTerms.size() - 1) {
                     if (clusterRatio == 0) {
                         futures.add(
                             CompletableFuture.completedFuture(
@@ -102,7 +102,6 @@ public class SparsePostingsReader {
                                     .get()
                             )
                         );
-
                     } else {
                         futures.add(
                             CompletableFuture.supplyAsync(
@@ -113,7 +112,7 @@ public class SparsePostingsReader {
                     }
                     termBatch = new ArrayList<>(BATCH_SIZE);
                 }
-                ++i;
+                ++index;
             }
             for (int j = 0; j < futures.size(); ++j) {
                 try {
@@ -151,7 +150,15 @@ public class SparsePostingsReader {
                 SparseTerms sparseTerms = (SparseTerms) terms;
                 allTerms.addAll(sparseTerms.getReader().terms());
             } else {
-                throw new RuntimeException("terms should always be SparseTerms");
+                // fieldsProducer could be a delegate one as we need to merge normal segments into seis segment
+                TermsEnum termsEnum = terms.iterator();
+                while (true) {
+                    BytesRef term = termsEnum.next();
+                    if (term == null) {
+                        break;
+                    }
+                    allTerms.add(BytesRef.deepCopyOf(term));
+                }
             }
         }
         return allTerms;
@@ -161,7 +168,8 @@ public class SparsePostingsReader {
         MergeState mergeState,
         BytesRef term,
         FieldInfo fieldInfo,
-        Map<Integer, Pair<Integer, InMemoryKey.IndexKey>> newToOldDocIdMap
+        int[] newIdToFieldProducerIndex,
+        int[] newIdToOldId
     ) throws IOException {
         List<DocFreq> docFreqs = new ArrayList<>();
         for (int i = 0; i < mergeState.fieldsProducers.length; i++) {
@@ -172,6 +180,7 @@ public class SparsePostingsReader {
                 log.error("binaryDocValues is not SparseBinaryDocValuesPassThrough, {}", binaryDocValues.getClass().getName());
                 continue;
             }
+            SparseBinaryDocValuesPassThrough sparseBinaryDocValues = (SparseBinaryDocValuesPassThrough) binaryDocValues;
             Terms terms = fieldsProducer.terms(fieldInfo.name);
             if (terms == null) {
                 log.error("terms is null");
@@ -188,31 +197,30 @@ public class SparsePostingsReader {
                 continue;
             }
             PostingsEnum postings = termsEnum.postings(null);
-            if (!(postings instanceof SparsePostingsEnum)) {
-                log.error("postings is not SparsePostingsEnum, {}", postings);
-                continue;
-            }
-            InMemoryKey.IndexKey oldKey = new InMemoryKey.IndexKey(
-                ((SparseBinaryDocValuesPassThrough) binaryDocValues).getSegmentInfo(),
-                fieldInfo
-            );
-
-            SparsePostingsEnum sparsePostingsEnum = (SparsePostingsEnum) postings;
-            IteratorWrapper<DocumentCluster> clusterIter = sparsePostingsEnum.clusterIterator();
-            while (clusterIter.next() != null) {
-                DocFreqIterator docIter = clusterIter.getCurrent().getDisi();
-                while (docIter.nextDoc() != PostingsEnum.NO_MORE_DOCS) {
-                    if (docIter.docID() == -1) {
-                        log.error("docId is -1");
-                        continue;
-                    }
-                    int newDocId = mergeState.docMaps[i].get(docIter.docID());
-                    if (newDocId == -1) {
-                        continue;
-                    }
-                    newToOldDocIdMap.put(newDocId, Pair.of(docIter.docID(), oldKey));
-                    docFreqs.add(new DocFreq(newDocId, docIter.freq()));
+            boolean isSparsePostings = postings instanceof SparsePostingsEnum;
+            int docId = postings.nextDoc();
+            while (docId != PostingsEnum.NO_MORE_DOCS) {
+                if (docId == -1) {
+                    log.error("docId is -1");
+                    continue;
                 }
+                int newDocId = mergeState.docMaps[i].get(docId);
+                if (newDocId == -1) {
+                    continue;
+                }
+                newIdToFieldProducerIndex[newDocId] = i;
+                newIdToOldId[newDocId] = docId;
+                int freq = postings.freq();
+                byte freqByte = 0;
+                if (isSparsePostings) {
+                    // SparsePostingsEnum.freq() already transform byte freq to int
+                    freqByte = (byte) freq;
+                } else {
+                    // decode to float first
+                    freqByte = ByteQuantizer.quantizeFloatToByte(ValueEncoder.decodeFeatureValue(freq));
+                }
+                docFreqs.add(new DocFreq(newDocId, freqByte));
+                docId = postings.nextDoc();
             }
         }
         return docFreqs;

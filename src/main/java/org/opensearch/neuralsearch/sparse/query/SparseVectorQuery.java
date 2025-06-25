@@ -25,12 +25,14 @@ public class SparseVectorQuery extends Query {
     private final SparseVector queryVector;
     private final SparseQueryContext queryContext;
     private final String fieldName;
+    private final Query originalQuery;
 
     @Builder
-    public SparseVectorQuery(SparseVector queryVector, String fieldName, SparseQueryContext queryContext) {
+    public SparseVectorQuery(SparseVector queryVector, String fieldName, SparseQueryContext queryContext, Query originalQuery) {
         this.queryVector = queryVector;
         this.fieldName = fieldName;
         this.queryContext = queryContext;
+        this.originalQuery = originalQuery;
     }
 
     @Override
@@ -62,6 +64,6 @@ public class SparseVectorQuery extends Query {
 
     @Override
     public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        return new SparseQueryWeight(this, boost);
+        return new SparseQueryWeight(this, searcher, scoreMode, boost);
     }
 }

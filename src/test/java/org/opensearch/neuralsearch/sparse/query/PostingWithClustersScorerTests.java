@@ -477,7 +477,7 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.getOrCreate(indexKey, 10);
         SparseVector vector = mock(SparseVector.class);
         when(vector.dotProduct(queryDenseVector)).thenReturn(5);
-        index.getForwardIndexWriter().write(1, vector);
+        index.getWriter().write(1, vector);
 
         PostingWithClustersScorer scorer = new PostingWithClustersScorer(
             FIELD_NAME,

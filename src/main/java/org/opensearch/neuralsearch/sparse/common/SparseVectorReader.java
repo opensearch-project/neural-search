@@ -4,7 +4,9 @@
  */
 package org.opensearch.neuralsearch.sparse.common;
 
+import java.io.IOException;
+
 @FunctionalInterface
 public interface SparseVectorReader {
-    SparseVector read(int docId);
+    SparseVector read(int docId) throws IOException;
 }

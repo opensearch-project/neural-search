@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.query;
 
 import lombok.extern.log4j.Log4j2;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FilterCodecReader;
 import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.LeafReader;
@@ -14,7 +15,9 @@ import org.apache.lucene.index.SegmentReader;
 import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Explanation;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LeafCollector;
+import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
@@ -23,6 +26,7 @@ import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.codec.InMemorySparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.codec.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
+import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
@@ -33,10 +37,12 @@ import java.io.IOException;
 @Log4j2
 public class SparseQueryWeight extends Weight {
     private final float boost;
+    private final Weight booleanQueryWeight;
 
-    public SparseQueryWeight(SparseVectorQuery query, float boost) {
+    public SparseQueryWeight(SparseVectorQuery query, IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
         super(query);
         this.boost = boost;
+        this.booleanQueryWeight = query.getOriginalQuery().createWeight(searcher, scoreMode, boost);
     }
 
     @Override
@@ -65,11 +71,15 @@ public class SparseQueryWeight extends Weight {
         final SparseVectorQuery query = (SparseVectorQuery) parentQuery;
         SegmentInfo info = getSegmentInfo(context.reader());
         String fieldType = query.getFieldName();
+        FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(fieldType);
+        if (!PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
+            return booleanQueryWeight.scorerSupplier(context);
+        }
         SparseVectorReader sparseReader = null;
         if (info != null) {
             InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(info, fieldType);
             SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
-            sparseReader = index != null ? index.getForwardIndexReader()::readSparseVector : (docId -> { return null; });
+            sparseReader = index != null ? index.getReader() : (docId -> { return null; });
         }
         final Scorer scorer = new PostingWithClustersScorer(
             query.getFieldName(),

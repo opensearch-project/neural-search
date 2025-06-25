@@ -4,25 +4,25 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
+
+import java.io.IOException;
 
 /**
  * Interface for sparse vector forward index
  */
-public interface SparseVectorForwardIndex extends ForwardIndex {
-    @Override
-    SparseVectorForwardIndexReader getForwardIndexReader();  // covariant return type
+public interface SparseVectorForwardIndex {
+    SparseVectorReader getReader();  // covariant return type
 
-    @Override
-    SparseVectorForwardIndexWriter getForwardIndexWriter();  // covariant return type
+    SparseVectorWriter getWriter();  // covariant return type
 
-    interface SparseVectorForwardIndexReader extends ForwardIndex.ForwardIndexReader {
-        SparseVector readSparseVector(int docId);
-    }
+    interface SparseVectorWriter {
+        void write(int docId, SparseVector vector) throws IOException;
 
-    interface SparseVectorForwardIndexWriter extends ForwardIndex.ForwardIndexWriter {
-        void write(int docId, SparseVector vector);
+        void write(int docId, BytesRef data) throws IOException;
     }
 
     static void removeIndex(InMemoryKey.IndexKey key) {
