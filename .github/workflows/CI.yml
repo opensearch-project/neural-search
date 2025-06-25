@@ -48,19 +48,15 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew check --parallel && ./gradlew jacocoTestReport && cp -v build/reports/jacoco/test/jacocoTestReport.xml ./jacocoTestReport.xml"
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ matrix.os }} == "ubuntu-latest"
-        with:
-          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./jacocoTestReport.xml
+          su `id -un 1000` -c "./gradlew check --parallel && ./gradlew jacocoTestReport"
 
       - name: Upload Coverage Report
-        uses: codecov/codecov-action@v5
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && contains(matrix.os, 'ubuntu') && contains(matrix.java, '21') }}
         with:
+          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./jacocoTestReport.xml
+          path: ./build/reports/jacoco/test/jacocoTestReport.xml
 
   Check-neural-search-windows:
     strategy:
@@ -164,7 +160,7 @@ jobs:
     needs: Precommit-neural-search-linux
     strategy:
       matrix:
-        java: [ 21, 23 ]
+        java: [21,23]
         os: [ ubuntu-latest, windows-latest ]
     name: Multi-Node Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
