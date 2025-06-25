@@ -47,7 +47,6 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextEmbeddingModel();
-                loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
@@ -64,6 +63,7 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                 break;
             case MIXED:
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadAndWaitForModelToBeReady(modelId);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -80,8 +80,8 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                    loadAndWaitForModelToBeReady(modelId);
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
                     HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
                     QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);
@@ -105,11 +105,6 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
     ) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
-        // In rolling upgrade tests we will not clean up the resources created in old and mix
-        // so check if the model is already deployed then no need to deploy it again.
-        if (!isModelAlreadyDeployed(modelId)) {
-            loadModel(modelId);
-        }
         // Try to ensure all nodes are green before we do the search.
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         Map<String, Object> searchResponseAsMap = search(

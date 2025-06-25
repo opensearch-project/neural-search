@@ -42,7 +42,6 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadSparseEncodingModel();
-                loadModel(modelId);
                 createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
@@ -60,6 +59,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
                 break;
             case MIXED:
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                loadAndWaitForModelToBeReady(modelId);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -80,8 +80,8 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                    loadAndWaitForModelToBeReady(modelId);
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
                     addSparseEncodingDoc(
                         getIndexNameForTest(),
                         "2",
@@ -103,7 +103,6 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
-        loadModel(modelId);
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_SPARSE_ENCODING_FIELD)
             .queryText(TEXT)
