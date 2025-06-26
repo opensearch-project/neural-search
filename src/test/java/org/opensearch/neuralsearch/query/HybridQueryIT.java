@@ -1004,7 +1004,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             prepareKnnIndex(
                 TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                1
+                3
             );
             addDocsToIndex(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
         }
