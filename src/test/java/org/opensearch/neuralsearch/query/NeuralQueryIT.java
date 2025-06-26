@@ -37,6 +37,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_MULTI_DOC_INDEX_NAME = "test-neural-multi-doc-index";
     private static final String TEST_SEMANTIC_INDEX_SPARSE_NAME = "test-neural-sparse-semantic-index";
     private static final String TEST_QUERY_TEXT = "Hello world";
+    private static final String TEST_QUERY_TEXT_SPARSE = "Hello world a b";
     private static final String TEST_IMAGE_TEXT = "/9j/4AAQSkZJRgABAQAASABIAAD";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_1 = "test-knn-vector-1";
     private static final String TEST_KNN_VECTOR_FIELD_NAME_2 = "test-knn-vector-2";
@@ -531,7 +532,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist(TEST_SEMANTIC_INDEX_SPARSE_NAME, modelId, null);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(TEST_SEMANTIC_TEXT_FIELD)
-            .queryText(TEST_QUERY_TEXT)
+            .queryText(TEST_QUERY_TEXT_SPARSE)
             .boost(2.0f)
             .searchAnalyzer("standard")
             .build();
@@ -540,7 +541,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, getHitCount(searchResponseAsMap));
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
         assertEquals("4", firstInnerHit.get("_id"));
-        float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+        float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, Map.of("hello", 1f, "world", 1f, "a", 1f, "b", 1f));
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
@@ -563,7 +564,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist(TEST_SEMANTIC_INDEX_SPARSE_NAME, modelId, "standard");
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName(TEST_SEMANTIC_TEXT_FIELD)
-            .queryText(TEST_QUERY_TEXT)
+            .queryText(TEST_QUERY_TEXT_SPARSE)
             .boost(2.0f)
             .build();
 
@@ -571,7 +572,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, getHitCount(searchResponseAsMap));
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
         assertEquals("4", firstInnerHit.get("_id"));
-        float expectedScore = 2 * computeExpectedScore(modelId, testRankFeaturesDoc, TEST_QUERY_TEXT);
+        float expectedScore = 2 * computeExpectedScore(testRankFeaturesDoc, Map.of("hello", 1f, "world", 1f, "a", 1f, "b", 1f));
         assertEquals(expectedScore, objectToFloat(firstInnerHit.get("_score")), DELTA);
     }
 
