@@ -547,20 +547,20 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         return cluster;
     }
 
-    private void prepareVectors(int... arguments) {
+    private void prepareVectors(int... arguments) throws IOException {
         for (int i = 0; i < arguments.length; i += 2) {
             prepareVector(arguments[i], arguments[i + 1]);
         }
     }
 
-    private SparseVector prepareVector(int docId, int dpScore) {
+    private SparseVector prepareVector(int docId, int dpScore) throws IOException {
         SparseVector docVector = mock(SparseVector.class);
         when(reader.read(docId)).thenReturn(docVector);
         when(docVector.dotProduct(queryDenseVector)).thenReturn(dpScore);
         return docVector;
     }
 
-    private void prepareClusterAndItsDocs(DocumentCluster cluster, int... docScores) {
+    private void prepareClusterAndItsDocs(DocumentCluster cluster, int... docScores) throws IOException {
         prepareVectors(docScores);
         List<Integer> docs = new ArrayList<>();
         for (int i = 0; i < docScores.length; i += 2) {
