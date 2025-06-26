@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
-* Change where collapse context is read from in collector factory ([#1413](https://github.com/opensearch-project/neural-search/pull/1413))
+* Fix for collapse bug with knn query not deduplicating results ([#1413](https://github.com/opensearch-project/neural-search/pull/1413))
 
 ### Infrastructure
 
