@@ -27,9 +27,9 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
 
         SearchContext searchContext = mock(SearchContext.class);
         when(searchContext.size()).thenReturn(1);
+        when(searchContext.collapse()).thenReturn(collapseContext);
 
         HybridCollectorFactoryDTO mockDTO = mock(HybridCollectorFactoryDTO.class);
-        when(mockDTO.getCollapseContext()).thenReturn(collapseContext);
         when(mockDTO.getSearchContext()).thenReturn(searchContext);
         when(mockDTO.getNumHits()).thenReturn(5);
 
@@ -44,9 +44,9 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
 
         SearchContext searchContext = mock(SearchContext.class);
         when(searchContext.size()).thenReturn(1);
+        when(searchContext.collapse()).thenReturn(collapseContext);
 
         HybridCollectorFactoryDTO mockDTO = mock(HybridCollectorFactoryDTO.class);
-        when(mockDTO.getCollapseContext()).thenReturn(collapseContext);
         when(mockDTO.getSearchContext()).thenReturn(searchContext);
         when(mockDTO.getNumHits()).thenReturn(5);
 
@@ -61,9 +61,9 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
 
         SearchContext searchContext = mock(SearchContext.class);
         when(searchContext.size()).thenReturn(1);
+        when(searchContext.collapse()).thenReturn(collapseContext);
 
         HybridCollectorFactoryDTO mockDTO = mock(HybridCollectorFactoryDTO.class);
-        when(mockDTO.getCollapseContext()).thenReturn(collapseContext);
         when(mockDTO.getSearchContext()).thenReturn(searchContext);
 
         expectThrows(IllegalStateException.class, () -> HybridCollectorFactory.createCollector(mockDTO));
