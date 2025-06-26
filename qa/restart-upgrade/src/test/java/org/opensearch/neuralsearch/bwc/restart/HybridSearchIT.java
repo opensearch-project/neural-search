@@ -58,7 +58,6 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
             createPipelineProcessor(modelId, pipelineName);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -71,7 +70,7 @@ public class HybridSearchIT extends AbstractRestartUpgradeRestTestCase {
             String modelId = null;
             try {
                 modelId = getModelId(getIngestionPipeline(pipelineName), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addDocuments(getIndexNameForTest(), false);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null, null, null);
                 validateTestIndex(getIndexNameForTest(), searchPipelineName, hybridQueryBuilder);

@@ -29,7 +29,6 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
             createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -41,7 +40,7 @@ public class KnnRadialSearchIT extends AbstractRestartUpgradeRestTestCase {
             String modelId = null;
             try {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_1);
                 validateIndexQuery(modelId);
             } finally {

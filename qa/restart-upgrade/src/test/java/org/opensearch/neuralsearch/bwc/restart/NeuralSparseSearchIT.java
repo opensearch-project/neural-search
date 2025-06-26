@@ -34,7 +34,6 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
             createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -54,7 +53,7 @@ public class NeuralSparseSearchIT extends AbstractRestartUpgradeRestTestCase {
             String modelId = null;
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addSparseEncodingDoc(
                     getIndexNameForTest(),
                     "1",

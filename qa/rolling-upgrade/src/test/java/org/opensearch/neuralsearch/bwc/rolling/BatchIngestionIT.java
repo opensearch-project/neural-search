@@ -28,7 +28,6 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 sparseModelId = uploadSparseEncodingModel();
-                loadModel(sparseModelId);
                 MLModelState oldModelState = getModelState(sparseModelId);
                 logger.info("Model state in OLD phase: {}", oldModelState);
                 if (oldModelState != MLModelState.LOADED && oldModelState != MLModelState.DEPLOYED) {
@@ -53,7 +52,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
                 break;
             case MIXED:
                 sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
-                loadModel(sparseModelId);
+                loadAndWaitForModelToBeReady(sparseModelId);
                 MLModelState mixedModelState = getModelState(sparseModelId);
                 logger.info("Model state in MIXED phase: {}", mixedModelState);
                 if (mixedModelState != MLModelState.LOADED && mixedModelState != MLModelState.DEPLOYED) {
@@ -74,7 +73,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_PIPELINE), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
+                    loadAndWaitForModelToBeReady(sparseModelId);
                     MLModelState upgradedModelState = getModelState(sparseModelId);
                     logger.info("Model state in UPGRADED phase: {}", upgradedModelState);
                     if (upgradedModelState != MLModelState.LOADED) {

@@ -34,7 +34,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
         switch (getClusterType()) {
             case OLD:
                 sparseModelId = uploadSparseEncodingModel();
-                loadModel(sparseModelId);
                 neuralSparseQueryBuilder.modelId(sparseModelId);
                 createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
@@ -52,14 +51,14 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
                 break;
             case MIXED:
                 sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(sparseModelId);
+                loadAndWaitForModelToBeReady(sparseModelId);
                 neuralSparseQueryBuilder.modelId(sparseModelId);
                 assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 break;
             case UPGRADED:
                 try {
                     sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
+                    loadAndWaitForModelToBeReady(sparseModelId);
                     neuralSparseQueryBuilder.modelId(sparseModelId);
                     assertNotNull(search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits"));
                 } finally {

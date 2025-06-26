@@ -10,36 +10,22 @@ import java.util.Locale;
 import java.util.Optional;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import static org.opensearch.neuralsearch.util.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.CLIENT_TIMEOUT_VALUE;
 import static org.opensearch.neuralsearch.util.TestUtils.RESTART_UPGRADE_OLD_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
+
+import org.opensearch.neuralsearch.BaseUpgradeTestCase;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
-public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearchIT {
+public abstract class AbstractRestartUpgradeRestTestCase extends BaseUpgradeTestCase {
 
     @Before
     protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
         return NEURAL_SEARCH_BWC_PREFIX + getTestName().toLowerCase(Locale.ROOT);
-    }
-
-    @Override
-    protected final boolean preserveIndicesUponCompletion() {
-        return true;
-    }
-
-    @Override
-    protected final boolean preserveReposUponCompletion() {
-        return true;
-    }
-
-    @Override
-    protected boolean preserveTemplatesUponCompletion() {
-        return true;
     }
 
     @Override
@@ -53,27 +39,12 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
             .build();
     }
 
-    @Override
-    protected boolean shouldCleanUpResources() {
-        // All NEW CLUSTER tests depend on resources created in OLD CLUSTER test cases
-        // Before NEW CLUSTER tests run, all OLD CLUSTER test cases will be run first
-        // We only want to clean up resources in NEW CLUSTER tests, also we don't want to clean up after each test case finishes
-        // this is because the cleanup method will pull every resource and delete, which will impact other tests
-        // Overriding the method in base class so that resources won't be accidentally clean up
-        return false;
-    }
-
     protected static final boolean isRunningAgainstOldCluster() {
         return Boolean.parseBoolean(System.getProperty(RESTART_UPGRADE_OLD_CLUSTER));
     }
 
     protected final Optional<String> getBWCVersion() {
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
-    }
-
-    protected String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
     }
 
     protected String registerModelGroupAndGetModelId(final String requestBody) throws Exception {
@@ -87,13 +58,6 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseNeuralSearc
     protected void createPipelineProcessor(final String modelId, final String pipelineName) throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/PipelineConfiguration.json").toURI()));
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
-    }
-
-    protected String uploadSparseEncodingModel() throws Exception {
-        String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
-        );
-        return registerModelGroupAndGetModelId(requestBody);
     }
 
     protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName) throws Exception {

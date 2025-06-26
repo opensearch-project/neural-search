@@ -27,7 +27,6 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -39,7 +38,7 @@ public class SemanticSearchIT extends AbstractRestartUpgradeRestTestCase {
             String modelId = null;
             try {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_1, null, null);
                 validateTestIndex(modelId);
             } finally {

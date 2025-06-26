@@ -48,7 +48,6 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextEmbeddingModel();
-                loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
@@ -72,7 +71,7 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
                 break;
             case MIXED:
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_MIXED, null, null);
                 addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_MIXED, null, null);
                 addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_MIXED, null, null);
@@ -93,7 +92,7 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                    loadModel(modelId);
+                    loadAndWaitForModelToBeReady(modelId);
                     addDocument(getIndexNameForTest(), "6", TEST_FIELD, TEXT_UPGRADED, null, null);
                     addDocument(getIndexNameForTest(), "7", TEST_FIELD, TEXT_UPGRADED, null, null);
                     addDocument(getIndexNameForTest(), "8", TEST_FIELD, TEXT_UPGRADED, null, null);
