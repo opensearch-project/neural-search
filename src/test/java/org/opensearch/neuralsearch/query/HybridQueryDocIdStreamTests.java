@@ -121,6 +121,40 @@ public class HybridQueryDocIdStreamTests extends OpenSearchTestCase {
         assertTrue(processedDocs.contains(64));
     }
 
+    @SneakyThrows
+    public void testForEach_whenSubsequentCalls_thenAllDocsProcessedProperly() {
+        // setup
+        FixedBitSet matchingDocs = new FixedBitSet(NUM_DOCS);
+        matchingDocs.set(DOC_ID_1); // docId = 1
+        matchingDocs.set(DOC_ID_2); // docId = 2
+        matchingDocs.set(DOC_ID_3); // docId = 3
+
+        HybridBulkScorer mockScorer = createMockScorerWithDocs(matchingDocs);
+        HybridQueryDocIdStream stream = new HybridQueryDocIdStream(mockScorer);
+        List<Integer> processedDocs = new ArrayList<>();
+
+        // first call with upTo = 2 (should process only docId = 1)
+        stream.forEach(2, docId -> processedDocs.add(docId));
+
+        // verify first call results
+        assertEquals(1, processedDocs.size());
+        assertEquals(DOC_ID_1, processedDocs.get(0).intValue());
+
+        // second call with upTo = 4 (should process docId = 2 and 3)
+        stream.forEach(4, docId -> processedDocs.add(docId));
+
+        // verify all documents were processed across both calls
+        assertEquals(3, processedDocs.size());
+        assertTrue(processedDocs.contains(DOC_ID_1));
+        assertTrue(processedDocs.contains(DOC_ID_2));
+        assertTrue(processedDocs.contains(DOC_ID_3));
+
+        // third call should process no additional documents since all are consumed
+        List<Integer> thirdCallDocs = new ArrayList<>();
+        stream.forEach(10, docId -> thirdCallDocs.add(docId));
+        assertTrue(thirdCallDocs.isEmpty());
+    }
+
     private HybridBulkScorer createMockScorerWithDocs(FixedBitSet matchingDocs, int numDocs) {
         HybridBulkScorer mockScorer = mock(HybridBulkScorer.class);
         when(mockScorer.getMatching()).thenReturn(matchingDocs);

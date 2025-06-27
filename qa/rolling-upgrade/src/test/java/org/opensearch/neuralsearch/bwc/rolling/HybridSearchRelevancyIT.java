@@ -94,7 +94,6 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextEmbeddingModel();
-                loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     indexName,
@@ -118,6 +117,7 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
                 break;
             case MIXED:
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadAndWaitForModelToBeReady(modelId);
                 HybridQueryBuilder mixedClusterQuery = createHybridQuery(modelId, QUERY_TEXT);
                 if (isFirstMixedRound()) {
                     getAndAssertQueryResults(mixedClusterQuery, modelId, NUM_DOCS);
@@ -132,7 +132,7 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                    loadModel(modelId);
+                    loadAndWaitForModelToBeReady(modelId);
                     String[] testDocumentsAfterFullUpgrade = generateTestDocuments(NUM_DOCS);
                     for (int i = 0; i < testDocumentsAfterFullUpgrade.length; i++) {
                         addDocument(indexName, String.valueOf(2 * NUM_DOCS + i), TEST_FIELD, testDocumentsAfterFullUpgrade[i], null, null);
@@ -186,7 +186,6 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
     }
 
     private void getAndAssertQueryResults(HybridQueryBuilder queryBuilder, String modelId, int queryResultSize) throws Exception {
-        loadModel(modelId);
         Map<String, Object> searchResponseAsMap = search(
             getIndexNameForTest(),
             queryBuilder,

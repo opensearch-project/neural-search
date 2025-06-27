@@ -44,7 +44,6 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -62,7 +61,7 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
             String modelId = null;
             try {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addDocument(getIndexNameForTest(), "1", TEST_FIELD, TEXT_UPGRADED, null, null);
                 HybridQueryBuilder hybridQueryBuilder = getQueryBuilder(modelId, null, null);
                 QueryBuilder rescorer = QueryBuilders.matchQuery(TEST_FIELD, RESCORE_QUERY).boost(0.3f);

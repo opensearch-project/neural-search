@@ -14,6 +14,7 @@ import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 
 public class SemanticFieldIT extends AbstractRestartUpgradeRestTestCase {
+    private static final String PIPELINE_NAME = "nlp-pipeline-semantic-field";
     private static final String TEST_SEMANTIC_TEXT_FIELD = "test_field";
     private static final String SEMANTIC_INFO_FIELD = "semantic_info";
     private static final String SEMANTIC_EMBEDDING_FIELD = "embedding";
@@ -28,8 +29,7 @@ public class SemanticFieldIT extends AbstractRestartUpgradeRestTestCase {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         String modelId = null;
         if (isRunningAgainstOldCluster()) {
-            modelId = prepareSparseEncodingModel();
-            loadModel(modelId);
+            modelId = uploadSparseEncodingModel();
             prepareSemanticIndex(
                 getIndexNameForTest(),
                 Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
@@ -43,9 +43,11 @@ public class SemanticFieldIT extends AbstractRestartUpgradeRestTestCase {
                 List.of(SEMANTIC_EMBEDDING_FIELD),
                 List.of(testRankFeaturesDoc)
             );
+            // This is just to block the deletion of the model by other tests
+            createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
         } else {
             try {
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addSemanticDoc(
                     getIndexNameForTest(),
                     "1",
@@ -55,7 +57,7 @@ public class SemanticFieldIT extends AbstractRestartUpgradeRestTestCase {
                 );
                 validateTestIndex();
             } finally {
-                wipeOfTestResources(getIndexNameForTest(), null, modelId, null);
+                wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
             }
         }
 

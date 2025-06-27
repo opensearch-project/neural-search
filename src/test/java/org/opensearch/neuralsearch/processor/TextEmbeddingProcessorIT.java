@@ -459,7 +459,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         assertEquals("5", innerHitDetails.get("_id"));
     }
 
-    private String uploadTextEmbeddingModel() throws Exception {
+    protected String uploadTextEmbeddingModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         return registerModelGroupAndUploadModel(requestBody);
     }

@@ -36,7 +36,6 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextImageEmbeddingModel();
-                loadModel(modelId);
                 createPipelineForTextImageProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
@@ -47,6 +46,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
                 break;
             case MIXED:
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                loadAndWaitForModelToBeReady(modelId);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -60,8 +60,8 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_IMAGE_EMBEDDING_PROCESSOR);
+                    loadAndWaitForModelToBeReady(modelId);
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, TEST_IMAGE_FIELD, TEST_IMAGE_TEXT_UPGRADED);
                     validateIndexQueryOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED, TEST_IMAGE_TEXT_UPGRADED);
                 } finally {
@@ -77,7 +77,6 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
         throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
-        loadModel(modelId);
 
         // Test 1: Neural query with k parameter (standard k-NN search)
         NeuralQueryBuilder neuralQueryBuilderWithK = NeuralQueryBuilder.builder()

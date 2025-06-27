@@ -26,7 +26,6 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
         String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
             createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME, batchSize);
             createIndexWithConfiguration(
                 indexName,
@@ -39,7 +38,7 @@ public class BatchIngestionIT extends AbstractRestartUpgradeRestTestCase {
         } else {
             String modelId = null;
             modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-            loadModel(modelId);
+            loadAndWaitForModelToBeReady(modelId);
             try {
                 List<Map<String, String>> docs = prepareDataForBulkIngestion(5, 5);
                 bulkAddDocuments(indexName, TEXT_FIELD_NAME, PIPELINE_NAME, docs);

@@ -29,7 +29,6 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextEmbeddingModel();
-                loadModel(modelId);
                 createPipelineProcessor(modelId, PIPELINE_NAME);
                 createIndexWithConfiguration(
                     getIndexNameForTest(),
@@ -40,6 +39,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 break;
             case MIXED:
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                loadAndWaitForModelToBeReady(modelId);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
@@ -54,7 +54,7 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
                 try {
                     modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
-                    loadModel(modelId);
+                    loadAndWaitForModelToBeReady(modelId);
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, TEXT_UPGRADED, null, null);
                     validateTestIndexOnUpgrade(totalDocsCountUpgraded, modelId, TEXT_UPGRADED);
                 } finally {
@@ -70,7 +70,6 @@ public class SemanticSearchIT extends AbstractRollingUpgradeTestCase {
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId, final String text) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
-        loadModel(modelId);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
             .fieldName("passage_embedding")
             .modelId(modelId)
