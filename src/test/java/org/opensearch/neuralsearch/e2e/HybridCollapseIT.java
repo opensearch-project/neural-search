@@ -34,7 +34,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         createSearchPipeline(SEARCH_PIPELINE, "min_max", "arithmetic_mean", Map.of());
     }
 
-    public void testCollapse_whenE2E_thenSuccessful() throws IOException, ParseException {
+    public void testCollapse_whenE2E_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
 

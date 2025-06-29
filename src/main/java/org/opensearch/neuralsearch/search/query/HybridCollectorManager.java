@@ -34,7 +34,6 @@ import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.search.DocValueFormat;
-import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.MultiCollectorWrapper;
@@ -82,7 +81,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     @Nullable
     private final FieldDoc after;
     private final SearchContext searchContext;
-    private final CollapseContext collapseContext;
 
     private final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
         HybridTopScoreDocCollector.class,
@@ -153,7 +151,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
     public Collector newCollector() {
         Collector hybridCollector = HybridCollectorFactory.createCollector(
             HybridCollectorFactoryDTO.builder()
-                .collapseContext(collapseContext)
                 .sortAndFormats(sortAndFormats)
                 .searchContext(searchContext)
                 .hitsThresholdChecker(hitsThresholdChecker)
@@ -647,8 +644,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 filteringWeight,
                 new TopDocsMerger(searchContext.sort()),
                 searchContext.searchAfter(),
-                searchContext,
-                searchContext.collapse()
+                searchContext
             );
             scoreCollector = Objects.requireNonNull(super.newCollector(), "collector for hybrid query cannot be null");
         }
@@ -686,8 +682,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
                 filteringWeight,
                 new TopDocsMerger(searchContext.sort()),
                 searchContext.searchAfter(),
-                searchContext,
-                null
+                searchContext
             );
         }
     }

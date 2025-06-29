@@ -32,9 +32,9 @@ public class HybridCollectorFactory {
      * @throws IllegalArgumentException If the search_after configuration is invalid.
      */
     public static Collector createCollector(HybridCollectorFactoryDTO hybridCollectorFactoryDTO) {
-        CollapseContext collapseContext = hybridCollectorFactoryDTO.getCollapseContext();
         SortAndFormats sortAndFormats = hybridCollectorFactoryDTO.getSortAndFormats();
         SearchContext searchContext = hybridCollectorFactoryDTO.getSearchContext();
+        CollapseContext collapseContext = searchContext.collapse();
         HitsThresholdChecker hitsThresholdChecker = hybridCollectorFactoryDTO.getHitsThresholdChecker();
         int numHits = hybridCollectorFactoryDTO.getNumHits();
         FieldDoc after = hybridCollectorFactoryDTO.getAfter();
