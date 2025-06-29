@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix the HybridQueryDocIdStream to properly handle upTo value ([#1414](https://github.com/opensearch-project/neural-search/pull/1414))
 
 ### Infrastructure
+- Support multi node integration testing ([#1320](https://github.com/opensearch-project/neural-search/pull/1320))
 
 ### Documentation
 
