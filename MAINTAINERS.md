@@ -21,6 +21,7 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Zhichao Geng            | [zhichao-aws](https://github.com/zhichao-aws)             | Amazon      |
 | Yuye Zhu                | [yuye-aws](https://github.com/yuye-aws)                   | Amazon      |
 | Minal Shah              | [minalsha](https://github.com/minalsha)                   | Amazon      |
+| Bo Zhang                | [bzhangam](https://github.com/bzhangam)                   | Amazon      |
 
 
 ## Emeritus
