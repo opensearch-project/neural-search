@@ -349,6 +349,90 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
         }
     }
 
+    public void testSubQueryScores_whenSubQueryScoreIsEnabled_thenSuccessful() {
+        L2ScoreNormalizationTechnique normalizationTechnique = new L2ScoreNormalizationTechnique();
+        Float[] scores = { 0.5f, 0.2f };
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, scores[0]), new ScoreDoc(4, scores[1]) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .subQueryScores(true)
+            .build();
+        Map<Integer, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
+
+        CompoundTopDocs expectedCompoundDocs = new CompoundTopDocs(
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopDocs(
+                    new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        new ScoreDoc(2, l2Norm(scores[0], Arrays.asList(scores))),
+                        new ScoreDoc(4, l2Norm(scores[1], Arrays.asList(scores))) }
+                )
+            ),
+            false,
+            SEARCH_SHARD
+        );
+
+        Map<Integer, float[]> expectedDocIdToSubqueryScores = Map.ofEntries(
+            Map.entry(2, new float[] { 0.5f }),
+            Map.entry(4, new float[] { 0.2f })
+        );
+        assertEquals(expectedDocIdToSubqueryScores.size(), docIdToSubqueryScores.size());
+        for (Map.Entry<Integer, float[]> entry : expectedDocIdToSubqueryScores.entrySet()) {
+            int docId = entry.getKey();
+            float[] expectedScores = entry.getValue();
+            float[] actualScores = docIdToSubqueryScores.get(docId);
+
+            assertArrayEquals("Scores don't match for docId: " + docId, expectedScores, actualScores, 0.0001f);
+        }
+
+        assertNotNull(compoundTopDocs);
+        assertEquals(1, compoundTopDocs.size());
+        assertNotNull(compoundTopDocs.get(0).getTopDocs());
+        assertCompoundTopDocs(
+            new TopDocs(expectedCompoundDocs.getTotalHits(), expectedCompoundDocs.getScoreDocs().toArray(new ScoreDoc[0])),
+            compoundTopDocs.get(0).getTopDocs().get(0)
+        );
+    }
+
+    public void testSubQueryScores_whenSubQueryScoreIsDisabled_thenSuccessful() {
+        L2ScoreNormalizationTechnique normalizationTechnique = new L2ScoreNormalizationTechnique();
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.5f), new ScoreDoc(4, 0.2f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+        NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+            .queryTopDocs(compoundTopDocs)
+            .normalizationTechnique(normalizationTechnique)
+            .subQueryScores(false)
+            .build();
+        Map<Integer, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
+
+        assertTrue(docIdToSubqueryScores.isEmpty());
+    }
+
     private float l2Norm(float score, List<Float> scores) {
         return score / (float) Math.sqrt(scores.stream().map(Float::doubleValue).map(s -> s * s).mapToDouble(Double::doubleValue).sum());
     }

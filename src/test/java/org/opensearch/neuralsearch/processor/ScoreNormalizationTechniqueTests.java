@@ -10,12 +10,18 @@ import org.apache.commons.lang3.Range;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.opensearch.action.search.SearchPhaseContext;
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
 
@@ -23,16 +29,18 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
 
     public void testEmptyResults_whenEmptyResultsAndDefaultMethod_thenNoProcessing() {
         ScoreNormalizer scoreNormalizationMethod = new ScoreNormalizer();
+        SearchPhaseContext searchContext = mock(SearchPhaseContext.class);
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(List.of())
             .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
             .build();
-        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchContext);
     }
 
     @SneakyThrows
     public void testNormalization_whenOneSubqueryAndOneShardAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizationMethod = new ScoreNormalizer();
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(1, TotalHits.Relation.EQUAL_TO),
@@ -45,7 +53,14 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
             .build();
-        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
+
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        when(searchPhaseContext.getRequest().source()).thenReturn(searchSourceBuilder);
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchPhaseContext);
+
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchPhaseContext);
         assertNotNull(queryTopDocs);
         assertEquals(1, queryTopDocs.size());
         CompoundTopDocs resultDoc = queryTopDocs.get(0);
@@ -64,6 +79,7 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
     @SneakyThrows
     public void testNormalization_whenOneSubqueryMultipleHitsAndOneShardAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizationMethod = new ScoreNormalizer();
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
@@ -81,7 +97,14 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
             .build();
-        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
+
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        when(searchPhaseContext.getRequest().source()).thenReturn(searchSourceBuilder);
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchPhaseContext);
+
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchPhaseContext);
         assertNotNull(queryTopDocs);
         assertEquals(1, queryTopDocs.size());
         CompoundTopDocs resultDoc = queryTopDocs.get(0);
@@ -102,6 +125,7 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
 
     public void testNormalization_whenMultipleSubqueriesMultipleHitsAndOneShardAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizationMethod = new ScoreNormalizer();
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
@@ -123,7 +147,14 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
             .build();
-        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
+
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        when(searchPhaseContext.getRequest().source()).thenReturn(searchSourceBuilder);
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchPhaseContext);
+
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchPhaseContext);
 
         assertNotNull(queryTopDocs);
         assertEquals(1, queryTopDocs.size());
@@ -156,6 +187,7 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
 
     public void testNormalization_whenMultipleSubqueriesMultipleHitsMultipleShardsAndDefaultMethod_thenScoreNormalized() {
         ScoreNormalizer scoreNormalizationMethod = new ScoreNormalizer();
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         final List<CompoundTopDocs> queryTopDocs = List.of(
             new CompoundTopDocs(
                 new TotalHits(3, TotalHits.Relation.EQUAL_TO),
@@ -198,7 +230,12 @@ public class ScoreNormalizationTechniqueTests extends OpenSearchTestCase {
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
             .build();
-        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO);
+
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        when(searchPhaseContext.getRequest().source()).thenReturn(searchSourceBuilder);
+        scoreNormalizationMethod.normalizeScores(normalizeScoresDTO, searchPhaseContext);
         assertNotNull(queryTopDocs);
         assertEquals(3, queryTopDocs.size());
         // shard one
