@@ -13,6 +13,7 @@ import org.opensearch.search.fetch.FetchSubPhase;
 import org.opensearch.search.fetch.FetchSubPhaseProcessor;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -42,16 +43,22 @@ public class HybridizationFetchSubPhase implements FetchSubPhase {
             @Override
             public void process(HitContext hitContext) {
                 if (isClusterOnOrAfterMinReqVersionForSubQuerySupport() && hasInnerHits == false) {
-                    Map<Integer, float[]> scoreMap = HybridScoreRegistry.get(context);
+                    Map<String, float[]> scoreMap = HybridScoreRegistry.get(context);
                     if (scoreMap == null) {
                         return;
                     }
                     int docId = hitContext.docId();
-                    float[] subqueryScores = scoreMap.get(docId);
+                    int shardId = fetchContext.getQueryShardContext().getShardId();
+                    String key = shardId + "_" + docId;
+                    float[] subqueryScores = scoreMap.get(key);
 
                     if (subqueryScores != null) {
                         // Add it as a field rather than modifying _source
-                        hitContext.hit().setDocumentField(NAME, new DocumentField(NAME, List.of(subqueryScores)));
+                        List<Object> hybridScores = new ArrayList<>(subqueryScores.length);
+                        for (float score : subqueryScores) {
+                            hybridScores.add(score);
+                        }
+                        hitContext.hit().setDocumentField(NAME, new DocumentField(NAME, hybridScores));
                     }
                 }
             }

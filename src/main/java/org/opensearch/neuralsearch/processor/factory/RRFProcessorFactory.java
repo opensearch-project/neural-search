@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.processor.factory;
 import java.util.Map;
 import java.util.Objects;
 
-import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
@@ -60,7 +59,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
         );
 
         Map<String, Object> combinationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
-        boolean subQueryScores = readBooleanProperty(NormalizationProcessor.TYPE, tag, config, SUB_QUERY_SCORES, DEFAULT_SUB_QUERY_SCORES);
+        boolean subQueryScores = readBooleanProperty(RRFProcessor.TYPE, tag, config, SUB_QUERY_SCORES, DEFAULT_SUB_QUERY_SCORES);
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = readStringProperty(
                 RRFProcessor.TYPE,
@@ -87,6 +86,13 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
             scoreCombinationTechnique,
             subQueryScores
         );
-        return new RRFProcessor(tag, description, normalizationTechnique, scoreCombinationTechnique, normalizationProcessorWorkflow);
+        return new RRFProcessor(
+            tag,
+            description,
+            normalizationTechnique,
+            scoreCombinationTechnique,
+            normalizationProcessorWorkflow,
+            subQueryScores
+        );
     }
 }

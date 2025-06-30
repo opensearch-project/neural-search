@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
+import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 
 import java.util.List;
@@ -25,4 +26,5 @@ public class NormalizeScoresDTO {
     private ScoreNormalizationTechnique normalizationTechnique;
     @NonNull
     private boolean subQueryScores;
+    private SearchPhaseContext searchPhaseContext;
 }

@@ -370,7 +370,7 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
             .normalizationTechnique(normalizationTechnique)
             .subQueryScores(true)
             .build();
-        Map<Integer, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
+        Map<String, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
 
         CompoundTopDocs expectedCompoundDocs = new CompoundTopDocs(
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -386,17 +386,17 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
             SEARCH_SHARD
         );
 
-        Map<Integer, float[]> expectedDocIdToSubqueryScores = Map.ofEntries(
-            Map.entry(2, new float[] { 0.5f }),
-            Map.entry(4, new float[] { 0.2f })
+        Map<String, float[]> expectedDocIdToSubqueryScores = Map.ofEntries(
+            Map.entry(SEARCH_SHARD.getShardId() + "_" + "2", new float[] { 0.5f }),
+            Map.entry(SEARCH_SHARD.getShardId() + "_" + "4", new float[] { 0.2f })
         );
         assertEquals(expectedDocIdToSubqueryScores.size(), docIdToSubqueryScores.size());
-        for (Map.Entry<Integer, float[]> entry : expectedDocIdToSubqueryScores.entrySet()) {
-            int docId = entry.getKey();
+        for (Map.Entry<String, float[]> entry : expectedDocIdToSubqueryScores.entrySet()) {
+            String key = entry.getKey();
             float[] expectedScores = entry.getValue();
-            float[] actualScores = docIdToSubqueryScores.get(docId);
+            float[] actualScores = docIdToSubqueryScores.get(key);
 
-            assertArrayEquals("Scores don't match for docId: " + docId, expectedScores, actualScores, 0.0001f);
+            assertArrayEquals(expectedScores, actualScores, 0.0001f);
         }
 
         assertNotNull(compoundTopDocs);
@@ -428,7 +428,7 @@ public class L2ScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase 
             .normalizationTechnique(normalizationTechnique)
             .subQueryScores(false)
             .build();
-        Map<Integer, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
+        Map<String, float[]> docIdToSubqueryScores = normalizationTechnique.normalize(normalizeScoresDTO);
 
         assertTrue(docIdToSubqueryScores.isEmpty());
     }
