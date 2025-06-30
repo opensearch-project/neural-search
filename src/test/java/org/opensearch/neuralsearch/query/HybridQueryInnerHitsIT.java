@@ -233,8 +233,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            true,
-            false
+            false,
+            true
         );
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Max);

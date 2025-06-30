@@ -85,8 +85,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            true,
-            false
+            false,
+            true
         );
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
@@ -142,8 +142,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f })),
-            true,
-            false
+            false,
+            true
         );
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -432,8 +432,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            true,
-            false
+            false,
+            true
         );
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
@@ -494,8 +494,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             Map.of(),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            true,
-            false
+            false,
+            true
         );
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -689,8 +689,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            true,
-            false
+            false,
+            true
         );
 
         TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);

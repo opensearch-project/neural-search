@@ -175,6 +175,7 @@ public class HybridizationFetchSubPhaseTests extends OpenSearchTestCase {
     }
 
     public void testNoHybridizationFieldWhenDocIdNotInMap() throws IOException {
+        setUpClusterService();
         mockFetchContext = mock(FetchContext.class);
         mockQueryShardContext = mock(QueryShardContext.class);
         try (Directory directory = newDirectory()) {
