@@ -711,7 +711,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
             @SuppressWarnings("unchecked")
             List<Double> subQueryScores = (List<Double>) fields.get("hybridization_sub_query_scores");
-            System.out.println("subquery" + subQueryScores);
 
             assertNotNull(subQueryScores);
 
