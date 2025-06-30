@@ -63,8 +63,8 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
      * document scores are summed in combination step
      */
     @Override
-    public Map<Integer, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
-        Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
+    public Map<String, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        Map<String, float[]> docIdToSubqueryScores = new HashMap<>();
         boolean isSubQueryScores = normalizeScoresDTO.isSubQueryScores();
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -91,7 +91,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     @Override
     public Map<DocIdAtSearchShard, ExplanationDetails> explain(List<CompoundTopDocs> queryTopDocs) {
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
-        Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
+        Map<String, float[]> docIdToSubqueryScores = new HashMap<>();
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
@@ -116,11 +116,11 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         return getDocIdAtQueryForNormalization(normalizedScores, this);
     }
 
-    private Map<Integer, float[]> processTopDocs(
+    private Map<String, float[]> processTopDocs(
         CompoundTopDocs compoundQueryTopDocs,
         boolean subQueryScores,
         TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
-        Map<Integer, float[]> docIdToSubqueryScores
+        Map<String, float[]> docIdToSubqueryScores
     ) {
         if (Objects.isNull(compoundQueryTopDocs)) {
             return docIdToSubqueryScores;
@@ -150,7 +150,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         boolean subQueryScores,
         TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
         int topDocsSize,
-        Map<Integer, float[]> docIdToSubqueryScores
+        Map<String, float[]> docIdToSubqueryScores
     ) {
         ScoreDoc[] scoreDocs = topDocs.scoreDocs;
         for (int i = 0; i < scoreDocs.length; i++) {
@@ -160,7 +160,9 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
             scoreProcessor.apply(docIdAtSearchShard, normalizedScore, topDocsIndex);
             // Initialize or update subquery scores array per doc
             if (subQueryScores) {
-                float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(scoreDoc.doc, k -> new float[topDocsSize]);
+                int shardIndex = searchShard.getShardId();
+                String key = shardIndex + "_" + scoreDoc.doc;
+                float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(key, k -> new float[topDocsSize]);
                 scoresArray[topDocsIndex] = scoreDoc.score;
             }
             scoreDoc.score = normalizedScore;

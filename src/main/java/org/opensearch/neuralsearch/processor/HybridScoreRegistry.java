@@ -13,14 +13,14 @@ import java.util.Map;
  * Registry to store hybrid score for each search context
  */
 public class HybridScoreRegistry {
-    private static final Map<SearchPhaseContext, Map<Integer, float[]>> contextToHolder = new HashMap<>();
+    private static final Map<SearchPhaseContext, Map<String, float[]>> contextToHolder = new HashMap<>();
 
     /**
      * Store hybrid score for each search context
      * @param context
      * @param scoreMap
      */
-    public static void store(SearchPhaseContext context, Map<Integer, float[]> scoreMap) {
+    public static void store(SearchPhaseContext context, Map<String, float[]> scoreMap) {
         contextToHolder.put(context, scoreMap);
     }
 
@@ -29,7 +29,7 @@ public class HybridScoreRegistry {
      * @param context
      * @return map of hybrid score
      */
-    public static Map<Integer, float[]> get(SearchPhaseContext context) {
+    public static Map<String, float[]> get(SearchPhaseContext context) {
         return contextToHolder.get(context);
     }
 

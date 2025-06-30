@@ -20,7 +20,7 @@ public interface ScoreNormalizationTechnique {
      * original query results from multiple shards and multiple sub-queries, ScoreNormalizationTechnique,
      * and nullable rankConstant that is only used in RRF technique
      */
-    Map<Integer, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO);
+    Map<String, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO);
 
     /**
      * Returns the name of the normalization technique.

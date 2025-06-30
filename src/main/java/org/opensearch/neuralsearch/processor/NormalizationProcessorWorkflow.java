@@ -80,11 +80,12 @@ public class NormalizationProcessorWorkflow {
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(request.getNormalizationTechnique())
             .subQueryScores(request.isSubQueryScores())
+            .searchPhaseContext(request.getSearchPhaseContext())
             .build();
 
         // normalize
         log.debug("Do score normalization");
-        scoreNormalizer.normalizeScores(normalizeScoresDTO, request.getSearchPhaseContext());
+        scoreNormalizer.normalizeScores(normalizeScoresDTO);
 
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
@@ -300,7 +301,7 @@ public class NormalizationProcessorWorkflow {
         if (fetchSearchResultOptional.isEmpty()) {
             return;
         }
-        Map<Integer, float[]> scoreMap = HybridScoreRegistry.get(searchPhaseContext);
+        Map<String, float[]> scoreMap = HybridScoreRegistry.get(searchPhaseContext);
         // fetch results have list of document content, that includes start/stop and
         // delimiter elements. list is in original order from query searcher. We need to:
         // 1. filter out start/stop and delimiter elements
@@ -344,8 +345,9 @@ public class NormalizationProcessorWorkflow {
 
             // Check if inner hits are present
             boolean hasInnerHits = searchHit.getInnerHits() != null && !searchHit.getInnerHits().isEmpty();
-
-            float[] subqueryScores = scoreMap != null ? scoreMap.get(scoreDoc.doc) : null;
+            int shardIndex = querySearchResult.getShardIndex();
+            String key = shardIndex + "_" + scoreDoc.doc;
+            float[] subqueryScores = scoreMap != null ? scoreMap.get(key) : null;
 
             Map<String, DocumentField> documentFields = searchHit.getDocumentFields();
 
@@ -357,11 +359,11 @@ public class NormalizationProcessorWorkflow {
 
             if (shouldAddHybridScores) {
                 // Add it as a field rather than modifying _source
-                List<Float> hybridScores = new ArrayList<>(subqueryScores.length);
+                List<Object> hybridScores = new ArrayList<>(subqueryScores.length);
                 for (float score : subqueryScores) {
                     hybridScores.add(score);
                 }
-                searchHit.setDocumentField(NAME, new DocumentField(NAME, new ArrayList<Object>(hybridScores)));
+                searchHit.setDocumentField(NAME, new DocumentField(NAME, hybridScores));
             }
             updatedSearchHitArray[i] = searchHit;
         }
