@@ -32,12 +32,13 @@ public class ScoreNormalizer {
      * from multiple shards and multiple sub-queries, scoreNormalizationTechnique exact normalization technique
      * that should be applied, and nullable rankConstant that is only used in RRF technique
      */
-    public void normalizeScores(final NormalizeScoresDTO normalizeScoresDTO, SearchPhaseContext searchPhaseContext) {
+    public void normalizeScores(final NormalizeScoresDTO normalizeScoresDTO) {
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         final ScoreNormalizationTechnique scoreNormalizationTechnique = normalizeScoresDTO.getNormalizationTechnique();
+        final SearchPhaseContext searchPhaseContext = normalizeScoresDTO.getSearchPhaseContext();
         if (canQueryResultsBeNormalized(queryTopDocs)) {
 
-            Map<Integer, float[]> hybridizationScores = scoreNormalizationTechnique.normalize(normalizeScoresDTO);
+            Map<String, float[]> hybridizationScores = scoreNormalizationTechnique.normalize(normalizeScoresDTO);
 
             boolean isExplainEnabled = isExplainEnabled(searchPhaseContext);
             boolean isSortEnabled = isSortEnabled(searchPhaseContext);
@@ -48,7 +49,7 @@ public class ScoreNormalizer {
                 HybridScoreRegistry.store(searchPhaseContext, hybridizationScores);
 
                 // clean up later via context.addReleasable()
-                searchPhaseContext.addReleasable(() -> HybridScoreRegistry.remove(searchPhaseContext));
+                // searchPhaseContext.addReleasable(() -> HybridScoreRegistry.remove(searchPhaseContext));
             }
         }
     }

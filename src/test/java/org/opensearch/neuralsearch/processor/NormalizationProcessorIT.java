@@ -22,7 +22,6 @@ import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.Range;
 import org.junit.Before;
-import org.opensearch.common.document.DocumentField;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -504,7 +503,38 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 5, false);
-        assertHybridizationSubQueryScores(searchResponseAsMap, 5);
+        assertHybridizationSubQueryScores(searchResponseAsMap, 2);
+    }
+
+    @SneakyThrows
+    public void testSubQueryScoresWithMultipleShards_thenSuccessful() {
+        String modelId = null;
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        modelId = prepareModel();
+        createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true, false);
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(5)
+            .build();
+
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            6,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
+        );
+        assertQueryResults(searchResponseAsMap, 6, false);
+        assertHybridizationSubQueryScores(searchResponseAsMap, 2);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {
@@ -673,29 +703,24 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
 
         for (Map<String, Object> hit : hitsNestedList) {
-            // Get fields map from hit
             @SuppressWarnings("unchecked")
 
-            Map<String, DocumentField> fields = hit.getFields();
             Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
 
-            assertNotNull("Fields should not be null", fields);
+            assertNotNull(fields);
 
-            // Get hybridization_sub_query_scores from fields - corrected casting
             @SuppressWarnings("unchecked")
-            List<Double> subQueryScores = ((List<List<Double>>) fields.get("hybridization_sub_query_scores")).get(0);
+            List<Double> subQueryScores = (List<Double>) fields.get("hybridization_sub_query_scores");
+            System.out.println("subquery" + subQueryScores);
 
-            assertNotNull("Hybridization sub query scores should not be null", subQueryScores);
-            assertFalse("Hybridization sub query scores should not be empty", subQueryScores.isEmpty());
+            assertNotNull(subQueryScores);
 
-            // Verify number of scores
-            assertEquals("Should have expected number of sub-query scores", expectedSubQueryCount, subQueryScores.size());
+            assertEquals(expectedSubQueryCount, subQueryScores.size());
 
-            // Verify all scores are within valid range [0.0, 1.0]
             for (Double score : subQueryScores) {
-                assertNotNull("Sub-query score should not be null", score);
-                assertTrue("Sub-query score should be >= 0.0", score >= 0.0);
-                assertTrue("Sub-query score should be <= 1.0", score <= 1.0);
+                assertNotNull(score);
+                assertTrue(score >= 0.0);
+                assertTrue(score <= 1.0);
             }
         }
     }

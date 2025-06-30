@@ -73,8 +73,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public Map<Integer, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
-        Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
+    public Map<String, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
+        Map<String, float[]> docIdToSubqueryScores = new HashMap<>();
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
         // do normalization using actual score and min and max scores for corresponding sub query
@@ -98,10 +98,9 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
                     if (normalizeScoresDTO.isSubQueryScores()) {
-                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
-                            scoreDoc.doc,
-                            k -> new float[topDocsPerSubQuery.size()]
-                        );
+                        int shardIndex = compoundQueryTopDocs.getSearchShard().getShardId();
+                        String key = shardIndex + "_" + scoreDoc.doc;
+                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(key, k -> new float[topDocsPerSubQuery.size()]);
                         scoresArray[j] = scoreDoc.score;
                     }
                     scoreDoc.score = normalizeSingleScore(

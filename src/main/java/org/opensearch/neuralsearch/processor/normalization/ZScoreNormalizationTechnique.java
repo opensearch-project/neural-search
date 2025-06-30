@@ -61,8 +61,8 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
      * and nullable rankConstant that is only used in RRF technique
      */
     @Override
-    public Map<Integer, float[]> normalize(NormalizeScoresDTO normalizeScoresDTO) {
-        Map<Integer, float[]> docIdToSubqueryScores = new HashMap<>();
+    public Map<String, float[]> normalize(NormalizeScoresDTO normalizeScoresDTO) {
+        Map<String, float[]> docIdToSubqueryScores = new HashMap<>();
         List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
 
         ZScores zscores = getZScoreResults(queryTopDocs);
@@ -78,10 +78,9 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
                     if (normalizeScoresDTO.isSubQueryScores()) {
-                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(
-                            scoreDoc.doc,
-                            k -> new float[topDocsPerSubQuery.size()]
-                        );
+                        int shardIndex = compoundQueryTopDocs.getSearchShard().getShardId();
+                        String key = shardIndex + "_" + scoreDoc.doc;
+                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(key, k -> new float[topDocsPerSubQuery.size()]);
                         scoresArray[j] = scoreDoc.score;
                     }
                     scoreDoc.score = normalizeSingleScore(
