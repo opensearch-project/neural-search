@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.sparse.algorithm;
 
 import org.junit.Before;
-import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
@@ -41,7 +40,6 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         docFreqs = preparePostings(0, 10, 1, 20, 2, 30, 3, 40, 4, 50);
     }
 
-    @Test
     public void testClusterWithClusterRatio0() throws IOException {
         // Create RandomClustering with beta=1 (single cluster)
         RandomClustering clustering = new RandomClustering(1.0f, 0, reader);
@@ -67,7 +65,6 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         verify(reader, times(0)).read(anyInt());
     }
 
-    @Test
     public void testClusterWithMultipleClusters() throws IOException {
         // Create mock vectors for each document
         SparseVector vector0 = createVector(1, 10, 2, 20);
@@ -105,7 +102,6 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         assertEquals(docFreqs.size(), totalDocs);
     }
 
-    @Test
     public void testClusterWithEmptyDocFreqs() throws IOException {
         // Create RandomClustering
         RandomClustering clustering = new RandomClustering(1.0f, 0.1f, reader);
@@ -118,13 +114,11 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         verify(reader, never()).read(anyInt());
     }
 
-    @Test(expected = NullPointerException.class)
-    public void testClusterWithNullReader() throws IOException {
+    public void testClusterWithNullReader() {
         // Create RandomClustering with null reader
-        new RandomClustering(10, 1.0f, null);
+        expectThrows(NullPointerException.class, () -> new RandomClustering(1.0f, 0.5f, null));
     }
 
-    @Test
     public void testClusterWithNullVectors() throws IOException {
         // Set up the reader to return null for some documents
         when(reader.read(0)).thenReturn(createVector(1, 10));
@@ -156,7 +150,6 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         assertEquals(3, allAssignedDocs.size());
     }
 
-    @Test
     public void testClusterWithDifferentParameters() throws IOException {
         // Create mock vectors
         for (int i = 0; i < 5; i++) {
@@ -181,7 +174,6 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         assertFalse(clusters3.isEmpty());
     }
 
-    @Test
     public void testClusterAssignment() throws IOException {
         // Create vectors with clear similarity patterns
         // Vector 0 and 1 are similar, 2 and 3 are similar, 4 is different
