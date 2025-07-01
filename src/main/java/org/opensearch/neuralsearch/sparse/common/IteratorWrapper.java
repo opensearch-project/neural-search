@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.sparse.common;
 
+import lombok.Getter;
+
 import java.util.Iterator;
 
 /**
@@ -11,6 +13,7 @@ import java.util.Iterator;
  */
 public class IteratorWrapper<T> implements Iterator<T> {
     private final Iterator<T> iterator;
+    @Getter
     T current;
 
     public IteratorWrapper(Iterator<T> iterator) {
@@ -30,9 +33,5 @@ public class IteratorWrapper<T> implements Iterator<T> {
             return current;
         }
         return null;
-    }
-
-    public T getCurrent() {
-        return current;
     }
 }
