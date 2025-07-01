@@ -81,7 +81,7 @@ public class SparseQueryWeight extends Weight {
             SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
             sparseReader = index != null ? index.getReader() : (docId -> { return null; });
         }
-        final Scorer scorer = new PostingWithClustersScorer(
+        final Scorer scorer = new OrderedPostingWithClustersScorer(
             query.getFieldName(),
             query.getQueryContext(),
             query.getQueryVector(),

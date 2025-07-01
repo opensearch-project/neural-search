@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.sparse.algorithm;
 
 import org.apache.lucene.search.DocIdSetIterator;
 import org.junit.Before;
-import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.mockito.Mockito;
@@ -41,7 +40,6 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         lenient().when(cluster.getDisi()).thenReturn(iterator);
     }
 
-    @Test
     public void testGetTopKWhenKLargerThanListSize() {
         // Create a list of DocFreq objects
         List<DocFreq> postings = preparePostings(1, 10, 2, 20, 3, 30);
@@ -54,7 +52,6 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         assertTrue(result.containsAll(postings));
     }
 
-    @Test
     public void testGetTopKWhenKSmallerThanListSize() {
         // Create a list of DocFreq objects with different frequencies
         List<DocFreq> postings = preparePostings(1, 10, 2, 50, 3, 30, 4, 40, 5, 20);
@@ -82,7 +79,6 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         assertTrue("Result should contain docId 4", containsDocId4);
     }
 
-    @Test
     public void testGetTopKWithEmptyList() {
         // Call getTopK with an empty list
         List<DocFreq> result = PostingsProcessor.getTopK(Collections.emptyList(), 5);
@@ -91,7 +87,6 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         assertTrue(result.isEmpty());
     }
 
-    @Test
     public void testSummarize() throws IOException {
         // Set up the iterator to return two documents
         when(iterator.nextDoc()).thenReturn(0, 1, 2, DocIdSetIterator.NO_MORE_DOCS); // Return docIds 0, 1, then NO_MORE_DOCS (-1)
@@ -133,7 +128,6 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         }));
     }
 
-    @Test
     public void testSummarizeWithAlphaLessThanOne() throws IOException {
         // Set up the iterator to return one document
         when(iterator.nextDoc()).thenReturn(0, DocIdSetIterator.NO_MORE_DOCS); // Return docId 0, then NO_MORE_DOCS (-1)
@@ -162,7 +156,6 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         }));
     }
 
-    @Test
     public void testSummarizeWithNullVector() throws IOException {
         // Create a new mock cluster and iterator for this test
         DocumentCluster localCluster = Mockito.mock(DocumentCluster.class);

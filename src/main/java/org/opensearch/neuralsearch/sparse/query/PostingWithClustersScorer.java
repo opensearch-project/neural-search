@@ -6,32 +6,17 @@ package org.opensearch.neuralsearch.sparse.query;
 
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
-import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.PostingsEnum;
-import org.apache.lucene.index.Terms;
-import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.util.Bits;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.LongBitSet;
-import org.opensearch.neuralsearch.sparse.algorithm.DocumentCluster;
-import org.opensearch.neuralsearch.sparse.codec.InMemorySparseVectorForwardIndex;
-import org.opensearch.neuralsearch.sparse.codec.SparsePostingsEnum;
-import org.opensearch.neuralsearch.sparse.codec.SparseVectorForwardIndex;
-import org.opensearch.neuralsearch.sparse.common.DocFreqIterator;
-import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
+import org.opensearch.neuralsearch.sparse.algorithm.SeismicBaseScorer;
 import org.opensearch.neuralsearch.sparse.common.Profiling;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.PriorityQueue;
 
 /**
  * A scorer that simulates the query algorithm in seismic.
@@ -40,20 +25,8 @@ import java.util.PriorityQueue;
  * otherwise, we skip the whole cluster.
  */
 @Log4j2
-public class PostingWithClustersScorer extends Scorer {
-
-    private final String fieldName;
-    private final SparseQueryContext sparseQueryContext;
-    private final byte[] queryDenseVector;
-    // The heap to maintain docId and its similarity score with query
-    private final PriorityQueue<Pair<Integer, Float>> scoreHeap = new PriorityQueue<>((a, b) -> Float.compare(a.getRight(), b.getRight()));
-    private final LongBitSet visitedDocId;
-    private SparseVectorReader reader;
-    private List<Scorer> subScorers = new ArrayList<>();
-    private Terms terms;
-    private float score;
-    private final Bits acceptedDocs;
-    private float heapThreshold = Float.MIN_VALUE;
+public class PostingWithClustersScorer extends SeismicBaseScorer {
+    private int score;
     private final Similarity.SimScorer simScorer;
 
     public PostingWithClustersScorer(
@@ -65,51 +38,8 @@ public class PostingWithClustersScorer extends Scorer {
         SparseVectorReader reader,
         Similarity.SimScorer simScorer
     ) throws IOException {
-        this.sparseQueryContext = sparseQueryContext;
-        this.fieldName = fieldName;
-        this.queryDenseVector = queryVector.toDenseVector();
-        this.visitedDocId = new LongBitSet(leafReader.maxDoc());
-        this.acceptedDocs = acceptedDocs;
-        this.reader = reader;
+        super(leafReader, fieldName, sparseQueryContext, leafReader.maxDoc(), queryVector, reader, acceptedDocs);
         this.simScorer = simScorer;
-        initialize(leafReader);
-    }
-
-    private void initialize(LeafReader leafReader) throws IOException {
-        terms = Terms.getTerms(leafReader, fieldName);
-        assert terms != null : "Terms must not be null";
-        BinaryDocValues docValues = leafReader.getBinaryDocValues(fieldName);
-        for (String token : sparseQueryContext.getTokens()) {
-            TermsEnum termsEnum = terms.iterator();
-            BytesRef term = new BytesRef(token);
-            if (!termsEnum.seekExact(term)) {
-                continue;
-            }
-            PostingsEnum postingsEnum = termsEnum.postings(null, PostingsEnum.FREQS);
-            if (!(postingsEnum instanceof SparsePostingsEnum sparsePostingsEnum)) {
-                log.error("posting enum is not SparsePostingsEnum, actual type: {}", postingsEnum.getClass().getName());
-                return;
-            }
-            if (null == reader) {
-                SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(sparsePostingsEnum.getIndexKey());
-                if (index != null) {
-                    reader = index.getReader();
-                } else {
-                    reader = (docId) -> { return null; };
-                }
-            }
-            subScorers.add(new SingleScorer(sparsePostingsEnum, term));
-        }
-    }
-
-    private void addToHeap(Pair<Integer, Float> pair) {
-        if (pair.getRight() > heapThreshold) {
-            scoreHeap.add(pair);
-            if (scoreHeap.size() > sparseQueryContext.getK()) {
-                scoreHeap.poll();
-                heapThreshold = scoreHeap.peek().getRight();
-            }
-        }
     }
 
     @Override
@@ -168,7 +98,7 @@ public class PostingWithClustersScorer extends Scorer {
                     score = doc.dotProduct(queryDenseVector);
                     Profiling.INSTANCE.end(Profiling.ItemId.DP, start);
                     start = Profiling.INSTANCE.begin(Profiling.ItemId.HEAP);
-                    addToHeap(Pair.of(docId, score));
+                    scoreHeap.add(Pair.of(docId, score));
                     Profiling.INSTANCE.end(Profiling.ItemId.HEAP, start);
                     return docId;
                 }
@@ -195,97 +125,5 @@ public class PostingWithClustersScorer extends Scorer {
     @Override
     public float score() throws IOException {
         return this.simScorer.score(score, 0);
-    }
-
-    class SingleScorer extends Scorer {
-        private final IteratorWrapper<DocumentCluster> clusterIter;
-        private DocFreqIterator docs = null;
-
-        public SingleScorer(SparsePostingsEnum postingsEnum, BytesRef term) throws IOException {
-            clusterIter = postingsEnum.clusterIterator();
-        }
-
-        @Override
-        public int docID() {
-            if (docs == null) {
-                return -1;
-            }
-            return docs.docID();
-        }
-
-        @Override
-        public DocIdSetIterator iterator() {
-            return new DocIdSetIterator() {
-
-                private DocumentCluster nextQualifiedCluster() {
-                    DocumentCluster cluster = clusterIter.next();
-                    while (cluster != null) {
-                        if (cluster.isShouldNotSkip()) {
-                            long start = Profiling.INSTANCE.begin(Profiling.ItemId.CLUSTERSHOULDNOTSKIP);
-                            Profiling.INSTANCE.end(Profiling.ItemId.CLUSTERSHOULDNOTSKIP, start);
-                            return cluster;
-                        }
-                        int score = cluster.getSummary().dotProduct(queryDenseVector);
-                        if (scoreHeap.size() == sparseQueryContext.getK()
-                            && score < Objects.requireNonNull(scoreHeap.peek()).getRight() / sparseQueryContext.getHeapFactor()) {
-                            cluster = clusterIter.next();
-                        } else {
-                            long start = Profiling.INSTANCE.begin(Profiling.ItemId.CLUSTER);
-                            Profiling.INSTANCE.end(Profiling.ItemId.CLUSTER, start);
-                            return cluster;
-                        }
-                    }
-                    return null;
-                }
-
-                @Override
-                public int docID() {
-                    if (docs == null) {
-                        return -1;
-                    }
-                    return docs.docID();
-                }
-
-                @Override
-                public int nextDoc() throws IOException {
-                    DocumentCluster cluster = null;
-                    if (docs == null) {
-                        cluster = nextQualifiedCluster();
-                    } else {
-                        int docId = docs.nextDoc();
-                        if (docId != DocIdSetIterator.NO_MORE_DOCS) {
-                            return docId;
-                        }
-                        cluster = nextQualifiedCluster();
-                    }
-                    if (cluster == null) {
-                        return DocIdSetIterator.NO_MORE_DOCS;
-                    }
-                    docs = cluster.getDisi();
-                    // every cluster should have at least one doc
-                    return docs.nextDoc();
-                }
-
-                @Override
-                public int advance(int target) throws IOException {
-                    return 0;
-                }
-
-                @Override
-                public long cost() {
-                    return 0;
-                }
-            };
-        }
-
-        @Override
-        public float getMaxScore(int upTo) throws IOException {
-            return 0;
-        }
-
-        @Override
-        public float score() throws IOException {
-            return 0;
-        }
     }
 }
