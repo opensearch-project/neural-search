@@ -37,7 +37,6 @@ import org.opensearch.neuralsearch.sparse.codec.InMemorySparseVectorForwardIndex
 import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
 import org.opensearch.neuralsearch.sparse.common.Profiling;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
-import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.index.mapper.MappingTransformer;
@@ -190,6 +189,7 @@ public class NeuralSearch extends Plugin
             new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralKNNQueryBuilder.NAME, NeuralKNNQueryBuilder::new, NeuralKNNQueryBuilder::fromXContent),
             new QuerySpec<>(SparseAnnQueryBuilder.NAME, SparseAnnQueryBuilder::new, SparseAnnQueryBuilder::fromXContent)
+
         );
     }
 
@@ -380,7 +380,7 @@ public class NeuralSearch extends Plugin
                     Profiling.INSTANCE.run();
                 } else {
                     Profiling.INSTANCE.output();
-                }
+                }NeuralSparseQueryBuilder.java
             });
         }
     }
