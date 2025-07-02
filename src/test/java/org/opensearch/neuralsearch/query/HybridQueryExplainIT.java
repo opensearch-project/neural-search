@@ -737,6 +737,101 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         assertExplanation(topLevelExplanationsHit1, searchHit1, hitsNestedList, true);
     }
 
+    @SneakyThrows
+    public void testExplainWithSubQueryScoresEnabled_whenMultipleSubqueriesAndOneShard_thenNull() {
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        // create search pipeline with both normalization processor and explain response processor
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            true,
+            true
+        );
+
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(termQueryBuilder2).should(termQueryBuilder3);
+
+        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+        hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            10,
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+        );
+        // Assert
+        // search hits
+        assertEquals(3, getHitCount(searchResponseAsMap1));
+
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap1);
+        // No fields added to the hits when explain is enabled
+        for (Map<String, Object> hit : hitsNestedList) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
+            assertNull(fields);
+        }
+    }
+
+    @SneakyThrows
+    public void testExplainWithSubQueryScoresEnabled_whenMultipleSubqueriesAndMultipleShards_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        createSearchPipeline(
+            NORMALIZATION_SEARCH_PIPELINE,
+            NORMALIZATION_TECHNIQUE_L2,
+            Map.of(),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f })),
+            true,
+            true
+        );
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        KNNQueryBuilder knnQueryBuilder = KNNQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .vector(createRandomVector(TEST_DIMENSION))
+            .k(10)
+            .build();
+        hybridQueryBuilder.add(QueryBuilders.existsQuery(TEST_TEXT_FIELD_NAME_1));
+        hybridQueryBuilder.add(knnQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_NAME,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+        );
+        // Assert
+        // basic sanity check for search hits
+        assertEquals(4, getHitCount(searchResponseAsMap));
+        assertTrue(getMaxScore(searchResponseAsMap).isPresent());
+        float actualMaxScore = getMaxScore(searchResponseAsMap).get();
+        assertTrue(actualMaxScore > 0);
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(4, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
+        // explain, hit 1
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        // No fields added to the hits when explain is enabled
+        for (Map<String, Object> hit : hitsNestedList) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
+            assertNull(fields);
+        }
+    }
+
     private void assertExplanation(
         Map<String, Object> topLevelExplanationsHit1,
         Map<String, Object> searchHit1,

@@ -704,18 +704,12 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
         for (Map<String, Object> hit : hitsNestedList) {
             @SuppressWarnings("unchecked")
-
             Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
-
             assertNotNull(fields);
-
             @SuppressWarnings("unchecked")
             List<Double> subQueryScores = (List<Double>) fields.get("hybridization_sub_query_scores");
-
             assertNotNull(subQueryScores);
-
             assertEquals(expectedSubQueryCount, subQueryScores.size());
-
             for (Double score : subQueryScores) {
                 assertNotNull(score);
                 assertTrue(score >= 0.0);
