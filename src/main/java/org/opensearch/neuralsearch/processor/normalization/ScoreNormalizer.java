@@ -49,7 +49,7 @@ public class ScoreNormalizer {
                 HybridScoreRegistry.store(searchPhaseContext, hybridizationScores);
 
                 // clean up later via context.addReleasable()
-                // searchPhaseContext.addReleasable(() -> HybridScoreRegistry.remove(searchPhaseContext));
+                searchPhaseContext.addReleasable(() -> HybridScoreRegistry.remove(searchPhaseContext));
             }
         }
     }

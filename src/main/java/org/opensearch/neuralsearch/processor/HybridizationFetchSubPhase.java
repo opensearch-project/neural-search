@@ -24,7 +24,7 @@ import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isCluster
  */
 public class HybridizationFetchSubPhase implements FetchSubPhase {
 
-    private static final String NAME = "hybridization_sub_query_scores";
+    private static final String SUB_QUERY_SCORES_NAME = "hybridization_sub_query_scores";
 
     @Override
     public FetchSubPhaseProcessor getProcessor(FetchContext fetchContext) throws IOException {
@@ -58,7 +58,7 @@ public class HybridizationFetchSubPhase implements FetchSubPhase {
                         for (float score : subqueryScores) {
                             hybridScores.add(score);
                         }
-                        hitContext.hit().setDocumentField(NAME, new DocumentField(NAME, hybridScores));
+                        hitContext.hit().setDocumentField(SUB_QUERY_SCORES_NAME, new DocumentField(SUB_QUERY_SCORES_NAME, hybridScores));
                     }
                 }
             }

@@ -56,7 +56,7 @@ public class NormalizationProcessorWorkflow {
 
     private final ScoreNormalizer scoreNormalizer;
     private final ScoreCombiner scoreCombiner;
-    private static final String NAME = "hybridization_sub_query_scores";
+    private static final String SUB_QUERY_SCORES_NAME = "hybridization_sub_query_scores";
 
     /**
      * Start execution of this workflow
@@ -353,7 +353,7 @@ public class NormalizationProcessorWorkflow {
 
             // Check for all the conditions
             boolean shouldAddHybridScores = subqueryScores != null
-                && documentFields.containsKey(NAME) == false
+                && documentFields.containsKey(SUB_QUERY_SCORES_NAME) == false
                 && isClusterOnOrAfterMinReqVersionForSubQuerySupport()
                 && hasInnerHits == false;
 
@@ -363,7 +363,7 @@ public class NormalizationProcessorWorkflow {
                 for (float score : subqueryScores) {
                     hybridScores.add(score);
                 }
-                searchHit.setDocumentField(NAME, new DocumentField(NAME, hybridScores));
+                searchHit.setDocumentField(SUB_QUERY_SCORES_NAME, new DocumentField(SUB_QUERY_SCORES_NAME, hybridScores));
             }
             updatedSearchHitArray[i] = searchHit;
         }

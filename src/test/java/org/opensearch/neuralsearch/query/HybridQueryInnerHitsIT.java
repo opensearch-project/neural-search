@@ -335,6 +335,48 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testInnerHitsWhenSubQueryEnabled_whenMultipleSubqueriesOnNestedFields_thenSuccessful() {
+        testInnerHitsWhenSubQueryEnabled_whenMultipleSubqueriesOnNestedFields_thenSuccessful(
+            TEST_MULTI_DOC_WITH_NESTED_FIELDS_SINGLE_SHARD_INDEX_NAME
+        );
+        testInnerHitsWhenSubQueryEnabled_whenMultipleSubqueriesOnNestedFields_thenSuccessful(
+            TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME
+        );
+    }
+
+    private void testInnerHitsWhenSubQueryEnabled_whenMultipleSubqueriesOnNestedFields_thenSuccessful(String indexName) {
+        initializeIndexIfNotExist(indexName);
+        createSearchPipeline(NORMALIZATION_SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, DEFAULT_COMBINATION_METHOD, Map.of(), true);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder("user", new MatchQueryBuilder("user.name", "John"), ScoreMode.Avg);
+        nestedQueryBuilder1.innerHit(new InnerHitBuilder());
+        NestedQueryBuilder nestedQueryBuilder2 = new NestedQueryBuilder(
+            "location",
+            new MatchQueryBuilder("location.state", "California"),
+            ScoreMode.Avg
+        );
+        nestedQueryBuilder2.innerHit(new InnerHitBuilder());
+        hybridQueryBuilder.add(nestedQueryBuilder1);
+        hybridQueryBuilder.add(nestedQueryBuilder2);
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE)
+        );
+
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        // No fields added to the hits when explain is enabled
+        for (Map<String, Object> hit : hitsNestedList) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
+            assertNull(fields);
+        }
+    }
+
+    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
         Map<String, Map<String, String>> nestedFields = new HashMap<>();
         nestedFields.put(

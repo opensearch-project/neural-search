@@ -635,6 +635,55 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         assertEquals(0, getListOfValues(hit1DetailsForHit1DetailsForHit6, "details").size());
     }
 
+    public void testSort_whenSubQueryScoresEnabled_thenSuccessful() {
+        testSort_whenSubQueryScoresEnabled_thenSuccessful(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
+        testSort_whenSubQueryScoresEnabled_thenSuccessful(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+    }
+
+    @SneakyThrows
+    private void testSort_whenSubQueryScoresEnabled_thenSuccessful(int numShards) {
+        String indexName;
+        if (numShards == 1) {
+            indexName = TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_SINGLE_SHARD;
+            initializeIndexIfNotExists(indexName, numShards);
+        } else {
+            indexName = TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS;
+            initializeIndexIfNotExists(indexName, numShards);
+        }
+        createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true, true);
+
+        HybridQueryBuilder hybridQueryBuilder = createHybridQueryBuilderWithMatchTermAndRangeQuery(
+            "mission",
+            "part",
+            LTE_OF_RANGE_IN_HYBRID_QUERY,
+            GTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+
+        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+        fieldSortOrderMap.put("stock", SortOrder.DESC);
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            createSortBuilders(fieldSortOrderMap, false),
+            false,
+            null,
+            0
+        );
+        List<Map<String, Object>> nestedHits = validateHitsCountAndFetchNestedHits(searchResponseAsMap, 6, 6);
+        // No fields added to the hits when explain is enabled
+        for (Map<String, Object> hit : nestedHits) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
+            assertNull(fields);
+        }
+    }
+
     private HybridQueryBuilder createHybridQueryBuilderWithMatchTermAndRangeQuery(String text, String value, int lte, int gte) {
         MatchQueryBuilder matchQueryBuilder = QueryBuilders.matchQuery(TEXT_FIELD_1_NAME, text);
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEXT_FIELD_1_NAME, value);
