@@ -47,4 +47,10 @@ public class SemanticFieldConstants {
      * it during query time.
      */
     public static final String SEMANTIC_FIELD_SEARCH_ANALYZER = "semantic_field_search_analyzer";
+
+    /**
+     * Name of the field for dense embedding config. The config will be used to override config of the underlying
+     * knn_vector field.
+     */
+    public static final String DENSE_EMBEDDING_CONFIG = "dense_embedding_config";
 }

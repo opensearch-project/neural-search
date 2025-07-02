@@ -16,6 +16,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
  */
 public class SemanticInfoFieldConstants {
     public static final String KNN_VECTOR_DIMENSION_FIELD_NAME = "dimension";
+    public static final String KNN_VECTOR_DATA_TYPE_FIELD_NAME = "data_type";
     public static final String KNN_VECTOR_METHOD_FIELD_NAME = "method";
     public static final String KNN_VECTOR_METHOD_NAME_FIELD_NAME = "name";
     public static final String KNN_VECTOR_METHOD_DEFAULT_NAME = "hnsw";
