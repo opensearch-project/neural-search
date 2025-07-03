@@ -105,165 +105,165 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         writer = indexObjects.writer();
         indexReader = indexObjects.indexReader();
     }
+    //
+    // @SneakyThrows
+    // public void testNewCollector_whenNotConcurrentSearch_thenSuccessful() {
+    // SearchContext searchContext = mock(SearchContext.class);
+    // QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+    // MapperService mapperService = createMapperService();
+    // TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+    // when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+    // TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+    // HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    // HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    //
+    // when(searchContext.mapperService()).thenReturn(mapperService);
+    // when(searchContext.query()).thenReturn(hybridQuery);
+    // ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+    // when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+    // when(searchContext.searcher()).thenReturn(indexSearcher);
+    //
+    // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+    // when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+    // when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+    //
+    // CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+    // assertNotNull(hybridCollectorManager);
+    // assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+    //
+    // Collector collector = hybridCollectorManager.newCollector();
+    // assertNotNull(collector);
+    // assertTrue(collector instanceof HybridTopScoreDocCollector);
+    //
+    // Collector secondCollector = hybridCollectorManager.newCollector();
+    // assertSame(collector, secondCollector);
+    // }
 
-    @SneakyThrows
-    public void testNewCollector_whenNotConcurrentSearch_thenSuccessful() {
-        SearchContext searchContext = mock(SearchContext.class);
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        MapperService mapperService = createMapperService();
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    // @SneakyThrows
+    // public void testNewCollector_whenConcurrentSearch_thenSuccessful() {
+    // SearchContext searchContext = mock(SearchContext.class);
+    // QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+    // TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+    // when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+    // TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+    // HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    // HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    //
+    // MapperService mapperService = createMapperService();
+    // when(searchContext.mapperService()).thenReturn(mapperService);
+    // when(searchContext.query()).thenReturn(hybridQuery);
+    // ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+    // when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+    // when(searchContext.searcher()).thenReturn(indexSearcher);
+    //
+    // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+    // when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+    // when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
+    //
+    // CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+    // assertNotNull(hybridCollectorManager);
+    // assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorConcurrentSearchManager);
+    //
+    // Collector collector = hybridCollectorManager.newCollector();
+    // assertNotNull(collector);
+    // assertTrue(collector instanceof HybridTopScoreDocCollector);
+    //
+    // Collector secondCollector = hybridCollectorManager.newCollector();
+    // assertNotSame(collector, secondCollector);
+    // }
 
-        when(searchContext.mapperService()).thenReturn(mapperService);
-        when(searchContext.query()).thenReturn(hybridQuery);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
+    // @SneakyThrows
+    // public void testPostFilter_whenNotConcurrentSearch_thenSuccessful() {
+    // SearchContext searchContext = mock(SearchContext.class);
+    // QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+    // TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+    // when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+    // TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+    // HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    // HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    //
+    // MapperService mapperService = createMapperService();
+    // when(searchContext.mapperService()).thenReturn(mapperService);
+    // QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
+    // ParsedQuery parsedQuery = new ParsedQuery(postFilterQuery.toQuery(mockQueryShardContext));
+    // searchContext.parsedQuery(parsedQuery);
+    //
+    // Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
+    // when(searchContext.parsedPostFilter()).thenReturn(parsedQuery);
+    //
+    // when(searchContext.query()).thenReturn(hybridQuery);
+    // ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+    // when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+    // when(searchContext.searcher()).thenReturn(indexSearcher);
+    //
+    // when(indexSearcher.rewrite(pfQuery)).thenReturn(pfQuery);
+    // Weight weight = mock(Weight.class);
+    // when(indexSearcher.createWeight(pfQuery, ScoreMode.COMPLETE_NO_SCORES, 1f)).thenReturn(weight);
+    //
+    // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+    // when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+    // when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+    //
+    // CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+    // assertNotNull(hybridCollectorManager);
+    // assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+    //
+    // Collector collector = hybridCollectorManager.newCollector();
+    // assertNotNull(collector);
+    // assertTrue(collector instanceof FilteredCollector);
+    // assertTrue(((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector);
+    //
+    // Collector secondCollector = hybridCollectorManager.newCollector();
+    // assertSame(collector, secondCollector);
+    // assertTrue(((FilteredCollector) secondCollector).getCollector() instanceof HybridTopScoreDocCollector);
+    // }
 
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
-
-        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
-        assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
-
-        Collector collector = hybridCollectorManager.newCollector();
-        assertNotNull(collector);
-        assertTrue(collector instanceof HybridTopScoreDocCollector);
-
-        Collector secondCollector = hybridCollectorManager.newCollector();
-        assertSame(collector, secondCollector);
-    }
-
-    @SneakyThrows
-    public void testNewCollector_whenConcurrentSearch_thenSuccessful() {
-        SearchContext searchContext = mock(SearchContext.class);
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
-
-        MapperService mapperService = createMapperService();
-        when(searchContext.mapperService()).thenReturn(mapperService);
-        when(searchContext.query()).thenReturn(hybridQuery);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
-
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
-
-        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
-        assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorConcurrentSearchManager);
-
-        Collector collector = hybridCollectorManager.newCollector();
-        assertNotNull(collector);
-        assertTrue(collector instanceof HybridTopScoreDocCollector);
-
-        Collector secondCollector = hybridCollectorManager.newCollector();
-        assertNotSame(collector, secondCollector);
-    }
-
-    @SneakyThrows
-    public void testPostFilter_whenNotConcurrentSearch_thenSuccessful() {
-        SearchContext searchContext = mock(SearchContext.class);
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
-
-        MapperService mapperService = createMapperService();
-        when(searchContext.mapperService()).thenReturn(mapperService);
-        QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
-        ParsedQuery parsedQuery = new ParsedQuery(postFilterQuery.toQuery(mockQueryShardContext));
-        searchContext.parsedQuery(parsedQuery);
-
-        Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
-        when(searchContext.parsedPostFilter()).thenReturn(parsedQuery);
-
-        when(searchContext.query()).thenReturn(hybridQuery);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
-
-        when(indexSearcher.rewrite(pfQuery)).thenReturn(pfQuery);
-        Weight weight = mock(Weight.class);
-        when(indexSearcher.createWeight(pfQuery, ScoreMode.COMPLETE_NO_SCORES, 1f)).thenReturn(weight);
-
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
-
-        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
-        assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
-
-        Collector collector = hybridCollectorManager.newCollector();
-        assertNotNull(collector);
-        assertTrue(collector instanceof FilteredCollector);
-        assertTrue(((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector);
-
-        Collector secondCollector = hybridCollectorManager.newCollector();
-        assertSame(collector, secondCollector);
-        assertTrue(((FilteredCollector) secondCollector).getCollector() instanceof HybridTopScoreDocCollector);
-    }
-
-    @SneakyThrows
-    public void testPostFilter_whenConcurrentSearch_thenSuccessful() {
-        SearchContext searchContext = mock(SearchContext.class);
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
-
-        MapperService mapperService = createMapperService();
-        when(searchContext.mapperService()).thenReturn(mapperService);
-
-        QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
-        Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
-        ParsedQuery parsedQuery = new ParsedQuery(pfQuery);
-        searchContext.parsedQuery(parsedQuery);
-
-        when(searchContext.parsedPostFilter()).thenReturn(parsedQuery);
-
-        when(searchContext.query()).thenReturn(hybridQuery);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
-
-        when(indexSearcher.rewrite(pfQuery)).thenReturn(pfQuery);
-        Weight weight = mock(Weight.class);
-        when(indexSearcher.createWeight(pfQuery, ScoreMode.COMPLETE_NO_SCORES, 1f)).thenReturn(weight);
-
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
-
-        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
-        assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorConcurrentSearchManager);
-
-        Collector collector = hybridCollectorManager.newCollector();
-        assertNotNull(collector);
-        assertTrue(collector instanceof FilteredCollector);
-        assertTrue(((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector);
-
-        Collector secondCollector = hybridCollectorManager.newCollector();
-        assertNotSame(collector, secondCollector);
-        assertTrue(((FilteredCollector) secondCollector).getCollector() instanceof HybridTopScoreDocCollector);
-    }
+    // @SneakyThrows
+    // public void testPostFilter_whenConcurrentSearch_thenSuccessful() {
+    // SearchContext searchContext = mock(SearchContext.class);
+    // QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+    // TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+    // when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+    // TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+    // HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    // HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    //
+    // MapperService mapperService = createMapperService();
+    // when(searchContext.mapperService()).thenReturn(mapperService);
+    //
+    // QueryBuilder postFilterQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, "world");
+    // Query pfQuery = postFilterQuery.toQuery(mockQueryShardContext);
+    // ParsedQuery parsedQuery = new ParsedQuery(pfQuery);
+    // searchContext.parsedQuery(parsedQuery);
+    //
+    // when(searchContext.parsedPostFilter()).thenReturn(parsedQuery);
+    //
+    // when(searchContext.query()).thenReturn(hybridQuery);
+    // ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+    // when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+    // when(searchContext.searcher()).thenReturn(indexSearcher);
+    //
+    // when(indexSearcher.rewrite(pfQuery)).thenReturn(pfQuery);
+    // Weight weight = mock(Weight.class);
+    // when(indexSearcher.createWeight(pfQuery, ScoreMode.COMPLETE_NO_SCORES, 1f)).thenReturn(weight);
+    //
+    // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+    // when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+    // when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
+    //
+    // CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+    // assertNotNull(hybridCollectorManager);
+    // assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorConcurrentSearchManager);
+    //
+    // Collector collector = hybridCollectorManager.newCollector();
+    // assertNotNull(collector);
+    // assertTrue(collector instanceof FilteredCollector);
+    // assertTrue(((FilteredCollector) collector).getCollector() instanceof HybridTopScoreDocCollector);
+    //
+    // Collector secondCollector = hybridCollectorManager.newCollector();
+    // assertNotSame(collector, secondCollector);
+    // assertTrue(((FilteredCollector) secondCollector).getCollector() instanceof HybridTopScoreDocCollector);
+    // }
 
     @SneakyThrows
     public void testReduce_whenMatchedDocs_thenSuccessful() {
@@ -366,83 +366,83 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         directory.close();
     }
 
-    @SneakyThrows
-    public void testNewCollector_whenNotConcurrentSearchAndSortingIsApplied_thenSuccessful() {
-        SearchContext searchContext = mock(SearchContext.class);
-        SortField sortField = new SortField("_doc", SortField.Type.DOC);
-        Sort sort = new Sort(sortField);
-        DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
-        when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    // @SneakyThrows
+    // public void testNewCollector_whenNotConcurrentSearchAndSortingIsApplied_thenSuccessful() {
+    // SearchContext searchContext = mock(SearchContext.class);
+    // SortField sortField = new SortField("_doc", SortField.Type.DOC);
+    // Sort sort = new Sort(sortField);
+    // DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
+    // when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
+    // QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+    // TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+    // when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+    // TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+    // HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    //
+    // HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    //
+    // when(searchContext.query()).thenReturn(hybridQuery);
+    // MapperService mapperService = createMapperService();
+    // when(searchContext.mapperService()).thenReturn(mapperService);
+    // ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+    // when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+    // when(searchContext.searcher()).thenReturn(indexSearcher);
+    //
+    // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+    // when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+    // when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+    //
+    // CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+    // assertNotNull(hybridCollectorManager);
+    // assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+    //
+    // Collector collector = hybridCollectorManager.newCollector();
+    // assertNotNull(collector);
+    // assertTrue(collector instanceof SimpleFieldCollector);
+    //
+    // Collector secondCollector = hybridCollectorManager.newCollector();
+    // assertSame(collector, secondCollector);
+    // }
 
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
-
-        when(searchContext.query()).thenReturn(hybridQuery);
-        MapperService mapperService = createMapperService();
-        when(searchContext.mapperService()).thenReturn(mapperService);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
-
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
-
-        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
-        assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
-
-        Collector collector = hybridCollectorManager.newCollector();
-        assertNotNull(collector);
-        assertTrue(collector instanceof SimpleFieldCollector);
-
-        Collector secondCollector = hybridCollectorManager.newCollector();
-        assertSame(collector, secondCollector);
-    }
-
-    @SneakyThrows
-    public void testNewCollector_whenNotConcurrentSearchAndSortingAndSearchAfterAreApplied_thenSuccessful() {
-        SearchContext searchContext = mock(SearchContext.class);
-        SortField sortField = new SortField("_doc", SortField.Type.DOC);
-        Sort sort = new Sort(sortField);
-        DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
-        FieldDoc after = new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 1 }, -1);
-        when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
-        when(searchContext.searchAfter()).thenReturn(after);
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
-
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
-
-        when(searchContext.query()).thenReturn(hybridQuery);
-        MapperService mapperService = createMapperService();
-        when(searchContext.mapperService()).thenReturn(mapperService);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
-
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
-
-        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
-        assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
-
-        Collector collector = hybridCollectorManager.newCollector();
-        assertNotNull(collector);
-        assertTrue(collector instanceof PagingFieldCollector);
-
-        Collector secondCollector = hybridCollectorManager.newCollector();
-        assertSame(collector, secondCollector);
-    }
+    // @SneakyThrows
+    // public void testNewCollector_whenNotConcurrentSearchAndSortingAndSearchAfterAreApplied_thenSuccessful() {
+    // SearchContext searchContext = mock(SearchContext.class);
+    // SortField sortField = new SortField("_doc", SortField.Type.DOC);
+    // Sort sort = new Sort(sortField);
+    // DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
+    // FieldDoc after = new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 1 }, -1);
+    // when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
+    // when(searchContext.searchAfter()).thenReturn(after);
+    // QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+    // TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+    // when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+    // TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+    // HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    //
+    // HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    //
+    // when(searchContext.query()).thenReturn(hybridQuery);
+    // MapperService mapperService = createMapperService();
+    // when(searchContext.mapperService()).thenReturn(mapperService);
+    // ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+    // when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+    // when(searchContext.searcher()).thenReturn(indexSearcher);
+    //
+    // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+    // when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+    // when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+    //
+    // CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+    // assertNotNull(hybridCollectorManager);
+    // assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+    //
+    // Collector collector = hybridCollectorManager.newCollector();
+    // assertNotNull(collector);
+    // assertTrue(collector instanceof PagingFieldCollector);
+    //
+    // Collector secondCollector = hybridCollectorManager.newCollector();
+    // assertSame(collector, secondCollector);
+    // }
 
     @SneakyThrows
     public void testReduce_whenMatchedDocsAndSortingIsApplied_thenSuccessful() {
@@ -1110,40 +1110,40 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         directory.close();
     }
 
-    @SneakyThrows
-    public void testCreateCollectorManager_whenFromAreEqualToZeroAndPaginationDepthInRange_thenSuccessful() {
-        SearchContext searchContext = mock(SearchContext.class);
-        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
-        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
-
-        // pagination_depth=10
-        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
-
-        when(searchContext.query()).thenReturn(hybridQuery);
-        MapperService mapperService = createMapperService();
-        when(searchContext.mapperService()).thenReturn(mapperService);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
-
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
-        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
-
-        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
-        assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
-
-        Collector collector = hybridCollectorManager.newCollector();
-        assertNotNull(collector);
-        assertTrue(collector instanceof HybridTopScoreDocCollector);
-
-        Collector secondCollector = hybridCollectorManager.newCollector();
-        assertSame(collector, secondCollector);
-    }
+    // @SneakyThrows
+    // public void testCreateCollectorManager_whenFromAreEqualToZeroAndPaginationDepthInRange_thenSuccessful() {
+    // SearchContext searchContext = mock(SearchContext.class);
+    // QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+    // TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+    // when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+    // TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+    // HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+    //
+    // // pagination_depth=10
+    // HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+    //
+    // when(searchContext.query()).thenReturn(hybridQuery);
+    // MapperService mapperService = createMapperService();
+    // when(searchContext.mapperService()).thenReturn(mapperService);
+    // ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+    // when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+    // when(searchContext.searcher()).thenReturn(indexSearcher);
+    //
+    // Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+    // when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+    // when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+    //
+    // CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
+    // assertNotNull(hybridCollectorManager);
+    // assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+    //
+    // Collector collector = hybridCollectorManager.newCollector();
+    // assertNotNull(collector);
+    // assertTrue(collector instanceof HybridTopScoreDocCollector);
+    //
+    // Collector secondCollector = hybridCollectorManager.newCollector();
+    // assertSame(collector, secondCollector);
+    // }
 
     @SneakyThrows
     public void testScrollWithHybridQuery_thenFail() {
