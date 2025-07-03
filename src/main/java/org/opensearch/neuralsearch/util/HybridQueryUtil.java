@@ -6,13 +6,16 @@ package org.opensearch.neuralsearch.util;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.search.internal.SearchContext;
 
+import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Utility class for anything related to hybrid query
@@ -40,7 +43,7 @@ public class HybridQueryUtil {
             && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.query() instanceof HybridQuery);
     }
 
-    private static boolean hasAliasFilter(final Query query, final SearchContext searchContext) {
+    private static boolean hasAliasFilter(final SearchContext searchContext) {
         return Objects.nonNull(searchContext.aliasFilter());
     }
 
@@ -48,8 +51,31 @@ public class HybridQueryUtil {
      * This method checks whether hybrid query is wrapped under boolean query object
      */
     public static boolean isHybridQueryWrappedInBooleanQuery(final SearchContext searchContext, final Query query) {
-        return ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+        return ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
             && isWrappedHybridQuery(query)
             && !((BooleanQuery) query).clauses().isEmpty());
+    }
+
+    public static Query extractHybridQuery(final SearchContext searchContext) {
+        Query query = searchContext.query();
+        if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
+                throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
+            }
+            HybridQuery hybridQuery = (HybridQuery) booleanClauses.get(0).query();
+            List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
+            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
+            return hybridQueryWithFilter;
+        }
+        return query;
+    }
+
+    public static void validateHybridQuery(final HybridQuery query) {
+        for (Query innerQuery : query) {
+            if (innerQuery instanceof HybridQuery) {
+                throw new IllegalArgumentException("hybrid query cannot be nested in another hybrid query");
+            }
+        }
     }
 }
