@@ -53,6 +53,7 @@ public class RRFProcessor extends AbstractScoreHybridizationProcessor {
     private final ScoreNormalizationTechnique normalizationTechnique;
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
+    private final boolean subQueryScores;
 
     private final Map<String, Runnable> combTechniqueIncrementers = Map.of(
         RRFScoreCombinationTechnique.TECHNIQUE_NAME,
@@ -87,6 +88,7 @@ public class RRFProcessor extends AbstractScoreHybridizationProcessor {
             .fetchSearchResultOptional(fetchSearchResult)
             .normalizationTechnique(normalizationTechnique)
             .combinationTechnique(combinationTechnique)
+            .subQueryScores(subQueryScores)
             .explain(explain)
             .pipelineProcessingContext(requestContextOptional.orElse(null))
             .searchPhaseContext(searchPhaseContext)
