@@ -31,7 +31,6 @@ public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpe
     private SearchContext searchContext;
 
     public HybridQueryCollectorContextSpec(final SearchContext searchContext) throws IOException {
-        log.info("call 1");
         this.searchContext = searchContext;
         Query query = extractHybridQuery(searchContext);
         validateHybridQuery((HybridQuery) query);
@@ -60,7 +59,6 @@ public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpe
             new HybridCollectorResultsUtilParams.Builder().searchContext(searchContext).build(),
             collector
         );
-        log.info("searchcontext from {}", searchContext.from());
         TopDocsAndMaxScore topDocsAndMaxScore = hybridSearchCollectorResultUtil.getTopDocsAndAndMaxScore();
         hybridSearchCollectorResultUtil.reduceCollectorResults(result, topDocsAndMaxScore);
     }
