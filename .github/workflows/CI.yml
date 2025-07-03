@@ -48,13 +48,15 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew check"
+          su `id -un 1000` -c "./gradlew check --parallel && ./gradlew jacocoTestReport"
 
       - name: Upload Coverage Report
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v3
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && contains(matrix.os, 'ubuntu') && contains(matrix.java, '21') }}
         with:
+          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
           token: ${{ secrets.CODECOV_TOKEN }}
+          path: ./build/reports/jacoco/test/jacocoTestReport.xml
 
   Check-neural-search-windows:
     strategy:
@@ -76,7 +78,7 @@ jobs:
 
       - name: Run build
         run: |
-          ./gradlew check
+          ./gradlew check -x integTest
 
   Precommit-neural-search-linux:
     needs: Get-CI-Image-Tag
@@ -109,28 +111,23 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew precommit --parallel && ./gradlew jacocoTestReport && cp -v build/reports/jacoco/test/jacocoTestReport.xml ./jacocoTestReport.xml"
+          su `id -un 1000` -c "./gradlew precommit -x integTest"
 
-      - uses: actions/upload-artifact@v4
-        if: ${{ matrix.os }} == "ubuntu-latest"
-        with:
-          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./jacocoTestReport.xml
-
-  Precommit-codecov:
+  integMultiNodeTest:
     needs: Precommit-neural-search-linux
     strategy:
       matrix:
-        java: [21, 23]
-        os: [ubuntu-latest]
+        java: [21,23]
+        os: [ ubuntu-latest, windows-latest ]
+    name: Multi-Node Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - name: Set up JDK ${{ matrix.java }}
+        uses: actions/setup-java@v4
         with:
-          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./
-      - name: Upload Coverage Report
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./jacocoTestReport.xml
+          java-version: ${{ matrix.java }}
+          distribution: temurin
+      - name: Build and Run Tests
+        run: |
+          ./gradlew integTest -PnumNodes=3
