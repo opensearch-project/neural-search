@@ -176,11 +176,10 @@ public class SparsePostingsReader {
             FieldsProducer fieldsProducer = mergeState.fieldsProducers[i];
             // we need this SparseBinaryDocValuesPassThrough to get segment info
             BinaryDocValues binaryDocValues = mergeState.docValuesProducers[i].getBinary(fieldInfo);
-            if (!(binaryDocValues instanceof SparseBinaryDocValuesPassThrough)) {
+            if (!(binaryDocValues instanceof SparseBinaryDocValuesPassThrough sparseBinaryDocValues)) {
                 log.error("binaryDocValues is not SparseBinaryDocValuesPassThrough, {}", binaryDocValues.getClass().getName());
                 continue;
             }
-            SparseBinaryDocValuesPassThrough sparseBinaryDocValues = (SparseBinaryDocValuesPassThrough) binaryDocValues;
             Terms terms = fieldsProducer.terms(fieldInfo.name);
             if (terms == null) {
                 log.error("terms is null");
@@ -193,7 +192,7 @@ public class SparsePostingsReader {
                 continue;
             }
 
-            if (termsEnum.seekCeil(term) == TermsEnum.SeekStatus.NOT_FOUND) {
+            if (!termsEnum.seekExact(term)) {
                 continue;
             }
             PostingsEnum postings = termsEnum.postings(null);
