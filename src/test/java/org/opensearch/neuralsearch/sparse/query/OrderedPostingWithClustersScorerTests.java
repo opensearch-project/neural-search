@@ -4,18 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.query;
 
-import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.PostingsEnum;
@@ -23,10 +12,13 @@ import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.similarities.Similarity;
 import org.apache.lucene.store.ByteBuffersDirectory;
+import org.apache.lucene.util.BitSetIterator;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
+import org.apache.lucene.util.FixedBitSet;
 import org.apache.lucene.util.Version;
 import org.junit.Before;
 import org.mockito.Mock;
@@ -43,25 +35,24 @@ import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
 
-public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
-    private static final String FIELD_NAME = "test_field";
+import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
-    // Test constants
-    private static final int K = 2;
-    private static final float HEAP_FACTOR = 1.0f;
-    private static final List<String> TOKENS = Arrays.asList("token1", "token2");
-    private static final Similarity.SimScorer simScorer = new Similarity.SimScorer() {
-        @Override
-        public float score(float freq, long norm) {
-            return freq;
-        }
-    };
-    // Test variables
-    private SparseQueryContext queryContext;
-    private byte[] queryDenseVector;
-    @Mock
-    private SparseVector queryVector;
+public class OrderedPostingWithClustersScorerTests extends AbstractSparseTestBase {
+
     @Mock
     private LeafReader leafReader;
     @Mock
@@ -69,30 +60,55 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
     @Mock
     private TermsEnum termsEnum;
     @Mock
-    private SparseVectorReader reader;
+    private SparseVectorReader vectorReader;
     @Mock
     private SparsePostingsEnum postingsEnum1;
     @Mock
     private SparsePostingsEnum postingsEnum2;
     @Mock
     private SparseBinaryDocValuesPassThrough sparseBinaryDocValues;
+
+    private static final String FIELD_NAME = "test_field";
+    private static final int MAX_DOC_COUNT = 100;
+    private static final float score = 34.0f;
+    private static final int K_VALUE = 5;
+    private static final List<String> TEST_TOKENS = Arrays.asList("token1", "token2");
+
+    private SparseVector queryVector;
+    private List<Pair<Integer, Integer>> searchResults;
+    private Similarity.SimScorer simScorer;
+    private byte[] queryDenseVector;
+    private SparseQueryContext sparseQueryContext;
     private SegmentInfo segmentInfo;
 
     @Before
-    @Override
     public void setUp() throws Exception {
         super.setUp();
+        // Initialize mocks
         MockitoAnnotations.openMocks(this);
-        // Initialize common test objects
-        queryContext = constructSparseQueryContext(K, HEAP_FACTOR, TOKENS);
-        queryDenseVector = new byte[] { 1, 2, 3, 4 };
-        when(queryVector.toDenseVector()).thenReturn(queryDenseVector);
-        // Mock LeafReaderContext
-        when(leafReader.maxDoc()).thenReturn(100);
-        // Mock Terms
-        when(Terms.getTerms(leafReader, FIELD_NAME)).thenReturn(terms);
-        // Mock TermsEnum
-        when(terms.iterator()).thenReturn(termsEnum);
+
+        // Setup query vector
+        queryVector = createVector(1, 5, 2, 3, 3, 7);
+        queryDenseVector = queryVector.toDenseVector();
+        searchResults = Arrays.asList(Pair.of(3, 1), Pair.of(2, 2), Pair.of(3, 3));
+        // Setup sparse query context
+        sparseQueryContext = constructSparseQueryContext(K_VALUE, 1.0f, TEST_TOKENS);
+
+        // Setup leaf reader
+        when(leafReader.maxDoc()).thenReturn(MAX_DOC_COUNT);
+        preparePostings(leafReader, FIELD_NAME, terms, termsEnum, postingsEnum1, Map.of("token1", true, "token2", false));
+        prepareCluster(postingsEnum1);
+        // Setup vector reader
+        SparseVector docVector = createVector(1, 5, 2, 3);
+        when(vectorReader.read(anyInt())).thenReturn(docVector);
+
+        // Setup simScorer
+        simScorer = new Similarity.SimScorer() {
+            @Override
+            public float score(float freq, long norm) {
+                return freq;
+            }
+        };
         when(leafReader.getBinaryDocValues(anyString())).thenReturn(sparseBinaryDocValues);
         segmentInfo = new SegmentInfo(
             new ByteBuffersDirectory(),
@@ -109,6 +125,142 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
             null
         );
         when(sparseBinaryDocValues.getSegmentInfo()).thenReturn(segmentInfo);
+    }
+
+    public void testConstructorWithoutFilter() throws IOException {
+        // Create a spy of OrderedPostingWithClustersScorer to mock searchUpfront
+        OrderedPostingWithClustersScorer scorerSpy = spy(
+            new OrderedPostingWithClustersScorer(
+                FIELD_NAME,
+                sparseQueryContext,
+                queryVector,
+                leafReader,
+                null,
+                vectorReader,
+                simScorer,
+                null
+            )
+        );
+
+        // Mock searchUpfront to return our predefined results
+        doReturn(searchResults).when(scorerSpy).searchUpfront(eq(K_VALUE));
+
+        // Test iterator
+        DocIdSetIterator iterator = scorerSpy.iterator();
+        assertEquals(1, iterator.nextDoc());
+        assertEquals(score, scorerSpy.score(), DELTA_FOR_ASSERTION);
+        assertEquals(2, iterator.nextDoc());
+        assertEquals(score, scorerSpy.score(), DELTA_FOR_ASSERTION);
+        assertEquals(3, iterator.nextDoc());
+        assertEquals(score, scorerSpy.score(), DELTA_FOR_ASSERTION);
+        assertEquals(NO_MORE_DOCS, iterator.nextDoc());
+    }
+
+    public void testConstructorWithFilter() throws IOException {
+        // Create a BitSetIterator for filtering
+        FixedBitSet bitSet = new FixedBitSet(MAX_DOC_COUNT);
+        bitSet.set(1);
+        bitSet.set(5);
+        BitSetIterator filterBitSetIterator = new BitSetIterator(bitSet, 2);
+
+        // Create a spy of OrderedPostingWithClustersScorer to mock searchUpfront
+        OrderedPostingWithClustersScorer scorerSpy = spy(
+            new OrderedPostingWithClustersScorer(
+                FIELD_NAME,
+                sparseQueryContext,
+                queryVector,
+                leafReader,
+                null,
+                vectorReader,
+                simScorer,
+                filterBitSetIterator
+            )
+        );
+
+        // Test iterator - should only return doc 1 and 5 (intersection of results and filter)
+        DocIdSetIterator iterator = scorerSpy.iterator();
+        assertEquals(1, iterator.nextDoc());
+        assertEquals(NO_MORE_DOCS, iterator.nextDoc());
+    }
+
+    public void testDocID() throws IOException {
+        // Create a spy of OrderedPostingWithClustersScorer to mock searchUpfront
+        OrderedPostingWithClustersScorer scorerSpy = spy(
+            new OrderedPostingWithClustersScorer(
+                FIELD_NAME,
+                sparseQueryContext,
+                queryVector,
+                leafReader,
+                null,
+                vectorReader,
+                simScorer,
+                null
+            )
+        );
+
+        // Mock searchUpfront to return our predefined results
+        doReturn(searchResults).when(scorerSpy).searchUpfront(eq(K_VALUE));
+
+        // Test docID
+        DocIdSetIterator iterator = scorerSpy.iterator();
+        assertEquals(-1, scorerSpy.docID());
+
+        iterator.nextDoc();
+        assertEquals(1, scorerSpy.docID());
+        assertEquals(score, scorerSpy.score(), DELTA_FOR_ASSERTION);
+
+        iterator.nextDoc();
+        assertEquals(2, scorerSpy.docID());
+        assertEquals(score, scorerSpy.score(), DELTA_FOR_ASSERTION);
+
+        iterator.nextDoc();
+        assertEquals(3, scorerSpy.docID());
+        assertEquals(score, scorerSpy.score(), DELTA_FOR_ASSERTION);
+
+        iterator.nextDoc();
+        assertEquals(NO_MORE_DOCS, scorerSpy.docID());
+    }
+
+    public void testComplexHappyCase() throws IOException {
+        when(termsEnum.seekExact(new BytesRef("token1"))).thenReturn(true);
+        when(termsEnum.seekExact(new BytesRef("token2"))).thenReturn(true);
+
+        // Mock SparsePostingsEnum
+        when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum1).thenReturn(postingsEnum2);
+
+        // Mock clusters in term1
+        DocumentCluster cluster1_1 = prepareCluster(10, false, queryDenseVector);
+        DocumentCluster cluster1_2 = prepareCluster(0, true, queryDenseVector);
+        DocumentCluster cluster1_3 = prepareCluster(0, false, queryDenseVector);
+        DocumentCluster cluster2_1 = prepareCluster(3, false, queryDenseVector);
+
+        // Mock cluster iterator
+        IteratorWrapper<DocumentCluster> clusterIterator1 = mock(IteratorWrapper.class);
+        IteratorWrapper<DocumentCluster> clusterIterator2 = mock(IteratorWrapper.class);
+        when(postingsEnum1.clusterIterator()).thenReturn(clusterIterator1);
+        when(postingsEnum2.clusterIterator()).thenReturn(clusterIterator2);
+        when(clusterIterator1.next()).thenReturn(cluster1_1).thenReturn(cluster1_2).thenReturn(cluster1_3).thenReturn(null);
+        when(clusterIterator2.next()).thenReturn(cluster2_1).thenReturn(null);
+        when(leafReader.maxDoc()).thenReturn(15);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster1_1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6); // first cluster will be examined
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector,cluster1_2, 7, 0, 8, 1, 9, 2, 10, 5, 11, 2); // second cluster should not be skipped
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector,cluster1_3, 12, 100); // third cluster will be skipped
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector,cluster2_1, 13, 10); // fourth cluster will be examined
+
+        // Create scorer
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
+            FIELD_NAME,
+            sparseQueryContext,
+            queryVector,
+            leafReader,
+            null,
+            vectorReader,
+            simScorer,
+            null
+        );
+
+        // Test iterator - should skip the low score cluster and process the high score one
+        verifyDocIDs(Arrays.asList(4, 5, 6, 10, 13), scorer);
     }
 
     public void testBasicScoring() throws IOException {
@@ -141,14 +293,15 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         when(docVector.dotProduct(queryDenseVector)).thenReturn(5);
 
         // Create scorer
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
             FIELD_NAME,
-            queryContext,
+            sparseQueryContext,
             queryVector,
             leafReader,
             null,
             reader,
-            simScorer
+            simScorer,
+            null
         );
 
         // Test iterator
@@ -156,55 +309,6 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         assertEquals(1, iterator.nextDoc());
         assertEquals(5, scorer.score(), DELTA_FOR_ASSERTION);
         assertEquals(NO_MORE_DOCS, iterator.nextDoc());
-    }
-
-    public void testComplexHappyCase() throws IOException {
-        when(termsEnum.seekExact(new BytesRef("token1"))).thenReturn(true);
-        when(termsEnum.seekExact(new BytesRef("token2"))).thenReturn(true);
-
-        // Mock SparsePostingsEnum
-        when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum1).thenReturn(postingsEnum2);
-
-        // Mock clusters in term1
-        DocumentCluster cluster1_1 = prepareCluster(10, false);
-        DocumentCluster cluster1_2 = prepareCluster(0, true);
-        DocumentCluster cluster1_3 = prepareCluster(1, false);
-        DocumentCluster cluster2_1 = prepareCluster(3, false);
-
-        // Mock cluster iterator
-        IteratorWrapper<DocumentCluster> clusterIterator1 = mock(IteratorWrapper.class);
-        IteratorWrapper<DocumentCluster> clusterIterator2 = mock(IteratorWrapper.class);
-        when(postingsEnum1.clusterIterator()).thenReturn(clusterIterator1);
-        when(postingsEnum2.clusterIterator()).thenReturn(clusterIterator2);
-        when(clusterIterator1.next()).thenReturn(cluster1_1).thenReturn(cluster1_2).thenReturn(cluster1_3).thenReturn(null);
-        when(clusterIterator2.next()).thenReturn(cluster2_1).thenReturn(null);
-
-        prepareClusterAndItsDocs(cluster1_1, 1, 2, 2, 2); // first cluster will be examined
-        prepareClusterAndItsDocs(cluster1_2, 3, 0); // second cluster should not be skipped
-        prepareClusterAndItsDocs(cluster1_3, 4, 1); // third cluster will be skipped
-        prepareClusterAndItsDocs(cluster2_1, 5, 1, 1, 10); // fourth cluster will be examined
-
-        // Create scorer
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(
-            FIELD_NAME,
-            queryContext,
-            queryVector,
-            leafReader,
-            null,
-            reader,
-            simScorer
-        );
-
-        // Test iterator - should skip the low score cluster and process the high score one
-        DocIdSetIterator iterator = scorer.iterator();
-        List<Integer> expectedDocIds = Arrays.asList(1, 2, 3, 5);
-        List<Integer> actualDocIds = new ArrayList<>();
-        int doc = iterator.nextDoc();
-        while (iterator.docID() != NO_MORE_DOCS) {
-            actualDocIds.add(doc);
-            doc = iterator.nextDoc();
-        }
-        assertEquals(expectedDocIds, actualDocIds);
     }
 
     public void testDocumentFiltering() throws IOException {
@@ -215,7 +319,7 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum);
 
         // Mock document cluster
-        DocumentCluster cluster = prepareCluster(10, false);
+        DocumentCluster cluster = prepareCluster(10, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
@@ -241,14 +345,15 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         when(docVector.dotProduct(queryDenseVector)).thenReturn(15);
 
         // Create scorer
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
             FIELD_NAME,
-            queryContext,
+            sparseQueryContext,
             queryVector,
             leafReader,
             acceptedDocs,
             reader,
-            simScorer
+            simScorer,
+            null
         );
 
         // First call to nextDoc() - should skip doc 10 (deleted) and doc 20 (already visited)
@@ -271,20 +376,20 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         SparsePostingsEnum postingsEnum = mock(SparsePostingsEnum.class);
         when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum);
         // cluster 1 will always be examined, cluster2 will be not as its dp score won't surpass heap's lowest
-        DocumentCluster cluster1 = prepareCluster(10, false);
-        DocumentCluster cluster2 = prepareCluster(9, false);
+        DocumentCluster cluster1 = prepareCluster(10, false, queryDenseVector);
+        DocumentCluster cluster2 = prepareCluster(9, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
         when(postingsEnum.clusterIterator()).thenReturn(clusterIterator);
         when(clusterIterator.next()).thenReturn(cluster1).thenReturn(cluster2).thenReturn(null);
 
-        prepareClusterAndItsDocs(cluster1, 1, 5, 2, 10, 3, 15);
-        prepareClusterAndItsDocs(cluster2, 2, 10, 3, 15);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster1, 1, 5, 2, 10, 3, 15);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster2, 2, 10, 3, 15);
 
         // Create scorer
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(FIELD_NAME, queryContext, queryVector,
-            leafReader, null, reader, simScorer
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(FIELD_NAME, sparseQueryContext, queryVector,
+            leafReader, null, vectorReader, simScorer, null
         );
 
         // Process all documents
@@ -313,144 +418,29 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         SparsePostingsEnum postingsEnum = mock(SparsePostingsEnum.class);
         when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum);
         // cluster 1 will always be examined, cluster2 will be not as its dp score won't surpass heap's lowest
-        DocumentCluster cluster1 = prepareCluster(10, false);
-        DocumentCluster cluster2 = prepareCluster(6, false);
+        DocumentCluster cluster1 = prepareCluster(10, false, queryDenseVector);
+        DocumentCluster cluster2 = prepareCluster(1, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
         when(postingsEnum.clusterIterator()).thenReturn(clusterIterator);
         when(clusterIterator.next()).thenReturn(cluster1).thenReturn(cluster2).thenReturn(null);
 
-        prepareClusterAndItsDocs(cluster1, 1, 5, 2, 10, 3, 15);
-        prepareClusterAndItsDocs(cluster2, 4, 1);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster1, 1, 12, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster2, 11, 11);
 
         // Create scorer
         SparseQueryContext context = SparseQueryContext.builder()
             .heapFactor(2.0f)
             .k(2)
-            .tokens(TOKENS)
+            .tokens(TEST_TOKENS)
             .build();
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(FIELD_NAME, context, queryVector,
-            leafReader, null, reader, simScorer
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(FIELD_NAME, context, queryVector,
+            leafReader, null, vectorReader, simScorer, null
         );
 
         // Process all documents
-        DocIdSetIterator iterator = scorer.iterator();
-
-        // First doc (doc 1)
-        assertEquals(1, iterator.nextDoc());
-        assertEquals(5, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // Second doc (doc 2)
-        assertEquals(2, iterator.nextDoc());
-        assertEquals(10, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // Third doc (doc 3)
-        assertEquals(3, iterator.nextDoc());
-        assertEquals(15, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // fourth doc (doc 4)
-        assertEquals(4, iterator.nextDoc());
-        assertEquals(1, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // No more docs
-        assertEquals(NO_MORE_DOCS, iterator.nextDoc());
-    }
-
-    public void testLargerK() throws IOException {
-        when(termsEnum.seekExact(new BytesRef("token1"))).thenReturn(true);
-
-        // Mock SparsePostingsEnum
-        SparsePostingsEnum postingsEnum = mock(SparsePostingsEnum.class);
-        when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum);
-        // cluster 1 will always be examined, cluster2 will be not as its dp score won't surpass heap's lowest
-        DocumentCluster cluster1 = prepareCluster(10, false);
-        DocumentCluster cluster2 = prepareCluster(6, false);
-
-        // Mock cluster iterator
-        IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
-        when(postingsEnum.clusterIterator()).thenReturn(clusterIterator);
-        when(clusterIterator.next()).thenReturn(cluster1).thenReturn(cluster2).thenReturn(null);
-
-        prepareClusterAndItsDocs(cluster1, 1, 5, 2, 10, 3, 15);
-        prepareClusterAndItsDocs(cluster2, 4, 1);
-
-        // Create scorer
-        SparseQueryContext context = SparseQueryContext.builder()
-            .heapFactor(0.1f)
-            .k(5)
-            .tokens(TOKENS)
-            .build();
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(FIELD_NAME, context, queryVector,
-            leafReader, null, reader, simScorer
-        );
-
-        // Process all documents
-        DocIdSetIterator iterator = scorer.iterator();
-
-        // First doc (doc 1)
-        assertEquals(1, iterator.nextDoc());
-        assertEquals(5, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // Second doc (doc 2)
-        assertEquals(2, iterator.nextDoc());
-        assertEquals(10, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // Third doc (doc 3)
-        assertEquals(3, iterator.nextDoc());
-        assertEquals(15, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // fourth doc (doc 4)
-        assertEquals(4, iterator.nextDoc());
-        assertEquals(1, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // No more docs
-        assertEquals(NO_MORE_DOCS, iterator.nextDoc());
-    }
-
-    public void testClusterShouldNotSkip() throws IOException {
-        when(termsEnum.seekExact(new BytesRef("token1"))).thenReturn(true);
-
-        // Mock SparsePostingsEnum
-        when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum1);
-        // cluster 1 will always be examined, cluster2 will be not as its dp score won't surpass heap's lowest
-        DocumentCluster cluster1 = prepareCluster(10, false);
-        DocumentCluster cluster2 = prepareCluster(9, true);
-
-        // Mock cluster iterator
-        IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
-        when(postingsEnum1.clusterIterator()).thenReturn(clusterIterator);
-        when(clusterIterator.next()).thenReturn(cluster1).thenReturn(cluster2).thenReturn(null);
-
-        prepareClusterAndItsDocs(cluster1, 1, 5, 2, 10);
-        prepareClusterAndItsDocs(cluster2, 3, 15, 4, 9);
-
-        // Create scorer
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(FIELD_NAME, queryContext, queryVector,
-            leafReader, null, reader, simScorer
-        );
-
-        // Process all documents
-        DocIdSetIterator iterator = scorer.iterator();
-
-        // First doc (doc 1)
-        assertEquals(1, iterator.nextDoc());
-        assertEquals(5, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // Second doc (doc 2)
-        assertEquals(2, iterator.nextDoc());
-        assertEquals(10, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // Third doc (doc 3)
-        assertEquals(3, iterator.nextDoc());
-        assertEquals(15, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // Fourth doc (doc 4)
-        assertEquals(4, iterator.nextDoc());
-        assertEquals(9, scorer.score(), DELTA_FOR_ASSERTION);
-
-        // No more docs
-        assertEquals(NO_MORE_DOCS, iterator.nextDoc());
+        verifyDocIDs(Arrays.asList(1, 11), scorer);
     }
 
     public void testNullSparseVectorReaderWithoutInMemoryReader() throws IOException {
@@ -460,7 +450,7 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         when(postingsEnum1.getIndexKey()).thenReturn(indexKey);
 
         // Mock document cluster
-        DocumentCluster cluster = prepareCluster(10, false);
+        DocumentCluster cluster = prepareCluster(10, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
@@ -472,17 +462,18 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         when(sparseBinaryDocValues.read(1)).thenReturn(null);
         when(sparseBinaryDocValues.read(2)).thenReturn(vector);
 
-        prepareClusterAndItsDocs(cluster, 1, 2, 2, 3);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster, 1, 2, 2, 3);
 
         // Create scorer
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
             FIELD_NAME,
-            queryContext,
+            sparseQueryContext,
             queryVector,
             leafReader,
             null,
             null,
-            simScorer
+            simScorer,
+            null
         );
 
         // Test iterator - should skip doc 1 (no vector) and return doc 2
@@ -497,28 +488,29 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         InMemoryKey.IndexKey indexKey = new InMemoryKey.IndexKey(segmentInfo, FIELD_NAME);
 
         // Mock document cluster
-        DocumentCluster cluster = prepareCluster(10, false);
+        DocumentCluster cluster = prepareCluster(10, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
         when(postingsEnum1.clusterIterator()).thenReturn(clusterIterator);
         when(clusterIterator.next()).thenReturn(cluster).thenReturn(null);
 
-        prepareClusterAndItsDocs(cluster, 1, 2, 2, 3);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster, 1, 2, 2, 3);
 
         SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.getOrCreate(indexKey, 10);
         SparseVector vector = mock(SparseVector.class);
         when(vector.dotProduct(queryDenseVector)).thenReturn(5);
         index.getWriter().write(1, vector);
 
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
             FIELD_NAME,
-            queryContext,
+            sparseQueryContext,
             queryVector,
             leafReader,
             null,
             null,
-            simScorer
+            simScorer,
+            null
         );
 
         // Test iterator - should skip doc 1 (no vector) and return doc 2
@@ -534,14 +526,14 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         when(postingsEnum1.getIndexKey()).thenReturn(indexKey);
 
         // Mock document cluster
-        DocumentCluster cluster = prepareCluster(10, false);
+        DocumentCluster cluster = prepareCluster(10, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
         when(postingsEnum1.clusterIterator()).thenReturn(clusterIterator);
         when(clusterIterator.next()).thenReturn(cluster).thenReturn(null);
 
-        prepareClusterAndItsDocs(cluster, 1, 2, 2, 3);
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster, 1, 2, 2, 3);
 
         SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.getOrCreate(indexKey, 10);
         SparseVector vector = mock(SparseVector.class);
@@ -551,14 +543,15 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         BinaryDocValues binaryDocValues = mock(BinaryDocValues.class);
         when(leafReader.getBinaryDocValues(anyString())).thenReturn(binaryDocValues);
 
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
             FIELD_NAME,
-            queryContext,
+            sparseQueryContext,
             queryVector,
             leafReader,
             null,
             null,
-            simScorer
+            simScorer,
+            null
         );
 
         // Test iterator - should skip doc 1 (no vector) and return doc 2
@@ -571,7 +564,7 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum1);
 
         // Mock document cluster
-        DocumentCluster cluster = prepareCluster(10, false);
+        DocumentCluster cluster = prepareCluster(10, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
@@ -582,19 +575,20 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         DocFreqIterator docIterator = constructDocFreqIterator(1, 2);
         when(cluster.getDisi()).thenReturn(docIterator);
         // Doc 1 has no vector
-        when(reader.read(1)).thenReturn(null);
+        when(vectorReader.read(1)).thenReturn(null);
         // Doc 2 has a vector
-        SparseVector docVector = prepareVector(2, 5);
+        SparseVector docVector = prepareVector(2, 5, vectorReader, queryDenseVector);
 
         // Create scorer
-        PostingWithClustersScorer scorer = new PostingWithClustersScorer(
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
             FIELD_NAME,
-            queryContext,
+            sparseQueryContext,
             queryVector,
             leafReader,
             null,
-            reader,
-            simScorer
+            vectorReader,
+            simScorer,
+            null
         );
 
         // Test iterator - should skip doc 1 (no vector) and return doc 2
@@ -604,41 +598,14 @@ public class PostingWithClustersScorerTests extends AbstractSparseTestBase {
         assertEquals(NO_MORE_DOCS, iterator.nextDoc());
     }
 
-    private SparseQueryContext constructSparseQueryContext(int k, float hf, List<String> tokens) {
-        return SparseQueryContext.builder().k(k).heapFactor(hf).tokens(tokens).build();
-    }
-
-    private DocumentCluster prepareCluster(int summaryDP, boolean shouldNotSkip) {
-        // Mock document cluster
-        DocumentCluster cluster = mock(DocumentCluster.class);
-        SparseVector clusterSummary = mock(SparseVector.class);
-        when(cluster.getSummary()).thenReturn(clusterSummary);
-        when(clusterSummary.dotProduct(queryDenseVector)).thenReturn(summaryDP);
-        when(cluster.isShouldNotSkip()).thenReturn(shouldNotSkip);
-        return cluster;
-    }
-
-    private void prepareVectors(int... arguments) throws IOException {
-        for (int i = 0; i < arguments.length; i += 2) {
-            prepareVector(arguments[i], arguments[i + 1]);
+    private void verifyDocIDs(List<Integer> expectedDocIds, Scorer scorer) throws IOException {
+        DocIdSetIterator iterator = scorer.iterator();
+        List<Integer> actualDocIds = new ArrayList<>();
+        int doc = iterator.nextDoc();
+        while (iterator.docID() != NO_MORE_DOCS) {
+            actualDocIds.add(doc);
+            doc = iterator.nextDoc();
         }
-    }
-
-    private SparseVector prepareVector(int docId, int dpScore) throws IOException {
-        SparseVector docVector = mock(SparseVector.class);
-        when(reader.read(docId)).thenReturn(docVector);
-        when(docVector.dotProduct(queryDenseVector)).thenReturn(dpScore);
-        return docVector;
-    }
-
-    private void prepareClusterAndItsDocs(DocumentCluster cluster, int... docScores) throws IOException {
-        prepareVectors(docScores);
-        List<Integer> docs = new ArrayList<>();
-        for (int i = 0; i < docScores.length; i += 2) {
-            docs.add(docScores[i]);
-        }
-        // Mock DocFreqIterator with two docs - one with vector and one without
-        DocFreqIterator docIterator = constructDocFreqIterator(docs, docs);
-        when(cluster.getDisi()).thenReturn(docIterator);
+        assertEquals(expectedDocIds, actualDocIds);
     }
 }

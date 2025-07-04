@@ -59,6 +59,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     static final ParseField HEAP_FACTOR_FIELD = new ParseField("heap_factor");
     @VisibleForTesting
     public static final ParseField METHOD_PARAMETERS_FIELD = new ParseField("method_parameters");
+    @VisibleForTesting
+    public static final ParseField FILTER_FIELD = new ParseField("filter");
     private String fieldName;
     private Integer queryCut;
     private Integer k;
@@ -110,6 +112,14 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                         String.format(Locale.ROOT, "[%s] unknown field [%s]", NAME, methodFieldName)
                     );
                 }
+            } else if (FILTER_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
+                QueryBuilder filterQueryBuilder = parseInnerQueryBuilder(parser);
+                builder.filter(filterQueryBuilder);
+            } else {
+                throw new ParsingException(
+                    parser.getTokenLocation(),
+                    String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, methodFieldName)
+                );
             }
         }
         return builder.build();
@@ -169,10 +179,16 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
 
         SparseQueryContext sparseQueryContext = constructSparseQueryContext();
 
+        Query filterQuery = null;
+        if (filter != null) {
+            filterQuery = filter.toQuery(context);
+        }
+
         return new SparseVectorQuery.SparseVectorQueryBuilder().fieldName(fieldName)
             .queryContext(sparseQueryContext)
             .queryVector(new SparseVector(queryTokens))
             .originalQuery(fallbackQuery)
+            .filter(filterQuery)
             .build();
     }
 
