@@ -113,7 +113,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testQueryWithBoostAndImageQueryAndRadialQuery() {
         // Enable stats for the test
-        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), true);
+        enableStats();
         String modelId = null;
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
         modelId = prepareModel();
@@ -207,7 +207,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             getNestedValue(allNodesStats, EventStatName.NEURAL_QUERY_REQUESTS)
         );
         // Disable stats to not impact other tests
-        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), false);
+        disableStats();
     }
 
     /**

@@ -34,7 +34,7 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
     public void testStats_E2EFlow() throws Exception {
 
         waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
 
         // Get initial stats
         String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());

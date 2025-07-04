@@ -84,7 +84,7 @@ public class HybridQueryFilterIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testFilterOnHybridQuery_statsEnabled() {
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
         prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER);
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
 
@@ -148,7 +148,7 @@ public class HybridQueryFilterIT extends BaseNeuralSearchIT {
         assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
         assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_REQUESTS));
 
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
     }
 
     @SneakyThrows

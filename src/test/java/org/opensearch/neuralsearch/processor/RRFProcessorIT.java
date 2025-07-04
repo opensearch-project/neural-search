@@ -66,7 +66,7 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testRRF_statsEnabled() {
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
 
         createPipelineProcessor(null, RRF_INGEST_PIPELINE, ProcessorType.TEXT_EMBEDDING);
         prepareKnnIndex(RRF_INDEX_NAME, Collections.singletonList(new KNNFieldConfig("passage_embedding", RRF_DIMENSION, TEST_SPACE_TYPE)));
@@ -89,7 +89,7 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
         assertEquals(1, getNestedValue(stats, InfoStatName.RRF_PROCESSORS));
         assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_RRF_PROCESSORS));
 
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
     }
 
     private HybridQueryBuilder getHybridQueryBuilder() {

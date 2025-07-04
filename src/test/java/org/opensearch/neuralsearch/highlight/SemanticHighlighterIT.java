@@ -82,7 +82,7 @@ public class SemanticHighlighterIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testQueriesWithSemanticHighlighter() {
         // Enable stats for the test
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
         // Set up models for the test
         String textEmbeddingModelId = prepareModel();
         String sentenceHighlightingModelId = prepareSentenceHighlightingModel();

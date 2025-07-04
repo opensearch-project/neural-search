@@ -134,7 +134,7 @@ public class TextImageEmbeddingProcessorIT extends BaseNeuralSearchIT {
         assertEquals(1, getNestedValue(stats, InfoStatName.SKIP_EXISTING_PROCESSORS.getFullPath()));
 
         // Reset stats
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
 
         disableStats();
     }

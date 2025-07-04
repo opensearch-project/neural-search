@@ -27,7 +27,7 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
     // Info stats based on persistent constructs should be persisted between restarts
     public void testNeuralStats_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
 
         // Get initial stats
         String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
