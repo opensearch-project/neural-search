@@ -521,11 +521,14 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
         }
-        Query neuralSparseQuery = builder.build();
         if (!isSeismic) {
-            return neuralSparseQuery;
+            return builder.build();
         } else {
-            return sparseAnnQueryBuilder.queryTokens(queryTokens).fieldName(fieldName).fallbackQuery(neuralSparseQuery).doToQuery(context);
+            QueryBuilder filter = sparseAnnQueryBuilder.filter();
+            if (filter != null) {
+                builder.add(filter.toQuery(context), BooleanClause.Occur.FILTER);
+            }
+            return sparseAnnQueryBuilder.queryTokens(queryTokens).fieldName(fieldName).fallbackQuery(builder.build()).doToQuery(context);
         }
     }
 
