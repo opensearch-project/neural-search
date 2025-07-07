@@ -274,7 +274,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             return MAX_SCORE;
         }
 
-        float result = calculateNormalizedScore(score, effectiveMinScore, effectiveMaxScore);
         return calculateNormalizedScore(score, effectiveMinScore, effectiveMaxScore);
     }
 
