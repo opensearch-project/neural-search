@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.util;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.index.search.NestedHelper;
@@ -48,8 +49,25 @@ public class HybridQueryUtil {
      * This method checks whether hybrid query is wrapped under boolean query object
      */
     public static boolean isHybridQueryWrappedInBooleanQuery(final SearchContext searchContext, final Query query) {
-        return ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
-            && isWrappedHybridQuery(query)
-            && !((BooleanQuery) query).clauses().isEmpty());
+        if (!(query instanceof BooleanQuery)) {
+            return false;
+        }
+
+        BooleanQuery boolQuery = (BooleanQuery) query;
+
+        // Check if there's a hybrid query in MUST clause
+        boolean hasHybridQuery = boolQuery.clauses()
+            .stream()
+            .anyMatch(clause -> clause.occur() == BooleanClause.Occur.MUST && clause.query() instanceof HybridQuery);
+
+        // Check if all other clauses are FILTER
+        boolean onlyFilters = boolQuery.clauses()
+            .stream()
+            .filter(clause -> !(clause.query() instanceof HybridQuery))
+            .allMatch(clause -> clause.occur() == BooleanClause.Occur.FILTER);
+
+        return hasHybridQuery
+            && onlyFilters
+            && (hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext) || !boolQuery.clauses().isEmpty());
     }
 }

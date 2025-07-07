@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.search.query;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -78,14 +79,27 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
         if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
-            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
-                throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            List<BooleanClause> booleanClauses = booleanQuery.clauses();
+
+            // Find the HybridQuery clause
+            Optional<BooleanClause> hybridClause = booleanClauses.stream()
+                .filter(clause -> clause.query() instanceof HybridQuery)
+                .findFirst();
+
+            if (hybridClause.isEmpty()) {
+                throw new IllegalArgumentException("hybrid query must be present in the boolean query");
             }
-            HybridQuery hybridQuery = (HybridQuery) booleanClauses.get(0).query();
-            List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
-            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
-            return hybridQueryWithFilter;
+
+            HybridQuery hybridQuery = (HybridQuery) hybridClause.get().query();
+
+            // Collect all filter clauses
+            List<BooleanClause> filterQueries = booleanClauses.stream()
+                .filter(clause -> clause.occur() == BooleanClause.Occur.FILTER)
+                .collect(Collectors.toList());
+
+            // Create new HybridQuery with filters
+            return new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
         }
         return query;
     }
@@ -109,9 +123,21 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
      */
     private void validateQuery(final SearchContext searchContext, final Query query) {
         if (query instanceof BooleanQuery) {
-            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
+            BooleanQuery boolQuery = (BooleanQuery) query;
+            List<BooleanClause> booleanClauses = boolQuery.clauses();
+
+            // Allow hybrid query in MUST clause with additional FILTER clauses
+            boolean hasHybridInMust = booleanClauses.stream()
+                .anyMatch(clause -> clause.occur() == BooleanClause.Occur.MUST && clause.query() instanceof HybridQuery);
+
+            boolean onlyHasFilters = booleanClauses.stream()
+                .filter(clause -> !(clause.query() instanceof HybridQuery))
+                .allMatch(clause -> clause.occur() == BooleanClause.Occur.FILTER);
+
+            if (!hasHybridInMust || !onlyHasFilters) {
+                for (BooleanClause booleanClause : booleanClauses) {
+                    validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
+                }
             }
         } else if (query instanceof DisjunctionMaxQuery) {
             for (Query disjunct : (DisjunctionMaxQuery) query) {
