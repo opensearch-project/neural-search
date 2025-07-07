@@ -63,7 +63,7 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
     }
 
     public void test_statsDisabledIsForbidden() throws Exception {
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
         Request request = new Request("GET", NeuralSearch.NEURAL_BASE_URI + "/stats");
 
         ResponseException response = expectThrows(ResponseException.class, () -> client().performRequest(request));
@@ -119,8 +119,8 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
 
         // Reset stats
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        disableStats();
+        enableStats();
 
         // info stats should persist, event stats should be reset
         responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());

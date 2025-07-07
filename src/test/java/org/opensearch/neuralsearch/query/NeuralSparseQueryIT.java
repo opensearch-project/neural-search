@@ -63,7 +63,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testBasicQueryUsingQueryText() {
         // Enable stats for the test
-        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), true);
+        enableStats();
         String modelId = null;
         initializeIndexIfNotExist(TEST_BASIC_INDEX_NAME);
         modelId = prepareSparseEncodingModel();
@@ -89,7 +89,7 @@ public class NeuralSparseQueryIT extends BaseNeuralSearchIT {
             getNestedValue(allNodesStats, EventStatName.NEURAL_SPARSE_QUERY_REQUESTS)
         );
         // Disable stats to not impact other tests
-        updateClusterSettings(NEURAL_STATS_ENABLED.getKey(), false);
+        disableStats();
     }
 
     /**

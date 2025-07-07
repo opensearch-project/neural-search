@@ -635,7 +635,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testNormalizationProcessor_stats() {
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
 
         createSearchPipeline(
@@ -701,6 +701,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_GEOMETRIC_PROCESSORS));
         assertEquals(1, getNestedValue(stats, InfoStatName.COMB_TECHNIQUE_HARMONIC_PROCESSORS));
 
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
     }
 }
