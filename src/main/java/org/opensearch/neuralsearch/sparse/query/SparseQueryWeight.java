@@ -122,7 +122,9 @@ public class SparseQueryWeight extends Weight {
         if (segmentInfo != null) {
             InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(segmentInfo, fieldType);
             SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
-            sparseReader = index != null ? index.getReader() : (docId -> { return null; });
+            if (index != null) {
+                sparseReader = index.getReader();
+            }
         }
         Similarity.SimScorer simScorer = ByteQuantizer.getSimScorer(boost);
         BitSetIterator filterBitIterator = null;
