@@ -2439,6 +2439,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void enableStats() {
+        // Toggle stats off first to reset values
+        disableStats();
         updateClusterSettings("plugins.neural_search.stats_enabled", true);
     }
 
