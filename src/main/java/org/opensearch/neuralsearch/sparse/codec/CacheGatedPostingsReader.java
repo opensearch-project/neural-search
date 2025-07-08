@@ -13,14 +13,14 @@ import java.util.Set;
 
 public class CacheGatedPostingsReader {
     private final String field;
-    private final InMemoryClusteredPosting.InMemoryClusteredPostingReader inMemoryReader;
+    private final ClusteredPostingReader inMemoryReader;
     private final InMemoryKey.IndexKey indexKey;
     // SparseTermsLuceneReader to read sparse terms from disk
     private final SparseTermsLuceneReader luceneReader;
 
     public CacheGatedPostingsReader(
         String field,
-        InMemoryClusteredPosting.InMemoryClusteredPostingReader reader,
+        ClusteredPostingReader reader,
         SparseTermsLuceneReader luceneReader,
         InMemoryKey.IndexKey indexKey
     ) {
@@ -45,7 +45,8 @@ public class CacheGatedPostingsReader {
         if (clusters == null) {
             clusters = luceneReader.read(field, term);
             if (clusters != null) {
-                InMemoryClusteredPosting.InMemoryClusteredPostingWriter.writePostingClusters(indexKey, term, clusters.getClusters());
+                ClusteredPostingWriter writer = InMemoryClusteredPosting.getOrCreate(indexKey).getWriter();
+                writer.write(term, clusters.getClusters());
             }
         }
         return clusters;

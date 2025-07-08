@@ -19,4 +19,8 @@ public interface SparseVectorForwardIndex {
     static void removeIndex(InMemoryKey.IndexKey key) {
         InMemorySparseVectorForwardIndex.removeIndex(key);
     }
+
+    static void removeIndex(InMemoryKey.IndexKey key) {
+        InMemorySparseVectorForwardIndex.removeIndex(key);
+    }
 }
