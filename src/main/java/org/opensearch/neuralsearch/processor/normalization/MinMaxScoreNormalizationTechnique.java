@@ -30,8 +30,13 @@ import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+import org.opensearch.neuralsearch.processor.normalization.bounds.BoundMode;
+import org.opensearch.neuralsearch.processor.normalization.bounds.LowerBound;
+import org.opensearch.neuralsearch.processor.normalization.bounds.UpperBound;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
+import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MAX_BOUND_SCORE;
+import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MIN_BOUND_SCORE;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
@@ -264,13 +269,13 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             return SINGLE_RESULT_SCORE;
         }
 
-        float effectiveMinScore = determineEffectiveMinScore(score, minScore, maxScore, lowerBound);
-        float effectiveMaxScore = determineEffectiveMaxScore(score, minScore, maxScore, upperBound);
+        float effectiveMinScore = lowerBound.determineEffectiveScore(score, minScore, maxScore);
+        float effectiveMaxScore = upperBound.determineEffectiveScore(score, minScore, maxScore);
 
-        if (isScoreBelowEffectiveMin(score, effectiveMinScore, lowerBound)) {
+        if (lowerBound.shouldClipToBound(score, effectiveMinScore)) {
             return MIN_SCORE;
         }
-        if (isScoreAboveEffectiveMax(score, effectiveMaxScore, upperBound)) {
+        if (upperBound.shouldClipToBound(score, effectiveMaxScore)) {
             return MAX_SCORE;
         }
 
@@ -279,40 +284,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
     private boolean isSingleScore(float score, float minScore, float maxScore) {
         return Floats.compare(maxScore, minScore) == 0 && Floats.compare(maxScore, score) == 0;
-    }
-
-    private float determineEffectiveMinScore(float score, float minScore, float maxScore, LowerBound lowerBound) {
-        if (!lowerBound.isEnabled()) {
-            return minScore;
-        }
-
-        float lowerBoundMinScore = lowerBound.getMinScore();
-        return switch (lowerBound.getMode()) {
-            case APPLY -> (maxScore > lowerBoundMinScore && score > lowerBoundMinScore) ? lowerBoundMinScore : minScore;
-            case CLIP -> maxScore < lowerBoundMinScore ? minScore : lowerBoundMinScore;
-            case IGNORE -> minScore;
-        };
-    }
-
-    private float determineEffectiveMaxScore(float score, float minScore, float maxScore, UpperBound upperBound) {
-        if (!upperBound.isEnabled()) {
-            return maxScore;
-        }
-
-        float upperBoundMaxScore = upperBound.getMaxScore();
-        return switch (upperBound.getMode()) {
-            case APPLY -> (minScore < upperBoundMaxScore && score < upperBoundMaxScore) ? upperBoundMaxScore : maxScore;
-            case CLIP -> minScore > upperBoundMaxScore ? maxScore : upperBoundMaxScore;
-            case IGNORE -> maxScore;
-        };
-    }
-
-    private boolean isScoreBelowEffectiveMin(float score, float effectiveMinScore, LowerBound lowerBound) {
-        return lowerBound.isEnabled() && lowerBound.getMode() == BoundMode.CLIP && score < effectiveMinScore;
-    }
-
-    private boolean isScoreAboveEffectiveMax(float score, float effectiveMaxScore, UpperBound upperBound) {
-        return upperBound.isEnabled() && upperBound.getMode() == BoundMode.CLIP && score > effectiveMaxScore;
     }
 
     private float calculateNormalizedScore(float score, float effectiveMinScore, float effectiveMaxScore) {
@@ -408,11 +379,11 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         try {
             float score = Float.parseFloat(String.valueOf(scoreObj));
             Validate.isTrue(
-                score >= LowerBound.MIN_LOWER_BOUND_SCORE && score <= UpperBound.MAX_UPPER_BOUND_SCORE,
+                score >= MIN_BOUND_SCORE && score <= MAX_BOUND_SCORE,
                 "%s must be a valid finite number between %f and %f",
                 scoreParamName,
-                LowerBound.MIN_LOWER_BOUND_SCORE,
-                UpperBound.MAX_UPPER_BOUND_SCORE
+                MIN_BOUND_SCORE,
+                MAX_BOUND_SCORE
             );
             return score;
         } catch (NumberFormatException e) {
@@ -431,86 +402,5 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     private static class MinMaxScores {
         float[] minScoresPerSubquery;
         float[] maxScoresPerSubquery;
-    }
-
-    protected enum BoundMode {
-        APPLY,
-        CLIP,
-        IGNORE;
-
-        public static final BoundMode DEFAULT = APPLY;
-
-        public static String getValidValues() {
-            return Arrays.stream(values()).map(mode -> mode.name().toLowerCase(Locale.ROOT)).collect(Collectors.joining(", "));
-        }
-
-        public static BoundMode fromString(String value) {
-            if (Objects.isNull(value)) {
-                throw new IllegalArgumentException("mode value cannot be null or empty");
-            }
-            if (value.trim().isEmpty()) {
-                return DEFAULT;
-            }
-            try {
-                return valueOf(value.toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "invalid mode: %s, valid values are: %s", value, getValidValues())
-                );
-            }
-        }
-
-        @Override
-        public String toString() {
-            return name().toLowerCase(Locale.ROOT);
-        }
-    }
-
-    /**
-     * Result class to hold lower bound for each sub query
-     */
-    @Getter
-    static class LowerBound {
-        static final float MIN_LOWER_BOUND_SCORE = -10_000f;
-        static final float MAX_LOWER_BOUND_SCORE = 10_000f;
-        static final float DEFAULT_LOWER_BOUND_SCORE = 0.0f;
-
-        private final boolean enabled;
-        private final BoundMode mode;
-        private final float minScore;
-
-        LowerBound() {
-            this(false, BoundMode.DEFAULT, DEFAULT_LOWER_BOUND_SCORE);
-        }
-
-        LowerBound(boolean enabled, BoundMode mode, float minScore) {
-            this.enabled = enabled;
-            this.mode = mode;
-            this.minScore = minScore;
-        }
-    }
-
-    /**
-     * Result class to hold upper bound for each sub query
-     */
-    @Getter
-    static class UpperBound {
-        static final float MIN_UPPER_BOUND_SCORE = -10_000f;
-        static final float MAX_UPPER_BOUND_SCORE = 10_000f;
-        static final float DEFAULT_UPPER_BOUND_SCORE = 1.0f;
-
-        private final boolean enabled;
-        private final BoundMode mode;
-        private final float maxScore;
-
-        UpperBound() {
-            this(false, BoundMode.DEFAULT, DEFAULT_UPPER_BOUND_SCORE);
-        }
-
-        UpperBound(boolean enabled, BoundMode mode, float maxScore) {
-            this.enabled = enabled;
-            this.mode = mode;
-            this.maxScore = maxScore;
-        }
     }
 }
