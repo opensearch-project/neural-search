@@ -16,7 +16,7 @@ public class UpperBoundTests extends OpenSearchTestCase {
         assertEquals(UpperBound.DEFAULT_UPPER_BOUND_SCORE, upperBound.boundScore, DELTA_FOR_SCORE_ASSERTION);
     }
 
-    public void testConstructor_whenNonDefault_thenSuccessful() {
+    public void testConstructor_whenNotDefault_thenSuccessful() {
         UpperBound upperBound = new UpperBound(true, BoundMode.CLIP, 0.7f);
         assertTrue(upperBound.enabled);
         assertEquals(BoundMode.CLIP, upperBound.mode);
