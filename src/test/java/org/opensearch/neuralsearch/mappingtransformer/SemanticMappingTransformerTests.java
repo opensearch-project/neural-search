@@ -449,6 +449,51 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         assertEquals(expectedErrorMessage, capturedException.getMessage());
     }
 
+    public void testTransform_whenInvalidDenseEmbeddingConfig_thenException() {
+        // prepare original mappings
+        final String dummyModelId = "dummyModelId";
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticFiled = new HashMap<>();
+        properties.put("semantic_field", semanticFiled);
+        semanticFiled.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticFiled.put(SemanticFieldConstants.MODEL_ID, dummyModelId);
+        semanticFiled.put(SemanticFieldConstants.DENSE_EMBEDDING_CONFIG, "invalid");
+
+        final Integer embeddingDimension = 768;
+        final RemoteModelConfig remoteTextEmbeddingModelConfig = RemoteModelConfig.builder()
+            .embeddingDimension(embeddingDimension)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
+            .modelType(FunctionName.TEXT_EMBEDDING.name())
+            .frameworkType(RemoteModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .build();
+        final MLModel remoteTextEmbeddingModel = MLModel.builder()
+            .algorithm(FunctionName.REMOTE)
+            .modelConfig(remoteTextEmbeddingModelConfig)
+            .build();
+
+        // mock
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(dummyModelId, remoteTextEmbeddingModel));
+            return null;
+        }).when(mlClientAccessor).getModels(any(), any(), any());
+
+        // call
+        transformer.transform(mappings, null, listener);
+
+        // Capture the exception passed to onFailure
+        final ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        // Then: Assert that the exception message is as expected
+        final Exception capturedException = exceptionCaptor.getValue();
+        final String expectedErrorMessage = "Failed to transform the mapping for the semantic field at semantic_field "
+            + "due to dense_embedding_config should be a Map<String, Object> for the semantic field at semantic_field";
+        assertEquals(expectedErrorMessage, capturedException.getMessage());
+    }
+
     private Map<String, Object> getBaseMappingsWithOneSemanticField(@NonNull final String modelId) {
         final Map<String, Object> mappings = new HashMap<>();
         final Map<String, Object> properties = new HashMap<>();

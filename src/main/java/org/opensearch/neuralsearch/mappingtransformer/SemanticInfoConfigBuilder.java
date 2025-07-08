@@ -17,15 +17,18 @@ import org.opensearch.ml.common.model.TextEmbeddingModelConfig;
 import reactor.util.annotation.NonNull;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_TEXT_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.DEFAULT_MODEL_CONFIG;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_DATA_TYPE_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_DIMENSION_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_DEFAULT_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_FIELD_NAME;
@@ -47,6 +50,12 @@ public class SemanticInfoConfigBuilder {
     private Integer embeddingDimension;
     private Boolean chunkingEnabled;
     private String semanticFieldSearchAnalyzer;
+    private Map<String, Object> denseEmbeddingConfig;
+    private final static List<String> UNSUPPORTED_DENSE_EMBEDDING_CONFIG = List.of(
+        KNN_VECTOR_DIMENSION_FIELD_NAME,
+        KNN_VECTOR_DATA_TYPE_FIELD_NAME,
+        KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME
+    );
 
     public SemanticInfoConfigBuilder(@NonNull final NamedXContentRegistry xContentRegistry) {
         this.xContentRegistry = xContentRegistry;
@@ -74,29 +83,21 @@ public class SemanticInfoConfigBuilder {
      * @return Config of the semantic info fields.
      */
     public Map<String, Object> build() {
-        if (semanticFieldSearchAnalyzer != null && RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType) == false) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Cannot build the semantic info config because the embedding field type %s cannot build with semantic field search analyzer %s",
-                    embeddingFieldType,
-                    semanticFieldSearchAnalyzer
-                )
-            );
-        }
+        validate();
+
         final Map<String, Object> embeddingFieldConfig = switch (embeddingFieldType) {
             case KNNVectorFieldMapper.CONTENT_TYPE -> buildKnnFieldConfig();
             case RankFeaturesFieldMapper.CONTENT_TYPE -> buildRankFeaturesFieldConfig();
             default -> throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "Cannot build the semantic" + " info config because the embedding field type %s is not supported.",
+                    "Cannot build the semantic info config because the embedding field type %s is not supported.",
                     embeddingFieldType
                 )
             );
         };
 
-        if (chunkingEnabled) {
+        if (Boolean.TRUE.equals(chunkingEnabled)) {
             final Map<String, Object> chunksConfig = Map.of(
                 TYPE,
                 ObjectMapper.NESTED_CONTENT_TYPE,
@@ -109,15 +110,89 @@ public class SemanticInfoConfigBuilder {
         }
     }
 
+    private void validate() {
+        if (semanticFieldSearchAnalyzer != null && RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType) == false) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Cannot build the semantic info config because the embedding field type %s cannot build with semantic field search analyzer %s",
+                    embeddingFieldType,
+                    semanticFieldSearchAnalyzer
+                )
+            );
+        }
+
+        if (denseEmbeddingConfig != null && RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Cannot build the semantic info config because %s is not supported by %s.",
+                    DENSE_EMBEDDING_CONFIG,
+                    embeddingFieldType
+                )
+            );
+        }
+    }
+
     private Map<String, Object> buildKnnFieldConfig() {
         final Map<String, Object> config = new HashMap<>();
         config.put(TYPE, KNNVectorFieldMapper.CONTENT_TYPE);
         config.put(KNN_VECTOR_DIMENSION_FIELD_NAME, this.embeddingDimension);
+
         final Map<String, Object> methodConfig = new HashMap<>();
-        methodConfig.put(KNN_VECTOR_METHOD_NAME_FIELD_NAME, this.knnMethodName);
+
+        if (denseEmbeddingConfig != null) {
+            validateDenseEmbeddingConfig(denseEmbeddingConfig);
+            config.putAll(denseEmbeddingConfig);
+
+            final Object methodConfigObj = denseEmbeddingConfig.get(KNN_VECTOR_METHOD_FIELD_NAME);
+            if (methodConfigObj != null) {
+                if (methodConfigObj instanceof Map<?, ?> methodConfigMap) {
+                    // Create a shallow copy so we don't modify the original
+                    methodConfig.putAll((Map<String, Object>) methodConfigMap);
+                } else {
+                    throw new IllegalArgumentException(
+                        String.format(
+                            Locale.ROOT,
+                            "Cannot build the semantic info config because %s must be a Map when provided.",
+                            KNN_VECTOR_METHOD_FIELD_NAME
+                        )
+                    );
+                }
+            }
+        }
+
+        // Safe to override or add new method values
+        methodConfig.putIfAbsent(KNN_VECTOR_METHOD_NAME_FIELD_NAME, this.knnMethodName);
+        // Always use the one we found from the model config
         methodConfig.put(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, this.spaceType);
         config.put(KNN_VECTOR_METHOD_FIELD_NAME, methodConfig);
         return config;
+    }
+
+    private void validateDenseEmbeddingConfig(@NonNull final Map<String, Object> denseEmbeddingConfig) {
+        UNSUPPORTED_DENSE_EMBEDDING_CONFIG.forEach(name -> {
+            if (denseEmbeddingConfig.get(name) != null) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "Cannot configure %s in %s in the semantic field.", name, DENSE_EMBEDDING_CONFIG)
+                );
+            }
+        });
+
+        if (denseEmbeddingConfig.get(KNN_VECTOR_METHOD_FIELD_NAME) != null
+            && denseEmbeddingConfig.get(KNN_VECTOR_METHOD_FIELD_NAME) instanceof Map methodConfigMap) {
+            if (methodConfigMap.get(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME) != null) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Cannot configure %s in %s in the semantic field.",
+                        KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME,
+                        DENSE_EMBEDDING_CONFIG
+                    )
+                );
+            }
+        }
+
     }
 
     private Map<String, Object> buildRankFeaturesFieldConfig() {
@@ -261,6 +336,11 @@ public class SemanticInfoConfigBuilder {
 
     public SemanticInfoConfigBuilder semanticFieldSearchAnalyzer(final String semanticFieldSearchAnalyzer) {
         this.semanticFieldSearchAnalyzer = semanticFieldSearchAnalyzer;
+        return this;
+    }
+
+    public SemanticInfoConfigBuilder denseEmbeddingConfig(final Map<String, Object> denseEmbeddingConfig) {
+        this.denseEmbeddingConfig = denseEmbeddingConfig;
         return this;
     }
 }
