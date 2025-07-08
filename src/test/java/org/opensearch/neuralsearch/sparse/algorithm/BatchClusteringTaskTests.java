@@ -275,7 +275,7 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         MergeState mergeState = new MergeState(
             docMaps,
             segmentInfo,
-            fieldInfos,                // mergeFieldInfos - 使用我们的 fieldInfos
+            fieldInfos,                // mergeFieldInfos
             null,                      // storedFieldsReaders
             null,                      // termVectorsReaders
             null,                      // normsProducers
