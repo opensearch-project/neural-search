@@ -7,10 +7,11 @@ package org.opensearch.neuralsearch.mappingtransformer;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
-import org.opensearch.ml.common.model.TextEmbeddingModelConfig;
+import org.opensearch.ml.common.model.RemoteModelConfig;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
+import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -38,7 +39,7 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(namedXContentRegistry);
 
         // prepare mock model config
-        final TextEmbeddingModelConfig remoteTextEmbeddingModelConfig = mock(TextEmbeddingModelConfig.class);
+        final RemoteModelConfig remoteTextEmbeddingModelConfig = mock(RemoteModelConfig.class);
         final MLModel dummyModel = MLModel.builder()
             .modelId("dummyModelId")
             .algorithm(FunctionName.REMOTE)
@@ -54,21 +55,22 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         );
 
         final String expectedErrorMessage =
-            "Model dummyModelId is a remote text embedding model but the embedding dimension is not defined in the model config.";
+            "Model dummyModelId is a text embedding model, but the embedding dimension is not defined in the model config.";
         assertEquals(expectedErrorMessage, exception.getMessage());
     }
 
-    public void testMlModel_whenRemoteModelMissingSpaceType_thenException() {
+    public void testMlModel_whenRemoteModelInvalidSpaceType_thenException() {
         final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(namedXContentRegistry);
 
         // prepare mock model config
         final Integer embeddingDimension = 768;
         final String allConfig = "{}";
-        final TextEmbeddingModelConfig remoteTextEmbeddingModelConfig = TextEmbeddingModelConfig.builder()
+        final RemoteModelConfig remoteTextEmbeddingModelConfig = RemoteModelConfig.builder()
             .embeddingDimension(embeddingDimension)
             .allConfig(allConfig)
             .modelType(FunctionName.TEXT_EMBEDDING.name())
-            .frameworkType(TextEmbeddingModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .additionalConfig(Map.of("space_type", 1))
+            .frameworkType(RemoteModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
             .build();
         final MLModel remoteTextEmbeddingModel = MLModel.builder()
             .modelId("dummyModelId")
@@ -85,4 +87,25 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         assertEquals(expectedErrorMessage, exception.getMessage());
     }
 
+    public void testMlModel_whenRemoteDenseModel_thenSuccess() {
+        final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(namedXContentRegistry);
+
+        // prepare mock model config
+        final Integer embeddingDimension = 768;
+        final String allConfig = "{}";
+        final RemoteModelConfig remoteTextEmbeddingModelConfig = RemoteModelConfig.builder()
+            .embeddingDimension(embeddingDimension)
+            .allConfig(allConfig)
+            .modelType(FunctionName.TEXT_EMBEDDING.name())
+            .additionalConfig(Map.of("space_type", "l2"))
+            .frameworkType(RemoteModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .build();
+        final MLModel remoteTextEmbeddingModel = MLModel.builder()
+            .modelId("dummyModelId")
+            .algorithm(FunctionName.REMOTE)
+            .modelConfig(remoteTextEmbeddingModelConfig)
+            .build();
+
+        builder.mlModel(remoteTextEmbeddingModel, "dummyModelId");
+    }
 }

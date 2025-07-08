@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.query;
 
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomTokenWeightMap;
 

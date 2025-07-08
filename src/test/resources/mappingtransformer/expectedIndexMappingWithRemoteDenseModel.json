@@ -1,0 +1,51 @@
+{
+  "semantic_field_remote_dense_model_index": {
+    "mappings": {
+      "properties": {
+        "products": {
+          "type": "nested",
+          "properties": {
+            "id": {
+              "type": "text"
+            },
+            "product_description": {
+              "type": "semantic",
+              "model_id": "%s",
+              "raw_field_type": "text"
+            },
+            "product_description_semantic_info": {
+              "properties": {
+                "embedding": {
+                  "type": "knn_vector",
+                  "dimension": 384,
+                  "method": {
+                    "engine": "faiss",
+                    "space_type": "l2",
+                    "name": "hnsw",
+                    "parameters": {}
+                  }
+                },
+                "model": {
+                  "properties": {
+                    "id": {
+                      "type": "text",
+                      "index": false
+                    },
+                    "name": {
+                      "type": "text",
+                      "index": false
+                    },
+                    "type": {
+                      "type": "text",
+                      "index": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

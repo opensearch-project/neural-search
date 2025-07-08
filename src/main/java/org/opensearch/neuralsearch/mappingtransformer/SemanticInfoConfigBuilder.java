@@ -12,6 +12,7 @@ import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.model.MLModelConfig;
+import org.opensearch.ml.common.model.RemoteModelConfig;
 import org.opensearch.ml.common.model.TextEmbeddingModelConfig;
 import reactor.util.annotation.NonNull;
 
@@ -125,10 +126,16 @@ public class SemanticInfoConfigBuilder {
         return config;
     }
 
+    /**
+     * Extract the info from the ML model and set it in the SemanticInfoConfigBuilder for build later.
+     * @param mlModel ML model info
+     * @param modelId ID of the ML model
+     * @return this
+     */
     // Here we also require the model id because sometimes the MLModel does not have that info.
     public SemanticInfoConfigBuilder mlModel(@NonNull final MLModel mlModel, @NonNull final String modelId) {
         switch (mlModel.getAlgorithm()) {
-            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel, modelId);
+            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel, modelId, false);
             case FunctionName.SPARSE_ENCODING, FunctionName.SPARSE_TOKENIZE -> extractInfoForSparseModel();
             case FunctionName.REMOTE -> extractInfoForRemoteModel(mlModel, modelId);
             default -> throw new IllegalArgumentException(
@@ -145,42 +152,65 @@ public class SemanticInfoConfigBuilder {
         return this;
     }
 
-    private void extractInfoForTextEmbeddingModel(@NonNull final MLModel mlModel, @NonNull final String modelId) {
+    private void extractInfoForTextEmbeddingModel(@NonNull final MLModel mlModel, @NonNull final String modelId, final boolean isRemote) {
         this.embeddingFieldType = KNNVectorFieldMapper.CONTENT_TYPE;
+        TextEmbeddingInfo textEmbeddingInfo;
 
-        if (mlModel.getModelConfig() instanceof TextEmbeddingModelConfig == false) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Model %s is a remote text embedding model but model config is not a text embedding config",
-                    modelId
-                )
-            );
-        }
-
-        final TextEmbeddingModelConfig textEmbeddingModelConfig = (TextEmbeddingModelConfig) mlModel.getModelConfig();
-
-        if (textEmbeddingModelConfig.getEmbeddingDimension() == null) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Model %s is a remote text embedding model but the embedding dimension is not defined in the model config.",
-                    modelId
-                )
-            );
-        }
-
-        this.embeddingDimension = textEmbeddingModelConfig.getEmbeddingDimension();
-
-        final Map<String, Object> additionalConfig = textEmbeddingModelConfig.getAdditionalConfig();
-        if (additionalConfig != null) {
-            final Object spaceTypeObject = additionalConfig.get(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME);
-            if (spaceTypeObject instanceof String == false) {
-                throw createInvalidSpaceTypeException(modelId);
-            }
-            this.spaceType = (String) spaceTypeObject;
+        if (isRemote) {
+            textEmbeddingInfo = extractInfoForRemoteTextEmbeddingModel(mlModel.getModelConfig(), modelId);
         } else {
+            textEmbeddingInfo = extractInfoForLocalTextEmbeddingModel(mlModel.getModelConfig(), modelId);
+        }
+
+        validateAndSetTextEmbeddingInfo(textEmbeddingInfo, modelId);
+    }
+
+    private void validateAndSetTextEmbeddingInfo(@NonNull final TextEmbeddingInfo textEmbeddingInfo, @NonNull final String modelId) {
+        if (textEmbeddingInfo.getEmbeddingDimension() == null) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Model %s is a text embedding model, but the embedding dimension is not defined in the model config.",
+                    modelId
+                )
+            );
+        }
+        this.embeddingDimension = textEmbeddingInfo.getEmbeddingDimension();
+
+        if (textEmbeddingInfo.getAdditionalConfig() == null
+            || textEmbeddingInfo.getAdditionalConfig().get(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME) instanceof String == false) {
             throw createInvalidSpaceTypeException(modelId);
+        }
+        this.spaceType = (String) textEmbeddingInfo.getAdditionalConfig().get(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME);
+    }
+
+    private TextEmbeddingInfo extractInfoForLocalTextEmbeddingModel(final MLModelConfig modelConfig, @NonNull final String modelId) {
+        if (modelConfig instanceof TextEmbeddingModelConfig textEmbeddingModelConfig) {
+            return new TextEmbeddingInfo(textEmbeddingModelConfig.getEmbeddingDimension(), textEmbeddingModelConfig.getAdditionalConfig());
+        } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Model %s is a local text embedding model, but model_config is a %s rather than a TextEmbeddingModelConfig.",
+                    modelId,
+                    modelConfig.getClass().getName()
+                )
+            );
+        }
+    }
+
+    private TextEmbeddingInfo extractInfoForRemoteTextEmbeddingModel(final MLModelConfig modelConfig, @NonNull final String modelId) {
+        if (modelConfig instanceof RemoteModelConfig remoteModelConfig) {
+            return new TextEmbeddingInfo(remoteModelConfig.getEmbeddingDimension(), remoteModelConfig.getAdditionalConfig());
+        } else {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Model %s is marked as remote text embedding model, but model_config is a %s rather than a RemoteModelConfig.",
+                    modelId,
+                    modelConfig.getClass().getName()
+                )
+            );
         }
     }
 
@@ -208,7 +238,7 @@ public class SemanticInfoConfigBuilder {
         }
 
         switch (modelTypeFunctionName) {
-            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel, modelId);
+            case FunctionName.TEXT_EMBEDDING -> extractInfoForTextEmbeddingModel(mlModel, modelId, true);
             case FunctionName.SPARSE_ENCODING, FunctionName.SPARSE_TOKENIZE -> extractInfoForSparseModel();
             default -> throw new IllegalArgumentException(getUnsupportedRemoteModelError(modelType, modelId));
         }
