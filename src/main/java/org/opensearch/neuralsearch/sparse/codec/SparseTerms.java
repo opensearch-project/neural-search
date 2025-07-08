@@ -30,7 +30,7 @@ public class SparseTerms extends Terms {
         this.indexKey = indexKey;
         this.reader = new CacheGatedPostingsReader(
             field,
-            new InMemoryClusteredPosting.InMemoryClusteredPostingReader(indexKey),
+            InMemoryClusteredPosting.getOrCreate(indexKey).getReader(),
             sparseTermsLuceneReader,
             indexKey
         );

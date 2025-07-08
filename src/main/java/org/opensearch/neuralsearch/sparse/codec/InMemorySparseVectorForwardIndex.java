@@ -11,10 +11,12 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorWriter;
 
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * InMemorySparseVectorForwardIndex is used to store/read sparse vector in memory
@@ -25,15 +27,15 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
     private static final Map<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> forwardIndexMap = new ConcurrentHashMap<>();
 
     public static long memUsage() {
-        long mem = 0;
+        long mem = RamUsageEstimator.shallowSizeOf(forwardIndexMap);
         for (Map.Entry<InMemoryKey.IndexKey, InMemorySparseVectorForwardIndex> entry : forwardIndexMap.entrySet()) {
-            mem += RamUsageEstimator.shallowSizeOf(InMemoryKey.IndexKey.class);
+            mem += RamUsageEstimator.shallowSizeOf(entry.getKey());
             mem += entry.getValue().ramBytesUsed();
         }
         return mem;
     }
 
-    public static InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key, int docCount) {
+    public static synchronized InMemorySparseVectorForwardIndex getOrCreate(InMemoryKey.IndexKey key, int docCount) {
         if (key == null) {
             throw new IllegalArgumentException("Index key cannot be null");
         }
@@ -51,13 +53,15 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
         forwardIndexMap.remove(key);
     }
 
-    // private final Map<Integer, SparseVector> sparseVectorMap = new ConcurrentHashMap<>();
     private final SparseVector[] sparseVectors;
+    private final AtomicLong usedRamBytes = new AtomicLong(0);
     private final SparseVectorReader reader = new InMemorySparseVectorReader();
     private final SparseVectorWriter writer = new InMemorySparseVectorWriter();
 
     public InMemorySparseVectorForwardIndex(int docCount) {
         sparseVectors = new SparseVector[docCount];
+        // Account for the array itself in memory usage
+        usedRamBytes.set(RamUsageEstimator.shallowSizeOf(sparseVectors));
     }
 
     @Override
@@ -72,12 +76,7 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
 
     @Override
     public long ramBytesUsed() {
-        long ramUsed = 0;
-        for (SparseVector vector : sparseVectors) {
-            if (vector == null) continue;
-            ramUsed += vector.ramBytesUsed();
-        }
-        return ramUsed;
+        return usedRamBytes.get();
     }
 
     private class InMemorySparseVectorReader implements SparseVectorReader {
@@ -91,9 +90,21 @@ public class InMemorySparseVectorForwardIndex implements SparseVectorForwardInde
     private class InMemorySparseVectorWriter implements SparseVectorWriter {
 
         @Override
-        public void write(int docId, SparseVector vector) {
-            if (vector == null || docId >= sparseVectors.length) return;
+        public synchronized void write(int docId, SparseVector vector) {
+            if (vector == null || docId >= sparseVectors.length) {
+                return;
+            }
+
+            // Calculate memory impact of this operation
+            SparseVector oldVector = sparseVectors[docId];
+            long oldVectorSize = (oldVector != null) ? oldVector.ramBytesUsed() : 0;
+            long newVectorSize = vector.ramBytesUsed();
+
+            // Update the vector
             sparseVectors[docId] = vector;
+
+            // Update memory usage tracking (subtract old size, add new size)
+            usedRamBytes.addAndGet(newVectorSize - oldVectorSize);
         }
 
         @Override

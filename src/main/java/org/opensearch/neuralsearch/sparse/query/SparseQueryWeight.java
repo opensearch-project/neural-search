@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.query;
 
 import lombok.extern.log4j.Log4j2;
+import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FilterCodecReader;
 import org.apache.lucene.index.FilterLeafReader;
@@ -27,10 +28,13 @@ import org.apache.lucene.util.BitSetIterator;
 import org.apache.lucene.util.Bits;
 import org.opensearch.neuralsearch.sparse.algorithm.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.codec.InMemorySparseVectorForwardIndex;
+import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.codec.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.InMemoryKey;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
+import org.opensearch.neuralsearch.sparse.common.SparseVector;
 import org.opensearch.neuralsearch.sparse.common.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.common.SparseVectorWriter;
 
 import java.io.IOException;
 
@@ -122,7 +126,10 @@ public class SparseQueryWeight extends Weight {
         if (segmentInfo != null) {
             InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(segmentInfo, fieldType);
             SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
-            sparseReader = index != null ? index.getReader() : (docId -> { return null; });
+            if (index == null) {
+                InMemorySparseVectorForwardIndex.getOrCreate(key, segmentInfo.maxDoc());
+            }
+            sparseReader = getSparseVectorReader(context.reader(), query.getFieldName());
         }
         Similarity.SimScorer simScorer = ByteQuantizer.getSimScorer(boost);
         BitSetIterator filterBitIterator = null;
@@ -146,6 +153,33 @@ public class SparseQueryWeight extends Weight {
             simScorer,
             filterBitIterator
         );
+    }
+
+    private SparseVectorReader getSparseVectorReader(LeafReader leafReader, String fieldName) throws IOException {
+        BinaryDocValues docValues = leafReader.getBinaryDocValues(fieldName);
+        if (docValues instanceof SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough) {
+            SparseVectorReader reader;
+            SegmentInfo segmentInfo = sparseBinaryDocValuesPassThrough.getSegmentInfo();
+            InMemoryKey.IndexKey key = new InMemoryKey.IndexKey(segmentInfo, fieldName);
+            SparseVectorForwardIndex index = InMemorySparseVectorForwardIndex.get(key);
+            if (index != null) {
+                SparseVectorReader inMemoryReader = index.getReader();
+                SparseVectorWriter inMemoryWriter = index.getWriter();
+                reader = (docId) -> {
+                    SparseVector vector = inMemoryReader.read(docId);
+                    if (vector != null) {
+                        return vector;
+                    }
+                    vector = sparseBinaryDocValuesPassThrough.read(docId);
+                    inMemoryWriter.write(docId, vector);
+                    return vector;
+                };
+            } else {
+                reader = sparseBinaryDocValuesPassThrough;
+            }
+            return reader;
+        }
+        return (docId) -> null;
     }
 
     @Override

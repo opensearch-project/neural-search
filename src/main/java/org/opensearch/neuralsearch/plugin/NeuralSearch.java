@@ -15,7 +15,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import org.apache.lucene.util.Accountables;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.index.IndexModule;
@@ -368,12 +367,10 @@ public class NeuralSearch extends Plugin
         if (SparseSettings.IS_SPARSE_INDEX_SETTING.get(indexModule.getSettings())) {
             indexModule.addIndexEventListener(new SparseIndexEventListener());
             indexModule.addSettingsUpdateConsumer(SparseSettings.SPARSE_MEMORY_SETTING, (v) -> {
-                // just to log in-memory data usage
-                InMemoryClusteredPosting inMemoryClusteredPosting = new InMemoryClusteredPosting();
                 log.info(
                     "memory usage: forward index {}, posting: {}",
                     RamUsageEstimator.humanReadableUnits(InMemorySparseVectorForwardIndex.memUsage()),
-                    Accountables.toString(inMemoryClusteredPosting)
+                    RamUsageEstimator.humanReadableUnits(InMemoryClusteredPosting.memUsage())
                 );
 
                 if (v) {
