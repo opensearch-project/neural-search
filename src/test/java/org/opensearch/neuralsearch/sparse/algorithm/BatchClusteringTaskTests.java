@@ -337,10 +337,10 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         // Test behavior with null merge state - should throw NullPointerException when accessing maxDocs
         BatchClusteringTask task = new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, null, null);
 
-        NullPointerException exception = assertThrows(NullPointerException.class, () -> task.get());
+        Exception exception = assertThrows(NullPointerException.class, () -> task.get());
 
-        // Optionally verify the exception message if needed
-        assertNotNull("Exception should not be null", exception);
+        // Assert that the exception is an instance of NullPointerException
+        assertTrue("Exception should be an instance of NullPointerException", exception instanceof NullPointerException);
     }
 
     public void testGetWithNonNullMergeState() throws Exception {
