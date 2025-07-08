@@ -924,10 +924,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
         // index segment 1
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         int docId1 = RandomizedTest.randomInt();
@@ -953,10 +951,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         when(searchContext2.shouldUseConcurrentSearch()).thenReturn(true);
 
         Directory directory2 = newDirectory();
-        final IndexWriter w2 = new IndexWriter(directory2, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w2 = new IndexWriter(directory2, newIndexWriterConfig());
         FieldType ft2 = new FieldType(TextField.TYPE_NOT_STORED);
-        ft2.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft2.setOmitNorms(random().nextBoolean());
         ft2.freeze();
 
         w2.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
@@ -964,9 +960,9 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         w2.commit();
 
         IndexReader reader1 = DirectoryReader.open(w);
-        IndexSearcher searcher1 = newSearcher(reader1);
+        IndexSearcher searcher1 = new IndexSearcher(reader1);
         IndexReader reader2 = DirectoryReader.open(w2);
-        IndexSearcher searcher2 = newSearcher(reader2);
+        IndexSearcher searcher2 = new IndexSearcher(reader2);
 
         RescorerBuilder<QueryRescorerBuilder> rescorerBuilder = new QueryRescorerBuilder(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2));
         RescoreContext rescoreContext = rescorerBuilder.buildContext(mockQueryShardContext);
@@ -1068,10 +1064,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         int docId1 = RandomizedTest.randomInt();
@@ -1080,7 +1074,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
 
         RescoreContext rescoreContext = mock(RescoreContext.class);
         Rescorer rescorer = mock(Rescorer.class);
