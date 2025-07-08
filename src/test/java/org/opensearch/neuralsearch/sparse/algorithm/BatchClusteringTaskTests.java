@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.sparse.algorithm;
 
+import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.codecs.FieldsProducer;
@@ -40,11 +42,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Iterator;
 import java.util.concurrent.Executors;
+import java.lang.reflect.Field;
 
 public class BatchClusteringTaskTests extends AbstractSparseTestBase {
-
+    @VisibleForTesting
     private List<BytesRef> terms;
     private InMemoryKey.IndexKey key;
+    private String fieldName = "test_field";
 
     @Before
     @Override
@@ -54,12 +58,9 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
 
         terms = Arrays.asList(new BytesRef("term1"), new BytesRef("term2"));
         key = new InMemoryKey.IndexKey(null, "test_field");
-
-        // Basic setup for tests
     }
 
     private FieldInfo prepareKeyFieldInfo() {
-        String fieldName = "test_field";
 
         // Create a FieldInfo object
         FieldInfo keyFieldInfo = new FieldInfo(
@@ -111,42 +112,7 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         return segmentInfo;
     }
 
-    private MergeState prepareMergeState(boolean isEmptyMaxDocs) {
-        MergeState.DocMap[] docMaps = new MergeState.DocMap[1];
-        docMaps[0] = docID -> docID;
-        SegmentInfo segmentInfo = prepareSegmentInfo();
-        // FieldInfo KeyFieldInfo = prepareKeyFieldInfo();
-
-        int[] maxDocs = new int[] { 0 };
-        if (isEmptyMaxDocs) {
-            maxDocs = new int[] { 10 };
-        }
-        // Make sure that this name aligns with later used key
-        String fieldName = "test_field";
-
-        // Create a FieldInfo object
-        FieldInfo keyFieldInfo = new FieldInfo(
-            fieldName,                     // name
-            0,                             // number
-            false,                         // storeTermVector
-            false,                         // omitNorms
-            false,                         // storePayloads
-            IndexOptions.DOCS,             // indexOptions
-            DocValuesType.BINARY,          // docValuesType
-            DocValuesSkipIndexType.NONE,   // docValuesSkipIndex
-            -1,                            // dvGen
-            new HashMap<>(),               // attributes
-            0,                             // pointDimensionCount
-            0,                             // pointIndexDimensionCount
-            0,                             // pointNumBytes
-            0,                             // vectorDimension
-            VectorEncoding.FLOAT32,        // vectorEncoding
-            VectorSimilarityFunction.EUCLIDEAN, // vectorSimilarityFunction
-            false,                         // softDeletesField
-            false                          // isParentField
-        );
-
-        // Create a real BinaryDocValues object
+    private BinaryDocValues prepareBinaryDocValues() {
         final BytesRef value = new BytesRef(new byte[] { 1, 2, 3, 4 });
         BinaryDocValues binaryDocValues = new BinaryDocValues() {
             private int docID = -1;
@@ -193,8 +159,10 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
                 return false;
             }
         };
+        return binaryDocValues;
+    }
 
-        // Create a DocValuesProducer
+    private DocValuesProducer prepareDocValuesProducer(BinaryDocValues binaryDocValues) {
         DocValuesProducer docValuesProducer = new DocValuesProducer() {
             @Override
             public NumericDocValues getNumeric(FieldInfo field) {
@@ -235,16 +203,10 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
                 return null;
             }
         };
+        return docValuesProducer;
+    }
 
-        DocValuesProducer[] docValuesProducers = new DocValuesProducer[1];
-        docValuesProducers[0] = docValuesProducer;
-
-        // Create FieldInfos, like an array of FieldInfo
-        FieldInfos fieldInfos = new FieldInfos(new FieldInfo[] { keyFieldInfo });
-        FieldInfos[] fieldInfosArray = new FieldInfos[1];
-        fieldInfosArray[0] = fieldInfos;
-
-        // Create FieldsProducer
+    private FieldsProducer prepareFieldsProducer() {
         FieldsProducer fieldsProducer = new FieldsProducer() {
             @Override
             public Iterator<String> iterator() {
@@ -267,6 +229,39 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
             @Override
             public void close() {}
         };
+        return fieldsProducer;
+    }
+
+    private MergeState prepareMergeState(boolean isEmptyMaxDocs) {
+        MergeState.DocMap[] docMaps = new MergeState.DocMap[1];
+        docMaps[0] = docID -> docID;
+        SegmentInfo segmentInfo = prepareSegmentInfo();
+        // FieldInfo KeyFieldInfo = prepareKeyFieldInfo();
+
+        int[] maxDocs = new int[] { 10 };
+        if (isEmptyMaxDocs) {
+            maxDocs = new int[] { 0 };
+        }
+
+        // Create a FieldInfo object
+        FieldInfo keyFieldInfo = prepareKeyFieldInfo();
+
+        // Create a real BinaryDocValues object
+        BinaryDocValues binaryDocValues = prepareBinaryDocValues();
+
+        // Create a DocValuesProducer
+        DocValuesProducer docValuesProducer = prepareDocValuesProducer(binaryDocValues);
+
+        DocValuesProducer[] docValuesProducers = new DocValuesProducer[1];
+        docValuesProducers[0] = docValuesProducer;
+
+        // Create FieldInfos, like an array of FieldInfo
+        FieldInfos fieldInfos = new FieldInfos(new FieldInfo[] { keyFieldInfo });
+        FieldInfos[] fieldInfosArray = new FieldInfos[1];
+        fieldInfosArray[0] = fieldInfos;
+
+        // Create FieldsProducer
+        FieldsProducer fieldsProducer = prepareFieldsProducer();
 
         FieldsProducer[] fieldsProducers = new FieldsProducer[1];
         fieldsProducers[0] = fieldsProducer;
@@ -303,11 +298,20 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         // Verify task is created
         assertNotNull("Task should be created successfully", task);
 
+        Field termsField = BatchClusteringTask.class.getDeclaredField("terms");
+        termsField.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        List<BytesRef> taskTerms = (List<BytesRef>) termsField.get(task);
+
+        // Verify deep copy by checking actual content
+        assertEquals("First term should be 'term1'", "term1", taskTerms.get(0).utf8ToString());
+
         // Modify original terms to verify deep copy
         originalTerms.get(0).bytes[0] = (byte) 'X';
 
-        // Task should still be valid (proves deep copy was made)
-        assertNotNull("Task should remain valid after original terms modification", task);
+        // Verify task's terms remain unchanged (proving deep copy worked)
+        assertEquals("Task's first term should still be 'term1'", "term1", taskTerms.get(0).utf8ToString());
+        assertNotEquals("Original term should now be different", "term1", originalTerms.get(0).utf8ToString());
     }
 
     public void testTaskCreationWithDifferentParameters() throws Exception {
@@ -333,13 +337,10 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         // Test behavior with null merge state - should throw NullPointerException when accessing maxDocs
         BatchClusteringTask task = new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, null, null);
 
-        try {
-            task.get();
-            fail("Should throw exception for null merge state");
-        } catch (NullPointerException e) {
-            // Expected - accessing mergeState.maxDocs on null should throw NPE
-            assertTrue("Should throw NPE for null merge state", true);
-        }
+        NullPointerException exception = assertThrows(NullPointerException.class, () -> task.get());
+
+        // Optionally verify the exception message if needed
+        assertNotNull("Exception should not be null", exception);
     }
 
     public void testGetWithNonNullMergeState() throws Exception {
@@ -351,11 +352,28 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         // Create BatchClusteringTask
         BatchClusteringTask task = new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, mergeState, keyFieldInfo);
 
-        try {
-            task.get();
-            assertTrue(true);
-        } catch (Exception e) {
-            fail("Unexpected exception: " + e);
+        // Execute and examine the result
+        List<Pair<BytesRef, PostingClusters>> result = task.get();
+
+        // Verify the returned clusters
+        assertNotNull("Result should not be null", result);
+        System.out.println("Result: " + result);
+        assertEquals("Should return clusters for each term", terms.size(), result.size());
+
+        for (int i = 0; i < result.size(); i++) {
+            Pair<BytesRef, PostingClusters> pair = result.get(i);
+
+            // Verify term matches
+            assertNotNull("Term should not be null", pair.getLeft());
+            assertEquals("Term should match input", terms.get(i).utf8ToString(), pair.getLeft().utf8ToString());
+
+            // Verify clusters
+            PostingClusters clusters = pair.getRight();
+            assertNotNull("PostingClusters should not be null", clusters);
+            assertNotNull("Clusters list should not be null", clusters.getClusters());
+
+            // Additional cluster validation
+            assertTrue("Should have non-negative cluster count", clusters.getClusters().size() >= 0);
         }
     }
 
@@ -368,29 +386,13 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         // Create BatchClusteringTask
         BatchClusteringTask task = new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, mergeState, keyFieldInfo);
 
-        try {
-            task.get();
-            assertTrue(true);
-        } catch (Exception e) {
-            fail("Unexpected exception: " + e);
-        }
-    }
+        // Execute and examine the result
+        List<Pair<BytesRef, PostingClusters>> result = task.get();
 
-    public void testGetMethodExceptionHandling() throws Exception {
-        // Test that IOException in get() method is wrapped in RuntimeException
-        // We can't easily mock the static methods, but we can test the constructor and basic behavior
-
-        // Create task that will likely fail when trying to process with null merge state
-        BatchClusteringTask task = new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, null, null);
-
-        // Verify that calling get() with invalid state throws appropriate exception
-        try {
-            task.get();
-            fail("Should throw exception");
-        } catch (Exception e) {
-            // Expected - either NPE from null access or RuntimeException from wrapped IOException
-            assertTrue("Should throw expected exception type", e instanceof RuntimeException || e instanceof NullPointerException);
-        }
+        // Verify the returned clusters
+        assertNotNull("Result should not be null", result);
+        // Should trigger early quit schema to return an empty list
+        assertEquals("Should return an empty list", 0, result.size());
     }
 
     public void testTermsDeepCopyInGet() throws Exception {
