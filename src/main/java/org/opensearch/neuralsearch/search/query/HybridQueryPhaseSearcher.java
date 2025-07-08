@@ -31,7 +31,9 @@ import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRules;
 
 /**
  * Custom search implementation to be used at {@link QueryPhase} for Hybrid Query search. For queries other than Hybrid the
@@ -77,6 +79,23 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
+        if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
+            return HybridQuery.fromQueryExtendedWithDlsRules(query, List.of());
+        }
+        if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            Query queryWithDls = booleanClauses.stream()
+                .filter(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .findFirst()
+                .map(BooleanClause::query)
+                .orElseThrow(
+                    () -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause with DLS rules")
+                );
+            List<BooleanClause> filterQueries = booleanClauses.stream()
+                .filter(clause -> !isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .toList();
+            return HybridQuery.fromQueryExtendedWithDlsRules(queryWithDls, filterQueries);
+        }
         if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
             if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {

@@ -23,6 +23,7 @@ import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchNoDocsQuery;
@@ -332,5 +333,120 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             countOfQueries++;
         }
         assertEquals(2, countOfQueries);
+    }
+
+    @SneakyThrows
+    public void testFromQueryExtendedWithDlsRulesBySecurityPlugin_whenNoFilters_thenSuccessful() {
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        List<Query> originHybridSubQueries = List.of(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
+        );
+        HybridQuery originHybridQuery = new HybridQuery(originHybridSubQueries, List.of(), new HybridQueryContext(10));
+
+        Query dlsQueryNotTest = QueryBuilders.constantScoreQuery(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "test"))
+        ).toQuery(mockQueryShardContext);
+
+        Query dlsQueryNotSomething = QueryBuilders.constantScoreQuery(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "something"))
+        ).toQuery(mockQueryShardContext);
+
+        BooleanQuery hybridWrappedInDlsRules = new BooleanQuery.Builder().add(dlsQueryNotTest, BooleanClause.Occur.SHOULD)
+            .add(dlsQueryNotSomething, BooleanClause.Occur.SHOULD)
+            .add(originHybridQuery, BooleanClause.Occur.MUST)
+            .setMinimumNumberShouldMatch(1)
+            .build();
+
+        HybridQuery hybridFromExtendedWithDlsRules = HybridQuery.fromQueryExtendedWithDlsRules(hybridWrappedInDlsRules, List.of());
+
+        List<Query> subqueriesWithDlsRules = hybridFromExtendedWithDlsRules.getSubQueries().stream().toList();
+        assertEquals(originHybridSubQueries.size(), subqueriesWithDlsRules.size());
+        assertEquals(
+            originHybridQuery.getQueryContext().getPaginationDepth(),
+            hybridFromExtendedWithDlsRules.getQueryContext().getPaginationDepth()
+        );
+
+        for (int i = 0; i < originHybridSubQueries.size(); i++) {
+            Query subqueryWithDls = subqueriesWithDlsRules.get(i);
+            assertTrue(subqueryWithDls instanceof BooleanQuery);
+            BooleanQuery booleanWithDls = (BooleanQuery) subqueryWithDls;
+            assertEquals(hybridWrappedInDlsRules.clauses().size(), booleanWithDls.clauses().size());
+            assertEquals(hybridWrappedInDlsRules.getMinimumNumberShouldMatch(), booleanWithDls.getMinimumNumberShouldMatch());
+            assertEquals(BooleanClause.Occur.MUST, booleanWithDls.clauses().get(0).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(0).query(), originHybridSubQueries.get(i));
+            assertEquals(BooleanClause.Occur.SHOULD, booleanWithDls.clauses().get(1).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(1).query(), dlsQueryNotTest);
+            assertEquals(BooleanClause.Occur.SHOULD, booleanWithDls.clauses().get(2).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(2).query(), dlsQueryNotSomething);
+        }
+    }
+
+    @SneakyThrows
+    public void testFromQueryExtendedWithDlsRulesBySecurityPlugin_whenFiltersPassed_thenSuccessful() {
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        List<Query> originHybridSubQueries = List.of(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
+        );
+        HybridQuery originHybridQuery = new HybridQuery(originHybridSubQueries, List.of(), new HybridQueryContext(10));
+
+        Query dlsQueryNotTest = QueryBuilders.constantScoreQuery(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "test"))
+        ).toQuery(mockQueryShardContext);
+
+        BooleanQuery hybridWrappedInDlsRules = new BooleanQuery.Builder().add(dlsQueryNotTest, BooleanClause.Occur.SHOULD)
+            .add(originHybridQuery, BooleanClause.Occur.MUST)
+            .setMinimumNumberShouldMatch(1)
+            .build();
+
+        BooleanClause filterNotSomething = new BooleanClause(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "something")).toQuery(mockQueryShardContext),
+            BooleanClause.Occur.FILTER
+        );
+
+        HybridQuery hybridFromExtendedWithDlsRules = HybridQuery.fromQueryExtendedWithDlsRules(
+            hybridWrappedInDlsRules,
+            List.of(filterNotSomething)
+        );
+
+        List<Query> subqueriesWithDlsRules = hybridFromExtendedWithDlsRules.getSubQueries().stream().toList();
+        assertEquals(originHybridSubQueries.size(), subqueriesWithDlsRules.size());
+        assertEquals(
+            originHybridQuery.getQueryContext().getPaginationDepth(),
+            hybridFromExtendedWithDlsRules.getQueryContext().getPaginationDepth()
+        );
+
+        for (int i = 0; i < originHybridSubQueries.size(); i++) {
+            Query subqueryWithDls = subqueriesWithDlsRules.get(i);
+            assertTrue(subqueryWithDls instanceof BooleanQuery);
+            BooleanQuery booleanWithDls = (BooleanQuery) subqueryWithDls;
+            assertEquals(3, booleanWithDls.clauses().size());
+            assertEquals(hybridWrappedInDlsRules.getMinimumNumberShouldMatch(), booleanWithDls.getMinimumNumberShouldMatch());
+            assertEquals(BooleanClause.Occur.MUST, booleanWithDls.clauses().get(0).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(0).query(), originHybridSubQueries.get(i));
+            assertEquals(BooleanClause.Occur.SHOULD, booleanWithDls.clauses().get(1).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(1).query(), dlsQueryNotTest);
+            assertEquals(BooleanClause.Occur.FILTER, booleanWithDls.clauses().get(2).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(2).query(), filterNotSomething.query());
+        }
+    }
+
+    @SneakyThrows
+    public void testFromQueryExtendedWithDlsRulesBySecurityPlugin_whenBooleanQueryWithNoHybridClause_thenFail() {
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> HybridQuery.fromQueryExtendedWithDlsRules(
+                new BooleanQuery.Builder().add(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)), BooleanClause.Occur.SHOULD).build(),
+                List.of()
+            )
+        );
+        assertThat(exception.getMessage(), containsString("Given boolean query does not contain a HybridQuery clause"));
     }
 }

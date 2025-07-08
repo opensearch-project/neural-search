@@ -91,6 +91,31 @@ public final class HybridQuery extends Query implements Iterable<Query> {
     }
 
     /**
+     * Create new instance of hybrid query object based on query extended with DLS rules by the security plugin, and
+     * boolean clauses that are used as filters for each sub-query
+     */
+    public static HybridQuery fromQueryExtendedWithDlsRules(Query query, List<BooleanClause> filterClauses) {
+        BooleanQuery booleanQuery = (BooleanQuery) query;
+        List<BooleanClause> booleanClauses = booleanQuery.clauses();
+        HybridQuery hybridQuery = booleanClauses.stream()
+            .map(BooleanClause::query)
+            .filter(clauseQuery -> clauseQuery instanceof HybridQuery)
+            .map(HybridQuery.class::cast)
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause"));
+        List<BooleanClause> nonHybridClauses = booleanClauses.stream().filter(clause -> !(clause.query() instanceof HybridQuery)).toList();
+        List<Query> subqueriesWithFilters = hybridQuery.getSubQueries().stream().map(subquery -> {
+            BooleanQuery.Builder booleanBuilder = new BooleanQuery.Builder();
+            booleanBuilder.setMinimumNumberShouldMatch(booleanQuery.getMinimumNumberShouldMatch());
+            booleanBuilder.add(subquery, BooleanClause.Occur.MUST);
+            nonHybridClauses.forEach(booleanBuilder::add);
+            filterClauses.forEach(booleanBuilder::add);
+            return booleanBuilder.build();
+        }).collect(Collectors.toUnmodifiableList());
+        return new HybridQuery(subqueriesWithFilters, hybridQuery.getQueryContext());
+    }
+
+    /**
      * Returns an iterator over sub-queries that are parts of this hybrid query
      * @return iterator
      */
