@@ -33,6 +33,7 @@ import java.util.Set;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
@@ -146,6 +147,30 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
             null
         );
 
+        protected final Parameter<Map<String, Object>> denseEmbeddingConfig = new Parameter<>(
+            DENSE_EMBEDDING_CONFIG,
+            false,
+            () -> null,
+            (name, ctx, o) -> {
+                if (o == null) {
+                    return null;
+                } else if (o instanceof Map<?, ?>) {
+                    return (Map<String, Object>) o;
+                } else {
+                    throw new MapperParsingException("[" + DENSE_EMBEDDING_CONFIG + "] must be an object");
+                }
+            },
+            m -> ((SemanticFieldMapper) m).semanticParameters.getDenseEmbeddingConfig()
+        ).setSerializer((builder, name, value) -> {
+            if (value == null) {
+                builder.nullField(name);
+            } else {
+                builder.startObject(name);
+                builder.mapContents(value);
+                builder.endObject();
+            }
+        }, (v) -> v == null ? null : v.toString());
+
         @Setter
         protected ParametrizedFieldMapper.Builder delegateBuilder;
 
@@ -155,7 +180,15 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
 
         @Override
         protected List<Parameter<?>> getParameters() {
-            return List.of(modelId, searchModelId, rawFieldType, semanticInfoFieldName, chunkingEnabled, semanticFieldSearchAnalyzer);
+            return List.of(
+                modelId,
+                searchModelId,
+                rawFieldType,
+                semanticInfoFieldName,
+                chunkingEnabled,
+                semanticFieldSearchAnalyzer,
+                denseEmbeddingConfig
+            );
         }
 
         @Override
@@ -183,6 +216,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 .semanticInfoFieldName(semanticInfoFieldName.getValue())
                 .chunkingEnabled(chunkingEnabled.getValue())
                 .semanticFieldSearchAnalyzer(semanticFieldSearchAnalyzer.getValue())
+                .denseEmbeddingConfig(denseEmbeddingConfig.getValue())
                 .build();
         }
     }

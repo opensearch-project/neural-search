@@ -27,6 +27,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.collectSemanticField;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.extractModelIdToFieldPathMap;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getDenseEmbeddingConfig;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getSemanticFieldSearchAnalyzer;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getProperties;
@@ -219,6 +220,7 @@ public class SemanticMappingTransformer implements MappingTransformer {
         builder.mlModel(modelConfig, modelId);
         builder.chunkingEnabled(isChunkingEnabled(fieldConfig, fieldPath));
         builder.semanticFieldSearchAnalyzer(getSemanticFieldSearchAnalyzer(fieldConfig, fieldPath));
+        builder.denseEmbeddingConfig(getDenseEmbeddingConfig(fieldConfig, fieldPath));
         return builder.build();
     }
 
