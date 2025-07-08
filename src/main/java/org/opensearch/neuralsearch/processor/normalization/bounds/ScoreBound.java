@@ -4,6 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor.normalization.bounds;
 
+/**
+ * Represents a boundary constraint for score normalization in the min-max score normalization technique.
+ */
 public abstract class ScoreBound {
     public static final float MIN_BOUND_SCORE = -10_000f;
     public static final float MAX_BOUND_SCORE = 10_000f;
@@ -18,7 +21,22 @@ public abstract class ScoreBound {
         this.boundScore = boundScore;
     }
 
+    /**
+     * Determines the effective score based on the upper bound constraints.
+     *
+     * @param score    the current score to evaluate
+     * @param minScore the minimum possible score in the range
+     * @param maxScore the maximum possible score in the range
+     * @return the effective score after applying upper bound constraints
+     */
     public abstract float determineEffectiveScore(float score, float minScore, float maxScore);
 
+    /**
+     * Determines whether the score should be clipped to the bound value.
+     *
+     * @param score           the current score to evaluate
+     * @param effectiveScore  the calculated effective score
+     * @return true if the score should be clipped to the bound value, false otherwise
+     */
     public abstract boolean shouldClipToBound(float score, float effectiveScore);
 }
