@@ -1283,7 +1283,7 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
 
             float normalizedScore = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score;
             assertEquals(
-                String.format("Input score: %f, Expected: %f, Actual: %f", inputScore, expectedScore, normalizedScore),
+                String.format(Locale.ROOT, "Input score: %f, Expected: %f, Actual: %f", inputScore, expectedScore, normalizedScore),
                 expectedScore,
                 normalizedScore,
                 DELTA_FOR_SCORE_ASSERTION
