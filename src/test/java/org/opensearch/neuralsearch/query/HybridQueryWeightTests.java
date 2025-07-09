@@ -18,7 +18,6 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
@@ -36,7 +35,6 @@ import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
@@ -63,10 +61,8 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
         int docId = RandomizedTest.randomInt();
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId, TERM_QUERY_TEXT, ft));
@@ -77,7 +73,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)),
             new HybridQueryContext(10)
         );
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
         Weight weight = hybridQueryWithTerm.createWeight(searcher, ScoreMode.TOP_SCORES, 1.0f);
 
         assertNotNull(weight);
@@ -111,10 +107,8 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
         int docId = RandomizedTest.randomInt();
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId, TERM_QUERY_TEXT, ft));
@@ -134,7 +128,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
             ),
             new HybridQueryContext(10)
         );
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
         Weight weight = hybridQueryWithTerm.createWeight(searcher, ScoreMode.TOP_SCORES, 1.0f);
 
         assertNotNull(weight);
@@ -168,10 +162,8 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
         int docId = RandomizedTest.randomInt();
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId, RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
@@ -182,7 +174,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
             List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext)),
             new HybridQueryContext(10)
         );
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
         Weight weight = searcher.createWeight(hybridQueryWithTerm, ScoreMode.COMPLETE, 1.0f);
 
         assertNotNull(weight);
