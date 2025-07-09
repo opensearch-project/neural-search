@@ -1018,6 +1018,279 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         assertEquals(expectedCompoundDocsOne, compoundTopDocsOne);
     }
 
+    public void testCombinedLowerAndUpperBounds_whenApplyApply_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "apply", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "apply", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.001f },      // (0.1 - 0.1) / (0.7 - 0.1) = 0.0 → MIN_SCORE
+            { 0.2f, 0.166667f },   // (0.2 - 0.1) / (0.7 - 0.1) = 0.166667
+            { 0.3f, 0.333333f },   // (0.3 - 0.3) / (0.7 - 0.3) = 0.333333
+            { 0.4f, 0.25f },       // (0.4 - 0.3) / (0.7 - 0.3) = 0.25
+            { 0.5f, 0.5f },        // (0.5 - 0.3) / (0.7 - 0.3) = 0.5
+            { 0.6f, 0.75f },       // (0.6 - 0.3) / (0.7 - 0.3) = 0.75
+            { 0.7f, 0.666667f },   // (0.7 - 0.3) / (0.9 - 0.3) = 0.666667
+            { 0.8f, 0.833333f },   // (0.8 - 0.3) / (0.9 - 0.3) = 0.833333
+            { 0.9f, 1.0f }         // (0.9 - 0.3) / (0.9 - 0.3) = 1.0
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenApplyClip_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "apply", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "clip", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.001f },      // (0.1 - 0.1) / (0.7 - 0.1) = 0.0 → MIN_SCORE
+            { 0.2f, 0.166667f },   // (0.2 - 0.1) / (0.7 - 0.1) = 0.166667
+            { 0.3f, 0.333333f },   // (0.3 - 0.3) / (0.7 - 0.3) = 0.333333
+            { 0.4f, 0.25f },       // (0.4 - 0.3) / (0.7 - 0.3) = 0.25
+            { 0.5f, 0.5f },        // (0.5 - 0.3) / (0.7 - 0.3) = 0.5
+            { 0.6f, 0.75f },       // (0.6 - 0.3) / (0.7 - 0.3) = 0.75
+            { 0.7f, 1.0f },        // score >= upperBound → MAX_SCORE
+            { 0.8f, 1.0f },        // score >= upperBound → MAX_SCORE
+            { 0.9f, 1.0f }         // score >= upperBound → MAX_SCORE
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenApplyIgnore_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "apply", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "ignore", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.001f },      // (0.1 - 0.1) / (0.9 - 0.1) = 0.0 → MIN_SCORE
+            { 0.2f, 0.125f },      // (0.2 - 0.1) / (0.9 - 0.1) = 0.125
+            { 0.3f, 0.25f },       // (0.3 - 0.3) / (0.9 - 0.3) = 0.25
+            { 0.4f, 0.166667f },   // (0.4 - 0.3) / (0.9 - 0.3) = 0.166667
+            { 0.5f, 0.333333f },   // (0.5 - 0.3) / (0.9 - 0.3) = 0.333333
+            { 0.6f, 0.5f },        // (0.6 - 0.3) / (0.9 - 0.3) = 0.5
+            { 0.7f, 0.666667f },   // (0.7 - 0.3) / (0.9 - 0.3) = 0.666667
+            { 0.8f, 0.833333f },   // (0.8 - 0.3) / (0.9 - 0.3) = 0.833333
+            { 0.9f, 1.0f }         // (0.9 - 0.3) / (0.9 - 0.3) = 1.0
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenClipApply_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "clip", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "apply", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.001f },      // score < lowerBound → MIN_SCORE
+            { 0.2f, 0.001f },      // score < lowerBound → MIN_SCORE
+            { 0.3f, 0.0f },        // (0.3 - 0.3) / (0.7 - 0.3) = 0.0
+            { 0.4f, 0.25f },       // (0.4 - 0.3) / (0.7 - 0.3) = 0.25
+            { 0.5f, 0.5f },        // (0.5 - 0.3) / (0.7 - 0.3) = 0.5
+            { 0.6f, 0.75f },       // (0.6 - 0.3) / (0.7 - 0.3) = 0.75
+            { 0.7f, 0.666667f },   // (0.7 - 0.3) / (0.9 - 0.3) = 0.666667
+            { 0.8f, 0.833333f },   // (0.8 - 0.3) / (0.9 - 0.3) = 0.833333
+            { 0.9f, 1.0f }         // (0.9 - 0.3) / (0.9 - 0.3) = 1.0
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenClipClip_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "clip", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "clip", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.001f },      // score < lowerBound → MIN_SCORE
+            { 0.2f, 0.001f },      // score < lowerBound → MIN_SCORE
+            { 0.3f, 0.0f },        // (0.3 - 0.3) / (0.7 - 0.3) = 0.0
+            { 0.4f, 0.25f },       // (0.4 - 0.3) / (0.7 - 0.3) = 0.25
+            { 0.5f, 0.5f },        // (0.5 - 0.3) / (0.7 - 0.3) = 0.5
+            { 0.6f, 0.75f },       // (0.6 - 0.3) / (0.7 - 0.3) = 0.75
+            { 0.7f, 1.0f },        // score >= upperBound → MAX_SCORE
+            { 0.8f, 1.0f },        // score > upperBound → MAX_SCORE
+            { 0.9f, 1.0f }         // score > upperBound → MAX_SCORE
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenClipIgnore_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "clip", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "ignore", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.001f },      // score < lowerBound → MIN_SCORE
+            { 0.2f, 0.001f },      // score < lowerBound → MIN_SCORE
+            { 0.3f, 0.0f },        // (0.3 - 0.3) / (0.9 - 0.3) = 0.0
+            { 0.4f, 0.166667f },   // (0.4 - 0.3) / (0.9 - 0.3) = 0.166667
+            { 0.5f, 0.333333f },   // (0.5 - 0.3) / (0.9 - 0.3) = 0.333333
+            { 0.6f, 0.5f },        // (0.6 - 0.3) / (0.9 - 0.3) = 0.5
+            { 0.7f, 0.666667f },   // (0.7 - 0.3) / (0.9 - 0.3) = 0.666667
+            { 0.8f, 0.833333f },   // (0.8 - 0.3) / (0.9 - 0.3) = 0.833333
+            { 0.9f, 1.0f }         // (0.9 - 0.3) / (0.9 - 0.3) = 1.0
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenIgnoreApply_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "ignore", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "apply", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.0f },        // (0.1 - 0.1) / (0.7 - 0.1) = 0.0
+            { 0.2f, 0.166667f },   // (0.2 - 0.1) / (0.7 - 0.1) = 0.166667
+            { 0.3f, 0.333333f },   // (0.3 - 0.1) / (0.7 - 0.1) = 0.333333
+            { 0.4f, 0.5f },        // (0.4 - 0.1) / (0.7 - 0.1) = 0.5
+            { 0.5f, 0.666667f },   // (0.5 - 0.1) / (0.7 - 0.1) = 0.666667
+            { 0.6f, 0.833333f },   // (0.6 - 0.1) / (0.7 - 0.1) = 0.833333
+            { 0.7f, 0.75f },       // (0.7 - 0.1) / (0.9 - 0.1) = 0.75
+            { 0.8f, 0.875f },      // (0.8 - 0.1) / (0.9 - 0.1) = 0.875
+            { 0.9f, 1.0f }         // (0.9 - 0.1) / (0.9 - 0.1) = 1.0
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenIgnoreClip_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "ignore", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "clip", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.0f },        // (0.1 - 0.1) / (0.7 - 0.1) = 0.0
+            { 0.2f, 0.166667f },   // (0.2 - 0.1) / (0.7 - 0.1) = 0.166667
+            { 0.3f, 0.333333f },   // (0.3 - 0.1) / (0.7 - 0.1) = 0.333333
+            { 0.4f, 0.5f },        // (0.4 - 0.1) / (0.7 - 0.1) = 0.5
+            { 0.5f, 0.666667f },   // (0.5 - 0.1) / (0.7 - 0.1) = 0.666667
+            { 0.6f, 0.833333f },   // (0.6 - 0.1) / (0.7 - 0.1) = 0.833333
+            { 0.7f, 1.0f },        // score >= upperBound → MAX_SCORE
+            { 0.8f, 1.0f },        // score > upperBound → MAX_SCORE
+            { 0.9f, 1.0f }         // score > upperBound → MAX_SCORE
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    public void testCombinedLowerAndUpperBounds_whenIgnoreIgnore_thenSuccessful() {
+        float lowerBoundScore = 0.3f;
+        float upperBoundScore = 0.7f;
+        Map<String, Object> params = Map.of(
+            "lower_bounds",
+            List.of(Map.of("mode", "ignore", "min_score", lowerBoundScore)),
+            "upper_bounds",
+            List.of(Map.of("mode", "ignore", "max_score", upperBoundScore))
+        );
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique(params, new ScoreNormalizationUtil());
+
+        float[][] testCases = {
+            { 0.1f, 0.0f },        // (0.1 - 0.1) / (0.9 - 0.1) = 0.0
+            { 0.2f, 0.125f },      // (0.2 - 0.1) / (0.9 - 0.1) = 0.125
+            { 0.3f, 0.25f },       // (0.3 - 0.1) / (0.9 - 0.1) = 0.25
+            { 0.4f, 0.375f },      // (0.4 - 0.1) / (0.9 - 0.1) = 0.375
+            { 0.5f, 0.5f },        // (0.5 - 0.1) / (0.9 - 0.1) = 0.5
+            { 0.6f, 0.625f },      // (0.6 - 0.1) / (0.9 - 0.1) = 0.625
+            { 0.7f, 0.75f },       // (0.7 - 0.1) / (0.9 - 0.1) = 0.75
+            { 0.8f, 0.875f },      // (0.8 - 0.1) / (0.9 - 0.1) = 0.875
+            { 0.9f, 1.0f }         // (0.9 - 0.1) / (0.9 - 0.1) = 1.0
+        };
+
+        assertNormalizedScores(technique, testCases);
+    }
+
+    private void assertNormalizedScores(MinMaxScoreNormalizationTechnique technique, float[][] testCases) {
+        for (float[] testCase : testCases) {
+            float inputScore = testCase[0];
+            float expectedScore = testCase[1];
+
+            List<CompoundTopDocs> compoundTopDocs = List.of(
+                new CompoundTopDocs(
+                    new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                    List.of(
+                        new TopDocs(
+                            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                            new ScoreDoc[] {
+                                new ScoreDoc(1, inputScore),
+                                new ScoreDoc(2, 0.1f),  // min score
+                                new ScoreDoc(3, 0.9f)   // max score
+                            }
+                        )
+                    ),
+                    false,
+                    SEARCH_SHARD
+                )
+            );
+
+            NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
+                .queryTopDocs(compoundTopDocs)
+                .normalizationTechnique(technique)
+                .build();
+            technique.normalize(normalizeScoresDTO);
+
+            float normalizedScore = compoundTopDocs.get(0).getTopDocs().get(0).scoreDocs[0].score;
+            assertEquals(
+                String.format("Input score: %f, Expected: %f, Actual: %f", inputScore, expectedScore, normalizedScore),
+                expectedScore,
+                normalizedScore,
+                DELTA_FOR_SCORE_ASSERTION
+            );
+        }
+    }
+
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {
         assertEquals(expected.totalHits.value(), actual.totalHits.value());
         assertEquals(expected.totalHits.relation(), actual.totalHits.relation());

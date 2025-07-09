@@ -272,6 +272,10 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         float effectiveMinScore = lowerBound.determineEffectiveScore(score, minScore, maxScore);
         float effectiveMaxScore = upperBound.determineEffectiveScore(score, minScore, maxScore);
 
+        if (Floats.compare(effectiveMaxScore, effectiveMinScore) == 0) {
+            return SINGLE_RESULT_SCORE;
+        }
+
         if (lowerBound.shouldClipToBound(score, effectiveMinScore)) {
             return MIN_SCORE;
         }
