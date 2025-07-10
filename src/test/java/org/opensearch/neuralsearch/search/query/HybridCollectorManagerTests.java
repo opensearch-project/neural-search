@@ -63,6 +63,7 @@ import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -71,6 +72,7 @@ import java.util.Map;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_DELIMITER;
@@ -764,6 +766,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        // mock to query to generate the parsed query
+        doAnswer(invocationOnMock -> {
+            final QueryBuilder queryBuilder = invocationOnMock.getArgument(0);
+            return new ParsedQuery(queryBuilder.toQuery(mockQueryShardContext), Collections.emptyMap());
+        }).when(mockQueryShardContext).toQuery(any());
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
@@ -804,6 +811,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         RescorerBuilder<QueryRescorerBuilder> rescorerBuilder = new QueryRescorerBuilder(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2));
         RescoreContext rescoreContext = rescorerBuilder.buildContext(mockQueryShardContext);
+
         List<RescoreContext> rescoreContexts = List.of(rescoreContext);
         when(searchContext.rescore()).thenReturn(rescoreContexts);
         Weight rescoreWeight = mock(Weight.class);
@@ -890,6 +898,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        // mock to query to generate the parsed query
+        doAnswer(invocationOnMock -> {
+            final QueryBuilder queryBuilder = invocationOnMock.getArgument(0);
+            return new ParsedQuery(queryBuilder.toQuery(mockQueryShardContext), Collections.emptyMap());
+        }).when(mockQueryShardContext).toQuery(any());
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
