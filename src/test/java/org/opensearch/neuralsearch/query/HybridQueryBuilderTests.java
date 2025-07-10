@@ -1092,6 +1092,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testFilter() {
+        setUpClusterService();
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(
             NeuralQueryBuilder.builder().fieldName("test").queryText("test").build()
         ).add(new NeuralSparseQueryBuilder());
