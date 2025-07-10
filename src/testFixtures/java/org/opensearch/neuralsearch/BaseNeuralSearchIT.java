@@ -1864,6 +1864,9 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 stringBuilderForContentBody.append("]");
             }
             if (normalizationParams.containsKey(PARAM_NAME_UPPER_BOUNDS)) {
+                if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+                    stringBuilderForContentBody.append(",");
+                }
                 stringBuilderForContentBody.append("\"upper_bounds\": [");
                 List<Map> upperBounds = (List) normalizationParams.get(PARAM_NAME_UPPER_BOUNDS);
                 for (int i = 0; i < upperBounds.size(); i++) {

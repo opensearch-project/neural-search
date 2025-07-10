@@ -664,6 +664,110 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 1.0f));
     }
 
+    @SneakyThrows
+    public void testMinMaxBothBounds_whenMultipleShards_thenSuccessful() {
+        String modelId = null;
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
+        modelId = prepareModel();
+
+        // Test with both bounds for 2 queries
+        createSearchPipeline(
+            "both-bounds-2-queries",
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(
+                "lower_bounds",
+                List.of(
+                    Map.of("mode", "apply", "min_score", Float.toString(0.01f)),
+                    Map.of("mode", "clip", "min_score", Float.toString(0.0f))
+                ),
+                "upper_bounds",
+                List.of(
+                    Map.of("mode", "apply", "max_score", Float.toString(0.99f)),
+                    Map.of("mode", "clip", "max_score", Float.toString(1.0f))
+                )
+            ),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            false
+        );
+        int totalExpectedDocQty = 6;
+
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(6)
+            .build();
+
+        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(neuralQueryBuilder);
+        hybridQueryBuilder.add(termQueryBuilder);
+
+        Map<String, Object> searchResponseAsMap = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            6,
+            Map.of("search_pipeline", "both-bounds-2-queries")
+        );
+
+        assertQueryResults(searchResponseAsMap, totalExpectedDocQty, false, Range.between(0.01f, 0.99f));
+
+        // Test with both bounds for 3 queries
+        createSearchPipeline(
+            "both-bounds-3-queries",
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(
+                "lower_bounds",
+                List.of(
+                    Map.of("mode", "apply", "min_score", Float.toString(0.01f)),
+                    Map.of("mode", "clip", "min_score", Float.toString(0.0f)),
+                    Map.of("mode", "ignore")
+                ),
+                "upper_bounds",
+                List.of(
+                    Map.of("mode", "apply", "max_score", Float.toString(0.99f)),
+                    Map.of("mode", "clip", "max_score", Float.toString(1.0f)),
+                    Map.of("mode", "ignore")
+                )
+            ),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            false
+        );
+
+        // verify case when there are partial matches
+        HybridQueryBuilder hybridQueryBuilderPartialMatch = new HybridQueryBuilder();
+        hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3));
+        hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4));
+        hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+
+        Map<String, Object> searchResponseAsMapPartialMatch = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilderPartialMatch,
+            null,
+            5,
+            Map.of("search_pipeline", "both-bounds-3-queries")
+        );
+        assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 0.99f));
+
+        // verify case when query doesn't have a match
+        HybridQueryBuilder hybridQueryBuilderNoMatches = new HybridQueryBuilder();
+        hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT6));
+        hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
+
+        Map<String, Object> searchResponseAsMapNoMatches = search(
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilderNoMatches,
+            null,
+            5,
+            Map.of("search_pipeline", "both-bounds-2-queries")
+        );
+        assertQueryResults(searchResponseAsMapNoMatches, 0, true);
+    }
+
     private void initializeIndexIfNotExist(String indexName) throws IOException {
         if (TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME.equalsIgnoreCase(indexName) && !indexExists(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME)) {
             prepareKnnIndex(
