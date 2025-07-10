@@ -96,6 +96,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_
 import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_LOWER_BOUNDS;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_UPPER_BOUNDS;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
@@ -1832,6 +1833,46 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                         .append(lowerBound.get("min_score"))
                         .append(" }");
                     if (i < lowerBounds.size() - 1) {
+                        stringBuilderForContentBody.append(", ");
+                    }
+                }
+                stringBuilderForContentBody.append("]");
+            }
+            if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+                stringBuilderForContentBody.append("\"lower_bounds\": [");
+                List<Map> lowerBounds = (List) normalizationParams.get(PARAM_NAME_LOWER_BOUNDS);
+                for (int i = 0; i < lowerBounds.size(); i++) {
+                    Map<String, String> lowerBound = lowerBounds.get(i);
+                    stringBuilderForContentBody.append("{ ")
+                        .append("\"mode\"")
+                        .append(": \"")
+                        .append(lowerBound.get("mode"))
+                        .append("\",")
+                        .append("\"min_score\"")
+                        .append(": ")
+                        .append(lowerBound.get("min_score"))
+                        .append(" }");
+                    if (i < lowerBounds.size() - 1) {
+                        stringBuilderForContentBody.append(", ");
+                    }
+                }
+                stringBuilderForContentBody.append("]");
+            }
+            if (normalizationParams.containsKey(PARAM_NAME_UPPER_BOUNDS)) {
+                stringBuilderForContentBody.append("\"upper_bounds\": [");
+                List<Map> upperBounds = (List) normalizationParams.get(PARAM_NAME_UPPER_BOUNDS);
+                for (int i = 0; i < upperBounds.size(); i++) {
+                    Map<String, String> upperBound = upperBounds.get(i);
+                    stringBuilderForContentBody.append("{ ")
+                        .append("\"mode\"")
+                        .append(": \"")
+                        .append(upperBound.get("mode"))
+                        .append("\",")
+                        .append("\"max_score\"")
+                        .append(": ")
+                        .append(upperBound.get("max_score"))
+                        .append(" }");
+                    if (i < upperBounds.size() - 1) {
                         stringBuilderForContentBody.append(", ");
                     }
                 }
