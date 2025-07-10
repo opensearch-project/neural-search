@@ -30,11 +30,9 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 
@@ -60,10 +58,8 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
     @SneakyThrows
     public void testBasics_whenCreateNewCollector_thenSuccessful() {
         final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
@@ -95,10 +91,8 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
     @SneakyThrows
     public void testTopDocs_whenCreateNewAndGetTopDocs_thenSuccessful() {
         final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
@@ -159,10 +153,8 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
     @SneakyThrows
     public void testTopDocs_whenMatchedDocsDifferentForEachSubQuery_thenSuccessful() {
         final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
@@ -270,10 +262,8 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
         );
 
         final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
@@ -312,10 +302,8 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
     @SneakyThrows
     public void testTrackTotalHits_whenTotalHitsSetIntegerMaxValue_thenSuccessful() {
         final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
@@ -364,10 +352,8 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
         );
 
         final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
@@ -408,10 +394,8 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
     @SneakyThrows
     public void testTotalHitsCountValidation_whenTotalHitsCollectedAtTopLevelInCollector_thenSuccessful() {
         final Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));

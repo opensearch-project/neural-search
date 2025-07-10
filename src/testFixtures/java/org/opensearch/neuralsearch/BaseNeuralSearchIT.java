@@ -216,6 +216,26 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
     }
 
+    protected String createConnector(final String requestBody) throws Exception {
+        Response createResponse = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/connectors/_create",
+            null,
+            toHttpEntity(requestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> createResJson = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(createResponse.getEntity()),
+            false
+        );
+        final String connector_id = createResJson.get("connector_id").toString();
+        assertNotNull(connector_id);
+
+        return connector_id;
+    }
+
     protected String uploadModel(final String requestBody) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
@@ -382,6 +402,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
         assertEquals("true", node.get("acknowledged").toString());
         assertEquals(indexName, node.get("index").toString());
+    }
+
+    @SneakyThrows
+    protected Map<String, Object> getIndexMapping(final String indexName) {
+        Request request = new Request("GET", "/" + indexName + "/_mappings");
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        return createParser(XContentType.JSON.xContent(), responseBody).map();
     }
 
     protected void updateSemanticIndexWithConfiguration(final String indexName, String indexConfiguration, final String modelId)
@@ -2435,6 +2464,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void enableStats() {
+        // Toggle stats off first to reset values
+        disableStats();
         updateClusterSettings("plugins.neural_search.stats_enabled", true);
     }
 

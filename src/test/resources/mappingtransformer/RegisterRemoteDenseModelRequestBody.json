@@ -1,0 +1,14 @@
+{
+  "name": "openAI-gpt-3.5-turbo",
+  "function_name": "remote",
+  "description": "test model",
+  "model_config": {
+    "model_type": "TEXT_EMBEDDING",
+    "embedding_dimension": 384,
+    "framework_type": "SENTENCE_TRANSFORMERS",
+    "additional_config": {
+      "space_type": "l2"
+    }
+  },
+  "connector_id": "%s"
+}

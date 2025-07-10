@@ -19,7 +19,6 @@ import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.index.mapper.KeywordFieldMapper;
 import org.opensearch.index.mapper.NumberFieldMapper;
@@ -46,7 +45,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
     public void testKeywordCollapse_whenCollectAndTopDocs_thenSuccessful() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
         // Add 1000 documents with keyword collapse field values
         for (int i = 0; i < 1000; i++) {
@@ -105,7 +104,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
     public void testNumericCollapse_whenCollectAndTopDocs_thenSuccessful() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
         // Add 1000 documents with numeric collapse field values
         for (int i = 0; i < 1000; i++) {
