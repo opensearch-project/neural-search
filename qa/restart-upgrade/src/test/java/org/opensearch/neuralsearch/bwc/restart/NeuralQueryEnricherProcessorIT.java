@@ -38,7 +38,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
             sparseEncodingQueryBuilderWithModelId.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -62,7 +61,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             String modelId = null;
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(modelId);
                 assertEquals(
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
@@ -87,7 +86,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
 
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
             neuralQueryBuilderWithModelId.modelId(modelId);
             createPipelineProcessor(modelId, DENSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -108,7 +106,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRestartUpgradeRestTe
             String modelId = null;
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
                 neuralQueryBuilderWithModelId.modelId(modelId);
 
                 assertEquals(

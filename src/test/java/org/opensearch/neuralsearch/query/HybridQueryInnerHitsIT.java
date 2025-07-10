@@ -581,7 +581,7 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testInnerHits_whenMultipleSubqueriesOnNestedFields_statsEnabled_thenSuccessful() {
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
 
         testInnerHits_whenMultipleSubqueriesOnNestedFields_thenSuccessful(TEST_MULTI_DOC_WITH_NESTED_FIELDS_SINGLE_SHARD_INDEX_NAME);
         testInnerHits_whenMultipleSubqueriesOnNestedFields_thenSuccessful(TEST_MULTI_DOC_WITH_NESTED_FIELDS_MULTIPLE_SHARD_INDEX_NAME);
@@ -595,6 +595,6 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
         assertEquals(2, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_INNER_HITS_REQUESTS));
 
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
     }
 }

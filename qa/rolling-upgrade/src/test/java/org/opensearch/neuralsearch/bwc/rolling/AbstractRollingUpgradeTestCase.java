@@ -13,7 +13,6 @@ import java.util.Set;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.ml.common.model.MLModelState;
-import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import static org.opensearch.neuralsearch.util.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.OLD_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.MIXED_CLUSTER;
@@ -22,9 +21,11 @@ import static org.opensearch.neuralsearch.util.TestUtils.ROLLING_UPGRADE_FIRST_R
 import static org.opensearch.neuralsearch.util.TestUtils.BWCSUITE_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.util.TestUtils.generateModelId;
+
+import org.opensearch.neuralsearch.BaseUpgradeTestCase;
 import org.opensearch.test.rest.OpenSearchRestTestCase;
 
-public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT {
+public abstract class AbstractRollingUpgradeTestCase extends BaseUpgradeTestCase {
 
     private static final Set<MLModelState> READY_FOR_INFERENCE_STATES = Set.of(MLModelState.LOADED, MLModelState.DEPLOYED);
 
@@ -36,21 +37,6 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
     }
 
     @Override
-    protected final boolean preserveIndicesUponCompletion() {
-        return true;
-    }
-
-    @Override
-    protected final boolean preserveReposUponCompletion() {
-        return true;
-    }
-
-    @Override
-    protected boolean preserveTemplatesUponCompletion() {
-        return true;
-    }
-
-    @Override
     protected final Settings restClientSettings() {
         return Settings.builder()
             .put(super.restClientSettings())
@@ -59,16 +45,6 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
             // account for delayed shards
             .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, "120s")
             .build();
-    }
-
-    @Override
-    protected boolean shouldCleanUpResources() {
-        // All UPGRADE tests depend on resources created in OLD and MIXED test cases
-        // Before UPGRADE tests run, all OLD and MIXED test cases will be run first
-        // We only want to clean up resources in upgrade tests, also we don't want to clean up after each test case finishes
-        // this is because the cleanup method will pull every resource and delete, which will impact other tests
-        // Overriding the method in base class so that resources won't be accidentally clean up
-        return false;
     }
 
     protected enum ClusterType {
@@ -102,11 +78,6 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         return Optional.ofNullable(System.getProperty(BWC_VERSION, null));
     }
 
-    protected String uploadTextEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
-    }
-
     protected String registerModelGroupAndGetModelId(String requestBody) throws Exception {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
@@ -120,23 +91,11 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseNeuralSearchIT 
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
-    protected String uploadTextImageEmbeddingModel() throws Exception {
-        String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
-        return registerModelGroupAndGetModelId(requestBody);
-    }
-
     protected void createPipelineForTextImageProcessor(String modelId, String pipelineName) throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())
         );
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
-    }
-
-    protected String uploadSparseEncodingModel() throws Exception {
-        String requestBody = Files.readString(
-            Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
-        );
-        return registerModelGroupAndGetModelId(requestBody);
     }
 
     protected void createPipelineForSparseEncodingProcessor(String modelId, String pipelineName, Integer batchSize) throws Exception {

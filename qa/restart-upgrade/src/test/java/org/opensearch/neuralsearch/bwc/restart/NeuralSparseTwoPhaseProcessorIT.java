@@ -28,7 +28,6 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadSparseEncodingModel();
-            loadModel(modelId);
             neuralSparseQueryBuilder.modelId(modelId);
             createPipelineForSparseEncodingProcessor(modelId, NEURAL_SPARSE_INGEST_PIPELINE_NAME);
             createIndexWithConfiguration(
@@ -48,7 +47,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRestartUpgradeRestT
             String modelId = null;
             try {
                 modelId = TestUtils.getModelId(getIngestionPipeline(NEURAL_SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 neuralSparseQueryBuilder.modelId(modelId);
                 Object resultWith2PhasePipeline = search(getIndexNameForTest(), neuralSparseQueryBuilder, 1).get("hits");
                 assertNotNull(resultWith2PhasePipeline);

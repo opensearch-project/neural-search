@@ -42,7 +42,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
         switch (getClusterType()) {
             case OLD:
                 sparseModelId = uploadSparseEncodingModel();
-                loadModel(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
                 createPipelineForSparseEncodingProcessor(sparseModelId, SPARSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
@@ -64,7 +63,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 break;
             case MIXED:
                 sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                loadModel(sparseModelId);
+                loadAndWaitForModelToBeReady(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
 
                 waitForClusterHealthGreen(NODES_BWC_CLUSTER);
@@ -76,7 +75,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
             case UPGRADED:
                 try {
                     sparseModelId = TestUtils.getModelId(getIngestionPipeline(SPARSE_INGEST_PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
-                    loadModel(sparseModelId);
+                    loadAndWaitForModelToBeReady(sparseModelId);
                     sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
                     assertEquals(
                         search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
@@ -107,7 +106,6 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
         switch (getClusterType()) {
             case OLD:
                 denseModelId = uploadTextEmbeddingModel();
-                loadModel(denseModelId);
                 neuralQueryBuilderWithModelId.modelId(denseModelId);
                 createPipelineProcessor(denseModelId, DENSE_INGEST_PIPELINE_NAME);
                 createIndexWithConfiguration(
@@ -130,7 +128,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 break;
             case MIXED:
                 denseModelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(denseModelId);
+                loadAndWaitForModelToBeReady(denseModelId);
                 neuralQueryBuilderWithModelId.modelId(denseModelId);
 
                 waitForClusterHealthGreen(NODES_BWC_CLUSTER);
@@ -142,7 +140,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
             case UPGRADED:
                 try {
                     denseModelId = TestUtils.getModelId(getIngestionPipeline(DENSE_INGEST_PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                    loadModel(denseModelId);
+                    loadAndWaitForModelToBeReady(denseModelId);
                     neuralQueryBuilderWithModelId.modelId(denseModelId);
 
                     assertEquals(

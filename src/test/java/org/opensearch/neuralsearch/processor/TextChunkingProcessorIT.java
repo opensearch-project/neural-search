@@ -220,7 +220,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testTextChunkingProcessor_processorStats_successful() {
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
         createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
         createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
 
@@ -281,7 +281,7 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_CHUNKING_FIXED_CHAR_LENGTH_PROCESSORS));
 
         // Reset stats
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
     }
 
     private void validateIndexIngestResultsWithMultipleDocs(String indexName, String fieldName, Object expected, int docCount) {

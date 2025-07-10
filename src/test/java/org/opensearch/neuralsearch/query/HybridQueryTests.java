@@ -20,7 +20,6 @@ import java.util.stream.Collectors;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
@@ -31,7 +30,6 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.search.QueryUtils;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -110,10 +108,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field1Value = "text1";
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
@@ -154,10 +150,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field3Value = "text3";
 
         final Directory dir = newDirectory();
-        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
@@ -166,7 +160,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
 
         HybridQuery query = new HybridQuery(
             List.of(new TermQuery(new Term(TEXT_FIELD_NAME, field1Value)), new TermQuery(new Term(TEXT_FIELD_NAME, field2Value))),
@@ -202,10 +196,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field3Value = "text3";
 
         final Directory dir = newDirectory();
-        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
@@ -214,7 +206,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
 
         HybridQuery query = new HybridQuery(List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))), new HybridQueryContext(10));
         // executing search query, getting up to 3 docs in result
@@ -237,10 +229,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field3Value = "text3";
 
         final Directory dir = newDirectory();
-        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
@@ -249,7 +239,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
 
         HybridQuery query = new HybridQuery(
             List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)), new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))),

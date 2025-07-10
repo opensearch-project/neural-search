@@ -4,40 +4,14 @@
  */
 package org.opensearch.neuralsearch;
 
+import com.carrotsearch.randomizedtesting.RandomizedTest;
+import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
+import com.google.common.collect.ImmutableList;
 import joptsimple.internal.Strings;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import lombok.NonNull;
-import org.junit.After;
-import org.opensearch.action.search.SearchResponse;
-import org.opensearch.client.ResponseException;
-import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.core.xcontent.DeprecationHandler;
-import org.opensearch.core.xcontent.MediaType;
-import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.ml.common.model.MLModelState;
-
-import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
-import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.ArrayList;
-import java.util.function.Predicate;
-import java.util.function.Supplier;
-import java.util.stream.Collectors;
-
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
@@ -47,26 +21,37 @@ import org.apache.hc.core5.http.ParseException;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
+import org.junit.After;
 import org.junit.Before;
+import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
 import org.opensearch.client.Response;
+import org.opensearch.client.ResponseException;
 import org.opensearch.client.RestClient;
 import org.opensearch.client.WarningsHandler;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.xcontent.MediaType;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
+import org.opensearch.ml.common.model.MLModelState;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
-import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
+import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
@@ -82,30 +67,41 @@ import org.opensearch.test.ClusterServiceUtils;
 import org.opensearch.threadpool.TestThreadPool;
 import org.opensearch.threadpool.ThreadPool;
 
-import com.carrotsearch.randomizedtesting.RandomizedTest;
-import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
-import com.google.common.collect.ImmutableList;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
-import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
-import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
+import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
+import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
-import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
-import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
+import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
+import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
+import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
+import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_LOWER_BOUNDS;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_UPPER_BOUNDS;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
-import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
-import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.SEARCH_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.SECURITY_AUDITLOG_PREFIX;
-
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.SneakyThrows;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
@@ -219,6 +215,26 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupId = getModelGroupId();
         // model group id is dynamically generated, we need to update model update request body after group is registered
         return uploadModel(String.format(LOCALE, requestBody, modelGroupId));
+    }
+
+    protected String createConnector(final String requestBody) throws Exception {
+        Response createResponse = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/connectors/_create",
+            null,
+            toHttpEntity(requestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> createResJson = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(createResponse.getEntity()),
+            false
+        );
+        final String connector_id = createResJson.get("connector_id").toString();
+        assertNotNull(connector_id);
+
+        return connector_id;
     }
 
     protected String uploadModel(final String requestBody) throws Exception {
@@ -387,6 +403,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
         assertEquals("true", node.get("acknowledged").toString());
         assertEquals(indexName, node.get("index").toString());
+    }
+
+    @SneakyThrows
+    protected Map<String, Object> getIndexMapping(final String indexName) {
+        Request request = new Request("GET", "/" + indexName + "/_mappings");
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        return createParser(XContentType.JSON.xContent(), responseBody).map();
     }
 
     protected void updateSemanticIndexWithConfiguration(final String indexName, String indexConfiguration, final String modelId)
@@ -1744,7 +1769,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         );
     }
 
-    private Response getModel(@NonNull final String modelId) throws IOException {
+    protected Response getModel(@NonNull final String modelId) throws IOException {
         return makeRequest(
             client(),
             "GET",
@@ -2480,6 +2505,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void enableStats() {
+        // Toggle stats off first to reset values
+        disableStats();
         updateClusterSettings("plugins.neural_search.stats_enabled", true);
     }
 

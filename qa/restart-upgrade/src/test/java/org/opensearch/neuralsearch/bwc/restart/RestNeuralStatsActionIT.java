@@ -27,7 +27,7 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
     // Info stats based on persistent constructs should be persisted between restarts
     public void testNeuralStats_E2EFlow() throws Exception {
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
 
         // Get initial stats
         String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
@@ -43,7 +43,6 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
         // to avoid having to upload a model and run inference.
         if (isRunningAgainstOldCluster()) {
             String modelId = uploadTextEmbeddingModel();
-            loadModel(modelId);
             createPipelineProcessor(modelId, PIPELINE_NAME);
             createIndexWithConfiguration(
                 getIndexNameForTest(),
@@ -69,7 +68,7 @@ public class RestNeuralStatsActionIT extends AbstractRestartUpgradeRestTestCase 
             String modelId = null;
             try {
                 modelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
-                loadModel(modelId);
+                loadAndWaitForModelToBeReady(modelId);
                 addDocument(getIndexNameForTest(), "3", TEST_FIELD, TEXT_1, null, null);
                 addDocument(getIndexNameForTest(), "4", TEST_FIELD, TEXT_1, null, null);
                 addDocument(getIndexNameForTest(), "5", TEST_FIELD, TEXT_1, null, null);
