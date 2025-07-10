@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +20,8 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_WITH_SPARSE_MODEL_WITH_CHUNKING = "semantic_field_sparse_model_with_chunking_index";
     private static final String INDEX_WITH_SPARSE_MODEL = "semantic_field_sparse_model_index";
+    private static final String INDEX_WITH_SPARSE_MODEL_AND_SPARSE_ENCODING_CONFIG =
+        "semantic_field_sparse_model_and_sparse_encoding_config_index";
     private static final String INDEX_WITH_DENSE_MODEL_WITH_CHUNKING = "semantic_field_dense_model_with_chunking_index";
     private static final String INDEX_WITH_DENSE_MODEL = "semantic_field_dense_model_index";
     protected static final String LEVEL_1_FIELD = "products";
@@ -51,7 +54,27 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
         assertEquals(1, getDocCount(INDEX_WITH_SPARSE_MODEL));
 
         Map<String, Object> source = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL, "1").get("_source");
-        assertEmbeddings(source);
+        List<Object> embeddings = assertEmbeddings(source);
+
+        // test custom prune type as none
+        createIndexWithModelId(
+            INDEX_WITH_SPARSE_MODEL_AND_SPARSE_ENCODING_CONFIG,
+            "semantic/SemanticIndexMappingsWithSparseEncodingConfig.json",
+            modelId
+        );
+        ingestDocument(INDEX_WITH_SPARSE_MODEL_AND_SPARSE_ENCODING_CONFIG, INGEST_DOC1, "1");
+        assertEquals(1, getDocCount(INDEX_WITH_SPARSE_MODEL_AND_SPARSE_ENCODING_CONFIG));
+        Map<String, Object> source1 = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL_AND_SPARSE_ENCODING_CONFIG, "1").get(
+            "_source"
+        );
+        List<Object> embeddings1 = assertEmbeddings(source1);
+
+        // verify the sparse embedding has more tokens since we use prune type none and by default
+        // we will do max_ratio prune with 0.1f ratio.
+        assertTrue(
+            "Embedding without prune should have more tokens than the embedding with the default max_ratio 0.1 prune.",
+            ((Map) embeddings1.get(0)).size() > ((Map) embeddings.get(0)).size()
+        );
     }
 
     public void testSemanticFieldProcessor_withDenseModel() throws Exception {
@@ -208,21 +231,25 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
         assertModelUpdate(originalDoc, updatedDoc, modelId, newModelId);
     }
 
-    private void assertEmbeddings(Map<String, Object> source) {
+    private List<Object> assertEmbeddings(Map<String, Object> source) {
+        List<Object> embeddings = new ArrayList<>();
         List<Map<String, Object>> level1 = (List<Map<String, Object>>) source.get(LEVEL_1_FIELD);
         for (Map<String, Object> nested : level1) {
             Map<String, Object> level2 = (Map<String, Object>) nested.get(LEVEL_2_FIELD);
-            doAssertEmbedding(level2.get(EMBEDDING_FIELD));
+            doAssertEmbedding(level2.get(EMBEDDING_FIELD), embeddings);
         }
+        return embeddings;
     }
 
-    private void doAssertEmbedding(Object embedding) {
+    private void doAssertEmbedding(Object embedding, List<Object> embeddings) {
         assertNotNull("Embedding should not be null", embedding);
         if (embedding instanceof Map<?, ?>) {
             Map<String, Double> embeddingMap = (Map<String, Double>) embedding;
+            embeddings.add(embeddingMap);
             assertValidSparseEmbeddingValues(embeddingMap);
         } else if (embedding instanceof List<?>) {
             List<Float> embeddingList = (List<Float>) embedding;
+            embeddings.add(embeddingList);
             assertTrue("Embedding dimension should be correct", embeddingList.size() == 768);
         } else {
             fail("Embeddings are neither a map for sparse model nor a list for dense model.");
@@ -236,9 +263,11 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
         }
     }
 
-    private void assertEmbeddingWithChunks(Map<String, Object> source) {
+    private List<List<Object>> assertEmbeddingWithChunks(Map<String, Object> source) {
+        List<List<Object>> embeddingsList = new ArrayList<>();
         List<Map<String, Object>> level = (List<Map<String, Object>>) source.get(LEVEL_1_FIELD);
         for (Map<String, Object> nested : level) {
+            List<Object> embeddings = new ArrayList<>();
             Map<String, Object> semanticInfo = (Map<String, Object>) nested.get(LEVEL_2_FIELD);
             List<Map<String, Object>> chunks = (List<Map<String, Object>>) semanticInfo.get(CHUNKS_FIELD);
             assertNotNull("Chunks should not be null", chunks);
@@ -246,9 +275,13 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
             for (Map<String, Object> chunk : chunks) {
                 assertNotNull("Chunk text should not be null", chunk.get(TEXT_FIELD));
-                doAssertEmbedding(chunk.get(EMBEDDING_FIELD));
+                doAssertEmbedding(chunk.get(EMBEDDING_FIELD), embeddings);
             }
+
+            embeddingsList.add(embeddings);
         }
+
+        return embeddingsList;
     }
 
     private void assertModelUpdate(Map<String, Object> originalDoc, Map<String, Object> updatedDoc, String oldModelId, String newModelId) {

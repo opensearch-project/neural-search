@@ -24,6 +24,8 @@ import java.util.Map;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SPARSE_ENCODING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_TEXT_FIELD_NAME;
@@ -51,6 +53,7 @@ public class SemanticInfoConfigBuilder {
     private Boolean chunkingEnabled;
     private String semanticFieldSearchAnalyzer;
     private Map<String, Object> denseEmbeddingConfig;
+    private boolean sparseEncodingConfigDefined;
     private final static List<String> UNSUPPORTED_DENSE_EMBEDDING_CONFIG = List.of(
         KNN_VECTOR_DIMENSION_FIELD_NAME,
         KNN_VECTOR_DATA_TYPE_FIELD_NAME,
@@ -111,24 +114,47 @@ public class SemanticInfoConfigBuilder {
     }
 
     private void validate() {
-        if (semanticFieldSearchAnalyzer != null && RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType) == false) {
+        if (KNNVectorFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            validateSearchAnalyzerNotDefined();
+            validateSparseEncodingConfigNotDefined();
+        }
+
+        if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
+            validateDenseEmbeddingConfigNotDefined();
+        }
+    }
+
+    private void validateSparseEncodingConfigNotDefined() {
+        if (sparseEncodingConfigDefined) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "Cannot build the semantic info config because the embedding field type %s cannot build with semantic field search analyzer %s",
-                    embeddingFieldType,
-                    semanticFieldSearchAnalyzer
+                    "Cannot build the semantic info config because the dense(text embedding) model cannot support %s.",
+                    SPARSE_ENCODING_CONFIG
                 )
             );
         }
+    }
 
+    private void validateDenseEmbeddingConfigNotDefined() {
         if (denseEmbeddingConfig != null && RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "Cannot build the semantic info config because %s is not supported by %s.",
-                    DENSE_EMBEDDING_CONFIG,
-                    embeddingFieldType
+                    "Cannot build the semantic info config because %s is not supported by the sparse model.",
+                    DENSE_EMBEDDING_CONFIG
+                )
+            );
+        }
+    }
+
+    private void validateSearchAnalyzerNotDefined() {
+        if (semanticFieldSearchAnalyzer != null) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Cannot build the semantic info config because the dense(text embedding) model cannot support %s",
+                    SEMANTIC_FIELD_SEARCH_ANALYZER
                 )
             );
         }
@@ -341,6 +367,11 @@ public class SemanticInfoConfigBuilder {
 
     public SemanticInfoConfigBuilder denseEmbeddingConfig(final Map<String, Object> denseEmbeddingConfig) {
         this.denseEmbeddingConfig = denseEmbeddingConfig;
+        return this;
+    }
+
+    public SemanticInfoConfigBuilder sparseEncodingConfigDefined(final boolean sparseEncodingConfigDefined) {
+        this.sparseEncodingConfigDefined = sparseEncodingConfigDefined;
         return this;
     }
 }

@@ -15,6 +15,7 @@ import org.opensearch.ingest.AbstractBatchingSystemProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ml.common.MLModel;
+import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
@@ -224,7 +225,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
 
         generateEmbedding(modelIdToRawDataMap, modelIdValueToEmbeddingMap -> {
             try {
-                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap, DEFAULT_PRUNE_RATIO);
+                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap);
             } catch (Exception e) {
                 handler.accept(null, e);
             }
@@ -251,8 +252,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     private void setInference(
         @NonNull final IngestDocument ingestDocument,
         @NonNull final List<SemanticFieldInfo> semanticFieldInfoList,
-        @NonNull final Map<Pair<String, String>, Pair<Object, Exception>> modelIdValueToEmbeddingMap,
-        @NonNull final Float pruneRatio
+        @NonNull final Map<Pair<String, String>, Pair<Object, Exception>> modelIdValueToEmbeddingMap
     ) throws Exception {
         for (final SemanticFieldInfo semanticFieldInfo : semanticFieldInfoList) {
             final String modelId = semanticFieldInfo.getModelId();
@@ -265,10 +265,13 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                     throw exception;
                 }
                 Object embedding = modelIdValueToEmbeddingMap.get(Pair.of(modelId, chunk)).getLeft();
-                // TODO: In future we should allow user to configure how we should prune the sparse embedding
-                // for each semantic field. Then we can pull the config from the semantic config and use it here.
                 if (!isDenseModel) {
-                    embedding = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, pruneRatio, (Map<String, Float>) embedding);
+                    final SparseEncodingConfig sparseEncodingConfig = semanticFieldInfo.getSparseEncodingConfig();
+                    final PruneType pruneType = sparseEncodingConfig == null ? PruneType.MAX_RATIO : sparseEncodingConfig.getPruneType();
+                    if (PruneType.NONE.equals(pruneType) == false) {
+                        final Float pruneRatio = sparseEncodingConfig == null ? DEFAULT_PRUNE_RATIO : sparseEncodingConfig.getPruneRatio();
+                        embedding = PruneUtils.pruneSparseVector(pruneType, pruneRatio, (Map<String, Float>) embedding);
+                    }
                 }
                 final String embeddingFullPath = semanticFieldInfo.getFullPathForEmbeddingInDoc(i);
                 ingestDocument.setFieldValue(embeddingFullPath, embedding);
@@ -386,6 +389,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                 // By using this path we can handle the nested object properly when we use it to set the data for the semantic field
                 .semanticInfoFullPathInDoc(getSemanticInfoFieldFullPath(fieldConfig, currentPath, pathToSemanticField))
                 .chunkingEnabled(isChunkingEnabled(fieldConfig, pathToSemanticField))
+                .sparseEncodingConfig(SparseEncodingConfig.parse(fieldConfig))
                 .build();
 
             semanticFieldInfoList.add(semanticFieldInfo);
@@ -565,7 +569,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             final IngestDocument ingestDocument = ingestDocumentWrapper.getIngestDocument();
             final List<SemanticFieldInfo> semanticFieldInfoList = entry.getValue();
             try {
-                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap, DEFAULT_PRUNE_RATIO);
+                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap);
             } catch (Exception e) {
                 ingestDocumentWrapper.update(ingestDocument, e);
             }
