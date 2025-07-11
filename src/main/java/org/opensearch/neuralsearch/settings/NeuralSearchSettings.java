@@ -35,4 +35,16 @@ public final class NeuralSearchSettings {
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
+
+    /**
+     * Configure the maximum number of docs we can batch ingest for the semantic field.
+     */
+    public static final Setting<Integer> SEMANTIC_INGEST_BATCH_SIZE = Setting.intSetting(
+        "index.neural_search.semantic_ingest_batch_size",
+        10,
+        1,
+        100,
+        Setting.Property.IndexScope,
+        Setting.Property.Dynamic
+    );
 }

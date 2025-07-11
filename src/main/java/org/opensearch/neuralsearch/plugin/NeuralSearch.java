@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -246,7 +247,7 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
+        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED, SEMANTIC_INGEST_BATCH_SIZE);
     }
 
     @Override

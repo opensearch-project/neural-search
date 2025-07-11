@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.semantic;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
@@ -592,5 +593,10 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     @Override
     public String getType() {
         return PROCESSOR_TYPE;
+    }
+
+    @VisibleForTesting
+    public int getBatchSize() {
+        return batchSize;
     }
 }
