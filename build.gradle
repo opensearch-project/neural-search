@@ -42,7 +42,7 @@ buildscript {
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
         classpath "com.diffplug.spotless:spotless-plugin-gradle:6.25.0"
-        classpath "io.freefair.gradle:lombok-plugin:8.4"
+        classpath "io.freefair.gradle:lombok-plugin:8.14"
 
         configurations.all {
             resolutionStrategy {
