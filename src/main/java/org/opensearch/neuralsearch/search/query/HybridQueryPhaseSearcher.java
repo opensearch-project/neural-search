@@ -80,14 +80,15 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
         if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
-            return HybridQuery.fromQueryExtendedWithDlsRules(query, List.of());
+            return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, List.of());
         }
         if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            Query queryWithDls = booleanClauses.stream()
+            BooleanQuery queryWithDls = booleanClauses.stream()
                 .filter(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
                 .findFirst()
                 .map(BooleanClause::query)
+                .map(BooleanQuery.class::cast)
                 .orElseThrow(
                     () -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause with DLS rules")
                 );

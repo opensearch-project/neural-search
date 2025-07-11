@@ -94,8 +94,7 @@ public final class HybridQuery extends Query implements Iterable<Query> {
      * Create new instance of hybrid query object based on query extended with DLS rules by the security plugin, and
      * boolean clauses that are used as filters for each sub-query
      */
-    public static HybridQuery fromQueryExtendedWithDlsRules(Query query, List<BooleanClause> filterClauses) {
-        BooleanQuery booleanQuery = (BooleanQuery) query;
+    public static HybridQuery fromQueryExtendedWithDlsRules(BooleanQuery booleanQuery, List<BooleanClause> filterClauses) {
         List<BooleanClause> booleanClauses = booleanQuery.clauses();
         HybridQuery hybridQuery = booleanClauses.stream()
             .map(BooleanClause::query)
