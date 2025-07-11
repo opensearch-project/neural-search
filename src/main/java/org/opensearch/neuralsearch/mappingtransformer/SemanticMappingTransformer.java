@@ -25,6 +25,7 @@ import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SPARSE_ENCODING_CONFIG;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.collectSemanticField;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.extractModelIdToFieldPathMap;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getDenseEmbeddingConfig;
@@ -221,6 +222,7 @@ public class SemanticMappingTransformer implements MappingTransformer {
         builder.chunkingEnabled(isChunkingEnabled(fieldConfig, fieldPath));
         builder.semanticFieldSearchAnalyzer(getSemanticFieldSearchAnalyzer(fieldConfig, fieldPath));
         builder.denseEmbeddingConfig(getDenseEmbeddingConfig(fieldConfig, fieldPath));
+        builder.sparseEncodingConfigDefined(fieldConfig.containsKey(SPARSE_ENCODING_CONFIG));
         return builder.build();
     }
 

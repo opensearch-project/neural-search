@@ -2,7 +2,7 @@
   "_routing" : "routing",
   "geo_data_semantic_info" : {
     "embedding" : {
-      "dummy token" : 1.0
+      "high score token" : 1.0
     },
     "model" : {
       "name" : "SPARSE_ENCODING",

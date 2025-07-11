@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor.dto;
 
 import lombok.Builder;
 import lombok.Data;
+import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
 
 import java.util.List;
@@ -53,6 +54,8 @@ public class SemanticFieldInfo {
      * The chunked strings of the original string value of the semantic field
      */
     private List<String> chunks;
+
+    private SparseEncodingConfig sparseEncodingConfig;
 
     /**
      * @return full path to the chunks field of the semantic field in a doc
