@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.util;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -111,6 +113,34 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         when(searchContext.mapperService()).thenReturn(mapperService);
 
         assertFalse(HybridQueryUtil.isHybridQuery(booleanQuery, searchContext));
+    }
+
+    @SneakyThrows
+    public void testIsHybridQueryCheck_whenHybridWrappedIntoBoolWithDlsRules_thenSuccess() {
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        MapperService mapperService = createMapperService();
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        hybridQueryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        hybridQueryBuilder.add(
+            QueryBuilders.rangeQuery(RANGE_FIELD).from(FROM_TEXT).to(TO_TEXT).rewrite(mockQueryShardContext).rewrite(mockQueryShardContext)
+        );
+        hybridQueryBuilder.paginationDepth(10);
+
+        Query booleanQuery = new BooleanQuery.Builder().add(
+            QueryBuilders.constantScoreQuery(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT)).toQuery(mockQueryShardContext),
+            BooleanClause.Occur.SHOULD
+        ).add(hybridQueryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST).build();
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+
+        assertTrue(HybridQueryUtil.isHybridQuery(booleanQuery, searchContext));
     }
 
     private static IndexMetadata getIndexMetadata() {

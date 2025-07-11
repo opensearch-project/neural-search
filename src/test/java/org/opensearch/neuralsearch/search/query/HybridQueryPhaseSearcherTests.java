@@ -41,6 +41,8 @@ import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.join.BitSetProducer;
+import org.apache.lucene.search.join.ToChildBlockJoinQuery;
 import org.apache.lucene.store.Directory;
 import org.opensearch.Version;
 import org.opensearch.action.OriginalIndices;
@@ -55,9 +57,10 @@ import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.ConstantScoreQueryBuilder;
+import org.opensearch.index.query.DisMaxQueryBuilder;
 import org.opensearch.index.query.ParsedQuery;
 import org.opensearch.index.query.QueryBuilders;
-import org.opensearch.index.query.DisMaxQueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
@@ -1183,6 +1186,352 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
 
         when(searchContext.query()).thenReturn(query);
         when(searchContext.aliasFilter()).thenReturn(termFilter);
+
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        when(searchContext.parsedQuery()).thenReturn(new ParsedQuery(hybridQuery));
+
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
+        hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
+
+        assertNotNull(querySearchResult.topDocs());
+        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+        TopDocs topDocs = topDocsAndMaxScore.topDocs;
+        assertEquals(0, topDocs.totalHits.value());
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        assertNotNull(scoreDocs);
+        assertEquals(0, scoreDocs.length);
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testWrappedHybridQuery_whenHybridWrappedIntoBoolBecauseOfSecurityDlsRules_thenSuccess() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = spy(new HybridQueryPhaseSearcher());
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        MapperService mapperService = createMapperService();
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        int docId1 = RandomizedTest.randomInt();
+        int docId2 = RandomizedTest.randomInt();
+        int docId3 = RandomizedTest.randomInt();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
+        w.commit();
+
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(3);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
+        boolean hasFilterCollector = randomBoolean();
+        boolean hasTimeout = randomBoolean();
+
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1);
+        hybridQueryBuilder.add(termSubQuery);
+        hybridQueryBuilder.paginationDepth(10);
+
+        ConstantScoreQueryBuilder dlsQuery = QueryBuilders.constantScoreQuery(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+
+        Query query = new BooleanQuery.Builder().add(dlsQuery.toQuery(mockQueryShardContext), BooleanClause.Occur.SHOULD)
+            .add(hybridQueryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST)
+            .build();
+        when(searchContext.query()).thenReturn(query);
+
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
+        hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
+
+        assertNotNull(querySearchResult.topDocs());
+        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+        TopDocs topDocs = topDocsAndMaxScore.topDocs;
+        assertEquals(0, topDocs.totalHits.value());
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        assertNotNull(scoreDocs);
+        assertEquals(0, scoreDocs.length);
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testWrappedHybridQuery_whenHybridWrappedIntoBoolBecauseOfNestedAndSecurityDlsRules_thenSuccess() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+
+        MapperService mapperService = createMapperService(mapping(b -> {
+            b.startObject("field");
+            b.field("type", "text")
+                .field("fielddata", true)
+                .startObject("fielddata_frequency_filter")
+                .field("min", 2d)
+                .field("min_segment_size", 1000)
+                .endObject();
+            b.endObject();
+            b.startObject("user");
+            b.field("type", "nested");
+            b.endObject();
+        }));
+
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        when(mockQueryShardContext.getMapperService()).thenReturn(mapperService);
+        when(mockQueryShardContext.simpleMatchToIndexNames(anyString())).thenReturn(Set.of(TEXT_FIELD_NAME));
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        int docId1 = RandomizedTest.randomInt();
+        int docId2 = RandomizedTest.randomInt();
+        int docId3 = RandomizedTest.randomInt();
+        int docId4 = RandomizedTest.randomInt();
+        w.addDocument(document(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, docId4, TEST_DOC_TEXT4, ft));
+        w.commit();
+
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(4);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
+
+        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
+        boolean hasFilterCollector = randomBoolean();
+        boolean hasTimeout = randomBoolean();
+
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1));
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+        queryBuilder.paginationDepth(10);
+
+        BooleanQuery.Builder dlsBuilder = new BooleanQuery.Builder();
+        dlsBuilder.add(
+            QueryBuilders.constantScoreQuery(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2)).toQuery(mockQueryShardContext),
+            BooleanClause.Occur.SHOULD
+        )
+            .add(
+                new ToChildBlockJoinQuery(
+                    QueryBuilders.constantScoreQuery(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2)).toQuery(mockQueryShardContext),
+                    mock(BitSetProducer.class)
+                ),
+                BooleanClause.Occur.SHOULD
+            )
+            .add(queryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST);
+        BooleanQuery.Builder nestedBuilder = new BooleanQuery.Builder();
+        nestedBuilder.add(dlsBuilder.build(), BooleanClause.Occur.MUST).add(Queries.newNonNestedFilter(), BooleanClause.Occur.FILTER);
+        Query query = nestedBuilder.build();
+
+        when(searchContext.query()).thenReturn(query);
+        Query dlsQuery = dlsBuilder.build();
+        when(searchContext.parsedQuery()).thenReturn(new ParsedQuery(dlsQuery));
+
+        CollectorManager<? extends Collector, ReduceableSearchResult> collectorManager = HybridCollectorManager
+            .createHybridCollectorManager(searchContext);
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> queryCollectorManagers = new HashMap<>();
+        queryCollectorManagers.put(HybridCollectorManager.class, collectorManager);
+        when(searchContext.queryCollectorManagers()).thenReturn(queryCollectorManagers);
+
+        hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, collectors, hasFilterCollector, hasTimeout);
+        hybridQueryPhaseSearcher.aggregationProcessor(searchContext).postProcess(searchContext);
+
+        assertNotNull(querySearchResult.topDocs());
+        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+        TopDocs topDocs = topDocsAndMaxScore.topDocs;
+        assertEquals(0, topDocs.totalHits.value());
+        ScoreDoc[] scoreDocs = topDocs.scoreDocs;
+        assertNotNull(scoreDocs);
+        assertEquals(0, scoreDocs.length);
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testWrappedHybridQuery_whenHybridWrappedIntoBoolBecauseOfAliasFilterAndSecurityDlsRules_thenSuccess() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+
+        MapperService mapperService = createMapperService(mapping(b -> {
+            b.startObject("field");
+            b.field("type", "text")
+                .field("fielddata", true)
+                .startObject("fielddata_frequency_filter")
+                .field("min", 2d)
+                .field("min_segment_size", 1000)
+                .endObject();
+            b.endObject();
+        }));
+
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        when(mockQueryShardContext.getMapperService()).thenReturn(mapperService);
+        when(mockQueryShardContext.simpleMatchToIndexNames(anyString())).thenReturn(Set.of(TEXT_FIELD_NAME));
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        int docId1 = RandomizedTest.randomInt();
+        int docId2 = RandomizedTest.randomInt();
+        int docId3 = RandomizedTest.randomInt();
+        int docId4 = RandomizedTest.randomInt();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, docId4, TEST_DOC_TEXT4, ft));
+        w.commit();
+
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(4);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
+        boolean hasFilterCollector = randomBoolean();
+        boolean hasTimeout = randomBoolean();
+
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1));
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+        queryBuilder.paginationDepth(10);
+
+        BooleanQuery.Builder dlsQueryBuilder = new BooleanQuery.Builder();
+        dlsQueryBuilder.add(
+            QueryBuilders.constantScoreQuery(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2)).toQuery(mockQueryShardContext),
+            BooleanClause.Occur.SHOULD
+        ).add(queryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST);
+
+        Query aliasTermFilter = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1).toQuery(mockQueryShardContext);
+        BooleanQuery.Builder aliasQueryBuilder = new BooleanQuery.Builder();
+        aliasQueryBuilder.add(dlsQueryBuilder.build(), BooleanClause.Occur.MUST).add(aliasTermFilter, BooleanClause.Occur.FILTER);
+        Query query = aliasQueryBuilder.build();
+
+        when(searchContext.query()).thenReturn(query);
+        when(searchContext.aliasFilter()).thenReturn(aliasTermFilter);
 
         Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
         when(searchContext.parsedQuery()).thenReturn(new ParsedQuery(hybridQuery));
