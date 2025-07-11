@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -264,6 +265,9 @@ public class RestNeuralStatsAction extends BaseRestHandler {
             if (neuralStatsInput.isIncludeEvents()) {
                 neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
             }
+            if (neuralStatsInput.isIncludeMetrics()) {
+                neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(MetricStatName.class));
+            }
         } else {
             // Use a separate case here to save on version comparison if not necessary
             if (neuralStatsInput.isIncludeInfo()) {
@@ -282,6 +286,15 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                             .stream()
                             .filter(statName -> statName.version().onOrBefore(minVersion))
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
+                    );
+            }
+            if (neuralStatsInput.isIncludeMetrics()) {
+                neuralStatsInput.getMetricStatNames()
+                    .addAll(
+                        EnumSet.allOf(MetricStatName.class)
+                            .stream()
+                            .filter(statName -> statName.version().onOrBefore(minVersion))
+                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(MetricStatName.class)))
                     );
             }
         }
