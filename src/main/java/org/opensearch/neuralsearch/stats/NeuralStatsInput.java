@@ -211,11 +211,11 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
     }
 
     /**
-     * Helper to determine if we should fetch event stats or if we can skip them
+     * Helper to determine if we should fetch event and metrics stats or if we can skip them
      * If we exclude both individual and all nodes, then there is no need to fetch any specific stats from nodes
      * @return whether we need to fetch event stats
      */
-    public boolean isIncludeEvents() {
+    public boolean isIncludeEventsAndMetrics() {
         return this.isIncludeAllNodes() || this.isIncludeIndividualNodes();
     }
 }

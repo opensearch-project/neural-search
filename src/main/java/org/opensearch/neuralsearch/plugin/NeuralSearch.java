@@ -89,6 +89,7 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
+import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
@@ -188,7 +189,6 @@ public class NeuralSearch extends Plugin
             new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralKNNQueryBuilder.NAME, NeuralKNNQueryBuilder::new, NeuralKNNQueryBuilder::fromXContent),
             new QuerySpec<>(SparseAnnQueryBuilder.NAME, SparseAnnQueryBuilder::new, SparseAnnQueryBuilder::fromXContent)
-
         );
     }
 
@@ -277,7 +277,6 @@ public class NeuralSearch extends Plugin
     @Override
     public List<Setting<?>> getSettings() {
         return List.of(
-            NEURAL_SEARCH_HYBRID_SEARCH_DISABLED,
             RERANKER_MAX_DOC_FIELDS,
             NEURAL_STATS_ENABLED,
             SparseSettings.IS_SPARSE_INDEX_SETTING,
@@ -321,11 +320,6 @@ public class NeuralSearch extends Plugin
     }
 
     @Override
-    public Map<String, Mapper.TypeParser> getMappers() {
-        return Collections.singletonMap(SparseTokensFieldMapper.CONTENT_TYPE, new SparseTokensFieldMapper.SparseTypeParser());
-    }
-
-    @Override
     public Optional<CodecServiceFactory> getCustomCodecServiceFactory(IndexSettings indexSettings) {
         if (indexSettings.getValue(SparseSettings.IS_SPARSE_INDEX_SETTING)) {
             return Optional.of((config) -> new SparseCodecService(config, indexSettings));
@@ -343,7 +337,12 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Mapper.TypeParser> getMappers() {
-        return Map.of(SemanticFieldMapper.CONTENT_TYPE, new SemanticFieldMapper.TypeParser(), SparseTokensFieldMapper.CONTENT_TYPE, SparseTokensFieldMapper.PARSER);
+        return Map.of(
+            SemanticFieldMapper.CONTENT_TYPE,
+            new SemanticFieldMapper.TypeParser(),
+            SparseTokensFieldMapper.CONTENT_TYPE,
+            new SparseTokensFieldMapper.SparseTypeParser()
+        );
     }
 
     @Override
@@ -353,7 +352,15 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Processor.Factory> getSystemIngestProcessors(Processor.Parameters parameters) {
-        return Map.of(SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE, new SemanticFieldProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService(), parameters.analysisRegistry));
+        return Map.of(
+            SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE,
+            new SemanticFieldProcessorFactory(
+                clientAccessor,
+                parameters.env,
+                parameters.ingestService.getClusterService(),
+                parameters.analysisRegistry
+            )
+        );
     }
 
     public void onIndexModule(IndexModule indexModule) {

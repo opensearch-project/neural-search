@@ -120,7 +120,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     );
 
     /**
-     * Validates a param string if its under the max length and matches simple string pattern
+     * Validates a param string if it is under the max length and matches simple string pattern
      * @param param the string to validate
      * @return whether it's valid
      */
@@ -148,7 +148,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
     @Override
     protected RestChannelConsumer prepareRequest(RestRequest request, NodeClient client) {
-        if (settingsAccessor.isStatsEnabled() == false) {
+        if (!settingsAccessor.isStatsEnabled()) {
             return channel -> channel.sendResponse(new BytesRestResponse(RestStatus.FORBIDDEN, "Stats endpoint is disabled"));
         }
 
@@ -216,7 +216,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         Optional<String[]> optionalStats = splitCommaSeparatedParam(request, STAT_PARAM);
         Version minClusterVersion = clusterUtil.getClusterMinVersion();
 
-        if (optionalStats.isPresent() == false || optionalStats.get().length == 0) {
+        if (optionalStats.isEmpty() || optionalStats.get().length == 0) {
             // No specific stats requested, add all stats by default
             addAllStats(neuralStatsInput, minClusterVersion);
             return;
@@ -224,13 +224,13 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
         String[] stats = optionalStats.get();
         Set<String> invalidStatNames = new HashSet<>();
-        boolean includeEvents = neuralStatsInput.isIncludeEvents();
+        boolean includeEventsAndMetrics = neuralStatsInput.isIncludeEventsAndMetrics();
         boolean includeInfo = neuralStatsInput.isIncludeInfo();
 
         for (String stat : stats) {
             // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
-            if (isValidParamString(normalizedStat) == false || isValidEventOrInfoStatName(normalizedStat) == false) {
+            if (!isValidParamString(normalizedStat) || !isValidEventOrInfoStatName(normalizedStat)) {
                 invalidStatNames.add(normalizedStat);
                 continue;
             }
@@ -240,17 +240,24 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 if (infoStatName.version().onOrBefore(minClusterVersion)) {
                     neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
                 }
-            } else if (includeEvents && EventStatName.isValidName(normalizedStat)) {
-                EventStatName eventStatName = EventStatName.from(normalizedStat);
-                if (eventStatName.version().onOrBefore(minClusterVersion)) {
-                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+            } else if (includeEventsAndMetrics) {
+                if (EventStatName.isValidName(normalizedStat)) {
+                    EventStatName eventStatName = EventStatName.from(normalizedStat);
+                    if (eventStatName.version().onOrBefore(minClusterVersion)) {
+                        neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                    }
+                } else if (MetricStatName.isValidName(normalizedStat)) {
+                    MetricStatName metricStatName = MetricStatName.from(normalizedStat);
+                    if (metricStatName.version().onOrBefore(minClusterVersion)) {
+                        neuralStatsInput.getMetricStatNames().add(MetricStatName.from(normalizedStat));
+                    }
                 }
             }
         }
 
         // When we reach this block, we must have added at least one stat to the input, or else invalid stats will be
-        // non empty. So throwing this exception here without adding all covers the empty input case.
-        if (invalidStatNames.isEmpty() == false) {
+        // non-empty. So throwing this exception here without adding all covers the empty input case.
+        if (!invalidStatNames.isEmpty()) {
             throw new IllegalArgumentException(
                 unrecognized(request, invalidStatNames, Sets.union(EVENT_STAT_NAMES, INFO_STAT_NAMES), STAT_PARAM)
             );
@@ -258,15 +265,14 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     }
 
     private void addAllStats(NeuralStatsInput neuralStatsInput, Version minVersion) {
+        boolean includeEventsAndMetrics = neuralStatsInput.isIncludeEventsAndMetrics();
         if (minVersion == Version.CURRENT) {
             if (neuralStatsInput.isIncludeInfo()) {
                 neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
             }
-            if (neuralStatsInput.isIncludeEvents()) {
+            if (includeEventsAndMetrics) {
                 neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
-            }
-            if (neuralStatsInput.isIncludeMetrics()) {
-                neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(MetricStatName.class));
+                neuralStatsInput.getMetricStatNames().addAll(EnumSet.allOf(MetricStatName.class));
             }
         } else {
             // Use a separate case here to save on version comparison if not necessary
@@ -279,7 +285,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(InfoStatName.class)))
                     );
             }
-            if (neuralStatsInput.isIncludeEvents()) {
+            if (includeEventsAndMetrics) {
                 neuralStatsInput.getEventStatNames()
                     .addAll(
                         EnumSet.allOf(EventStatName.class)
@@ -287,8 +293,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                             .filter(statName -> statName.version().onOrBefore(minVersion))
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
                     );
-            }
-            if (neuralStatsInput.isIncludeMetrics()) {
+
                 neuralStatsInput.getMetricStatNames()
                     .addAll(
                         EnumSet.allOf(MetricStatName.class)

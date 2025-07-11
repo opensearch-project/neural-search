@@ -113,6 +113,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     // twoPhaseSharedQueryToken.
     private Map<String, Float> twoPhaseSharedQueryToken;
     private NeuralSparseQueryTwoPhaseInfo neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo();
+    private SparseAnnQueryBuilder sparseAnnQueryBuilder;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_0_0;
@@ -174,6 +175,9 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             out.writeOptionalString(this.analyzer);
             this.neuralSparseQueryTwoPhaseInfo.writeTo(out);
         }
+        if (this.sparseAnnQueryBuilder != null) {
+            this.sparseAnnQueryBuilder.writeTo(out);
+        }
     }
 
     /**
@@ -214,9 +218,6 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             copy.queryTokensSupplier(() -> this.twoPhaseSharedQueryToken);
         }
         return copy;
-        if (this.sparseAnnQueryBuilder != null) {
-            this.sparseAnnQueryBuilder.writeTo(out);
-        }
     }
 
     @Override

@@ -93,7 +93,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             request.getNeuralStatsInput().getEventStatNames(),
             request.getNeuralStatsInput().getMetricStatNames()
         );
-        
+
         Map<String, StatSnapshot<?>> flatInfoStats = Collections.emptyMap();
         if (request.getNeuralStatsInput().isIncludeInfo()) {
             // Get info stats

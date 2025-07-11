@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.stats.metrics;
 
 import lombok.Getter;
 import org.apache.commons.lang.StringUtils;
+import org.opensearch.Version;
 import org.opensearch.neuralsearch.stats.common.StatName;
 
 import java.util.Arrays;
@@ -18,14 +19,15 @@ import java.util.stream.Collectors;
  */
 @Getter
 public enum MetricStatName implements StatName {
-    MEMORY_SPARSE_TOTAL_USAGE("total_usage", "memory.sparse", MetricStatType.MEMORY),
-    MEMORY_SPARSE_FORWARD_INDEX_USAGE("forward_index_usage", "memory.sparse", MetricStatType.MEMORY),
-    MEMORY_SPARSE_CLUSTERED_POSTING_USAGE("clustered_posting_usage", "memory.sparse", MetricStatType.MEMORY);
+    MEMORY_SPARSE_TOTAL_USAGE("total_usage", "memory.sparse", MetricStatType.MEMORY, Version.V_3_2_0),
+    MEMORY_SPARSE_FORWARD_INDEX_USAGE("forward_index_usage", "memory.sparse", MetricStatType.MEMORY, Version.V_3_2_0),
+    MEMORY_SPARSE_CLUSTERED_POSTING_USAGE("clustered_posting_usage", "memory.sparse", MetricStatType.MEMORY, Version.V_3_2_0);
 
     private final String nameString;
     private final String path;
     private final MetricStatType statType;
     private MetricStat metricStat;
+    private final Version version;
 
     /**
      * Enum lookup table by nameString
@@ -34,15 +36,25 @@ public enum MetricStatName implements StatName {
         .collect(Collectors.toMap(stat -> stat.nameString, stat -> stat));
 
     /**
+     * Determines whether a given string is a valid stat name
+     * @param name
+     * @return whether the name is valid
+     */
+    public static boolean isValidName(String name) {
+        return BY_NAME.containsKey(name);
+    }
+
+    /**
      * Constructor
      * @param nameString the unique name of the stat.
      * @param path the unique path of the stat
      * @param statType the category of stat
      */
-    MetricStatName(String nameString, String path, MetricStatType statType) {
+    MetricStatName(String nameString, String path, MetricStatType statType, Version version) {
         this.nameString = nameString;
         this.path = path;
         this.statType = statType;
+        this.version = version;
 
         switch (statType) {
             case MetricStatType.MEMORY:
@@ -85,6 +97,11 @@ public enum MetricStatName implements StatName {
             return nameString;
         }
         return String.join(".", path, nameString);
+    }
+
+    @Override
+    public Version version() {
+        return Version.V_3_2_0;
     }
 
     @Override
