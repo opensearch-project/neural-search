@@ -112,7 +112,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
-            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            false
         );
 
         assertEquals(DESCRIPTION, normalizationProcessor.getDescription());
@@ -131,7 +132,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            false
         );
 
         SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
@@ -201,7 +203,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            false
         );
 
         SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
@@ -270,7 +273,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME),
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            false
         );
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         normalizationProcessor.process(null, searchPhaseContext);
@@ -286,7 +290,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            false
         );
 
         SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
@@ -341,7 +346,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            false
         );
 
         SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
@@ -432,7 +438,8 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             DESCRIPTION,
             new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
             new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            false
         );
 
         SearchRequest searchRequest = new SearchRequest(INDEX_NAME);
