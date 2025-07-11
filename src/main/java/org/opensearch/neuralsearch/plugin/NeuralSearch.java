@@ -353,15 +353,8 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Processor.Factory> getSystemIngestProcessors(Processor.Parameters parameters) {
-        return Map.of(
-            SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE,
-            new SemanticFieldProcessorFactory(
-                clientAccessor,
-                parameters.env,
-                parameters.ingestService.getClusterService(),
-                parameters.analysisRegistry
-            )
-        );
+        return Map.of(SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE, new SemanticFieldProcessorFactory(clientAccessor, parameters.env, parameters.ingestService.getClusterService(), parameters.analysisRegistry));
+    }
 
     public void onIndexModule(IndexModule indexModule) {
         if (SparseSettings.IS_SPARSE_INDEX_SETTING.get(indexModule.getSettings())) {
