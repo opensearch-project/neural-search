@@ -21,6 +21,7 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.opensearch.ml.repackage.com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import com.google.common.primitives.Floats;
@@ -272,10 +273,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         float effectiveMinScore = lowerBound.determineEffectiveScore(score, minScore, maxScore);
         float effectiveMaxScore = upperBound.determineEffectiveScore(score, minScore, maxScore);
 
-        if (Floats.compare(effectiveMaxScore, effectiveMinScore) == 0) {
-            return SINGLE_RESULT_SCORE;
-        }
-
         if (lowerBound.shouldClipToBound(score, effectiveMinScore)) {
             return MIN_SCORE;
         }
@@ -290,7 +287,12 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return Floats.compare(maxScore, minScore) == 0 && Floats.compare(maxScore, score) == 0;
     }
 
-    private float calculateNormalizedScore(float score, float effectiveMinScore, float effectiveMaxScore) {
+    @VisibleForTesting
+    protected float calculateNormalizedScore(float score, float effectiveMinScore, float effectiveMaxScore) {
+        if (Floats.compare(effectiveMaxScore, effectiveMinScore) == 0) {
+            return SINGLE_RESULT_SCORE;
+        }
+
         float normalizedScore = (score - effectiveMinScore) / (effectiveMaxScore - effectiveMinScore);
         return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
     }

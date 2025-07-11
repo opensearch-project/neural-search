@@ -1252,6 +1252,11 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         assertNormalizedScores(technique, testCases);
     }
 
+    public void testCalculateNormalizedScore_whenSameEffectiveMinMax_thenSuccessful() {
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique();
+        assertEquals(1.0f, technique.calculateNormalizedScore(0.5f, 0.7f, 0.7f), DELTA_FOR_SCORE_ASSERTION);
+    }
+
     private void assertNormalizedScores(MinMaxScoreNormalizationTechnique technique, float[][] testCases) {
         for (float[] testCase : testCases) {
             float inputScore = testCase[0];

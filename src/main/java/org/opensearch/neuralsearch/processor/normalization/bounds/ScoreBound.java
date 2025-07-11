@@ -22,12 +22,12 @@ public abstract class ScoreBound {
     }
 
     /**
-     * Determines the effective score based on the upper bound constraints.
+     * Determines the effective score based on the bound constraints.
      *
      * @param score    the current score to evaluate
      * @param minScore the minimum possible score in the range
      * @param maxScore the maximum possible score in the range
-     * @return the effective score after applying upper bound constraints
+     * @return the effective score after applying bound constraints
      */
     public abstract float determineEffectiveScore(float score, float minScore, float maxScore);
 
