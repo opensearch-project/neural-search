@@ -370,7 +370,7 @@ public class NeuralSearch extends Plugin
                     Profiling.INSTANCE.run();
                 } else {
                     Profiling.INSTANCE.output();
-                }NeuralSparseQueryBuilder.java
+                }
             });
         }
     }
