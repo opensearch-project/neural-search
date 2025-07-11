@@ -38,7 +38,7 @@ public class HybridQueryUtil {
         return searchContext.mapperService().hasNested() && new NestedHelper(searchContext.mapperService()).mightMatchNestedDocs(query);
     }
 
-    private static boolean isWrappedHybridQuery(final Query query) {
+    public static boolean isWrappedHybridQuery(final Query query) {
         return query instanceof BooleanQuery
             && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.query() instanceof HybridQuery);
     }

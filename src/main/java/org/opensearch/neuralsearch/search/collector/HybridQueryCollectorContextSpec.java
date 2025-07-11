@@ -7,9 +7,7 @@ package org.opensearch.neuralsearch.search.collector;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
-import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
-import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.query.HybridCollectorManager;
 import org.opensearch.neuralsearch.search.query.HybridCollectorResultsUtilParams;
 import org.opensearch.neuralsearch.search.query.HybridSearchCollectorResultUtil;
@@ -21,8 +19,6 @@ import org.opensearch.search.query.ReduceableSearchResult;
 import java.io.IOException;
 
 import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_TOP_HITS;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.validateHybridQuery;
 
 @Log4j2
 public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpec {
@@ -32,8 +28,6 @@ public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpe
 
     public HybridQueryCollectorContextSpec(final SearchContext searchContext) throws IOException {
         this.searchContext = searchContext;
-        Query query = extractHybridQuery(searchContext);
-        validateHybridQuery((HybridQuery) query);
         this.collectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(searchContext);
         this.collector = (HybridSearchCollector) collectorManager.newCollector();
     }
