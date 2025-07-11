@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Handle remote dense model properly during mapping transform for the semantic field ([#1427](https://github.com/opensearch-project/neural-search/pull/1427))
 
 ### Infrastructure
+- Support multi node integration testing ([#1320](https://github.com/opensearch-project/neural-search/pull/1320))
 
 ### Documentation
 
