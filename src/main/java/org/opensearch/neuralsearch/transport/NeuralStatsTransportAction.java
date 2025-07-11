@@ -88,19 +88,12 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToEventStats = processorNodeEventStatsIntoMap(responses);
 
         // Sum the map to aggregate
-<<<<<<< HEAD
-        Map<String, StatSnapshot<?>> aggregatedNodeStats = Collections.emptyMap();
-        if (request.getNeuralStatsInput().isIncludeAllNodes()) {
-            aggregatedNodeStats = aggregateNodesResponses(responses, request.getNeuralStatsInput().getEventStatNames());
-        }
-=======
         Map<String, StatSnapshot<?>> aggregatedNodeStats = aggregateNodesResponses(
             responses,
             request.getNeuralStatsInput().getEventStatNames(),
             request.getNeuralStatsInput().getMetricStatNames()
         );
->>>>>>> f289acb5 (Feat: memory stats api (#26))
-
+        
         Map<String, StatSnapshot<?>> flatInfoStats = Collections.emptyMap();
         if (request.getNeuralStatsInput().isIncludeInfo()) {
             // Get info stats
