@@ -348,23 +348,26 @@ public class NormalizationProcessorWorkflow {
             int shardIndex = querySearchResult.getShardIndex();
             String key = shardIndex + "_" + scoreDoc.doc;
             float[] subqueryScores = scoreMap != null ? scoreMap.get(key) : null;
+            if (subqueryScores == null) {
+                log.debug("No sub query scores found");
+            } else {
+                Map<String, DocumentField> documentFields = searchHit.getDocumentFields();
 
-            Map<String, DocumentField> documentFields = searchHit.getDocumentFields();
+                // Check for all the conditions
+                boolean shouldAddHybridScores = documentFields.containsKey(SUB_QUERY_SCORES_NAME) == false
+                    && isClusterOnOrAfterMinReqVersionForSubQuerySupport()
+                    && hasInnerHits == false;
 
-            // Check for all the conditions
-            boolean shouldAddHybridScores = subqueryScores != null
-                && documentFields.containsKey(SUB_QUERY_SCORES_NAME) == false
-                && isClusterOnOrAfterMinReqVersionForSubQuerySupport()
-                && hasInnerHits == false;
-
-            if (shouldAddHybridScores) {
-                // Add it as a field rather than modifying _source
-                List<Object> hybridScores = new ArrayList<>(subqueryScores.length);
-                for (float score : subqueryScores) {
-                    hybridScores.add(score);
+                if (shouldAddHybridScores) {
+                    // Add it as a field rather than modifying _source
+                    List<Object> hybridScores = new ArrayList<>(subqueryScores.length);
+                    for (float score : subqueryScores) {
+                        hybridScores.add(score);
+                    }
+                    searchHit.setDocumentField(SUB_QUERY_SCORES_NAME, new DocumentField(SUB_QUERY_SCORES_NAME, hybridScores));
                 }
-                searchHit.setDocumentField(SUB_QUERY_SCORES_NAME, new DocumentField(SUB_QUERY_SCORES_NAME, hybridScores));
             }
+
             updatedSearchHitArray[i] = searchHit;
         }
         SearchHits updatedSearchHits = new SearchHits(

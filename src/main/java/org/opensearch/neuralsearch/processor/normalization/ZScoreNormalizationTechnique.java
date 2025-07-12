@@ -16,7 +16,6 @@ import java.util.Locale;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
-import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 import com.google.common.primitives.Floats;
@@ -26,6 +25,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.updateDocSubqueryScores;
 
 /**
  * Abstracts normalization of scores based on z score method
@@ -77,12 +77,14 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    if (normalizeScoresDTO.isSubQueryScores()) {
-                        int shardIndex = compoundQueryTopDocs.getSearchShard().getShardId();
-                        String key = shardIndex + "_" + scoreDoc.doc;
-                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(key, k -> new float[topDocsPerSubQuery.size()]);
-                        scoresArray[j] = scoreDoc.score;
-                    }
+                    updateDocSubqueryScores(
+                        normalizeScoresDTO.isSubQueryScores(),
+                        docIdToSubqueryScores,
+                        compoundQueryTopDocs,
+                        scoreDoc,
+                        j,
+                        topDocsPerSubQuery.size()
+                    );
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         zscores.stdPerSubquery[j],

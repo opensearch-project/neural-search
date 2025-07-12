@@ -37,6 +37,7 @@ import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.get
 import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MAX_BOUND_SCORE;
 import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MIN_BOUND_SCORE;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.updateDocSubqueryScores;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
 /**
@@ -109,12 +110,14 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 UpperBound upperBound = getUpperBound(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    if (normalizeScoresDTO.isSubQueryScores()) {
-                        int shardIndex = compoundQueryTopDocs.getSearchShard().getShardId();
-                        String key = shardIndex + "_" + scoreDoc.doc;
-                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(key, k -> new float[topDocsPerSubQuery.size()]);
-                        scoresArray[j] = scoreDoc.score;
-                    }
+                    updateDocSubqueryScores(
+                        normalizeScoresDTO.isSubQueryScores(),
+                        docIdToSubqueryScores,
+                        compoundQueryTopDocs,
+                        scoreDoc,
+                        j,
+                        topDocsPerSubQuery.size()
+                    );
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         minMaxScores.getMinScoresPerSubquery()[j],

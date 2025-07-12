@@ -44,12 +44,14 @@ public class ScoreNormalizer {
             boolean isSortEnabled = isSortEnabled(searchPhaseContext);
 
             if (isExplainEnabled == false && isSortEnabled == false) {
-                // Store in registry
-                setSearchPhaseContext(searchPhaseContext);
-                HybridScoreRegistry.store(searchPhaseContext, hybridizationScores);
-
-                // clean up later via context.addReleasable()
-                searchPhaseContext.addReleasable(() -> HybridScoreRegistry.remove(searchPhaseContext));
+                try {
+                    // Store in registry
+                    setSearchPhaseContext(searchPhaseContext);
+                    HybridScoreRegistry.store(searchPhaseContext, hybridizationScores);
+                } finally {
+                    // clean up later via context.addReleasable()
+                    searchPhaseContext.addReleasable(() -> HybridScoreRegistry.remove(searchPhaseContext));
+                }
             }
         }
     }

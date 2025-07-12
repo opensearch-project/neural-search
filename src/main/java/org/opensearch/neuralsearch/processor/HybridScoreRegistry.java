@@ -6,17 +6,17 @@ package org.opensearch.neuralsearch.processor;
 
 import org.opensearch.action.search.SearchPhaseContext;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Registry to store hybrid score for each search context
+ * Registry to store hybrid score for each search phase context
  */
 public class HybridScoreRegistry {
-    private static final Map<SearchPhaseContext, Map<String, float[]>> contextToHolder = new HashMap<>();
+    private static final ConcurrentHashMap<SearchPhaseContext, Map<String, float[]>> contextToHolder = new ConcurrentHashMap<>();
 
     /**
-     * Store hybrid score for each search context
+     * Store hybrid score for each search phase context
      * @param context
      * @param scoreMap
      */
@@ -25,7 +25,7 @@ public class HybridScoreRegistry {
     }
 
     /**
-     * Get hybrid score for each search context
+     * Get hybrid score for each search phase context
      * @param context
      * @return map of hybrid score
      */
@@ -34,7 +34,7 @@ public class HybridScoreRegistry {
     }
 
     /**
-     * Remove hybrid score for each search context
+     * Remove hybrid score for each search phase context
      * @param context
      */
     public static void remove(SearchPhaseContext context) {
