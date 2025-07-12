@@ -59,7 +59,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
         );
 
         Map<String, Object> combinationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
-        boolean subQueryScores = readBooleanProperty(RRFProcessor.TYPE, tag, config, SUB_QUERY_SCORES, DEFAULT_SUB_QUERY_SCORES);
+        boolean subQueryScoresEnabled = readBooleanProperty(RRFProcessor.TYPE, tag, config, SUB_QUERY_SCORES, DEFAULT_SUB_QUERY_SCORES);
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = readStringProperty(
                 RRFProcessor.TYPE,
@@ -84,7 +84,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
             RRFProcessor.TYPE,
             normalizationTechnique,
             scoreCombinationTechnique,
-            subQueryScores
+            subQueryScoresEnabled
         );
         return new RRFProcessor(
             tag,
@@ -92,7 +92,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
             normalizationTechnique,
             scoreCombinationTechnique,
             normalizationProcessorWorkflow,
-            subQueryScores
+            subQueryScoresEnabled
         );
     }
 }

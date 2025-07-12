@@ -24,6 +24,7 @@ import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.updateDocSubqueryScores;
 
 /**
  * Abstracts normalization of scores based on L2 method
@@ -66,12 +67,14 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
                     // Initialize or update subquery scores array per doc
-                    if (normalizeScoresDTO.isSubQueryScores()) {
-                        int shardIndex = compoundQueryTopDocs.getSearchShard().getShardId();
-                        String key = shardIndex + "_" + scoreDoc.doc;
-                        float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(key, k -> new float[topDocsPerSubQuery.size()]);
-                        scoresArray[j] = scoreDoc.score;
-                    }
+                    updateDocSubqueryScores(
+                        normalizeScoresDTO.isSubQueryScores(),
+                        docIdToSubqueryScores,
+                        compoundQueryTopDocs,
+                        scoreDoc,
+                        j,
+                        topDocsPerSubQuery.size()
+                    );
                     scoreDoc.score = normalizeSingleScore(scoreDoc.score, normsPerSubquery.get(j));
                 }
             }

@@ -161,8 +161,8 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
             // Initialize or update subquery scores array per doc
             if (subQueryScores) {
                 int shardIndex = searchShard.getShardId();
-                String key = shardIndex + "_" + scoreDoc.doc;
-                float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(key, k -> new float[topDocsSize]);
+                String docKey = String.format(Locale.ROOT, "%d_%d", shardIndex, scoreDoc.doc);
+                float[] scoresArray = docIdToSubqueryScores.computeIfAbsent(docKey, k -> new float[topDocsSize]);
                 scoresArray[topDocsIndex] = scoreDoc.score;
             }
             scoreDoc.score = normalizedScore;

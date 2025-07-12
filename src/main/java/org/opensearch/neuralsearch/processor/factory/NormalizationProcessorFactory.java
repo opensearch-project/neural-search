@@ -53,7 +53,13 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
         final Processor.PipelineContext pipelineContext
     ) throws Exception {
         Map<String, Object> normalizationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, NORMALIZATION_CLAUSE);
-        boolean subQueryScores = readBooleanProperty(NormalizationProcessor.TYPE, tag, config, SUB_QUERY_SCORES, DEFAULT_SUB_QUERY_SCORES);
+        boolean subQueryScoresEnabled = readBooleanProperty(
+            NormalizationProcessor.TYPE,
+            tag,
+            config,
+            SUB_QUERY_SCORES,
+            DEFAULT_SUB_QUERY_SCORES
+        );
         ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(normalizationClause)) {
             String normalizationTechniqueName = readStringProperty(
@@ -94,7 +100,7 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             NormalizationProcessor.TYPE,
             normalizationTechnique,
             scoreCombinationTechnique,
-            subQueryScores
+            subQueryScoresEnabled
         );
         return new NormalizationProcessor(
             tag,
@@ -102,7 +108,7 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
             normalizationTechnique,
             scoreCombinationTechnique,
             normalizationProcessorWorkflow,
-            subQueryScores
+            subQueryScoresEnabled
         );
     }
 }

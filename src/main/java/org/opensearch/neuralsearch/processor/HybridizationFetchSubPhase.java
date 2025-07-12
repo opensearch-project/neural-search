@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.document.DocumentField;
@@ -22,6 +23,7 @@ import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isCluster
 /**
  * Fetch sub phase to add hybridization scores to the search response
  */
+@Log4j2
 public class HybridizationFetchSubPhase implements FetchSubPhase {
 
     private static final String SUB_QUERY_SCORES_NAME = "hybridization_sub_query_scores";
@@ -42,9 +44,13 @@ public class HybridizationFetchSubPhase implements FetchSubPhase {
 
             @Override
             public void process(HitContext hitContext) {
-                if (isClusterOnOrAfterMinReqVersionForSubQuerySupport() && hasInnerHits == false) {
+                boolean shouldAddHybridScores = hitContext.hit().getDocumentFields().containsKey(SUB_QUERY_SCORES_NAME) == false
+                    && isClusterOnOrAfterMinReqVersionForSubQuerySupport()
+                    && hasInnerHits == false;
+                if (shouldAddHybridScores) {
                     Map<String, float[]> scoreMap = HybridScoreRegistry.get(context);
                     if (scoreMap == null) {
+                        log.debug("No sub query scores found");
                         return;
                     }
                     int docId = hitContext.docId();
