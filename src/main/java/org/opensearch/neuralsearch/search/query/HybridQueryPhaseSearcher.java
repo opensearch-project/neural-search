@@ -19,6 +19,7 @@ import org.apache.lucene.search.Query;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.HybridQuery;
+import org.opensearch.neuralsearch.util.HybridQueryUtil;
 import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
@@ -79,8 +80,9 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
+        HybridQuery hybridQuery = HybridQueryUtil.extractHybridQuery(searchContext);
         if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
-            return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, List.of());
+            return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, hybridQuery, List.of());
         }
         if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
@@ -95,14 +97,10 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             List<BooleanClause> filterQueries = booleanClauses.stream()
                 .filter(clause -> !isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
                 .toList();
-            return HybridQuery.fromQueryExtendedWithDlsRules(queryWithDls, filterQueries);
+            return HybridQuery.fromQueryExtendedWithDlsRules(queryWithDls, hybridQuery, filterQueries);
         }
         if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
-                throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
-            }
-            HybridQuery hybridQuery = (HybridQuery) booleanClauses.get(0).query();
             List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
             HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
             return hybridQueryWithFilter;

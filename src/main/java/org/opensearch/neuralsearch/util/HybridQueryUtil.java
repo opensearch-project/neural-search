@@ -105,4 +105,48 @@ public class HybridQueryUtil {
             && query instanceof BooleanQuery booleanQuery
             && booleanQuery.clauses().stream().anyMatch(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext)));
     }
+
+    /**
+     * Unwraps a HybridQuery from a direct query, a nested BooleanQuery, a query extended with DLS rules, or a nested query extended with DLS rules.
+     */
+    public static HybridQuery extractHybridQuery(final SearchContext searchContext) {
+        HybridQuery hybridQuery;
+        Query query = searchContext.query();
+        if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            hybridQuery = unwrapHybridQueryWrappedInSecurityDlsRules(booleanQuery);
+        } else if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
+            BooleanQuery booleanQuery = (BooleanQuery) query;
+            hybridQuery = booleanQuery.clauses()
+                .stream()
+                .filter(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .findFirst()
+                .map(BooleanClause::query)
+                .map(BooleanQuery.class::cast)
+                .map(HybridQueryUtil::unwrapHybridQueryWrappedInSecurityDlsRules)
+                .orElseThrow(() -> new IllegalArgumentException("Given query does not contain a HybridQuery clause with DLS rules"));
+
+        } else if (isHybridQueryWrappedInBooleanQuery(searchContext, searchContext.query())) {
+            // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
+                throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
+            }
+            hybridQuery = (HybridQuery) booleanClauses.get(0).query();
+        } else {
+            hybridQuery = (HybridQuery) query;
+        }
+        return hybridQuery;
+    }
+
+    private static HybridQuery unwrapHybridQueryWrappedInSecurityDlsRules(BooleanQuery booleanQuery) {
+        return booleanQuery.clauses()
+            .stream()
+            .map(BooleanClause::query)
+            .filter(clauseQuery -> clauseQuery instanceof HybridQuery)
+            .map(HybridQuery.class::cast)
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause"));
+    }
+
 }

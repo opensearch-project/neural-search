@@ -361,7 +361,11 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             .setMinimumNumberShouldMatch(1)
             .build();
 
-        HybridQuery hybridFromExtendedWithDlsRules = HybridQuery.fromQueryExtendedWithDlsRules(hybridWrappedInDlsRules, List.of());
+        HybridQuery hybridFromExtendedWithDlsRules = HybridQuery.fromQueryExtendedWithDlsRules(
+            hybridWrappedInDlsRules,
+            originHybridQuery,
+            List.of()
+        );
 
         List<Query> subqueriesWithDlsRules = hybridFromExtendedWithDlsRules.getSubQueries().stream().toList();
         assertEquals(originHybridSubQueries.size(), subqueriesWithDlsRules.size());
@@ -413,6 +417,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
 
         HybridQuery hybridFromExtendedWithDlsRules = HybridQuery.fromQueryExtendedWithDlsRules(
             hybridWrappedInDlsRules,
+            originHybridQuery,
             List.of(filterNotSomething)
         );
 
@@ -436,17 +441,5 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             assertEquals(BooleanClause.Occur.FILTER, booleanWithDls.clauses().get(2).occur());
             QueryUtils.checkEqual(booleanWithDls.clauses().get(2).query(), filterNotSomething.query());
         }
-    }
-
-    @SneakyThrows
-    public void testFromQueryExtendedWithDlsRulesBySecurityPlugin_whenBooleanQueryWithNoHybridClause_thenFail() {
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> HybridQuery.fromQueryExtendedWithDlsRules(
-                new BooleanQuery.Builder().add(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)), BooleanClause.Occur.SHOULD).build(),
-                List.of()
-            )
-        );
-        assertThat(exception.getMessage(), containsString("Given boolean query does not contain a HybridQuery clause"));
     }
 }
