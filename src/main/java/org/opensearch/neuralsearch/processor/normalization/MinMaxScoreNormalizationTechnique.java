@@ -17,8 +17,6 @@ import java.util.stream.Collectors;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.apache.commons.lang3.Validate;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.ml.repackage.com.google.common.annotations.VisibleForTesting;
@@ -65,8 +63,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         Set.of(PARAM_NAME_BOUND_MODE, PARAM_NAME_UPPER_BOUND_MAX_SCORE)
     );
 
-    private final Optional<List<Pair<BoundMode, Float>>> lowerBoundsOptional;
-    private final Optional<List<Pair<BoundMode, Float>>> upperBoundsOptional;
+    private final Optional<List<Map<String, Object>>> lowerBoundsParamsOptional;
+    private final Optional<List<Map<String, Object>>> upperBoundsParamsOptional;
 
     public MinMaxScoreNormalizationTechnique() {
         this(Map.of(), new ScoreNormalizationUtil());
@@ -74,8 +72,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
     public MinMaxScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
         scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMETERS, NESTED_PARAMETERS);
-        lowerBoundsOptional = getBounds(params, PARAM_NAME_LOWER_BOUNDS, this::parseLowerBound);
-        upperBoundsOptional = getBounds(params, PARAM_NAME_UPPER_BOUNDS, this::parseUpperBound);
+        lowerBoundsParamsOptional = getBoundsParams(params, PARAM_NAME_LOWER_BOUNDS);
+        upperBoundsParamsOptional = getBoundsParams(params, PARAM_NAME_UPPER_BOUNDS);
     }
 
     /**
@@ -122,25 +120,21 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     }
 
     private boolean isBoundsAndSubQueriesCountMismatched(List<TopDocs> topDocsPerSubQuery) {
-        boolean lowerBoundsMismatch = lowerBoundsOptional.isPresent()
+        boolean lowerBoundsMismatch = lowerBoundsParamsOptional.isPresent()
             && !topDocsPerSubQuery.isEmpty()
-            && lowerBoundsOptional.get().size() != topDocsPerSubQuery.size();
-        boolean upperBoundsMismatch = upperBoundsOptional.isPresent()
+            && lowerBoundsParamsOptional.get().size() != topDocsPerSubQuery.size();
+        boolean upperBoundsMismatch = upperBoundsParamsOptional.isPresent()
             && !topDocsPerSubQuery.isEmpty()
-            && upperBoundsOptional.get().size() != topDocsPerSubQuery.size();
+            && upperBoundsParamsOptional.get().size() != topDocsPerSubQuery.size();
         return lowerBoundsMismatch || upperBoundsMismatch;
     }
 
     private LowerBound getLowerBound(int subQueryIndex) {
-        return lowerBoundsOptional.map(
-            pairs -> new LowerBound(true, pairs.get(subQueryIndex).getLeft(), pairs.get(subQueryIndex).getRight())
-        ).orElseGet(LowerBound::new);
+        return lowerBoundsParamsOptional.map(bounds -> bounds.get(subQueryIndex)).map(LowerBound::new).orElseGet(LowerBound::new);
     }
 
     private UpperBound getUpperBound(int subQueryIndex) {
-        return upperBoundsOptional.map(
-            pairs -> new UpperBound(true, pairs.get(subQueryIndex).getLeft(), pairs.get(subQueryIndex).getRight())
-        ).orElseGet(UpperBound::new);
+        return upperBoundsParamsOptional.map(bounds -> bounds.get(subQueryIndex)).map(UpperBound::new).orElseGet(UpperBound::new);
     }
 
     private MinMaxScores getMinMaxScoresResult(final List<CompoundTopDocs> queryTopDocs) {
@@ -161,17 +155,21 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     public String describe() {
         StringBuilder description = new StringBuilder(TECHNIQUE_NAME);
 
-        lowerBoundsOptional.ifPresent(lb -> {
-            String lowerBounds = lb.stream()
-                .map(pair -> String.format(Locale.ROOT, "(%s, %s)", pair.getLeft(), pair.getRight()))
-                .collect(Collectors.joining(", ", "[", "]"));
+        lowerBoundsParamsOptional.ifPresent(lb -> {
+            String lowerBounds = lb.stream().map(boundMap -> {
+                BoundMode mode = BoundMode.fromString(Objects.toString(boundMap.get("mode"), ""));
+                String minScore = Objects.toString(boundMap.get("min_score"), String.valueOf(LowerBound.DEFAULT_LOWER_BOUND_SCORE));
+                return String.format(Locale.ROOT, "(%s, %s)", mode, minScore);
+            }).collect(Collectors.joining(", ", "[", "]"));
             description.append(String.format(Locale.ROOT, ", lower bounds %s", lowerBounds));
         });
 
-        upperBoundsOptional.ifPresent(ub -> {
-            String upperBounds = ub.stream()
-                .map(pair -> String.format(Locale.ROOT, "(%s, %s)", pair.getLeft(), pair.getRight()))
-                .collect(Collectors.joining(", ", "[", "]"));
+        upperBoundsParamsOptional.ifPresent(ub -> {
+            String upperBounds = ub.stream().map(boundMap -> {
+                BoundMode mode = BoundMode.fromString(Objects.toString(boundMap.get("mode"), ""));
+                String maxScore = Objects.toString(boundMap.get("max_score"), String.valueOf(UpperBound.DEFAULT_UPPER_BOUND_SCORE));
+                return String.format(Locale.ROOT, "(%s, %s)", mode, maxScore);
+            }).collect(Collectors.joining(", ", "[", "]"));
             description.append(String.format(Locale.ROOT, ", upper bounds %s", upperBounds));
         });
 
@@ -297,12 +295,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
     }
 
-    private <T> Optional<List<Pair<T, Float>>> getBounds(
-        final Map<String, Object> params,
-        String paramName,
-        java.util.function.Function<Object, Pair<T, Float>> parseFunction
-    ) {
-        // validate that the input parameters are in correct format
+    private Optional<List<Map<String, Object>>> getBoundsParams(final Map<String, Object> params, String paramName) {
         if (Objects.isNull(params) || !params.containsKey(paramName)) {
             return Optional.empty();
         }
@@ -312,7 +305,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             .map(List.class::cast)
             .orElseThrow(() -> new IllegalArgumentException(paramName + " must be a List"));
 
-        // number of bounds must match the number of sub-queries in a hybrid query
         if (boundsParams.size() > MAX_NUMBER_OF_SUB_QUERIES) {
             throw new IllegalArgumentException(
                 String.format(
@@ -325,54 +317,37 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             );
         }
 
-        // parse each bound item and put all items in a list
-        return Optional.of(boundsParams.stream().map(parseFunction).collect(Collectors.toList()));
+        String scoreParamName = paramName.equals(PARAM_NAME_LOWER_BOUNDS)
+            ? PARAM_NAME_LOWER_BOUND_MIN_SCORE
+            : PARAM_NAME_UPPER_BOUND_MAX_SCORE;
+        float defaultScore = paramName.equals(PARAM_NAME_LOWER_BOUNDS)
+            ? LowerBound.DEFAULT_LOWER_BOUND_SCORE
+            : UpperBound.DEFAULT_UPPER_BOUND_SCORE;
+
+        return Optional.of(boundsParams.stream().map(item -> {
+            if (!(item instanceof Map)) {
+                throw new IllegalArgumentException("each bound must be a map");
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> boundMap = (Map<String, Object>) item;
+
+            // Validate mode
+            String modeString = Objects.toString(boundMap.get(PARAM_NAME_BOUND_MODE), "");
+            if (!modeString.isEmpty()) {
+                BoundMode.fromString(modeString);
+            }
+
+            // Validate score
+            validateBoundScore(boundMap, scoreParamName, defaultScore);
+
+            return boundMap;
+        }).collect(Collectors.toList()));
     }
 
-    @SuppressWarnings("unchecked")
-    /**
-     * Parse each lower bound item and return a pair of mode and min score
-     * @param boundObj lower bound item provided by the client
-     * @return a single pair of mode and min score
-     */
-    private Pair<BoundMode, Float> parseLowerBound(Object boundObj) {
-        if ((boundObj instanceof Map) == false) {
-            throw new IllegalArgumentException("each lower bound must be a map");
-        }
-
-        Map<String, Object> lowerBound = (Map<String, Object>) boundObj;
-
-        String lowerBoundModeValue = Objects.toString(lowerBound.get(PARAM_NAME_BOUND_MODE), "");
-        BoundMode mode = BoundMode.fromString(lowerBoundModeValue);
-        float minScore = extractAndValidateScore(lowerBound, PARAM_NAME_LOWER_BOUND_MIN_SCORE, LowerBound.DEFAULT_LOWER_BOUND_SCORE);
-
-        return ImmutablePair.of(mode, minScore);
-    }
-
-    /**
-     * Parse each upper bound item and return a pair of mode and max score
-     * @param boundObj upper bound item provided by the client
-     * @return a single pair of mode and max score
-     */
-    @SuppressWarnings("unchecked")
-    private Pair<BoundMode, Float> parseUpperBound(Object boundObj) {
-        if (!(boundObj instanceof Map)) {
-            throw new IllegalArgumentException("each upper bound must be a map");
-        }
-
-        Map<String, Object> upperBound = (Map<String, Object>) boundObj;
-
-        String upperBoundModeValue = Objects.toString(upperBound.get(PARAM_NAME_BOUND_MODE), "");
-        BoundMode mode = BoundMode.fromString(upperBoundModeValue);
-        float maxScore = extractAndValidateScore(upperBound, PARAM_NAME_UPPER_BOUND_MAX_SCORE, UpperBound.DEFAULT_UPPER_BOUND_SCORE);
-
-        return ImmutablePair.of(mode, maxScore);
-    }
-
-    private float extractAndValidateScore(Map<String, Object> bound, String scoreParamName, float defaultScore) {
+    private void validateBoundScore(Map<String, Object> bound, String scoreParamName, float defaultScore) {
         Object scoreObj = bound.get(scoreParamName);
         if (scoreObj == null) {
-            return defaultScore;
+            return;
         }
         try {
             float score = Float.parseFloat(String.valueOf(scoreObj));
@@ -383,7 +358,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 MIN_BOUND_SCORE,
                 MAX_BOUND_SCORE
             );
-            return score;
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException(
                 String.format(Locale.ROOT, "invalid format for %s: must be a valid float value", scoreParamName),

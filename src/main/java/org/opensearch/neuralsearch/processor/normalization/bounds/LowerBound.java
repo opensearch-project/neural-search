@@ -4,11 +4,14 @@
  */
 package org.opensearch.neuralsearch.processor.normalization.bounds;
 
+import java.util.Map;
+
 /**
  * Represents a lower boundary constraint for score normalization in the min-max score normalization technique.
  */
 public class LowerBound extends ScoreBound {
     public static final float DEFAULT_LOWER_BOUND_SCORE = 0.0f;
+    private static final String PARAM_NAME_LOWER_BOUND_MIN_SCORE = "min_score";
 
     /**
      * Constructs a default LowerBound instance.
@@ -27,6 +30,15 @@ public class LowerBound extends ScoreBound {
      */
     public LowerBound(boolean enabled, BoundMode mode, float boundScore) {
         super(enabled, mode, boundScore);
+    }
+
+    /**
+     * Constructs a LowerBound instance from a map of parameters.
+     *
+     * @param lowerBound the map containing the lower bound parameters
+     */
+    public LowerBound(Map<String, Object> lowerBound) {
+        this(true, parseBoundMode(lowerBound), parseBoundScore(lowerBound, PARAM_NAME_LOWER_BOUND_MIN_SCORE, DEFAULT_LOWER_BOUND_SCORE));
     }
 
     /**

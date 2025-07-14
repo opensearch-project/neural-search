@@ -4,11 +4,14 @@
  */
 package org.opensearch.neuralsearch.processor.normalization.bounds;
 
+import java.util.Map;
+
 /**
  * Represents an upper boundary constraint for score normalization in the min-max score normalization technique.
  */
 public class UpperBound extends ScoreBound {
     public static final float DEFAULT_UPPER_BOUND_SCORE = 1.0f;
+    private static final String PARAM_NAME_UPPER_BOUND_MAX_SCORE = "max_score";
 
     /**
      * Constructs a default UpperBound instance.
@@ -27,6 +30,15 @@ public class UpperBound extends ScoreBound {
      */
     public UpperBound(boolean enabled, BoundMode mode, float boundScore) {
         super(enabled, mode, boundScore);
+    }
+
+    /**
+     * Constructs an UpperBound instance from a map of parameters.
+     *
+     * @param upperBound the map containing the upper bound parameters
+     */
+    public UpperBound(Map<String, Object> upperBound) {
+        this(true, parseBoundMode(upperBound), parseBoundScore(upperBound, PARAM_NAME_UPPER_BOUND_MAX_SCORE, DEFAULT_UPPER_BOUND_SCORE));
     }
 
     /**
