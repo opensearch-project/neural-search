@@ -6,8 +6,8 @@ package org.opensearch.neuralsearch.processor;
 
 import org.opensearch.action.search.SearchPhaseContext;
 
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
 
 /**
  * Registry to store hybrid score for each search phase context

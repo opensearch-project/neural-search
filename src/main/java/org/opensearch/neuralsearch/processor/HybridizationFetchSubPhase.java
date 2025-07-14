@@ -48,7 +48,7 @@ public class HybridizationFetchSubPhase implements FetchSubPhase {
                     && isClusterOnOrAfterMinReqVersionForSubQuerySupport()
                     && hasInnerHits == false;
                 if (shouldAddHybridScores) {
-                    Map<String, float[]> scoreMap = HybridScoreRegistry.get(context);
+                    Map<String, float[]> scoreMap = context == null ? null : HybridScoreRegistry.get(context);
                     if (scoreMap == null) {
                         log.debug("No sub query scores found");
                         return;
