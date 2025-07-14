@@ -74,8 +74,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
     public MinMaxScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
         scoreNormalizationUtil.validateParameters(params, SUPPORTED_PARAMETERS, NESTED_PARAMETERS);
-        lowerBoundsOptional = getLowerBounds(params);
-        upperBoundsOptional = getUpperBounds(params);
+        lowerBoundsOptional = getBounds(params, PARAM_NAME_LOWER_BOUNDS, this::parseLowerBound);
+        upperBoundsOptional = getBounds(params, PARAM_NAME_UPPER_BOUNDS, this::parseUpperBound);
     }
 
     /**
@@ -295,14 +295,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
 
         float normalizedScore = (score - effectiveMinScore) / (effectiveMaxScore - effectiveMinScore);
         return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
-    }
-
-    private Optional<List<Pair<BoundMode, Float>>> getLowerBounds(final Map<String, Object> params) {
-        return getBounds(params, PARAM_NAME_LOWER_BOUNDS, this::parseLowerBound);
-    }
-
-    private Optional<List<Pair<BoundMode, Float>>> getUpperBounds(final Map<String, Object> params) {
-        return getBounds(params, PARAM_NAME_UPPER_BOUNDS, this::parseUpperBound);
     }
 
     private <T> Optional<List<Pair<T, Float>>> getBounds(
