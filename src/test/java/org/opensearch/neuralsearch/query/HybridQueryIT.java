@@ -883,7 +883,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     public void testComplexQuery_whenMultipleSubqueries_statsEnabled_thenSuccessful() {
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
 
         testComplexQuery_whenMultipleSubqueries_thenSuccessful();
 
@@ -900,12 +900,12 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS));
         assertEquals(0, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FILTER_REQUESTS));
 
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
     }
 
     @SneakyThrows
     public void testPaginationOnSingleShard_statsEnabled_thenSuccessful() {
-        updateClusterSettings("plugins.neural_search.stats_enabled", true);
+        enableStats();
 
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, false);
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
@@ -921,7 +921,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_REQUESTS));
         assertEquals(1, getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_PAGINATION_REQUESTS));
 
-        updateClusterSettings("plugins.neural_search.stats_enabled", false);
+        disableStats();
     }
 
     @SneakyThrows

@@ -25,6 +25,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.DOC;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
@@ -464,5 +465,35 @@ public class SemanticMappingUtils {
         }
 
         return null;
+    }
+
+    /**
+     * Check if the semantic field search analyzer is provided in the semantic field config.
+     * If the field is not defined then return null as the default value.
+     * @param fieldConfigMap The config for a semantic field.
+     * @return if the semantic field search analyzer is provided in the semantic field config.
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> getDenseEmbeddingConfig(
+        @NonNull final Map<String, Object> fieldConfigMap,
+        @NonNull final String semanticFieldPath
+    ) {
+        final Object config = fieldConfigMap.get(DENSE_EMBEDDING_CONFIG);
+        if (config == null) {
+            return null;
+        }
+
+        if (!(config instanceof Map)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "%s should be a Map<String, Object> for the semantic field at %s",
+                    DENSE_EMBEDDING_CONFIG,
+                    semanticFieldPath
+                )
+            );
+        }
+
+        return (Map<String, Object>) config;
     }
 }

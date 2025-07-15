@@ -20,10 +20,10 @@ import java.util.stream.Collectors;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
-import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchNoDocsQuery;
@@ -31,7 +31,6 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.store.Directory;
-import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.tests.search.QueryUtils;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -110,10 +109,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field1Value = "text1";
 
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), RandomizedTest.randomAsciiAlphanumOfLength(8), ft));
@@ -154,10 +151,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field3Value = "text3";
 
         final Directory dir = newDirectory();
-        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
@@ -166,7 +161,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
 
         HybridQuery query = new HybridQuery(
             List.of(new TermQuery(new Term(TEXT_FIELD_NAME, field1Value)), new TermQuery(new Term(TEXT_FIELD_NAME, field2Value))),
@@ -202,10 +197,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field3Value = "text3";
 
         final Directory dir = newDirectory();
-        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
@@ -214,7 +207,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
 
         HybridQuery query = new HybridQuery(List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))), new HybridQueryContext(10));
         // executing search query, getting up to 3 docs in result
@@ -237,10 +230,8 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         String field3Value = "text3";
 
         final Directory dir = newDirectory();
-        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig(new MockAnalyzer(random())));
+        final IndexWriter w = new IndexWriter(dir, newIndexWriterConfig());
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
-        ft.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft.setOmitNorms(random().nextBoolean());
         ft.freeze();
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, field1Value, ft));
@@ -249,7 +240,7 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
         w.commit();
 
         DirectoryReader reader = DirectoryReader.open(w);
-        IndexSearcher searcher = newSearcher(reader);
+        IndexSearcher searcher = new IndexSearcher(reader);
 
         HybridQuery query = new HybridQuery(
             List.of(new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT)), new TermQuery(new Term(TEXT_FIELD_NAME, QUERY_TEXT))),
@@ -342,5 +333,113 @@ public class HybridQueryTests extends OpenSearchQueryTestCase {
             countOfQueries++;
         }
         assertEquals(2, countOfQueries);
+    }
+
+    @SneakyThrows
+    public void testFromQueryExtendedWithDlsRulesBySecurityPlugin_whenNoFilters_thenSuccessful() {
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        List<Query> originHybridSubQueries = List.of(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
+        );
+        HybridQuery originHybridQuery = new HybridQuery(originHybridSubQueries, List.of(), new HybridQueryContext(10));
+
+        Query dlsQueryNotTest = QueryBuilders.constantScoreQuery(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "test"))
+        ).toQuery(mockQueryShardContext);
+
+        Query dlsQueryNotSomething = QueryBuilders.constantScoreQuery(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "something"))
+        ).toQuery(mockQueryShardContext);
+
+        BooleanQuery hybridWrappedInDlsRules = new BooleanQuery.Builder().add(dlsQueryNotTest, BooleanClause.Occur.SHOULD)
+            .add(dlsQueryNotSomething, BooleanClause.Occur.SHOULD)
+            .add(originHybridQuery, BooleanClause.Occur.MUST)
+            .setMinimumNumberShouldMatch(1)
+            .build();
+
+        HybridQuery hybridFromExtendedWithDlsRules = HybridQuery.fromQueryExtendedWithDlsRules(
+            hybridWrappedInDlsRules,
+            originHybridQuery,
+            List.of()
+        );
+
+        List<Query> subqueriesWithDlsRules = hybridFromExtendedWithDlsRules.getSubQueries().stream().toList();
+        assertEquals(originHybridSubQueries.size(), subqueriesWithDlsRules.size());
+        assertEquals(
+            originHybridQuery.getQueryContext().getPaginationDepth(),
+            hybridFromExtendedWithDlsRules.getQueryContext().getPaginationDepth()
+        );
+
+        for (int i = 0; i < originHybridSubQueries.size(); i++) {
+            Query subqueryWithDls = subqueriesWithDlsRules.get(i);
+            assertTrue(subqueryWithDls instanceof BooleanQuery);
+            BooleanQuery booleanWithDls = (BooleanQuery) subqueryWithDls;
+            assertEquals(hybridWrappedInDlsRules.clauses().size(), booleanWithDls.clauses().size());
+            assertEquals(hybridWrappedInDlsRules.getMinimumNumberShouldMatch(), booleanWithDls.getMinimumNumberShouldMatch());
+            assertEquals(BooleanClause.Occur.MUST, booleanWithDls.clauses().get(0).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(0).query(), originHybridSubQueries.get(i));
+            assertEquals(BooleanClause.Occur.SHOULD, booleanWithDls.clauses().get(1).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(1).query(), dlsQueryNotTest);
+            assertEquals(BooleanClause.Occur.SHOULD, booleanWithDls.clauses().get(2).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(2).query(), dlsQueryNotSomething);
+        }
+    }
+
+    @SneakyThrows
+    public void testFromQueryExtendedWithDlsRulesBySecurityPlugin_whenFiltersPassed_thenSuccessful() {
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        List<Query> originHybridSubQueries = List.of(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT).toQuery(mockQueryShardContext),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_ANOTHER_QUERY_TEXT).toQuery(mockQueryShardContext)
+        );
+        HybridQuery originHybridQuery = new HybridQuery(originHybridSubQueries, List.of(), new HybridQueryContext(10));
+
+        Query dlsQueryNotTest = QueryBuilders.constantScoreQuery(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "test"))
+        ).toQuery(mockQueryShardContext);
+
+        BooleanQuery hybridWrappedInDlsRules = new BooleanQuery.Builder().add(dlsQueryNotTest, BooleanClause.Occur.SHOULD)
+            .add(originHybridQuery, BooleanClause.Occur.MUST)
+            .setMinimumNumberShouldMatch(1)
+            .build();
+
+        BooleanClause filterNotSomething = new BooleanClause(
+            QueryBuilders.boolQuery().mustNot(QueryBuilders.termQuery(TEXT_FIELD_NAME, "something")).toQuery(mockQueryShardContext),
+            BooleanClause.Occur.FILTER
+        );
+
+        HybridQuery hybridFromExtendedWithDlsRules = HybridQuery.fromQueryExtendedWithDlsRules(
+            hybridWrappedInDlsRules,
+            originHybridQuery,
+            List.of(filterNotSomething)
+        );
+
+        List<Query> subqueriesWithDlsRules = hybridFromExtendedWithDlsRules.getSubQueries().stream().toList();
+        assertEquals(originHybridSubQueries.size(), subqueriesWithDlsRules.size());
+        assertEquals(
+            originHybridQuery.getQueryContext().getPaginationDepth(),
+            hybridFromExtendedWithDlsRules.getQueryContext().getPaginationDepth()
+        );
+
+        for (int i = 0; i < originHybridSubQueries.size(); i++) {
+            Query subqueryWithDls = subqueriesWithDlsRules.get(i);
+            assertTrue(subqueryWithDls instanceof BooleanQuery);
+            BooleanQuery booleanWithDls = (BooleanQuery) subqueryWithDls;
+            assertEquals(3, booleanWithDls.clauses().size());
+            assertEquals(hybridWrappedInDlsRules.getMinimumNumberShouldMatch(), booleanWithDls.getMinimumNumberShouldMatch());
+            assertEquals(BooleanClause.Occur.MUST, booleanWithDls.clauses().get(0).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(0).query(), originHybridSubQueries.get(i));
+            assertEquals(BooleanClause.Occur.SHOULD, booleanWithDls.clauses().get(1).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(1).query(), dlsQueryNotTest);
+            assertEquals(BooleanClause.Occur.FILTER, booleanWithDls.clauses().get(2).occur());
+            QueryUtils.checkEqual(booleanWithDls.clauses().get(2).query(), filterNotSomething.query());
+        }
     }
 }

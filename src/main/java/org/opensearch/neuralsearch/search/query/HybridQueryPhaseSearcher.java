@@ -20,6 +20,7 @@ import org.apache.lucene.search.Query;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.HybridQuery;
+import org.opensearch.neuralsearch.util.HybridQueryUtil;
 import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
@@ -32,7 +33,9 @@ import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRules;
 
 /**
  * Custom search implementation to be used at {@link QueryPhase} for Hybrid Query search. For queries other than Hybrid the
@@ -78,28 +81,30 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
-        if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
-            BooleanQuery booleanQuery = (BooleanQuery) query;
-            List<BooleanClause> booleanClauses = booleanQuery.clauses();
-
-            // Find the HybridQuery clause
-            Optional<BooleanClause> hybridClause = booleanClauses.stream()
-                .filter(clause -> clause.query() instanceof HybridQuery)
-                .findFirst();
-
-            if (hybridClause.isEmpty()) {
-                throw new IllegalArgumentException("hybrid query must be present in the boolean query");
-            }
-
-            HybridQuery hybridQuery = (HybridQuery) hybridClause.get().query();
-
-            // Collect all filter clauses
+        HybridQuery hybridQuery = HybridQueryUtil.extractHybridQuery(searchContext);
+        if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
+            return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, hybridQuery, List.of());
+        }
+        if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            BooleanQuery queryWithDls = booleanClauses.stream()
+                .filter(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .findFirst()
+                .map(BooleanClause::query)
+                .map(BooleanQuery.class::cast)
+                .orElseThrow(
+                    () -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause with DLS rules")
+                );
             List<BooleanClause> filterQueries = booleanClauses.stream()
-                .filter(clause -> clause.occur() == BooleanClause.Occur.FILTER)
-                .collect(Collectors.toList());
-
-            // Create new HybridQuery with filters
-            return new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
+                .filter(clause -> !isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .toList();
+            return HybridQuery.fromQueryExtendedWithDlsRules(queryWithDls, hybridQuery, filterQueries);
+        }
+        if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
+            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
+            return hybridQueryWithFilter;
         }
         return query;
     }
