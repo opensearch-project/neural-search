@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.search.query;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -34,6 +33,7 @@ import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanMustQueryWithFilters;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRules;
 
@@ -132,14 +132,8 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             List<BooleanClause> booleanClauses = boolQuery.clauses();
 
             // Allow hybrid query in MUST clause with additional FILTER clauses
-            boolean hasHybridInMust = booleanClauses.stream()
-                .anyMatch(clause -> clause.occur() == BooleanClause.Occur.MUST && clause.query() instanceof HybridQuery);
-
-            boolean onlyHasFilters = booleanClauses.stream()
-                .filter(clause -> !(clause.query() instanceof HybridQuery))
-                .allMatch(clause -> clause.occur() == BooleanClause.Occur.FILTER);
-
-            if (!hasHybridInMust || !onlyHasFilters) {
+            // This format is used when inner hits are passed within the collapse parameter
+            if (isHybridQueryWrappedInBooleanMustQueryWithFilters(booleanClauses) == false) {
                 for (BooleanClause booleanClause : booleanClauses) {
                     validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
                 }
