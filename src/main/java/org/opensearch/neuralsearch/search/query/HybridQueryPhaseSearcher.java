@@ -128,8 +128,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
      */
     private void validateQuery(final SearchContext searchContext, final Query query) {
         if (query instanceof BooleanQuery) {
-            BooleanQuery boolQuery = (BooleanQuery) query;
-            List<BooleanClause> booleanClauses = boolQuery.clauses();
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
 
             // Allow hybrid query in MUST clause with additional FILTER clauses
             // This format is used when inner hits are passed within the collapse parameter

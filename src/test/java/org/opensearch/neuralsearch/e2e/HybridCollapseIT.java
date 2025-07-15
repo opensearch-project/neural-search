@@ -4,15 +4,16 @@
  */
 package org.opensearch.neuralsearch.e2e;
 
-import org.apache.hc.core5.http.ParseException;
 import org.junit.Before;
 import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortBuilders;
 
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +39,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
 
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_1, null, null);
+
         Map<String, Object> searchResponse = search(
             COLLAPSE_TEST_INDEX,
             hybridQuery,
@@ -54,16 +57,18 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            TEST_TEXT_FIELD_1  // collapse field
+            collapseContext
         );
 
         String collapseDuplicate = "Chocolate Cake";
         assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
     }
 
-    public void testCollapse_whenE2E_andSortEnabled_thenSuccessful() throws IOException, ParseException {
+    public void testCollapse_whenE2E_andSortEnabled_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_1, null, null);
 
         Map<String, Object> searchResponse = search(
             COLLAPSE_TEST_INDEX,
@@ -81,13 +86,47 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            TEST_TEXT_FIELD_1  // collapse field
+            collapseContext
         );
 
         String collapseDuplicate = "Chocolate Cake";
         assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
         String responseString = searchResponse.toString();
         assertTrue(responseString.indexOf("Vanilla") < responseString.indexOf("Chocolate"));
+    }
+
+    public void testCollapse_whenE2EWithInnerHits_thenSuccessful() {
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
+
+        InnerHitBuilder cheapestItemsBuilder = new InnerHitBuilder("cheapest_items");
+        cheapestItemsBuilder.setSize(2);
+        cheapestItemsBuilder.setSorts(List.of(SortBuilders.fieldSort(TEST_FLOAT_FIELD)));
+
+        List<InnerHitBuilder> innerHitBuilders = new ArrayList<>();
+        innerHitBuilders.add(cheapestItemsBuilder);
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_1, null, innerHitBuilders);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext
+        );
+        String responseString = searchResponse.toString();
+        assertTrue(responseString.contains("cheapest_items"));
     }
 
     @SneakyThrows
