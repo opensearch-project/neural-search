@@ -317,12 +317,20 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
             );
         }
 
-        String scoreParamName = paramName.equals(PARAM_NAME_LOWER_BOUNDS)
-            ? PARAM_NAME_LOWER_BOUND_MIN_SCORE
-            : PARAM_NAME_UPPER_BOUND_MAX_SCORE;
-        float defaultScore = paramName.equals(PARAM_NAME_LOWER_BOUNDS)
-            ? LowerBound.DEFAULT_LOWER_BOUND_SCORE
-            : UpperBound.DEFAULT_UPPER_BOUND_SCORE;
+        String scoreParamName;
+        float defaultScore;
+        switch (paramName) {
+            case PARAM_NAME_LOWER_BOUNDS:
+                scoreParamName = PARAM_NAME_LOWER_BOUND_MIN_SCORE;
+                defaultScore = LowerBound.DEFAULT_LOWER_BOUND_SCORE;
+                break;
+            case PARAM_NAME_UPPER_BOUNDS:
+                scoreParamName = PARAM_NAME_UPPER_BOUND_MAX_SCORE;
+                defaultScore = UpperBound.DEFAULT_UPPER_BOUND_SCORE;
+                break;
+            default:
+                throw new IllegalArgumentException(String.format(Locale.ROOT, "Unsupported bounds parameter name: %s", paramName));
+        }
 
         return Optional.of(boundsParams.stream().map(item -> {
             if (!(item instanceof Map)) {
