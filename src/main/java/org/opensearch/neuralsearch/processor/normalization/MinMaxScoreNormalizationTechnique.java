@@ -155,25 +155,24 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     public String describe() {
         StringBuilder description = new StringBuilder(TECHNIQUE_NAME);
 
-        lowerBoundsParamsOptional.ifPresent(lb -> {
-            String lowerBounds = lb.stream().map(boundMap -> {
-                BoundMode mode = BoundMode.fromString(Objects.toString(boundMap.get("mode"), ""));
-                String minScore = Objects.toString(boundMap.get("min_score"), String.valueOf(LowerBound.DEFAULT_LOWER_BOUND_SCORE));
-                return String.format(Locale.ROOT, "(%s, %s)", mode, minScore);
-            }).collect(Collectors.joining(", ", "[", "]"));
-            description.append(String.format(Locale.ROOT, ", lower bounds %s", lowerBounds));
-        });
-
-        upperBoundsParamsOptional.ifPresent(ub -> {
-            String upperBounds = ub.stream().map(boundMap -> {
-                BoundMode mode = BoundMode.fromString(Objects.toString(boundMap.get("mode"), ""));
-                String maxScore = Objects.toString(boundMap.get("max_score"), String.valueOf(UpperBound.DEFAULT_UPPER_BOUND_SCORE));
-                return String.format(Locale.ROOT, "(%s, %s)", mode, maxScore);
-            }).collect(Collectors.joining(", ", "[", "]"));
-            description.append(String.format(Locale.ROOT, ", upper bounds %s", upperBounds));
-        });
+        description.append(buildBoundDescription(lowerBoundsParamsOptional, "lower", LowerBound.DEFAULT_LOWER_BOUND_SCORE));
+        description.append(buildBoundDescription(upperBoundsParamsOptional, "upper", UpperBound.DEFAULT_UPPER_BOUND_SCORE));
 
         return description.toString();
+    }
+
+    private String buildBoundDescription(Optional<List<Map<String, Object>>> boundsOptional, String label, double defaultScore) {
+        return boundsOptional.map(bounds -> {
+            String formatted = bounds.stream().map(boundMap -> {
+                BoundMode mode = BoundMode.fromString(Objects.toString(boundMap.get("mode"), ""));
+                String score = Objects.toString(
+                    boundMap.get(label.equals("lower") ? "min_score" : "max_score"),
+                    String.valueOf(defaultScore)
+                );
+                return String.format(Locale.ROOT, "(%s, %s)", mode, score);
+            }).collect(Collectors.joining(", ", "[", "]"));
+            return String.format(Locale.ROOT, ", %s bounds %s", label, formatted);
+        }).orElse("");
     }
 
     @Override
