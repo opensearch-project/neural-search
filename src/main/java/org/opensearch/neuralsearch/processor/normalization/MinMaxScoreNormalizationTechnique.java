@@ -295,7 +295,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
     }
 
-    private Optional<List<Map<String, Object>>> getBoundsParams(final Map<String, Object> params, String paramName) {
+    @VisibleForTesting
+    protected Optional<List<Map<String, Object>>> getBoundsParams(final Map<String, Object> params, String paramName) {
         if (Objects.isNull(params) || !params.containsKey(paramName)) {
             return Optional.empty();
         }

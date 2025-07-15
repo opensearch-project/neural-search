@@ -1252,6 +1252,16 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         assertNormalizedScores(technique, testCases);
     }
 
+    public void testGetBoundsParams_whenInvalidParamName_thenFail() {
+        MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique();
+        String invalidParamName = "invalid";
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> technique.getBoundsParams(Map.of(invalidParamName, new ArrayList<>()), invalidParamName)
+        );
+        assertEquals("Unsupported bounds parameter name: invalid", e.getMessage());
+    }
+
     public void testCalculateNormalizedScore_whenSameEffectiveMinMax_thenSuccessful() {
         MinMaxScoreNormalizationTechnique technique = new MinMaxScoreNormalizationTechnique();
         assertEquals(1.0f, technique.calculateNormalizedScore(0.5f, 0.7f, 0.7f), DELTA_FOR_SCORE_ASSERTION);
