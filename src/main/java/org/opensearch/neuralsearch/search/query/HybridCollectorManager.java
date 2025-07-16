@@ -8,18 +8,17 @@ import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.IndexReader;
-import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
-import org.apache.lucene.search.Weight;
+import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
-import org.apache.lucene.search.TotalHits;
-import org.apache.lucene.search.Query;
-import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
-import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.Nullable;
@@ -60,7 +59,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocDelimiterElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createSortFieldsForDelimiterResults;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -590,7 +589,7 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
      * @return results size to collected
      */
     private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
-        HybridQuery hybridQuery = unwrapHybridQuery(searchContext);
+        HybridQuery hybridQuery = extractHybridQuery(searchContext);
         Integer paginationDepth = hybridQuery.getQueryContext().getPaginationDepth();
 
         // Pagination is expected to work only when pagination_depth is provided in the search request.
@@ -604,22 +603,6 @@ public abstract class HybridCollectorManager implements CollectorManager<Collect
 
         // Switch to from+size retrieval size during standard hybrid query execution where from is 0.
         return searchContext.size();
-    }
-
-    /**
-     * Unwraps a HybridQuery from either a direct query or a nested BooleanQuery
-     */
-    private static HybridQuery unwrapHybridQuery(final SearchContext searchContext) {
-        HybridQuery hybridQuery;
-        Query query = searchContext.query();
-        // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
-        if (isHybridQueryWrappedInBooleanQuery(searchContext, searchContext.query())) {
-            BooleanQuery booleanQuery = (BooleanQuery) query;
-            hybridQuery = (HybridQuery) booleanQuery.clauses().get(0).query();
-        } else {
-            hybridQuery = (HybridQuery) query;
-        }
-        return hybridQuery;
     }
 
     /**
