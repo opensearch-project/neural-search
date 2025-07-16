@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor.factory;
 
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.env.Environment;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.ingest.AbstractBatchingSystemProcessor;
@@ -20,8 +21,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
 import static org.opensearch.plugins.IngestPlugin.SystemIngestPipelineConfigKeys.INDEX_MAPPINGS;
+import static org.opensearch.plugins.IngestPlugin.SystemIngestPipelineConfigKeys.INDEX_SETTINGS;
 import static org.opensearch.plugins.IngestPlugin.SystemIngestPipelineConfigKeys.INDEX_TEMPLATE_MAPPINGS;
+import static org.opensearch.plugins.IngestPlugin.SystemIngestPipelineConfigKeys.INDEX_TEMPLATE_SETTINGS;
 
 /**
  *  Factory for semantic fields.
@@ -62,13 +66,20 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
     @Override
     protected AbstractBatchingSystemProcessor newProcessor(String tag, String description, Map<String, Object> config) {
         final List<Map<String, Object>> mappings = new ArrayList<>();
-        final Object mappingFromIndex = config.get(INDEX_MAPPINGS);
-        final Object mappingFromTemplates = config.get(INDEX_TEMPLATE_MAPPINGS);
-        if (mappingFromTemplates instanceof List) {
+        final List<Settings> settingsList = new ArrayList<>();
+        // Configurations from later templates override earlier ones. Index configurations override all template
+        // configurations, so we read templates first, then index configurations.
+        if (config.get(INDEX_TEMPLATE_MAPPINGS) instanceof List<?> mappingFromTemplates) {
             mappings.addAll((List<Map<String, Object>>) mappingFromTemplates);
         }
-        if (mappingFromIndex instanceof Map) {
+        if (config.get(INDEX_MAPPINGS) instanceof Map<?, ?> mappingFromIndex) {
             mappings.add((Map<String, Object>) mappingFromIndex);
+        }
+        if (config.get(INDEX_TEMPLATE_SETTINGS) instanceof List<?> settingsFromTemplates) {
+            settingsList.addAll((List<Settings>) settingsFromTemplates);
+        }
+        if (config.get(INDEX_SETTINGS) instanceof Settings settingsFromIndex) {
+            settingsList.add(settingsFromIndex);
         }
 
         // If no config we are not able to create a processor so simply return a null to show no processor created
@@ -97,13 +108,20 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
             return null;
         }
 
+        int batch_size = DEFAULT_BATCH_SIZE;
+        for (Settings settings : settingsList) {
+            if (settings.hasValue(SEMANTIC_INGEST_BATCH_SIZE.getKey())) {
+                batch_size = SEMANTIC_INGEST_BATCH_SIZE.get(settings);
+            }
+        }
+
         // TODO: Allow users to define the chunkers for each field and build the semantic field path -> chunkers map
         // and pass to the SemanticFieldProcessor to use. - https://github.com/opensearch-project/neural-search/issues/1340
 
         return new SemanticFieldProcessor(
             tag,
             description,
-            DEFAULT_BATCH_SIZE,
+            batch_size,
             semanticFieldPathToConfigMap,
             mlClientAccessor,
             environment,
