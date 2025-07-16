@@ -64,7 +64,7 @@ public class HybridQueryUtil {
         return isHybridQueryWrappedInBooleanMustQueryWithFilters(boolQuery.clauses())
             || ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
                 && isWrappedHybridQuery(query)
-                && !((BooleanQuery) query).clauses().isEmpty());
+                && !boolQuery.clauses().isEmpty());
     }
 
     /**
@@ -80,7 +80,7 @@ public class HybridQueryUtil {
 
         boolean areRemainingClausesFilters = booleanClauses.size() <= 1
             || booleanClauses.stream()
-                .skip(1)  // Skip the first clause
+                .skip(1)  // Skip the first clause since we checked it above for a hybrid within a must clause
                 .allMatch(clause -> clause.occur() == BooleanClause.Occur.FILTER);
 
         return isFirstClauseMustHybrid && areRemainingClausesFilters;
