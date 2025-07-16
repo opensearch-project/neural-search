@@ -30,6 +30,8 @@ import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
@@ -53,7 +55,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARA
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
-import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SPARSE_ENCODING_CONFIG;
 import static org.opensearch.neuralsearch.processor.TextChunkingProcessorTests.getAnalysisRegistry;
 import org.opensearch.neuralsearch.util.TestUtils;
 
@@ -107,18 +109,16 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
         // one field enable the chunking and one field disable the chunking
         pathToFieldConfigMap = Map.of(
             FIELD_NAME_PRODUCTS + PATH_SEPARATOR + FIELD_NAME_PRODUCT_DESCRIPTION,
+            Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_1, CHUNKING, true),
+            FIELD_NAME_GEO_DATA,
             Map.of(
                 TYPE,
                 SemanticFieldMapper.CONTENT_TYPE,
                 MODEL_ID,
-                DUMMY_MODEL_ID_1,
-                CHUNKING,
-                true,
-                SEMANTIC_FIELD_SEARCH_ANALYZER,
-                "standard"
-            ),
-            FIELD_NAME_GEO_DATA,
-            Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_2)
+                DUMMY_MODEL_ID_2,
+                SPARSE_ENCODING_CONFIG,
+                Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.MAX_RATIO.getValue(), PruneUtils.PRUNE_RATIO_FIELD, 0.5)
+            )
         );
 
         // prepare mock model config
@@ -363,7 +363,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             final String modelId = textInferenceRequest.getModelId();
             final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
             assertEquals("sparse model should be the model id 2", DUMMY_MODEL_ID_2, modelId);
-            listener.onResponse(List.of(Map.of("response", List.of(Map.of("dummy token", 1.0)))));
+            listener.onResponse(List.of(Map.of("response", List.of(Map.of("high score token", 1.0)))));
             return null;
         }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
 
@@ -414,7 +414,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             final String modelId = textInferenceRequest.getModelId();
             final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
             assertEquals("sparse model should be the model id 2", DUMMY_MODEL_ID_2, modelId);
-            listener.onResponse(List.of(Map.of("response", List.of(Map.of("dummy token", 1.0)))));
+            listener.onResponse(List.of(Map.of("response", List.of(Map.of("high score token", 1.0, "low score token", 0.1)))));
             return null;
         }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
 

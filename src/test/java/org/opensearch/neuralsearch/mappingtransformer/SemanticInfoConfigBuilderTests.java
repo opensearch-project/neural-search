@@ -136,7 +136,7 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         final IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, builder::build);
 
         final String expectedErrorMessage =
-            "Cannot build the semantic info config because dense_embedding_config is not supported by rank_features.";
+            "Cannot build the semantic info config because dense_embedding_config is not supported by the sparse model.";
         assertEquals(expectedErrorMessage, exception.getMessage());
     }
 
@@ -235,5 +235,35 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         final Map<String, Object> embeddingConfig = (Map<String, Object>) properties.get(EMBEDDING_FIELD_NAME);
         final Map<String, Object> actualMethod = (Map<String, Object>) embeddingConfig.get(KNN_VECTOR_METHOD_FIELD_NAME);
         assertEquals(expectedMethod, actualMethod);
+    }
+
+    public void testBuild_whenSparseEncodingConfigWithDenseEmbedding_thenException() {
+        final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(namedXContentRegistry);
+
+        // prepare mock model config
+        final String modelId = "dummyModelId";
+        final Integer embeddingDimension = 768;
+        final String allConfig = "{}";
+        final RemoteModelConfig remoteTextEmbeddingModelConfig = RemoteModelConfig.builder()
+            .embeddingDimension(embeddingDimension)
+            .allConfig(allConfig)
+            .modelType(FunctionName.TEXT_EMBEDDING.name())
+            .frameworkType(RemoteModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
+            .build();
+        final MLModel dummyModel = MLModel.builder()
+            .modelId(modelId)
+            .algorithm(FunctionName.REMOTE)
+            .modelConfig(remoteTextEmbeddingModelConfig)
+            .build();
+
+        builder.mlModel(dummyModel, modelId);
+        builder.sparseEncodingConfigDefined(true);
+
+        final IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, builder::build);
+
+        final String expectedErrorMessage =
+            "Cannot build the semantic info config because the dense(text embedding) model cannot support sparse_encoding_config.";
+        assertEquals(expectedErrorMessage, exception.getMessage());
     }
 }
