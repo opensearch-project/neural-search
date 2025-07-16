@@ -21,7 +21,9 @@ import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.mapper.TokenCountFieldMapper;
 import org.opensearch.index.mapper.WildcardFieldMapper;
 import org.opensearch.neuralsearch.constants.MappingConstants;
+import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
 import org.opensearch.neuralsearch.mapper.dto.SemanticParameters;
+import org.opensearch.neuralsearch.processor.chunker.ChunkerValidatorFactory;
 import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
 
 import java.io.IOException;
@@ -135,12 +137,19 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
         );
 
         @Getter
-        protected final Parameter<Boolean> chunkingEnabled = Parameter.boolParam(
+        protected final Parameter<ChunkingConfig> chunkingConfig = new Parameter<>(
             CHUNKING,
             false,
-            m -> ((SemanticFieldMapper) m).semanticParameters.getChunkingEnabled(),
-            false
-        );
+            () -> null,
+            (name, ctx, value) -> new ChunkingConfig(name, value, new ChunkerValidatorFactory()),
+            m -> ((SemanticFieldMapper) m).semanticParameters.getChunkingConfig()
+        ).setSerializer((builder, name, value) -> {
+            if (value == null) {
+                builder.nullField(name);
+            } else {
+                value.toXContent(builder, name);
+            }
+        }, (value) -> value == null ? null : value.toString());;
 
         protected final Parameter<String> semanticFieldSearchAnalyzer = Parameter.stringParam(
             SEMANTIC_FIELD_SEARCH_ANALYZER,
@@ -201,7 +210,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 searchModelId,
                 rawFieldType,
                 semanticInfoFieldName,
-                chunkingEnabled,
+                chunkingConfig,
                 semanticFieldSearchAnalyzer,
                 denseEmbeddingConfig,
                 sparseEncodingConfig
@@ -231,7 +240,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 .searchModelId(searchModelId.getValue())
                 .rawFieldType(rawFieldType.getValue())
                 .semanticInfoFieldName(semanticInfoFieldName.getValue())
-                .chunkingEnabled(chunkingEnabled.getValue())
+                .chunkingConfig(chunkingConfig.getValue())
                 .semanticFieldSearchAnalyzer(semanticFieldSearchAnalyzer.getValue())
                 .denseEmbeddingConfig(denseEmbeddingConfig.getValue())
                 .sparseEncodingConfig(sparseEncodingConfig.getValue())

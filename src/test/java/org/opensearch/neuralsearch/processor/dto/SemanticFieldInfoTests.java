@@ -4,9 +4,16 @@
  */
 package org.opensearch.neuralsearch.processor.dto;
 
+import org.opensearch.index.analysis.AnalysisRegistry;
+import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
+import org.opensearch.neuralsearch.processor.TextChunkingProcessorTests;
+import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.List;
+import java.util.Map;
+
+import static org.opensearch.neuralsearch.mapper.dto.ChunkingConfig.ALGORITHM_FIELD;
 
 public class SemanticFieldInfoTests extends OpenSearchTestCase {
 
@@ -59,5 +66,19 @@ public class SemanticFieldInfoTests extends OpenSearchTestCase {
             .semanticInfoFullPathInDoc("root.path_semantic_info")
             .chunks(List.of("chunk1", "chunk2"))
             .build();
+    }
+
+    public void testSetChunkingConfig_whenValidConfig_thenSuccess() {
+        AnalysisRegistry analysisRegistry = TextChunkingProcessorTests.getAnalysisRegistry();
+        ChunkingConfig chunkingConfig = ChunkingConfig.builder()
+            .enabled(true)
+            .configs(List.of(Map.of(ALGORITHM_FIELD, FixedTokenLengthChunker.ALGORITHM_NAME)))
+            .build();
+        SemanticFieldInfo semanticFieldInfo = SemanticFieldInfo.builder().build();
+        semanticFieldInfo.setChunkingConfig(chunkingConfig, analysisRegistry);
+
+        assertTrue(semanticFieldInfo.getChunkingEnabled());
+        assertEquals(1, semanticFieldInfo.getChunkers().size());
+        assertTrue(semanticFieldInfo.getChunkers().getFirst() instanceof FixedTokenLengthChunker);
     }
 }

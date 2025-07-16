@@ -126,7 +126,8 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
             mlClientAccessor,
             environment,
             clusterService,
-            createDefaultTextChunker()
+            createDefaultTextChunker(),
+            analysisRegistry
         );
     }
 

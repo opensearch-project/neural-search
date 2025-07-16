@@ -229,4 +229,14 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         List<String> expectedPassages = List.of("a");
         assertEquals(expectedPassages, passages);
     }
+
+    public void testValidateParameters_whenInvalidOverlapRate_thenThrowException() {
+        final Validator validator = new FixedCharLengthChunker();
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> validator.validate(Map.of(OVERLAP_RATE_FIELD, 1))
+        );
+
+        assertEquals("Parameter [overlap_rate] must be between 0.0 and 0.5, but was 1.0", exception.getMessage());
+    }
 }
