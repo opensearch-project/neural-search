@@ -49,4 +49,11 @@ public enum PruneType {
         }
         return type;
     }
+
+    /**
+     * @return Valid prune type values as a string separated by a comma.
+     */
+    public static String getValidValues() {
+        return Arrays.stream(PruneType.values()).map(v -> v.value).collect(Collectors.joining(","));
+    }
 }

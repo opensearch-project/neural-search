@@ -19,6 +19,8 @@ import org.opensearch.index.mapper.ParseContext;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.mapper.WildcardFieldMapper;
 import org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
@@ -40,6 +42,7 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_F
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SPARSE_ENCODING_CONFIG;
 import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.buildSemanticFieldMapperWithTextAsRawFieldType;
 import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.mockParserContext;
 import static org.opensearch.neuralsearch.util.SemanticFieldMapperTestUtil.TYPE_PARSER;
@@ -172,7 +175,7 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
 
     public void testBuilder_getParameters() {
         final SemanticFieldMapper.Builder builder = new SemanticFieldMapper.Builder(SemanticFieldMapperTestUtil.fieldName);
-        assertEquals(7, builder.getParameters().size());
+        assertEquals(8, builder.getParameters().size());
         List<String> actualParams = builder.getParameters().stream().map(a -> a.name).collect(Collectors.toList());
         List<String> expectedParams = Arrays.asList(
             MODEL_ID,
@@ -181,7 +184,8 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
             SEMANTIC_INFO_FIELD_NAME,
             CHUNKING,
             SEMANTIC_FIELD_SEARCH_ANALYZER,
-            DENSE_EMBEDDING_CONFIG
+            DENSE_EMBEDDING_CONFIG,
+            SPARSE_ENCODING_CONFIG
         );
         assertEquals(expectedParams, actualParams);
     }
@@ -249,6 +253,24 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
 
         final String expectedError = "Mapper for [testField] conflicts with existing mapper:\n"
             + "\tCannot update parameter [dense_embedding_config] from [null] to [{method={engine=lucene}}]";
+        assertEquals(expectedError, exception.getMessage());
+    }
+
+    public void testFieldMapper_merge_whenTrySparseEncodingConfig_thenException() {
+        final SemanticFieldMapper semanticFieldMapper = buildSemanticFieldMapperWithTextAsRawFieldType(parserContext);
+
+        final Map<String, Object> updatedConfig = createFieldConfig(TextFieldMapper.CONTENT_TYPE);
+        updatedConfig.put(SPARSE_ENCODING_CONFIG, Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.NONE.getValue()));
+        when(parserContext.typeParser(KeywordFieldMapper.CONTENT_TYPE)).thenReturn(KeywordFieldMapper.PARSER);
+        final SemanticFieldMapper semanticFieldMapperToMerge = buildSemanticFieldMapperWithTextAsRawFieldType(updatedConfig, parserContext);
+
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> semanticFieldMapper.merge(semanticFieldMapperToMerge)
+        );
+
+        final String expectedError = "Mapper for [testField] conflicts with existing mapper:\n"
+            + "\tCannot update parameter [sparse_encoding_config] from [null] to [{prune_type=none}]";
         assertEquals(expectedError, exception.getMessage());
     }
 

@@ -22,4 +22,5 @@ public class SemanticParameters {
     private final Boolean chunkingEnabled;
     private final String semanticFieldSearchAnalyzer;
     private final Map<String, Object> denseEmbeddingConfig;
+    private final SparseEncodingConfig sparseEncodingConfig;
 }

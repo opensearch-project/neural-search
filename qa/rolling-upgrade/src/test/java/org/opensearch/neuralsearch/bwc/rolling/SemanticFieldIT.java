@@ -11,10 +11,11 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 
 public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
-    private static final String PIPELINE_NAME = "nlp-pipeline-semantic-field";
     private static final String TEST_SEMANTIC_TEXT_FIELD = "test_field";
+    private static final String TEST_SEMANTIC_TEXT_FIELD_PATH = "mappings.properties.test_field";
     private static final String SEMANTIC_INFO_FIELD = "semantic_info";
     private static final String SEMANTIC_EMBEDDING_FIELD = "embedding";
     private static final String TEST_QUERY_TEXT = "Hello world";
@@ -44,10 +45,9 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
                     List.of(SEMANTIC_EMBEDDING_FIELD),
                     List.of(testRankFeaturesDoc)
                 );
-                // This is just to block the deletion of the model by other tests
-                createPipelineForSparseEncodingProcessor(modelId, PIPELINE_NAME);
                 break;
             case MIXED:
+                modelId = getModelId(getIndexMapping(getIndexNameForTest()), getIndexNameForTest(), TEST_SEMANTIC_TEXT_FIELD_PATH);
                 loadAndWaitForModelToBeReady(modelId);
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
@@ -68,6 +68,7 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
             case UPGRADED:
                 try {
                     int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                    modelId = getModelId(getIndexMapping(getIndexNameForTest()), getIndexNameForTest(), TEST_SEMANTIC_TEXT_FIELD_PATH);
                     loadAndWaitForModelToBeReady(modelId);
                     addSemanticDoc(
                         getIndexNameForTest(),
@@ -78,7 +79,7 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
                     );
                     validateTestIndex(totalDocsCountUpgraded);
                 } finally {
-                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, modelId, null);
+                    wipeOfTestResources(getIndexNameForTest(), null, modelId, null);
                 }
                 break;
             default:
@@ -96,7 +97,7 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
             .build();
 
         Map<String, Object> searchResponseAsMap = search(getIndexNameForTest(), neuralQueryBuilder, 1);
-        assertEquals(2, getHitCount(searchResponseAsMap));
+        assertEquals(1, getHitCount(searchResponseAsMap));
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
         assertEquals("0", firstInnerHit.get("_id"));
     }
