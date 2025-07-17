@@ -10,7 +10,13 @@ on:
       - "feature/**"
 
 jobs:
+  Get-CI-Image-Tag:
+    uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
+    with:
+      product: opensearch
+
   Restart-Upgrade-BWCTests-NeuralSearch:
+    needs: Get-CI-Image-Tag
     strategy:
       matrix:
         java: [ 21, 24 ]
@@ -20,6 +26,12 @@ jobs:
 
     name: NeuralSearch Restart-Upgrade BWC Tests
     runs-on: ${{ matrix.os }}
+    container:
+      # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
+      # this image tag is subject to change as more dependencies and updates will arrive over time
+      image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
+      # need to switch to root so that github actions can install runner binary on container without permission issues.
+      options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
     env:
       BWC_VERSION_RESTART_UPGRADE: ${{ matrix.bwc_version }}
 
@@ -38,6 +50,7 @@ jobs:
           ./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
+    needs: Get-CI-Image-Tag
     strategy:
       matrix:
         java: [21, 24]
@@ -47,6 +60,12 @@ jobs:
 
     name: NeuralSearch Rolling-Upgrade BWC Tests
     runs-on: ${{ matrix.os }}
+    container:
+      # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
+      # this image tag is subject to change as more dependencies and updates will arrive over time
+      image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
+      # need to switch to root so that github actions can install runner binary on container without permission issues.
+      options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
     env:
       BWC_VERSION_ROLLING_UPGRADE: ${{ matrix.bwc_version }}
 
@@ -60,7 +79,6 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
-        continue-on-error: true
         run: |
           echo "Running rolling-upgrade backwards compatibility tests ..."
           ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'
