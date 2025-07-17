@@ -55,7 +55,7 @@ public class HybridQueryUtil {
      * This method checks whether hybrid query is wrapped under boolean query object
      */
     public static boolean isHybridQueryWrappedInBooleanQuery(final SearchContext searchContext, final Query query) {
-        if (!(query instanceof BooleanQuery)) {
+        if (query instanceof BooleanQuery == false) {
             return false;
         }
 
@@ -64,7 +64,7 @@ public class HybridQueryUtil {
         return isHybridQueryWrappedInBooleanMustQueryWithFilters(boolQuery.clauses())
             || ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
                 && isWrappedHybridQuery(query)
-                && !boolQuery.clauses().isEmpty());
+                && boolQuery.clauses().isEmpty() == false);
     }
 
     /**
