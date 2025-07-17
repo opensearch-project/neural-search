@@ -37,11 +37,12 @@ jobs:
 
     steps:
       - name: Checkout neural-search
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Java ${{ matrix.java }}
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v4
         with:
+          distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
       - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
@@ -71,11 +72,12 @@ jobs:
 
     steps:
       - name: Checkout neural-search
-        uses: actions/checkout@v1
+        uses: actions/checkout@v4
 
       - name: Setup Java ${{ matrix.java }}
-        uses: actions/setup-java@v1
+        uses: actions/setup-java@v4
         with:
+          distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
       - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
