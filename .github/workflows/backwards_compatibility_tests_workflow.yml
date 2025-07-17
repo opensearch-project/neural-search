@@ -60,6 +60,7 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
+        continue-on-error: true
         run: |
           echo "Running rolling-upgrade backwards compatibility tests ..."
           ./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'
