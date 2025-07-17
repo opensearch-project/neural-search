@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -73,6 +74,22 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
     }
 
     /**
+     * Check if a model is being used by any index
+     * @param modelId the model ID to check
+     * @return true if the model is used by any pipeline, false otherwise
+     */
+    @SneakyThrows
+    protected boolean isModelUsedByAnyIndex(final String modelId) {
+        List<Map<String, Object>> indexMappings = retrieveIndices();
+        for (Map<String, Object> index : indexMappings) {
+            if (isIndexContainingModel(index, modelId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
      * Check if any pipeline in the given pipeline map contains the specified model
      * @param pipelinesMap the map of pipelines to check
      * @param modelId the model ID to search for
@@ -83,17 +100,21 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
         if (pipelinesMap == null || pipelinesMap.isEmpty()) {
             return false;
         }
+        return pipelinesMap.toString().contains(modelId);
+    }
 
-        for (Object pipelineObj : pipelinesMap.values()) {
-            if (pipelineObj instanceof Map) {
-                Map<String, Object> pipeline = (Map<String, Object>) pipelineObj;
-                String pipelineStr = pipeline.toString();
-                if (pipelineStr.contains(modelId)) {
-                    return true;
-                }
-            }
+    /**
+     * Check if given index contains the specified model
+     * @param indexMap the map of pipelines to check
+     * @param modelId the model ID to search for
+     * @return true if index contains the model, false otherwise
+     */
+    @SneakyThrows
+    protected boolean isIndexContainingModel(final Map<String, Object> indexMap, final String modelId) {
+        if (indexMap == null || indexMap.isEmpty()) {
+            return false;
         }
-        return false;
+        return indexMap.toString().contains(modelId);
     }
 
     @SneakyThrows
@@ -112,7 +133,7 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
                 deleteSearchPipeline(searchPipeline);
             }
             if (modelId != null) {
-                if (!isModelUsedByAnyPipeline(modelId)) {
+                if (!isModelUsedByAnyPipeline(modelId) && !isModelUsedByAnyIndex(modelId)) {
                     deleteModel(modelId);
                     DEPLOYED_MODEL_IDS.remove(modelId);
                     if (modelId.equals(sharedTextEmbeddingModelId)) {

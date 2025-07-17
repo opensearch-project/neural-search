@@ -388,6 +388,23 @@ public class TestUtils {
         return modelId;
     }
 
+    /**
+     * Fetches model ID in given index with given path
+     * @param indexMapping mappings associated with index
+     * @param indexName name of the index
+     * @param path path to model ID
+     */
+    public static String getModelId(Map<String, Object> indexMapping, String indexName, String path) {
+        String[] paths = path.split("\\.");
+        Map<String, Object> curr = (Map<String, Object>) indexMapping.get(indexName);
+        for (String key : paths) {
+            curr = (Map<String, Object>) curr.get(key);
+        }
+        String modelId = (String) curr.get("model_id");
+        assertNotNull(modelId);
+        return modelId;
+    }
+
     @SuppressWarnings("unchecked")
     public static <T> T getValueByKey(Map<String, Object> map, String key) {
         assertNotNull(map);
