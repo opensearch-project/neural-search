@@ -36,6 +36,9 @@ jobs:
       BWC_VERSION_RESTART_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
+      - name: Run start commands
+        run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
+
       - name: Checkout neural-search
         uses: actions/checkout@v4
 
@@ -71,6 +74,9 @@ jobs:
       BWC_VERSION_ROLLING_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
+      - name: Run start commands
+        run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
+
       - name: Checkout neural-search
         uses: actions/checkout@v4
 
