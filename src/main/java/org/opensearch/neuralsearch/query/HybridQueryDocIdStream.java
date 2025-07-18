@@ -44,41 +44,32 @@ public class HybridQueryDocIdStream extends DocIdStream {
 
     @Override
     public void forEach(int upTo, CheckedIntConsumer<IOException> consumer) throws IOException {
-        // bitset that represents matching documents, bit is set (1) if doc id is a match
-        FixedBitSet matchingBitSet = getLocalMatchingBitSet();
+        // Always get the current matching bitset from the bulk scorer
+        FixedBitSet matchingBitSet = hybridBulkScorer.getMatching();
         long[] bitArray = matchingBitSet.getBits();
-        // iterate through each block of 64 documents (since each long contains 64 bits)
+
         for (int idx = 0; idx < bitArray.length; idx++) {
             long bits = bitArray[idx];
             while (bits != 0L) {
-                // find position of the rightmost set bit (1)
                 int numberOfTrailingZeros = Long.numberOfTrailingZeros(bits);
-                // calculate actual document ID within the window
-                // idx << 6 is equivalent to idx * 64 (block offset)
-                // numberOfTrailingZeros gives position within the block
                 final int docIndexInWindow = (idx << BLOCK_SHIFT) | numberOfTrailingZeros;
                 final int docId = base | docIndexInWindow;
 
-                // Only process documents up to the specified limit
-                if (docId >= upTo) {
-                    return;
+                // Only process documents < upTo
+                if (docId < upTo) {
+                    float[][] windowScores = hybridBulkScorer.getWindowScores();
+                    for (int subQueryIndex = 0; subQueryIndex < windowScores.length; subQueryIndex++) {
+                        if (Objects.isNull(windowScores[subQueryIndex])) {
+                            continue;
+                        }
+                        float scoreOfDocIdForSubQuery = windowScores[subQueryIndex][docIndexInWindow];
+                        hybridBulkScorer.getHybridSubQueryScorer().getSubQueryScores()[subQueryIndex] = scoreOfDocIdForSubQuery;
+                    }
+                    consumer.accept(docId);
+                    hybridBulkScorer.getHybridSubQueryScorer().resetScores();
                 }
 
-                float[][] windowScores = hybridBulkScorer.getWindowScores();
-                for (int subQueryIndex = 0; subQueryIndex < windowScores.length; subQueryIndex++) {
-                    if (Objects.isNull(windowScores[subQueryIndex])) {
-                        continue;
-                    }
-                    float scoreOfDocIdForSubQuery = windowScores[subQueryIndex][docIndexInWindow];
-                    hybridBulkScorer.getHybridSubQueryScorer().getSubQueryScores()[subQueryIndex] = scoreOfDocIdForSubQuery;
-                }
-                // process the document with its base offset
-                consumer.accept(docId);
-                // reset scores after processing of one doc, this is required because scorer object is re-used
-                hybridBulkScorer.getHybridSubQueryScorer().resetScores();
-                // clear bit from the local bitset copy to indicate that it has been consumed
-                matchingBitSet.clear(docIndexInWindow);
-                // reset bit for this doc id to indicate that it has been consumed
+                // Don't clear bits from the shared bitset!
                 bits ^= 1L << numberOfTrailingZeros;
             }
         }
