@@ -74,7 +74,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
     }
 
     public void testParseParameters_whenNoParams_thenSuccessful() {
-        fixedTokenLengthChunker.parseParameters(Map.of());
+        fixedTokenLengthChunker.parse(Map.of());
     }
 
     public void testParseParameters_whenIllegalTokenLimitType_thenFail() {
@@ -82,7 +82,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, "invalid token limit");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.parseParameters(parameters)
+            () -> fixedTokenLengthChunker.parse(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be of %s type", TOKEN_LIMIT_FIELD, Integer.class.getName()),
@@ -95,7 +95,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKEN_LIMIT_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.parseParameters(parameters)
+            () -> fixedTokenLengthChunker.parse(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be positive.", TOKEN_LIMIT_FIELD),
@@ -108,7 +108,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(OVERLAP_RATE_FIELD, "invalid overlap rate");
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.parseParameters(parameters)
+            () -> fixedTokenLengthChunker.parse(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be of %s type", OVERLAP_RATE_FIELD, Double.class.getName()),
@@ -121,7 +121,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(OVERLAP_RATE_FIELD, 0.6);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.parseParameters(parameters)
+            () -> fixedTokenLengthChunker.parse(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
@@ -134,7 +134,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(OVERLAP_RATE_FIELD, -1);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.parseParameters(parameters)
+            () -> fixedTokenLengthChunker.parse(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be between %s and %s", OVERLAP_RATE_FIELD, 0.0, 0.5),
@@ -147,7 +147,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         parameters.put(TOKENIZER_FIELD, 111);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.parseParameters(parameters)
+            () -> fixedTokenLengthChunker.parse(parameters)
         );
         assertEquals(
             String.format(Locale.ROOT, "Parameter [%s] must be of %s type", TOKENIZER_FIELD, String.class.getName()),
@@ -160,7 +160,7 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         Map<String, Object> parameters = Map.of(TOKENIZER_FIELD, ngramTokenizer);
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
-            () -> fixedTokenLengthChunker.parseParameters(parameters)
+            () -> fixedTokenLengthChunker.parse(parameters)
         );
         assert (illegalArgumentException.getMessage()
             .contains(String.format(Locale.ROOT, "Tokenizer [%s] is not supported for [%s] algorithm.", ngramTokenizer, ALGORITHM_NAME)));
@@ -308,5 +308,15 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
             "contains a single paragraph, two sentences and 24 tokens by standard tokenizer in OpenSearch."
         );
         assertEquals(expectedPassages, passages);
+    }
+
+    public void testValidateParameters_whenInvalidTokenizer_thenThrowException() {
+        final Validator validator = new FixedTokenLengthChunker();
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> validator.validate(Map.of(TOKENIZER_FIELD, "invalid"))
+        );
+
+        assertTrue(exception.getMessage().contains("Tokenizer [invalid] is not supported for [fixed_token_length] algorithm."));
     }
 }

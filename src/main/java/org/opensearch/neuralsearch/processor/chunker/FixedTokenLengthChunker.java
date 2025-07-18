@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.ArrayList;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
 import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction;
 import org.opensearch.action.admin.indices.analyze.AnalyzeAction.AnalyzeToken;
@@ -22,6 +24,7 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 /**
  * The implementation {@link Chunker} for fixed token length algorithm.
  */
+@NoArgsConstructor(access = AccessLevel.PUBLIC, force = true)
 public final class FixedTokenLengthChunker extends Chunker {
 
     /** The identifier for the fixed token length chunking algorithm. */
@@ -71,7 +74,7 @@ public final class FixedTokenLengthChunker extends Chunker {
      * @param parameters a map with non-runtime parameters to be parsed
      */
     public FixedTokenLengthChunker(final Map<String, Object> parameters) {
-        parseParameters(parameters);
+        parse(parameters);
         this.analysisRegistry = (AnalysisRegistry) parameters.get(ANALYSIS_REGISTRY_FIELD);
     }
 
@@ -91,32 +94,15 @@ public final class FixedTokenLengthChunker extends Chunker {
      *
      */
     @Override
-    public void parseParameters(Map<String, Object> parameters) {
+    public void parse(Map<String, Object> parameters) {
+        super.parse(parameters);
         this.tokenLimit = parsePositiveIntegerWithDefault(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
-        this.overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
-        this.tokenizer = parseStringWithDefault(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
-        if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Parameter [%s] must be between %s and %s",
-                    OVERLAP_RATE_FIELD,
-                    OVERLAP_RATE_LOWER_BOUND,
-                    OVERLAP_RATE_UPPER_BOUND
-                )
-            );
-        }
-        if (!WORD_TOKENIZERS.contains(tokenizer)) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Tokenizer [%s] is not supported for [%s] algorithm. Supported tokenizers are %s",
-                    tokenizer,
-                    ALGORITHM_NAME,
-                    WORD_TOKENIZERS
-                )
-            );
-        }
+        final double overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
+        final String tokenizer = parseStringWithDefault(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
+        validateOverlapRate(overlapRate);
+        validateTokenizer(tokenizer);
+        this.overlapRate = overlapRate;
+        this.tokenizer = tokenizer;
     }
 
     /**
@@ -184,5 +170,47 @@ public final class FixedTokenLengthChunker extends Chunker {
     @Override
     public String getAlgorithmName() {
         return ALGORITHM_NAME;
+    }
+
+    /**
+     * Validate the parameters for the FixedTokenLengthChunker
+     * @param parameters parameters for the FixedTokenLengthChunker
+     */
+    @Override
+    public void validate(Map<String, Object> parameters) {
+        super.validate(parameters);
+        parsePositiveIntegerWithDefault(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
+        final Double overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
+        final String tokenizer = parseStringWithDefault(parameters, TOKENIZER_FIELD, DEFAULT_TOKENIZER);
+        validateOverlapRate(overlapRate);
+        validateTokenizer(tokenizer);
+    }
+
+    private void validateTokenizer(final String tokenizer) {
+        if (!WORD_TOKENIZERS.contains(tokenizer)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Tokenizer [%s] is not supported for [%s] algorithm. Supported tokenizers are %s",
+                    tokenizer,
+                    ALGORITHM_NAME,
+                    WORD_TOKENIZERS
+                )
+            );
+        }
+    }
+
+    private void validateOverlapRate(final Double overlapRate) {
+        if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Parameter [%s] must be between %s and %s",
+                    OVERLAP_RATE_FIELD,
+                    OVERLAP_RATE_LOWER_BOUND,
+                    OVERLAP_RATE_UPPER_BOUND
+                )
+            );
+        }
     }
 }

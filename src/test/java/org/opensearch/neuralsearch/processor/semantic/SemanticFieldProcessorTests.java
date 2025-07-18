@@ -152,7 +152,8 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             mlCommonsClientAccessor,
             environment,
             clusterService,
-            chunker
+            chunker,
+            analysisRegistry
         );
     }
 

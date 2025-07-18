@@ -288,7 +288,7 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
         );
 
         final String expectedError = "Mapper for [testField] conflicts with existing mapper:\n"
-            + "\tCannot update parameter [chunking] from [false] to [true]";
+            + "\tCannot update parameter [chunking] from [null] to [true]";
         assertEquals(expectedError, exception.getMessage());
     }
 

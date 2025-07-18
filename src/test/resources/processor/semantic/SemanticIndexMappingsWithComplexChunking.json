@@ -1,0 +1,35 @@
+{
+  "settings": {
+    "index.knn": true
+  },
+  "mappings": {
+    "properties": {
+      "products":{
+        "type":"nested",
+        "properties":{
+          "id": {
+            "type": "text"
+          },
+          "product_description":{
+            "type": "semantic",
+            "chunking": [
+              {
+                "algorithm": "delimiter",
+                "parameters": {
+                  "delimiter": ","
+                }
+              },
+              {
+                "algorithm": "delimiter",
+                "parameters": {
+                  "delimiter": "."
+                }
+              }
+            ],
+            "model_id": "%s"
+          }
+        }
+      }
+    }
+  }
+}

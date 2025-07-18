@@ -425,12 +425,19 @@ public class SemanticMappingUtils {
      */
     public static Boolean isChunkingEnabled(@NonNull final Map<String, Object> fieldConfigMap, @NonNull final String semanticFieldPath) {
         if (fieldConfigMap.containsKey(CHUNKING)) {
-            final Object chunkingEnabledObj = fieldConfigMap.get(CHUNKING);
-            if (chunkingEnabledObj instanceof Boolean) {
-                return (Boolean) chunkingEnabledObj;
+            final Object chunkingConfigObj = fieldConfigMap.get(CHUNKING);
+            if (chunkingConfigObj instanceof Boolean) {
+                return (Boolean) chunkingConfigObj;
+            } else if (chunkingConfigObj instanceof List<?>) {
+                return true;
             } else {
                 throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "%s should be a boolean for the semantic field at %s", CHUNKING, semanticFieldPath)
+                    String.format(
+                        Locale.ROOT,
+                        "%s should either be a boolean or a list of maps for the semantic field at %s",
+                        CHUNKING,
+                        semanticFieldPath
+                    )
                 );
             }
         }

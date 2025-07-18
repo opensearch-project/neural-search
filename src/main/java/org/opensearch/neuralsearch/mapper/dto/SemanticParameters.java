@@ -19,8 +19,15 @@ public class SemanticParameters {
     private final String searchModelId;
     private final String rawFieldType;
     private final String semanticInfoFieldName;
-    private final Boolean chunkingEnabled;
+    private final ChunkingConfig chunkingConfig;
     private final String semanticFieldSearchAnalyzer;
     private final Map<String, Object> denseEmbeddingConfig;
     private final SparseEncodingConfig sparseEncodingConfig;
+
+    public boolean isChunkingEnabled() {
+        if (chunkingConfig == null) {
+            return false;
+        }
+        return chunkingConfig.isEnabled();
+    }
 }

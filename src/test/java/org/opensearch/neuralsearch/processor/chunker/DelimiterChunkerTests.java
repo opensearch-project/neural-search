@@ -109,4 +109,14 @@ public class DelimiterChunkerTests extends OpenSearchTestCase {
         List<String> expectedPassages = List.of("\n\na\n\n\n");
         assertEquals(expectedPassages, passages);
     }
+
+    public void testValidateParameters_whenInvalidDelimiter_thenThrowException() {
+        final Validator validator = new DelimiterChunker();
+        final IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> validator.validate(Map.of(DELIMITER_FIELD, 1))
+        );
+
+        assertEquals("Parameter [delimiter] must be of java.lang.String type", exception.getMessage());
+    }
 }
