@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
@@ -103,12 +104,33 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
+        for (int i = 0; i < numberOfDocs; i++) {
+            String docId = String.valueOf(i);
+            BoolQueryBuilder idQuery = new BoolQueryBuilder().filter(new TermQueryBuilder("_id", docId));
+            Map<String, Object> idResponse = search(getIndexNameForTest(), idQuery, 1);
+            Map<String, Object> hits = (Map<String, Object>) idResponse.get("hits");
+            assertNotNull(hits);
+
+            // Check total hits - handle both old and new response formats
+            Object totalObj = hits.get("total");
+            int totalHits;
+            if (totalObj instanceof Map) {
+                // New format: {"value": N, "relation": "eq"}
+                @SuppressWarnings("unchecked")
+                Map<String, Object> total = (Map<String, Object>) totalObj;
+                totalHits = (int) total.get("value");
+            } else {
+                // Old format: just the number
+                totalHits = (int) totalObj;
+            }
+            assertEquals(1, totalHits);
+        }
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_SPARSE_ENCODING_FIELD)
             .queryText(TEXT)
             .modelId(modelId);
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder(TEST_TEXT_FIELD, TEXT);
-        boolQueryBuilder.should(sparseEncodingQueryBuilder).should(matchQueryBuilder);
+        boolQueryBuilder.should(sparseEncodingQueryBuilder).should(matchQueryBuilder).filter(new TermQueryBuilder("_id", "0"));
         Map<String, Object> response = search(getIndexNameForTest(), boolQueryBuilder, 1);
         Map<String, Object> firstInnerHit = getFirstInnerHit(response);
 
