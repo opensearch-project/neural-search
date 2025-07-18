@@ -877,7 +877,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             prepareKnnIndex(
                 TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
                 Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)),
-                1
+                3
             );
             addKnnDoc(
                 TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,

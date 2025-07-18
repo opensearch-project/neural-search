@@ -21,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Handle a hybrid query extended with DLS rules by the security plugin ([#1432](https://github.com/opensearch-project/neural-search/pull/1432))
 
 ### Infrastructure
+- Support multi node integration testing ([#1320](https://github.com/opensearch-project/neural-search/pull/1320))
 
 ### Documentation
 
