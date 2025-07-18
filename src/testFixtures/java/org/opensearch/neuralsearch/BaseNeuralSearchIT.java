@@ -45,6 +45,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.ml.common.model.MLModelState;
@@ -58,6 +59,7 @@ import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.FieldSortBuilder;
 import org.opensearch.search.sort.ScoreSortBuilder;
 import org.opensearch.search.sort.SortBuilder;
@@ -759,7 +761,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param highlightOptions global highlight options
      * @param preTags pre tag for highlight
      * @param postTags post tag for highlight
-     * @param collapseField field to collapse results on
+     * @param collapseContext context containing collapse details
      * @return Search results represented as a map
      */
     @SneakyThrows
@@ -779,7 +781,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, Object> highlightOptions,
         List<String> preTags,
         List<String> postTags,
-        String collapseField
+        CollapseContext collapseContext
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -795,8 +797,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
 
         // Add collapse if specified
-        if (collapseField != null) {
-            builder.startObject("collapse").field("field", collapseField).endObject();
+        if (collapseContext != null) {
+            builder.startObject("collapse").field("field", collapseContext.getFieldName());
+            List<InnerHitBuilder> innerHitBuilders = collapseContext.getInnerHit();
+            if (innerHitBuilders != null) {
+                builder.startArray("inner_hits");
+                for (int innerHitIndex = 0; innerHitIndex < innerHitBuilders.size(); innerHitIndex++) {
+                    InnerHitBuilder innerHitBuilder = innerHitBuilders.get(innerHitIndex);
+                    innerHitBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+                }
+                builder.endArray();
+            }
+            builder.endObject();
         }
 
         if (Objects.nonNull(aggs)) {
