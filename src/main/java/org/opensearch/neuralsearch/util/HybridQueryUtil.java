@@ -55,9 +55,35 @@ public class HybridQueryUtil {
      * This method checks whether hybrid query is wrapped under boolean query object
      */
     public static boolean isHybridQueryWrappedInBooleanQuery(final SearchContext searchContext, final Query query) {
-        return ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
-            && isWrappedHybridQuery(query)
-            && !((BooleanQuery) query).clauses().isEmpty());
+        if (query instanceof BooleanQuery == false) {
+            return false;
+        }
+
+        BooleanQuery boolQuery = (BooleanQuery) query;
+
+        return isHybridQueryWrappedInBooleanMustQueryWithFilters(boolQuery.clauses())
+            || ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+                && isWrappedHybridQuery(query)
+                && boolQuery.clauses().isEmpty() == false);
+    }
+
+    /**
+     * This method checks if the hybrid query is in a MUST clause with additional FILTER clauses
+     * This format is used when inner hits are passed within the collapse parameter
+     * @param booleanClauses a list of boolean clauses from a boolean query
+     * @return true if the clauses represent a hybrid query wrapped in a boolean must clause with the rest of the clauses being filters
+     */
+    public static boolean isHybridQueryWrappedInBooleanMustQueryWithFilters(List<BooleanClause> booleanClauses) {
+        boolean isFirstClauseMustHybrid = !booleanClauses.isEmpty()
+            && booleanClauses.get(0).occur() == BooleanClause.Occur.MUST
+            && booleanClauses.get(0).query() instanceof HybridQuery;
+
+        boolean areRemainingClausesFilters = booleanClauses.size() <= 1
+            || booleanClauses.stream()
+                .skip(1)  // Skip the first clause since we checked it above for a hybrid within a must clause
+                .allMatch(clause -> clause.occur() == BooleanClause.Occur.FILTER);
+
+        return isFirstClauseMustHybrid && areRemainingClausesFilters;
     }
 
     /**

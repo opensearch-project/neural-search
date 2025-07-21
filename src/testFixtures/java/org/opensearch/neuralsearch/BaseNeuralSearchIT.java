@@ -45,6 +45,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.ml.common.model.MLModelState;
@@ -58,6 +59,7 @@ import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.FieldSortBuilder;
 import org.opensearch.search.sort.ScoreSortBuilder;
 import org.opensearch.search.sort.SortBuilder;
@@ -98,6 +100,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_
 import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_LOWER_BOUNDS;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_UPPER_BOUNDS;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.SEARCH_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.SECURITY_AUDITLOG_PREFIX;
@@ -758,7 +761,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param highlightOptions global highlight options
      * @param preTags pre tag for highlight
      * @param postTags post tag for highlight
-     * @param collapseField field to collapse results on
+     * @param collapseContext context containing collapse details
      * @return Search results represented as a map
      */
     @SneakyThrows
@@ -778,7 +781,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, Object> highlightOptions,
         List<String> preTags,
         List<String> postTags,
-        String collapseField
+        CollapseContext collapseContext
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -794,8 +797,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
 
         // Add collapse if specified
-        if (collapseField != null) {
-            builder.startObject("collapse").field("field", collapseField).endObject();
+        if (collapseContext != null) {
+            builder.startObject("collapse").field("field", collapseContext.getFieldName());
+            List<InnerHitBuilder> innerHitBuilders = collapseContext.getInnerHit();
+            if (innerHitBuilders != null) {
+                builder.startArray("inner_hits");
+                for (int innerHitIndex = 0; innerHitIndex < innerHitBuilders.size(); innerHitIndex++) {
+                    InnerHitBuilder innerHitBuilder = innerHitBuilders.get(innerHitIndex);
+                    innerHitBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+                }
+                builder.endArray();
+            }
+            builder.endObject();
         }
 
         if (Objects.nonNull(aggs)) {
@@ -1857,6 +1870,29 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                         .append(lowerBound.get("min_score"))
                         .append(" }");
                     if (i < lowerBounds.size() - 1) {
+                        stringBuilderForContentBody.append(", ");
+                    }
+                }
+                stringBuilderForContentBody.append("]");
+            }
+            if (normalizationParams.containsKey(PARAM_NAME_UPPER_BOUNDS)) {
+                if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+                    stringBuilderForContentBody.append(",");
+                }
+                stringBuilderForContentBody.append("\"upper_bounds\": [");
+                List<Map> upperBounds = (List) normalizationParams.get(PARAM_NAME_UPPER_BOUNDS);
+                for (int i = 0; i < upperBounds.size(); i++) {
+                    Map<String, String> upperBound = upperBounds.get(i);
+                    stringBuilderForContentBody.append("{ ")
+                        .append("\"mode\"")
+                        .append(": \"")
+                        .append(upperBound.get("mode"))
+                        .append("\",")
+                        .append("\"max_score\"")
+                        .append(": ")
+                        .append(upperBound.get("max_score"))
+                        .append(" }");
+                    if (i < upperBounds.size() - 1) {
                         stringBuilderForContentBody.append(", ");
                     }
                 }
