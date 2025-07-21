@@ -122,7 +122,7 @@ public class HybridQueryDocIdStreamTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testForEach_whenSubsequentCalls_thenUpToParameterRespected() {
+    public void testForEach_whenSubsequentCalls_thenUpToParameterIgnored() {
         // setup
         FixedBitSet matchingDocs = new FixedBitSet(NUM_DOCS);
         matchingDocs.set(DOC_ID_1); // docId = 1
@@ -133,20 +133,11 @@ public class HybridQueryDocIdStreamTests extends OpenSearchTestCase {
         HybridQueryDocIdStream stream = new HybridQueryDocIdStream(mockScorer);
         List<Integer> processedDocs = new ArrayList<>();
 
-        // first call with upTo = 2 (should process only docId = 1)
+        // HybridQueryDocIdStream does not respect the upTo parameter and processes all matching documents
+        // first call with upTo = 2 (will process all matching docs despite upTo value)
         stream.forEach(2, docId -> processedDocs.add(docId));
 
-        // verify first call results - only doc 1 should be processed (< 2)
-        assertEquals(1, processedDocs.size());
-        assertEquals(DOC_ID_1, processedDocs.get(0).intValue());
-
-        // clear processed docs list
-        processedDocs.clear();
-
-        // second call with upTo = 4 (should process docId = 1, 2, and 3 since no state is maintained)
-        stream.forEach(4, docId -> processedDocs.add(docId));
-
-        // verify second call results - all docs < 4 should be processed
+        // verify first call results - all 3 docs are processed (upTo is ignored)
         assertEquals(3, processedDocs.size());
         assertTrue(processedDocs.contains(DOC_ID_1));
         assertTrue(processedDocs.contains(DOC_ID_2));
@@ -155,9 +146,24 @@ public class HybridQueryDocIdStreamTests extends OpenSearchTestCase {
         // clear processed docs list
         processedDocs.clear();
 
-        // third call with upTo = 1 (should process no documents since no doc < 1)
+        // second call with upTo = 4 (will process all matching docs)
+        stream.forEach(4, docId -> processedDocs.add(docId));
+
+        // verify second call results - all docs are processed
+        assertEquals(3, processedDocs.size());
+        assertTrue(processedDocs.contains(DOC_ID_1));
+        assertTrue(processedDocs.contains(DOC_ID_2));
+        assertTrue(processedDocs.contains(DOC_ID_3));
+
+        // clear processed docs list
+        processedDocs.clear();
+
+        // third call with upTo = 1 (will still process all documents since upTo is ignored)
         stream.forEach(1, docId -> processedDocs.add(docId));
-        assertTrue(processedDocs.isEmpty());
+        assertEquals(3, processedDocs.size());
+        assertTrue(processedDocs.contains(DOC_ID_1));
+        assertTrue(processedDocs.contains(DOC_ID_2));
+        assertTrue(processedDocs.contains(DOC_ID_3));
     }
 
     private HybridBulkScorer createMockScorerWithDocs(FixedBitSet matchingDocs, int numDocs) {

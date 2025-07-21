@@ -25,11 +25,6 @@ public class HybridQueryDocIdStream extends DocIdStream {
     private int base;
 
     @Override
-    public boolean mayHaveRemaining() {
-        return getLocalMatchingBitSet().cardinality() > 0;
-    }
-
-    @Override
     public int count(int upTo) {
         // Use a counter to track how many documents are processed
         final int[] count = { 0 };
@@ -43,6 +38,12 @@ public class HybridQueryDocIdStream extends DocIdStream {
     }
 
     @Override
+    public boolean mayHaveRemaining() {
+        return false;
+    }
+
+    // This class does not respect the upTo value; it consumes all matching documents.
+    @Override
     public void forEach(int upTo, CheckedIntConsumer<IOException> consumer) throws IOException {
         // Always get the current matching bitset from the bulk scorer
         FixedBitSet matchingBitSet = hybridBulkScorer.getMatching();
@@ -55,21 +56,17 @@ public class HybridQueryDocIdStream extends DocIdStream {
                 final int docIndexInWindow = (idx << BLOCK_SHIFT) | numberOfTrailingZeros;
                 final int docId = base | docIndexInWindow;
 
-                // Only process documents < upTo
-                if (docId < upTo) {
-                    float[][] windowScores = hybridBulkScorer.getWindowScores();
-                    for (int subQueryIndex = 0; subQueryIndex < windowScores.length; subQueryIndex++) {
-                        if (Objects.isNull(windowScores[subQueryIndex])) {
-                            continue;
-                        }
-                        float scoreOfDocIdForSubQuery = windowScores[subQueryIndex][docIndexInWindow];
-                        hybridBulkScorer.getHybridSubQueryScorer().getSubQueryScores()[subQueryIndex] = scoreOfDocIdForSubQuery;
+                float[][] windowScores = hybridBulkScorer.getWindowScores();
+                for (int subQueryIndex = 0; subQueryIndex < windowScores.length; subQueryIndex++) {
+                    if (Objects.isNull(windowScores[subQueryIndex])) {
+                        continue;
                     }
-                    consumer.accept(docId);
-                    hybridBulkScorer.getHybridSubQueryScorer().resetScores();
+                    float scoreOfDocIdForSubQuery = windowScores[subQueryIndex][docIndexInWindow];
+                    hybridBulkScorer.getHybridSubQueryScorer().getSubQueryScores()[subQueryIndex] = scoreOfDocIdForSubQuery;
                 }
+                consumer.accept(docId);
+                hybridBulkScorer.getHybridSubQueryScorer().resetScores();
 
-                // Don't clear bits from the shared bitset!
                 bits ^= 1L << numberOfTrailingZeros;
             }
         }
