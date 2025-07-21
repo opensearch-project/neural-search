@@ -130,7 +130,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
             .queryText(TEXT)
             .modelId(modelId);
         MatchQueryBuilder matchQueryBuilder = new MatchQueryBuilder(TEST_TEXT_FIELD, TEXT);
-        boolQueryBuilder.should(sparseEncodingQueryBuilder).should(matchQueryBuilder).filter(new TermQueryBuilder("_id", "0"));
+        boolQueryBuilder.should(sparseEncodingQueryBuilder).should(matchQueryBuilder);
         Map<String, Object> response = search(getIndexNameForTest(), boolQueryBuilder, 1);
         Map<String, Object> firstInnerHit = getFirstInnerHit(response);
 
