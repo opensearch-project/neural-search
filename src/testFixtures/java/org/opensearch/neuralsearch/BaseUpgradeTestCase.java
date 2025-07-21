@@ -114,7 +114,8 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
         if (indexMap == null || indexMap.isEmpty()) {
             return false;
         }
-        return indexMap.toString().contains(modelId);
+        final String indexName = (String) indexMap.get("index");
+        return getIndexMapping(indexName).toString().contains(modelId);
     }
 
     @SneakyThrows
@@ -132,6 +133,9 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
             if (searchPipeline != null) {
                 deleteSearchPipeline(searchPipeline);
             }
+            if (indexName != null) {
+                deleteIndex(indexName);
+            }
             if (modelId != null) {
                 if (!isModelUsedByAnyPipeline(modelId) && !isModelUsedByAnyIndex(modelId)) {
                     deleteModel(modelId);
@@ -146,9 +150,6 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
                         sharedSparseEmbeddingModelId = null;
                     }
                 }
-            }
-            if (indexName != null) {
-                deleteIndex(indexName);
             }
         }
     }

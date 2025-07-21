@@ -33,6 +33,7 @@ import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanMustQueryWithFilters;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRules;
 
@@ -128,8 +129,13 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     private void validateQuery(final SearchContext searchContext, final Query query) {
         if (query instanceof BooleanQuery) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
+
+            // Allow hybrid query in MUST clause with additional FILTER clauses
+            // This format is used when inner hits are passed within the collapse parameter
+            if (isHybridQueryWrappedInBooleanMustQueryWithFilters(booleanClauses) == false) {
+                for (BooleanClause booleanClause : booleanClauses) {
+                    validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
+                }
             }
         } else if (query instanceof DisjunctionMaxQuery) {
             for (Query disjunct : (DisjunctionMaxQuery) query) {
