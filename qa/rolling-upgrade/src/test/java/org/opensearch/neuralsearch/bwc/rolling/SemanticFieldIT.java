@@ -33,17 +33,17 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
             case OLD:
                 modelId = uploadSparseEncodingModel();
                 prepareSemanticIndex(
-                        getIndexNameForTest(),
-                        Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
-                        modelId,
-                        null
+                    getIndexNameForTest(),
+                    Collections.singletonList(new SemanticFieldConfig(TEST_SEMANTIC_TEXT_FIELD)),
+                    modelId,
+                    null
                 );
                 addSemanticDoc(
-                        getIndexNameForTest(),
-                        "0",
-                        String.format(LOCALE, "%s_%s", TEST_SEMANTIC_TEXT_FIELD, SEMANTIC_INFO_FIELD),
-                        List.of(SEMANTIC_EMBEDDING_FIELD),
-                        List.of(testRankFeaturesDoc)
+                    getIndexNameForTest(),
+                    "0",
+                    String.format(LOCALE, "%s_%s", TEST_SEMANTIC_TEXT_FIELD, SEMANTIC_INFO_FIELD),
+                    List.of(SEMANTIC_EMBEDDING_FIELD),
+                    List.of(testRankFeaturesDoc)
                 );
                 break;
             case MIXED:
@@ -54,11 +54,11 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
                     validateTestIndex(totalDocsCountMixed);
                     addSemanticDoc(
-                            getIndexNameForTest(),
-                            "1",
-                            String.format(LOCALE, "%s_%s", TEST_SEMANTIC_TEXT_FIELD, SEMANTIC_INFO_FIELD),
-                            List.of(SEMANTIC_EMBEDDING_FIELD),
-                            List.of(testRankFeaturesDoc)
+                        getIndexNameForTest(),
+                        "1",
+                        String.format(LOCALE, "%s_%s", TEST_SEMANTIC_TEXT_FIELD, SEMANTIC_INFO_FIELD),
+                        List.of(SEMANTIC_EMBEDDING_FIELD),
+                        List.of(testRankFeaturesDoc)
                     );
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
@@ -71,11 +71,11 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
                     modelId = getModelId(getIndexMapping(getIndexNameForTest()), getIndexNameForTest(), TEST_SEMANTIC_TEXT_FIELD_PATH);
                     loadAndWaitForModelToBeReady(modelId);
                     addSemanticDoc(
-                            getIndexNameForTest(),
-                            "2",
-                            String.format(LOCALE, "%s_%s", TEST_SEMANTIC_TEXT_FIELD, SEMANTIC_INFO_FIELD),
-                            List.of(SEMANTIC_EMBEDDING_FIELD),
-                            List.of(testRankFeaturesDoc)
+                        getIndexNameForTest(),
+                        "2",
+                        String.format(LOCALE, "%s_%s", TEST_SEMANTIC_TEXT_FIELD, SEMANTIC_INFO_FIELD),
+                        List.of(SEMANTIC_EMBEDDING_FIELD),
+                        List.of(testRankFeaturesDoc)
                     );
                     validateTestIndex(totalDocsCountUpgraded);
                 } finally {
@@ -91,10 +91,10 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_SEMANTIC_TEXT_FIELD)
-                .queryText(TEST_QUERY_TEXT)
-                .boost(2.0f)
-                .build();
+            .fieldName(TEST_SEMANTIC_TEXT_FIELD)
+            .queryText(TEST_QUERY_TEXT)
+            .boost(2.0f)
+            .build();
 
         Map<String, Object> searchResponseAsMap = search(getIndexNameForTest(), neuralQueryBuilder, 1);
         assertEquals(1, getHitCount(searchResponseAsMap));

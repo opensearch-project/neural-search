@@ -494,6 +494,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -534,6 +535,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
 
@@ -584,6 +586,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -649,6 +652,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
 
@@ -692,6 +696,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -739,6 +744,7 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
+            false,
             false
         );
 
@@ -780,32 +786,33 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
 
         // Test with both bounds for 2 queries
         createSearchPipeline(
-                "both-bounds-2-queries",
-                DEFAULT_NORMALIZATION_METHOD,
-                Map.of(
-                        "lower_bounds",
-                        List.of(
-                                Map.of("mode", "apply", "min_score", Float.toString(0.01f)),
-                                Map.of("mode", "clip", "min_score", Float.toString(0.0f))
-                        ),
-                        "upper_bounds",
-                        List.of(
-                                Map.of("mode", "apply", "max_score", Float.toString(0.99f)),
-                                Map.of("mode", "clip", "max_score", Float.toString(1.0f))
-                        )
+            "both-bounds-2-queries",
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(
+                "lower_bounds",
+                List.of(
+                    Map.of("mode", "apply", "min_score", Float.toString(0.01f)),
+                    Map.of("mode", "clip", "min_score", Float.toString(0.0f))
                 ),
-                DEFAULT_COMBINATION_METHOD,
-                Map.of(),
-                false
+                "upper_bounds",
+                List.of(
+                    Map.of("mode", "apply", "max_score", Float.toString(0.99f)),
+                    Map.of("mode", "clip", "max_score", Float.toString(1.0f))
+                )
+            ),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            false,
+            false
         );
         int totalExpectedDocQty = 5;
 
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText(TEST_DOC_TEXT1)
-                .modelId(modelId)
-                .k(5)
-                .build();
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(5)
+            .build();
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
@@ -814,36 +821,37 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         hybridQueryBuilder.add(termQueryBuilder);
 
         Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                hybridQueryBuilder,
-                null,
-                5,
-                Map.of("search_pipeline", "both-bounds-2-queries")
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", "both-bounds-2-queries")
         );
 
         assertQueryResults(searchResponseAsMap, totalExpectedDocQty, false, Range.between(0.01f, 0.99f));
 
         // Test with both bounds for 3 queries
         createSearchPipeline(
-                "both-bounds-3-queries",
-                DEFAULT_NORMALIZATION_METHOD,
-                Map.of(
-                        "lower_bounds",
-                        List.of(
-                                Map.of("mode", "apply", "min_score", Float.toString(0.01f)),
-                                Map.of("mode", "clip", "min_score", Float.toString(0.0f)),
-                                Map.of("mode", "ignore")
-                        ),
-                        "upper_bounds",
-                        List.of(
-                                Map.of("mode", "apply", "max_score", Float.toString(0.99f)),
-                                Map.of("mode", "clip", "max_score", Float.toString(1.0f)),
-                                Map.of("mode", "ignore")
-                        )
+            "both-bounds-3-queries",
+            DEFAULT_NORMALIZATION_METHOD,
+            Map.of(
+                "lower_bounds",
+                List.of(
+                    Map.of("mode", "apply", "min_score", Float.toString(0.01f)),
+                    Map.of("mode", "clip", "min_score", Float.toString(0.0f)),
+                    Map.of("mode", "ignore")
                 ),
-                DEFAULT_COMBINATION_METHOD,
-                Map.of(),
-                false
+                "upper_bounds",
+                List.of(
+                    Map.of("mode", "apply", "max_score", Float.toString(0.99f)),
+                    Map.of("mode", "clip", "max_score", Float.toString(1.0f)),
+                    Map.of("mode", "ignore")
+                )
+            ),
+            DEFAULT_COMBINATION_METHOD,
+            Map.of(),
+            false,
+            false
         );
 
         // verify case when there are partial matches
@@ -853,11 +861,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         hybridQueryBuilderPartialMatch.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
 
         Map<String, Object> searchResponseAsMapPartialMatch = search(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                hybridQueryBuilderPartialMatch,
-                null,
-                5,
-                Map.of("search_pipeline", "both-bounds-3-queries")
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilderPartialMatch,
+            null,
+            5,
+            Map.of("search_pipeline", "both-bounds-3-queries")
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 3, false, Range.between(0.33f, 0.99f));
 
@@ -867,11 +875,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         hybridQueryBuilderNoMatches.add(QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT7));
 
         Map<String, Object> searchResponseAsMapNoMatches = search(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                hybridQueryBuilderNoMatches,
-                null,
-                5,
-                Map.of("search_pipeline", "both-bounds-2-queries")
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilderNoMatches,
+            null,
+            5,
+            Map.of("search_pipeline", "both-bounds-2-queries")
         );
         assertQueryResults(searchResponseAsMapNoMatches, 0, true);
     }
@@ -884,11 +892,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true, false);
 
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText(TEST_DOC_TEXT1)
-                .modelId(modelId)
-                .k(5)
-                .build();
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(5)
+            .build();
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
@@ -897,11 +905,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         hybridQueryBuilder.add(termQueryBuilder);
 
         Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-                hybridQueryBuilder,
-                null,
-                5,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
+            hybridQueryBuilder,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 5, false);
         assertHybridizationSubQueryScores(searchResponseAsMap, 2);
@@ -915,11 +923,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true, false);
 
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-                .queryText(TEST_DOC_TEXT1)
-                .modelId(modelId)
-                .k(5)
-                .build();
+            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+            .queryText(TEST_DOC_TEXT1)
+            .modelId(modelId)
+            .k(5)
+            .build();
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
 
@@ -928,11 +936,11 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         hybridQueryBuilder.add(termQueryBuilder);
 
         Map<String, Object> searchResponseAsMap = search(
-                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-                hybridQueryBuilder,
-                null,
-                6,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+            hybridQueryBuilder,
+            null,
+            6,
+            Map.of("search_pipeline", SEARCH_PIPELINE)
         );
         assertQueryResults(searchResponseAsMap, 6, false);
         assertHybridizationSubQueryScores(searchResponseAsMap, 2);
