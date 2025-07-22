@@ -50,7 +50,7 @@ public final class NeuralSearchSettings {
 
     public static final Setting<Integer> HYBRID_COLLAPSE_DOCS_PER_GROUP = Setting.intSetting(
         "index.neural_search.hybrid_collapse_docs_per_group",
-        0,
+        10,
         1,
         1000,
         Setting.Property.IndexScope,
