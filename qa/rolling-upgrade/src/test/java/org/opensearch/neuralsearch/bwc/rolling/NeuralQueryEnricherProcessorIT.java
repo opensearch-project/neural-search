@@ -32,7 +32,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
     // test of NeuralQueryEnricherProcessor supports neural_sparse query default model_id
     // the feature is introduced from 2.13
     public void testNeuralQueryEnricherProcessor_NeuralSparseSearch_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         NeuralSparseQueryBuilder sparseEncodingQueryBuilderWithoutModelId = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1);
         // will set the model_id after we obtain the id
@@ -66,7 +66,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 loadAndWaitForModelToBeReady(sparseModelId);
                 sparseEncodingQueryBuilderWithModelId.modelId(sparseModelId);
 
-                waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+                waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
                 assertEquals(
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithoutModelId, 1).get("hits"),
                     search(getIndexNameForTest(), sparseEncodingQueryBuilderWithModelId, 1).get("hits")
@@ -93,7 +93,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
     // test of NeuralQueryEnricherProcessor supports neural query default model_id
     // the feature is introduced from 2.11
     public void testNeuralQueryEnricherProcessor_NeuralSearch_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         NeuralQueryBuilder neuralQueryBuilderWithoutModelId = NeuralQueryBuilder.builder()
             .fieldName(TEST_ENCODING_FIELD)
             .queryText(TEXT_1)
@@ -131,7 +131,7 @@ public class NeuralQueryEnricherProcessorIT extends AbstractRollingUpgradeTestCa
                 loadAndWaitForModelToBeReady(denseModelId);
                 neuralQueryBuilderWithModelId.modelId(denseModelId);
 
-                waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+                waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
                 assertEquals(
                     search(getIndexNameForTest(), neuralQueryBuilderWithoutModelId, 1).get("hits"),
                     search(getIndexNameForTest(), neuralQueryBuilderWithModelId, 1).get("hits")

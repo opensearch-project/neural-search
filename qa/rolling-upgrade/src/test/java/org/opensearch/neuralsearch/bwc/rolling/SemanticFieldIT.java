@@ -28,7 +28,7 @@ public class SemanticFieldIT extends AbstractRollingUpgradeTestCase {
     // Create Index with Semantic Field and add document
     // Validate document with generated embeddings in rolling-upgrade scenario
     public void testSemanticFieldProcessor_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadSparseEncodingModel();

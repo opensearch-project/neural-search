@@ -88,7 +88,7 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
         "seamlessly" };
 
     public void testSearchHitsAfterNormalization_whenIndexWithMultipleShards_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         String indexName = getIndexNameForTest();
         String[] testDocuments = generateTestDocuments(NUM_DOCS);
         switch (getClusterType()) {

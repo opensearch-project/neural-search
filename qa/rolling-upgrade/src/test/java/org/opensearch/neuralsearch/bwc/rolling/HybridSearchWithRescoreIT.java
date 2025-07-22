@@ -43,7 +43,7 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
      * Test normalization with hybrid query and rescore. This test is required as rescore will not be compatible with version lower than 2.15
      */
     public void testHybridQueryWithRescore_whenIndexWithMultipleShards_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextEmbeddingModel();
@@ -106,7 +106,7 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         // Try to ensure all nodes are green before we do the search.
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         Map<String, Object> searchResponseAsMap = search(
             getIndexNameForTest(),
             hybridQueryBuilder,

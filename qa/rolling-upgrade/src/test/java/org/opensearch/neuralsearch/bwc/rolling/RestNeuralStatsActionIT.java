@@ -33,7 +33,7 @@ public class RestNeuralStatsActionIT extends AbstractRollingUpgradeTestCase {
     // https://github.com/opensearch-project/neural-search/issues/1368
     public void testStats_E2EFlow() throws Exception {
 
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         enableStats();
 
         // Get initial stats

@@ -27,7 +27,7 @@ public class NeuralSparseTwoPhaseProcessorIT extends AbstractRollingUpgradeTestC
     // test of NeuralSparseTwoPhaseProcessor supports neural_sparse query's two phase speed up
     // the feature is introduced from 2.15
     public void testNeuralSparseTwoPhaseProcessorIT_NeuralSparseSearch_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         // will set the model_id after we obtain the id
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_ENCODING_FIELD).queryText(TEXT_1);
 

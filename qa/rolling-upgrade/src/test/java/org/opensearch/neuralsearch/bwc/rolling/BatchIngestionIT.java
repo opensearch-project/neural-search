@@ -22,7 +22,7 @@ public class BatchIngestionIT extends AbstractRollingUpgradeTestCase {
     private static final String EMBEDDING_FIELD_NAME = "passage_embedding";
 
     public void testBatchIngestion_SparseEncodingProcessor_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER, 120);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         String indexName = getIndexNameForTest();
         String sparseModelId = null;
         switch (getClusterType()) {

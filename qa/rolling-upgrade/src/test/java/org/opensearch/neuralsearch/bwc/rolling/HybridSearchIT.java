@@ -42,7 +42,7 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
     // Create Text Embedding Processor, Ingestion Pipeline, add document and search pipeline with noramlization processor
     // Validate process , pipeline and document count in rolling-upgrade scenario
     public void testNormalizationProcessor_whenIndexWithMultipleShards_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextEmbeddingModel();

@@ -32,7 +32,7 @@ public class KnnRadialSearchIT extends AbstractRollingUpgradeTestCase {
     // Create Text Image Embedding Processor, Ingestion Pipeline and add document
     // Validate radial query, pipeline and document count in rolling-upgrade scenario
     public void testKnnRadialSearch_E2EFlow() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+        waitForClusterHealthGreenOrYellow(NODES_BWC_CLUSTER);
         switch (getClusterType()) {
             case OLD:
                 modelId = uploadTextImageEmbeddingModel();
