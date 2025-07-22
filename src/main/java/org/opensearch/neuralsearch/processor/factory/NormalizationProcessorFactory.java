@@ -4,9 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
-import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
-
 import java.util.Map;
 import java.util.Objects;
 
@@ -25,6 +22,10 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
+import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
+
 /**
  * Factory for query results normalization processor for search pipeline. Instantiates processor based on user provided input.
  */
@@ -33,6 +34,8 @@ import lombok.extern.log4j.Log4j2;
 public class NormalizationProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
     public static final String NORMALIZATION_CLAUSE = "normalization";
     public static final String COMBINATION_CLAUSE = "combination";
+    public static final String SUB_QUERY_SCORES = "sub-query-scores";
+    public static final boolean DEFAULT_SUB_QUERY_SCORES = false;
     public static final String TECHNIQUE = "technique";
     public static final String PARAMETERS = "parameters";
 
@@ -50,6 +53,13 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
         final Processor.PipelineContext pipelineContext
     ) throws Exception {
         Map<String, Object> normalizationClause = readOptionalMap(NormalizationProcessor.TYPE, tag, config, NORMALIZATION_CLAUSE);
+        boolean subQueryScoresEnabled = readBooleanProperty(
+            NormalizationProcessor.TYPE,
+            tag,
+            config,
+            SUB_QUERY_SCORES,
+            DEFAULT_SUB_QUERY_SCORES
+        );
         ScoreNormalizationTechnique normalizationTechnique = ScoreNormalizationFactory.DEFAULT_METHOD;
         if (Objects.nonNull(normalizationClause)) {
             String normalizationTechniqueName = readStringProperty(
@@ -86,17 +96,19 @@ public class NormalizationProcessorFactory implements Processor.Factory<SearchPh
         scoreNormalizationFactory.isTechniquesCompatible(techniqueCompatibilityCheckDTO);
 
         log.info(
-            "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}]",
+            "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}] with sub query scores as [{}]",
             NormalizationProcessor.TYPE,
             normalizationTechnique,
-            scoreCombinationTechnique
+            scoreCombinationTechnique,
+            subQueryScoresEnabled
         );
         return new NormalizationProcessor(
             tag,
             description,
             normalizationTechnique,
             scoreCombinationTechnique,
-            normalizationProcessorWorkflow
+            normalizationProcessorWorkflow,
+            subQueryScoresEnabled
         );
     }
 }

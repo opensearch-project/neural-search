@@ -48,6 +48,7 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
     private final ScoreNormalizationTechnique normalizationTechnique;
     private final ScoreCombinationTechnique combinationTechnique;
     private final NormalizationProcessorWorkflow normalizationWorkflow;
+    private final boolean subQueryScores;
 
     private final Map<String, Runnable> normTechniqueIncrementers = Map.of(
         L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
@@ -87,6 +88,7 @@ public class NormalizationProcessor extends AbstractScoreHybridizationProcessor 
             .fetchSearchResultOptional(fetchSearchResult)
             .normalizationTechnique(normalizationTechnique)
             .combinationTechnique(combinationTechnique)
+            .subQueryScores(subQueryScores)
             .explain(explain)
             .pipelineProcessingContext(requestContextOptional.orElse(null))
             .searchPhaseContext(searchPhaseContext)

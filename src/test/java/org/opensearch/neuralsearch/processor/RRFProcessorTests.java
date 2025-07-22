@@ -71,7 +71,14 @@ public class RRFProcessorTests extends OpenSearchTestCase {
     public void setUp() {
         super.setUp();
         MockitoAnnotations.openMocks(this);
-        rrfProcessor = new RRFProcessor(TAG, DESCRIPTION, mockNormalizationTechnique, mockCombinationTechnique, mockNormalizationWorkflow);
+        rrfProcessor = new RRFProcessor(
+            TAG,
+            DESCRIPTION,
+            mockNormalizationTechnique,
+            mockCombinationTechnique,
+            mockNormalizationWorkflow,
+            false
+        );
         when(mockCombinationTechnique.techniqueName()).thenReturn(RRFScoreCombinationTechnique.TECHNIQUE_NAME);
         TestUtils.initializeEventStatsManager();
     }

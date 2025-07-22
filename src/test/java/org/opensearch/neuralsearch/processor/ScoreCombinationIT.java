@@ -91,7 +91,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.4f, 0.3f, 0.3f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.4f, 0.3f, 0.3f })),
+            false
         );
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
@@ -115,7 +116,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.233f, 0.666f, 0.1f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.233f, 0.666f, 0.1f })),
+            false
         );
 
         Map<String, Object> searchResponseWithWeights2AsMap = search(
@@ -135,7 +137,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 1.0f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 1.0f })),
+            false
         );
 
         ResponseException exception1 = expectThrows(
@@ -158,7 +161,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.25f, 0.25f, 0.2f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.25f, 0.25f, 0.2f })),
+            false
         );
 
         ResponseException exception2 = expectThrows(
@@ -202,7 +206,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
+            false
         );
 
         HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
@@ -227,7 +232,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             L2_NORMALIZATION_METHOD,
             HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
+            false
         );
 
         HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();
@@ -275,7 +281,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
+            false
         );
 
         HybridQueryBuilder hybridQueryBuilderDefaultNorm = new HybridQueryBuilder();
@@ -301,7 +308,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             L2_NORMALIZATION_METHOD,
             GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
+            false
         );
 
         HybridQueryBuilder hybridQueryBuilderL2Norm = new HybridQueryBuilder();

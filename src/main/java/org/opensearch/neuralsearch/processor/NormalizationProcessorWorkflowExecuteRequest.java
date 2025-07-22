@@ -28,6 +28,7 @@ public class NormalizationProcessorWorkflowExecuteRequest {
     final Optional<FetchSearchResult> fetchSearchResultOptional;
     final ScoreNormalizationTechnique normalizationTechnique;
     final ScoreCombinationTechnique combinationTechnique;
+    final boolean subQueryScores;
     boolean explain;
     final PipelineProcessingContext pipelineProcessingContext;
     final SearchPhaseContext searchPhaseContext;
