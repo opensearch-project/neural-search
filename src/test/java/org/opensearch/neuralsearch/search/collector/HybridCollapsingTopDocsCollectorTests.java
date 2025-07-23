@@ -42,6 +42,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
     private static final String COLLAPSE_FIELD_NAME = "collapseField";
     private static final int TOP_N_GROUPS = 5;
     private static final int TOTAL_HITS_UP_TO = 1001;
+    private static final int DOCS_PER_GROUP_PER_SUBQUERY = 10;
 
     public void testKeywordCollapse_whenCollectAndTopDocs_thenSuccessful() throws IOException {
         Directory directory = newDirectory();
@@ -64,7 +65,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             fieldType,
             sort,
             TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            DOCS_PER_GROUP_PER_SUBQUERY
         );
 
         Weight weight = mock(Weight.class);
@@ -126,7 +128,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             fieldType,
             sort,
             TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            DOCS_PER_GROUP_PER_SUBQUERY
         );
 
         Weight weight = mock(Weight.class);
@@ -164,6 +167,66 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
+    public void testCollapse_whenZeroDocsPerGroupPerSubQuery_thenSuccessful() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // Add 1000 documents with keyword collapse field values
+        for (int i = 0; i < 1000; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + (i % 10));
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            TOP_N_GROUPS,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            0
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        int[] docIds = IntStream.range(0, 1000).toArray();
+        List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(1000).collect(Collectors.toList());
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+
+        assertEquals(1, topDocs.size());  // One for each sub-query
+
+        for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
+            assertEquals(1000, collapseTopFieldDocs.totalHits.value());
+            assertEquals(TOP_N_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
+
+            // Verify collapse values
+            Set<String> uniqueGroups = new HashSet<>();
+            for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
+                uniqueGroups.add(((BytesRef) collapseValue).utf8ToString());
+            }
+            assertEquals(5, uniqueGroups.size());
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
     public void testConstructor_whenZeroTopNGroups_thenFail() throws IOException {
         Sort sort = new Sort(new SortField(INT_FIELD_NAME, SortField.Type.INT));
         NumberFieldMapper.NumberFieldType fieldType = new NumberFieldMapper.NumberFieldType(
@@ -177,7 +240,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
                 fieldType,
                 sort,
                 0,
-                new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+                new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+                DOCS_PER_GROUP_PER_SUBQUERY
             )
         );
     }

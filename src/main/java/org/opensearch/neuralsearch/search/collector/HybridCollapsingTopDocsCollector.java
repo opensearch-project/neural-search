@@ -56,6 +56,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private Map<T, Integer> reverseMulMap;
     private Map<T, boolean[]> queueFullMap;
     private final int numHits;
+    private final int docsPerGroupPerSubQuery;
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private HitsThresholdChecker hitsThresholdChecker;
@@ -65,7 +66,8 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         String collapseField,
         Sort groupSort,
         int topNGroups,
-        HitsThresholdChecker hitsThresholdChecker
+        HitsThresholdChecker hitsThresholdChecker,
+        int docsPerGroupPerSubQuery
     ) {
         this.groupSelector = groupSelector;
         this.collapseField = collapseField;
@@ -91,6 +93,8 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
             this.numHits = topNGroups;
             this.hitsThresholdChecker = hitsThresholdChecker;
+            // If docsPerGroupPerSubQuery is not larger than 0, use the size for hybrid search without collapse
+            this.docsPerGroupPerSubQuery = docsPerGroupPerSubQuery > 0 ? docsPerGroupPerSubQuery : topNGroups;
         }
     }
 
@@ -109,14 +113,16 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         MappedFieldType fieldType,
         Sort sort,
         int topNGroups,
-        HitsThresholdChecker hitsThresholdChecker
+        HitsThresholdChecker hitsThresholdChecker,
+        int docsPerGroupPerSubQuery
     ) {
         return new HybridCollapsingTopDocsCollector<>(
             new CollapseDocSourceGroupSelector.Keyword(fieldType),
             collapseField,
             sort,
             topNGroups,
-            hitsThresholdChecker
+            hitsThresholdChecker,
+            docsPerGroupPerSubQuery
         );
     }
 
@@ -135,14 +141,16 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         MappedFieldType fieldType,
         Sort sort,
         int topNGroups,
-        HitsThresholdChecker hitsThresholdChecker
+        HitsThresholdChecker hitsThresholdChecker,
+        int docsPerGroupPerSubQuery
     ) {
         return new HybridCollapsingTopDocsCollector<>(
             new CollapseDocSourceGroupSelector.Numeric(fieldType),
             collapseField,
             sort,
             topNGroups,
-            hitsThresholdChecker
+            hitsThresholdChecker,
+            docsPerGroupPerSubQuery
         );
     }
 
@@ -486,7 +494,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             private void initializeQueue(int numSubQueries) throws IOException {
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = new FieldValueHitQueue[numSubQueries];
                 for (int i = 0; i < numSubQueries; i++) {
-                    compoundScores[i] = FieldValueHitQueue.create(sort.getSort(), numHits);
+                    compoundScores[i] = FieldValueHitQueue.create(sort.getSort(), docsPerGroupPerSubQuery);
                     firstComparatorMap.put(groupSelector.copyValue(), compoundScores[i].getComparators()[0]);
                 }
                 groupQueueMap.put(groupSelector.copyValue(), compoundScores);
