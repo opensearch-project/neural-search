@@ -8,14 +8,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+
+import lombok.extern.log4j.Log4j2;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.client.RequestOptions;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESSOR;
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.search.builder.SearchSourceBuilder;
 
 public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String PIPELINE_NAME = "nlp-ingest-pipeline-sparse";
@@ -101,6 +107,7 @@ public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     }
 
     private void validateTestIndexOnUpgrade(final int numberOfDocs, final String modelId) throws Exception {
+        logger.info(search(getIndexNameForTest(), QueryBuilders.matchAllQuery(), 10));
         int docCount = getDocCount(getIndexNameForTest());
         assertEquals(numberOfDocs, docCount);
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();

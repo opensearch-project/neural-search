@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
@@ -106,6 +107,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.SEARCH_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.SECURITY_AUDITLOG_PREFIX;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+@Log4j2
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected static final Locale LOCALE = Locale.ROOT;
@@ -883,6 +885,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         builder.endObject();
 
         Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
+        request.addParameter("allow_partial_search_results", "false");
         request.addParameter("size", Integer.toString(resultSize));
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
@@ -1993,7 +1996,17 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     // Method that waits till the health of nodes in the cluster goes green with default timeout value of 60
     protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
-        waitForClusterHealthGreen(numOfNodes, 60);
+        try {
+            waitForClusterHealthGreen(numOfNodes, 60);
+        } catch (ResponseException e) {
+            logger.error(e);
+            Request explain = new Request("GET", "/_cluster/allocation/explain");
+            logger.error(client().performRequest(explain));
+            Request shards = new Request("GET", "/_cat/shards?v");
+            logger.error(client().performRequest(shards));
+            Request health = new Request("GET", "/_cat/health?v");
+            logger.error(client().performRequest(health));
+        }
     }
 
     /**
