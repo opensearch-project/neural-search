@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
@@ -106,6 +107,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.SEARCH_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.SECURITY_AUDITLOG_PREFIX;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+@Log4j2
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected static final Locale LOCALE = Locale.ROOT;
@@ -883,6 +885,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         builder.endObject();
 
         Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
+        request.addParameter("allow_partial_search_results", "false");
         request.addParameter("size", Integer.toString(resultSize));
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
@@ -1992,8 +1995,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     // Method that waits till the health of nodes in the cluster goes green with default timeout value of 60
-    protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
-        waitForClusterHealthGreen(numOfNodes, 60);
+    protected void waitForClusterHealthGreen(final String numOfNodes) throws Exception {
+        try {
+            waitForClusterHealthGreen(numOfNodes, 60);
+        } catch (ResponseException e) {
+            // Perform additional API calls to log the cause of the yellow cluster state
+            Request explain = new Request("GET", "/_cluster/allocation/explain");
+            logger.info(EntityUtils.toString(client().performRequest(explain).getEntity()));
+            Request shards = new Request("GET", "/_cat/shards?v");
+            logger.info(EntityUtils.toString(client().performRequest(shards).getEntity()));
+            Request health = new Request("GET", "/_cat/health?v");
+            logger.info(EntityUtils.toString(client().performRequest(health).getEntity()));
+            throw e;
+        }
     }
 
     /**
