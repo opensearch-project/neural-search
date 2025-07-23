@@ -9,9 +9,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
-import lombok.extern.log4j.Log4j2;
-import org.opensearch.action.search.SearchRequest;
-import org.opensearch.client.RequestOptions;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -21,7 +18,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.SPARSE_ENCODING_PROCESS
 import static org.opensearch.neuralsearch.util.TestUtils.objectToFloat;
 import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
-import org.opensearch.search.builder.SearchSourceBuilder;
 
 public class NeuralSparseSearchIT extends AbstractRollingUpgradeTestCase {
     private static final String PIPELINE_NAME = "nlp-ingest-pipeline-sparse";
