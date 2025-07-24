@@ -4,6 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 import java.util.Locale;
 import java.util.Map;
 import java.util.List;
@@ -16,6 +19,7 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 /**
  * The implementation {@link Chunker} for fixed character length algorithm.
  */
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public final class FixedCharLengthChunker extends Chunker {
 
     /** The identifier for the fixed character length chunking algorithm. */
@@ -44,7 +48,7 @@ public final class FixedCharLengthChunker extends Chunker {
      * @param parameters a map with non-runtime parameters to be parsed
      */
     public FixedCharLengthChunker(final Map<String, Object> parameters) {
-        parseParameters(parameters);
+        parse(parameters);
     }
 
     /**
@@ -59,22 +63,12 @@ public final class FixedCharLengthChunker extends Chunker {
      * 2. overlap_rate must be within range [0, 0.5]
      */
     @Override
-    public void parseParameters(Map<String, Object> parameters) {
+    public void parse(Map<String, Object> parameters) {
+        super.parse(parameters);
         this.charLimit = parsePositiveIntegerWithDefault(parameters, CHAR_LIMIT_FIELD, DEFAULT_CHAR_LIMIT);
-        this.overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
-
-        if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Parameter [%s] must be between %s and %s, but was %s",
-                    OVERLAP_RATE_FIELD,
-                    OVERLAP_RATE_LOWER_BOUND,
-                    OVERLAP_RATE_UPPER_BOUND,
-                    overlapRate
-                )
-            );
-        }
+        final double overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
+        validateOverlapRate(overlapRate);
+        this.overlapRate = overlapRate;
     }
 
     /**
@@ -125,5 +119,32 @@ public final class FixedCharLengthChunker extends Chunker {
     @Override
     public String getAlgorithmName() {
         return ALGORITHM_NAME;
+    }
+
+    /**
+     * Validate the parameters for the FixedCharLengthChunker
+     * @param parameters parameters for the FixedCharLengthChunker
+     */
+    @Override
+    public void validate(Map<String, Object> parameters) {
+        super.validate(parameters);
+        parsePositiveIntegerWithDefault(parameters, CHAR_LIMIT_FIELD, DEFAULT_CHAR_LIMIT);
+        final Double overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
+        validateOverlapRate(overlapRate);
+    }
+
+    private void validateOverlapRate(final Double overlapRate) {
+        if (overlapRate < OVERLAP_RATE_LOWER_BOUND || overlapRate > OVERLAP_RATE_UPPER_BOUND) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Parameter [%s] must be between %s and %s, but was %s",
+                    OVERLAP_RATE_FIELD,
+                    OVERLAP_RATE_LOWER_BOUND,
+                    OVERLAP_RATE_UPPER_BOUND,
+                    overlapRate
+                )
+            );
+        }
     }
 }

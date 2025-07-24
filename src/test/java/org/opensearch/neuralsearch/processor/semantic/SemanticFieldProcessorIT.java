@@ -19,6 +19,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     private static final String INDEX_WITH_SPARSE_MODEL_WITH_CHUNKING = "semantic_field_sparse_model_with_chunking_index";
+    private static final String INDEX_WITH_SPARSE_MODEL_WITH_COMPLEX_CHUNKING = "semantic_field_sparse_model_with_complex_chunking_index";
     private static final String INDEX_WITH_SPARSE_MODEL = "semantic_field_sparse_model_index";
     private static final String INDEX_WITH_SPARSE_MODEL_AND_SPARSE_ENCODING_CONFIG =
         "semantic_field_sparse_model_and_sparse_encoding_config_index";
@@ -32,6 +33,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
     protected static final String MODEL_FIELD = "model";
     private final String INGEST_DOC1 = Files.readString(Path.of(classLoader.getResource("processor/semantic/ingest_doc1.json").toURI()));
     private final String INGEST_DOC2 = Files.readString(Path.of(classLoader.getResource("processor/semantic/ingest_doc2.json").toURI()));
+    private final String INGEST_DOC4 = Files.readString(Path.of(classLoader.getResource("processor/semantic/ingest_doc4.json").toURI()));
     private final String BULK_ITEM_TEMPLATE = Files.readString(
         Path.of(classLoader.getResource("processor/bulk_item_template.json").toURI())
     );
@@ -101,6 +103,42 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
         Map<String, Object> source = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL_WITH_CHUNKING, "1").get("_source");
         assertEmbeddingWithChunks(source);
+    }
+
+    public void testSemanticFieldProcessor_withComplexChunking_withSparseModel() throws Exception {
+        String modelId = prepareSparseEncodingModel();
+        loadModel(modelId);
+        final String targetIndex = INDEX_WITH_SPARSE_MODEL_WITH_COMPLEX_CHUNKING;
+        createIndexWithModelId(targetIndex, "semantic/SemanticIndexMappingsWithComplexChunking.json", modelId);
+
+        // Test document with complex chunking configuration
+        ingestDocument(targetIndex, INGEST_DOC4, "1");
+        assertEquals(1, getDocCount(targetIndex));
+
+        Map<String, Object> source = (Map<String, Object>) getDocById(targetIndex, "1").get("_source");
+        assertEmbeddingWithChunks(source);
+
+        List<String> chunkedTexts = extractChunkedTexts(source);
+        List<String> expectedChunkedTexts = List.of(
+            "This is an example document to be chunked.",
+            " The document contains a single paragraph,",
+            " two sentences and 24 tokens by standard tokenizer in OpenSearch."
+        );
+        assertEquals(expectedChunkedTexts, chunkedTexts);
+    }
+
+    private List<String> extractChunkedTexts(Map<String, Object> source) {
+        List<String> chunkedTexts = new ArrayList<>();
+        List<Map<String, Object>> products = (List<Map<String, Object>>) source.get(LEVEL_1_FIELD);
+        for (Map<String, Object> product : products) {
+            Map<String, Object> semanticInfo = (Map<String, Object>) product.get(LEVEL_2_FIELD);
+            List<Map<String, Object>> chunks = (List<Map<String, Object>>) semanticInfo.get(CHUNKS_FIELD);
+
+            for (Map<String, Object> chunk : chunks) {
+                chunkedTexts.add((String) chunk.get(TEXT_FIELD));
+            }
+        }
+        return chunkedTexts;
     }
 
     public void testSemanticFieldProcessor_withChunking_withDenseModel() throws Exception {

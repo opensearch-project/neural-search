@@ -12,11 +12,13 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Nullable;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
+import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.ingest.AbstractBatchingSystemProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
+import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
@@ -49,7 +51,6 @@ import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.M
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_NAME_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_TYPE_FIELD_NAME;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
-import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkList;
 import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkString;
@@ -57,9 +58,9 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getMaxTo
 import static org.opensearch.neuralsearch.util.ProcessorDocumentUtils.unflattenIngestDoc;
 import static org.opensearch.neuralsearch.util.SemanticMLModelUtils.getModelType;
 import static org.opensearch.neuralsearch.util.SemanticMLModelUtils.isDenseModel;
-import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getModelId;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getSemanticInfoFieldFullPath;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
 
 /**
  * Processor to ingest the semantic fields. It will do text chunking and embedding generation for the semantic field.
@@ -79,6 +80,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
     private final Environment environment;
     private final ClusterService clusterService;
+    private final AnalysisRegistry analysisRegistry;
 
     private final Chunker defaultTextChunker;
 
@@ -92,7 +94,8 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         @NonNull final MLCommonsClientAccessor mlClientAccessor,
         @NonNull final Environment environment,
         @NonNull final ClusterService clusterService,
-        @NonNull final Chunker defaultTextChunker
+        @NonNull final Chunker defaultTextChunker,
+        @NonNull final AnalysisRegistry analysisRegistry
     ) {
         super(tag, description, batchSize);
         this.pathToFieldConfig = pathToFieldConfig;
@@ -100,6 +103,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         this.environment = environment;
         this.clusterService = clusterService;
         this.defaultTextChunker = defaultTextChunker;
+        this.analysisRegistry = analysisRegistry;
     }
 
     /**
@@ -330,8 +334,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             final boolean isFirstChunker = chunks == null;
             runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
             runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, isFirstChunker ? 1 : chunks.size());
-            // TODO: Should allow user to configure it for each chunker - https://github.com/opensearch-project/neural-search/issues/1340
-            runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+            runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, chunker.getMaxChunkLimit());
 
             final List<String> chunkedText = new ArrayList<>();
             if (isFirstChunker) {
@@ -396,6 +399,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                 .chunkingEnabled(isChunkingEnabled(fieldConfig, pathToSemanticField))
                 .sparseEncodingConfig(new SparseEncodingConfig(fieldConfig))
                 .build();
+            semanticFieldInfo.setChunkingConfig(new ChunkingConfig(fieldConfig), analysisRegistry);
 
             semanticFieldInfoList.add(semanticFieldInfo);
         }
