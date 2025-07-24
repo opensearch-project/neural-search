@@ -48,15 +48,13 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew check --parallel && ./gradlew jacocoTestReport"
+          su `id -un 1000` -c "./gradlew check --parallel -x integTest"
 
       - name: Upload Coverage Report
-        uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && contains(matrix.os, 'ubuntu') && contains(matrix.java, '21') }}
+        uses: codecov/codecov-action@v3
         with:
-          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
           token: ${{ secrets.CODECOV_TOKEN }}
-          path: ./build/reports/jacoco/test/jacocoTestReport.xml
 
   Check-neural-search-windows:
     strategy:
@@ -111,31 +109,7 @@ jobs:
       - name: Run build
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew precommit -x integTest --parallel && ./gradlew jacocoTestReport && cp -v build/reports/jacoco/test/jacocoTestReport.xml ./jacocoTestReport.xml"
-
-      - uses: actions/upload-artifact@v4
-        if: ${{ matrix.os }} == "ubuntu-latest"
-        with:
-          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./jacocoTestReport.xml
-
-  Precommit-codecov:
-    needs: Precommit-neural-search-linux
-    strategy:
-      matrix:
-        java: [21, 24]
-        os: [ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: coverage-report-${{ matrix.os }}-${{ matrix.java }}
-          path: ./
-      - name: Upload Coverage Report
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./jacocoTestReport.xml
+          su `id -un 1000` -c "./gradlew precommit -x integTest --parallel"
 
   integTest:
     needs: Precommit-neural-search-linux
@@ -154,23 +128,23 @@ jobs:
           distribution: temurin
       - name: Build and Run Tests
         run: |
-          su `id -un 1000` -c "./gradlew precommit -x integTest"
+          ./gradlew integTest
 
   integMultiNodeTest:
-    needs: Precommit-neural-search-linux
-    strategy:
-      matrix:
-        java: [21,23]
-        os: [ ubuntu-latest, windows-latest ]
-    name: Multi-Node Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ matrix.java }}
-          distribution: temurin
-      - name: Build and Run Tests
-        run: |
-          ./gradlew integTest -PnumNodes=3
+      needs: Precommit-neural-search-linux
+      strategy:
+        matrix:
+          java: [ 21, 23 ]
+          os: [ ubuntu-latest, windows-latest ]
+      name: Multi-Node Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
+      runs-on: ${{ matrix.os }}
+      steps:
+        - uses: actions/checkout@v4
+        - name: Set up JDK ${{ matrix.java }}
+          uses: actions/setup-java@v4
+          with:
+            java-version: ${{ matrix.java }}
+            distribution: temurin
+        - name: Build and Run Tests
+          run: |
+            ./gradlew integTest -PnumNodes=3
