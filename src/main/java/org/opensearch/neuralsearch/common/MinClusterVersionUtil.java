@@ -32,7 +32,6 @@ public final class MinClusterVersionUtil {
 
     // Constant for neural_knn_query version check
     public static final String NEURAL_KNN_QUERY = "neural_knn_query";
-    public static final Version MINIMAL_SUPPORTED_VERSION_SUB_QUERY_SCORES = Version.V_3_1_0;
 
     // Note this minimal version will act as an override
     private static final Map<String, Version> MINIMAL_VERSION_NEURAL = ImmutableMap.<String, Version>builder()
@@ -57,10 +56,6 @@ public final class MinClusterVersionUtil {
 
     public static boolean isClusterOnOrAfterMinReqVersionForStatCategoryFiltering() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_STATS_CATEGORY_FILTERING);
-    }
-
-    public static boolean isClusterOnOrAfterMinReqVersionForSubQuerySupport() {
-        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_SUB_QUERY_SCORES);
     }
 
     public static boolean isClusterOnOrAfterMinReqVersion(String key) {

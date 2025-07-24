@@ -5,8 +5,6 @@
 package org.opensearch.neuralsearch.processor.util;
 
 import lombok.NonNull;
-import org.apache.lucene.search.ScoreDoc;
-import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
@@ -16,8 +14,6 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.search.SearchHit;
-import org.opensearch.search.builder.SearchSourceBuilder;
-import org.apache.lucene.search.ScoreDoc;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -26,7 +22,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Stack;
-import java.util.Locale;
 
 /**
  * Utility class for evaluating SearchResponse data. This is useful when you want
@@ -307,55 +302,6 @@ public class ProcessorUtils {
         }
 
         return false;
-    }
-
-    /**
-     *
-     * @param searchPhaseContext the search phase context that contains the search request
-     * @return whether sort is enabled in the search request
-     */
-    public static boolean isSortEnabled(SearchPhaseContext searchPhaseContext) {
-        SearchSourceBuilder searchSourceBuilder = searchPhaseContext.getRequest().source();
-        return searchSourceBuilder.sorts() != null && !searchSourceBuilder.sorts().isEmpty();
-    }
-
-    /**
-     *
-     * @param searchPhaseContext the search phase context that contains the search request
-     * @return whether explain is enabled in the search request
-     */
-    public static boolean isExplainEnabled(SearchPhaseContext searchPhaseContext) {
-        SearchSourceBuilder searchSourceBuilder = searchPhaseContext.getRequest().source();
-        return Objects.nonNull(searchSourceBuilder.explain()) && searchSourceBuilder.explain();
-    }
-
-    /**
-     * Updates the subquery scores for a document in the score tracking map.
-     * Creates a composite document key using shard ID and document ID, then stores
-     * the score for the specified subquery index.
-     *
-     * @param isSubQueryScores if isSubQueryScores is enabled or disabled
-     * @param docIdToSubqueryScores map storing scores arrays keyed by document identifier
-     * @param compoundTopDocs compound top docs containing shard information
-     * @param scoreDoc score document containing the document ID and score
-     * @param subQueryIndex index of the current subquery (0-based)
-     * @param totalSubQueries total number of subqueries for array initialization
-     */
-    public static void updateDocSubqueryScores(
-        boolean isSubQueryScores,
-        Map<String, float[]> docIdToSubqueryScores,
-        CompoundTopDocs compoundTopDocs,
-        ScoreDoc scoreDoc,
-        int subQueryIndex,
-        int totalSubQueries
-    ) {
-        if (!isSubQueryScores) return;
-
-        int shardId = compoundTopDocs.getSearchShard().getShardId();
-        String docKey = String.format(Locale.ROOT, "%d_%d", shardId, scoreDoc.doc);
-
-        float[] scores = docIdToSubqueryScores.computeIfAbsent(docKey, k -> new float[totalSubQueries]);
-        scores[subQueryIndex] = scoreDoc.score;
     }
 
     /**

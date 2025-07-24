@@ -270,7 +270,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -338,7 +337,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
 
@@ -389,7 +387,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -457,7 +454,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
 
@@ -494,7 +490,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -535,7 +530,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
 
@@ -586,7 +580,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -652,7 +645,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
 
@@ -696,7 +688,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
         int totalExpectedDocQty = 6;
@@ -744,7 +735,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
 
@@ -802,7 +792,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
         int totalExpectedDocQty = 5;
@@ -850,7 +839,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             ),
             DEFAULT_COMBINATION_METHOD,
             Map.of(),
-            false,
             false
         );
 
@@ -882,68 +870,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             Map.of("search_pipeline", "both-bounds-2-queries")
         );
         assertQueryResults(searchResponseAsMapNoMatches, 0, true);
-    }
-
-    @SneakyThrows
-    public void testSubQueryScoresWithSingleShard_thenSuccessful() {
-        String modelId = null;
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME);
-        modelId = prepareModel();
-        createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true, false);
-
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-            .queryText(TEST_DOC_TEXT1)
-            .modelId(modelId)
-            .k(5)
-            .build();
-
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(neuralQueryBuilder);
-        hybridQueryBuilder.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap = search(
-            TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME,
-            hybridQueryBuilder,
-            null,
-            5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertQueryResults(searchResponseAsMap, 5, false);
-        assertHybridizationSubQueryScores(searchResponseAsMap, 2);
-    }
-
-    @SneakyThrows
-    public void testSubQueryScoresWithMultipleShards_thenSuccessful() {
-        String modelId = null;
-        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME);
-        modelId = prepareModel();
-        createSearchPipeline(SEARCH_PIPELINE, DEFAULT_NORMALIZATION_METHOD, Map.of(), DEFAULT_COMBINATION_METHOD, Map.of(), true, false);
-
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-            .queryText(TEST_DOC_TEXT1)
-            .modelId(modelId)
-            .k(5)
-            .build();
-
-        TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
-
-        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
-        hybridQueryBuilder.add(neuralQueryBuilder);
-        hybridQueryBuilder.add(termQueryBuilder);
-
-        Map<String, Object> searchResponseAsMap = search(
-            TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
-            hybridQueryBuilder,
-            null,
-            6,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
-        );
-        assertQueryResults(searchResponseAsMap, 6, false);
-        assertHybridizationSubQueryScores(searchResponseAsMap, 2);
     }
 
     private void initializeIndexIfNotExist(String indexName) throws IOException {
@@ -1108,25 +1034,6 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         assertEquals(Set.copyOf(ids).size(), ids.size());
     }
 
-    private void assertHybridizationSubQueryScores(Map<String, Object> searchResponseAsMap, int expectedSubQueryCount) {
-        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
-
-        for (Map<String, Object> hit : hitsNestedList) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
-            assertNotNull(fields);
-            @SuppressWarnings("unchecked")
-            List<Double> subQueryScores = (List<Double>) fields.get("hybridization_sub_query_scores");
-            assertNotNull(subQueryScores);
-            assertEquals(expectedSubQueryCount, subQueryScores.size());
-            for (Double score : subQueryScores) {
-                assertNotNull(score);
-                assertTrue(score >= 0.0);
-                assertTrue(score <= 1.0);
-            }
-        }
-    }
-
     @SneakyThrows
     public void testNormalizationProcessor_stats() {
         enableStats();
@@ -1136,22 +1043,19 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             "pipeline1",
             L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
             HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            Map.of(),
-            false
+            Map.of()
         );
         createSearchPipeline(
             "pipeline2",
             MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
             GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            Map.of(),
-            false
+            Map.of()
         );
         createSearchPipeline(
             "pipeline3",
             ZScoreNormalizationTechnique.TECHNIQUE_NAME,
             ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            Map.of(),
-            false
+            Map.of()
         );
 
         TermQueryBuilder termQueryBuilder = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);

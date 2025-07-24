@@ -83,8 +83,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             L2_NORMALIZATION_METHOD,
             DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-            false
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
 
         HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
@@ -109,8 +108,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             L2_NORMALIZATION_METHOD,
             HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-            false
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
 
         HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
@@ -135,8 +133,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             L2_NORMALIZATION_METHOD,
             GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-            false
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
 
         HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
@@ -182,8 +179,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-            false
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
 
         HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
@@ -208,8 +204,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             HARMONIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-            false
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
 
         HybridQueryBuilder hybridQueryBuilderHarmonicMean = new HybridQueryBuilder();
@@ -234,8 +229,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             DEFAULT_NORMALIZATION_METHOD,
             GEOMETRIC_MEAN_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-            false
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
 
         HybridQueryBuilder hybridQueryBuilderGeometricMean = new HybridQueryBuilder();
@@ -281,8 +275,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             SEARCH_PIPELINE,
             Z_SCORE_NORMALIZATION_METHOD,
             DEFAULT_COMBINATION_METHOD,
-            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-            false
+            Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
         );
 
         HybridQueryBuilder hybridQueryBuilderArithmeticMean = new HybridQueryBuilder();
@@ -311,8 +304,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
                 SEARCH_PIPELINE,
                 Z_SCORE_NORMALIZATION_METHOD,
                 HARMONIC_MEAN_COMBINATION_METHOD,
-                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-                false
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
             )
         );
 
@@ -334,8 +326,7 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
                 SEARCH_PIPELINE,
                 Z_SCORE_NORMALIZATION_METHOD,
                 GEOMETRIC_MEAN_COMBINATION_METHOD,
-                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f })),
-                false
+                Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.533f, 0.466f }))
             )
         );
 

@@ -58,8 +58,7 @@ public class HybridSearchWithRescoreIT extends AbstractRollingUpgradeTestCase {
                     SEARCH_PIPELINE_NAME,
                     DEFAULT_NORMALIZATION_METHOD,
                     DEFAULT_COMBINATION_METHOD,
-                    Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f })),
-                    false
+                    Map.of(PARAM_NAME_WEIGHTS, Arrays.toString(new float[] { 0.3f, 0.7f }))
                 );
                 break;
             case MIXED:

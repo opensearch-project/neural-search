@@ -21,7 +21,6 @@ import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.action.search.SearchPhaseContext;
-import org.opensearch.common.document.DocumentField;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
 import org.opensearch.neuralsearch.processor.collapse.CollapseExecutor;
@@ -42,7 +41,6 @@ import org.opensearch.search.query.QuerySearchResult;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForSubQuerySupport;
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
 
@@ -56,7 +54,6 @@ public class NormalizationProcessorWorkflow {
 
     private final ScoreNormalizer scoreNormalizer;
     private final ScoreCombiner scoreCombiner;
-    private static final String SUB_QUERY_SCORES_NAME = "hybridization_sub_query_scores";
 
     /**
      * Start execution of this workflow
@@ -79,8 +76,6 @@ public class NormalizationProcessorWorkflow {
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(request.getNormalizationTechnique())
-            .subQueryScores(request.isSubQueryScores())
-            .searchPhaseContext(request.getSearchPhaseContext())
             .build();
 
         // normalize
@@ -104,7 +99,6 @@ public class NormalizationProcessorWorkflow {
         log.debug("Post-process query results after score normalization and combination");
         updateOriginalQueryResults(combineScoresDTO, fetchSearchResultOptional.isPresent());
         updateOriginalFetchResults(
-            request.getSearchPhaseContext(),
             querySearchResults,
             fetchSearchResultOptional,
             unprocessedDocIds,
@@ -292,7 +286,6 @@ public class NormalizationProcessorWorkflow {
      * A workaround for a single shard case, fetch has happened, and we need to update both fetch and query results
      */
     private void updateOriginalFetchResults(
-        final SearchPhaseContext searchPhaseContext,
         final List<QuerySearchResult> querySearchResults,
         final Optional<FetchSearchResult> fetchSearchResultOptional,
         final List<Integer> docIds,
@@ -301,7 +294,6 @@ public class NormalizationProcessorWorkflow {
         if (fetchSearchResultOptional.isEmpty()) {
             return;
         }
-        Map<String, float[]> scoreMap = HybridScoreRegistry.get(searchPhaseContext);
         // fetch results have list of document content, that includes start/stop and
         // delimiter elements. list is in original order from query searcher. We need to:
         // 1. filter out start/stop and delimiter elements
@@ -342,32 +334,6 @@ public class NormalizationProcessorWorkflow {
             SearchHit searchHit = docIdToSearchHit.get(scoreDoc.doc);
             // update score to normalized/combined value (3)
             searchHit.score(scoreDoc.score);
-
-            // Check if inner hits are present
-            boolean hasInnerHits = searchHit.getInnerHits() != null && !searchHit.getInnerHits().isEmpty();
-            int shardIndex = querySearchResult.getShardIndex();
-            String key = shardIndex + "_" + scoreDoc.doc;
-            float[] subqueryScores = scoreMap != null ? scoreMap.get(key) : null;
-            if (subqueryScores == null) {
-                log.debug("No sub query scores found");
-            } else {
-                Map<String, DocumentField> documentFields = searchHit.getDocumentFields();
-
-                // Check for all the conditions
-                boolean shouldAddHybridScores = documentFields.containsKey(SUB_QUERY_SCORES_NAME) == false
-                    && isClusterOnOrAfterMinReqVersionForSubQuerySupport()
-                    && hasInnerHits == false;
-
-                if (shouldAddHybridScores) {
-                    // Add it as a field rather than modifying _source
-                    List<Object> hybridScores = new ArrayList<>(subqueryScores.length);
-                    for (float score : subqueryScores) {
-                        hybridScores.add(score);
-                    }
-                    searchHit.setDocumentField(SUB_QUERY_SCORES_NAME, new DocumentField(SUB_QUERY_SCORES_NAME, hybridScores));
-                }
-            }
-
             updatedSearchHitArray[i] = searchHit;
         }
         SearchHits updatedSearchHits = new SearchHits(
