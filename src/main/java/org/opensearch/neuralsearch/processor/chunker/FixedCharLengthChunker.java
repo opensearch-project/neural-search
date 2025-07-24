@@ -63,7 +63,7 @@ public final class FixedCharLengthChunker extends Chunker {
      * 2. overlap_rate must be within range [0, 0.5]
      */
     @Override
-    public void parse(Map<String, Object> parameters) {
+    public void parse(Map<String, Object> parameters) throws IllegalArgumentException {
         super.parse(parameters);
         this.charLimit = parsePositiveIntegerWithDefault(parameters, CHAR_LIMIT_FIELD, DEFAULT_CHAR_LIMIT);
         final double overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);

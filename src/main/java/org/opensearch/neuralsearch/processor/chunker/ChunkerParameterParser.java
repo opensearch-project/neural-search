@@ -26,7 +26,7 @@ public final class ChunkerParameterParser {
      * @return The validated string value from the parameters map
      * @throws IllegalArgumentException if the parameter is not a string or is empty
      */
-    public static String parseString(final Map<String, Object> parameters, final String fieldName) {
+    public static String parseString(final Map<String, Object> parameters, final String fieldName) throws IllegalArgumentException {
         Object fieldValue = parameters.get(fieldName);
         if (!(fieldValue instanceof String)) {
             throw new IllegalArgumentException(
@@ -48,7 +48,8 @@ public final class ChunkerParameterParser {
      * @return The validated string value from the parameters map if present, otherwise the default value
      * @throws IllegalArgumentException if the parameter is present but is not a string or is empty
      */
-    public static String parseStringWithDefault(final Map<String, Object> parameters, final String fieldName, final String defaultValue) {
+    public static String parseStringWithDefault(final Map<String, Object> parameters, final String fieldName, final String defaultValue)
+        throws IllegalArgumentException {
         if (!parameters.containsKey(fieldName)) {
             // all string parameters are optional
             return defaultValue;
@@ -64,7 +65,7 @@ public final class ChunkerParameterParser {
      * @return The parsed integer value from the parameters map
      * @throws IllegalArgumentException if the parameter is not an integer or is empty
      */
-    public static int parseInteger(final Map<String, Object> parameters, final String fieldName) {
+    public static int parseInteger(final Map<String, Object> parameters, final String fieldName) throws IllegalArgumentException {
         String fieldValueString = parameters.get(fieldName).toString();
         try {
             return NumberUtils.createInteger(fieldValueString);
@@ -84,7 +85,8 @@ public final class ChunkerParameterParser {
      * @return The integer value from the parameters map if present, otherwise the default value
      * @throws IllegalArgumentException if the parameter is present but cannot be converted to an integer
      */
-    public static int parseIntegerWithDefault(final Map<String, Object> parameters, final String fieldName, final int defaultValue) {
+    public static int parseIntegerWithDefault(final Map<String, Object> parameters, final String fieldName, final int defaultValue)
+        throws IllegalArgumentException {
         if (!parameters.containsKey(fieldName)) {
             // return the default value when parameter is missing
             return defaultValue;
@@ -100,7 +102,7 @@ public final class ChunkerParameterParser {
      * @return The parsed positive integer value
      * @throws IllegalArgumentException if the parameter is not a positive integer or cannot be converted to an integer
      */
-    public static int parsePositiveInteger(final Map<String, Object> parameters, final String fieldName) {
+    public static int parsePositiveInteger(final Map<String, Object> parameters, final String fieldName) throws IllegalArgumentException {
         int fieldValueInt = parseInteger(parameters, fieldName);
         if (fieldValueInt <= 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Parameter [%s] must be positive.", fieldName));
@@ -121,7 +123,7 @@ public final class ChunkerParameterParser {
         final Map<String, Object> parameters,
         final String fieldName,
         final Integer defaultValue
-    ) {
+    ) throws IllegalArgumentException {
         if (!parameters.containsKey(fieldName)) {
             // all double parameters are optional
             return defaultValue;
@@ -137,7 +139,7 @@ public final class ChunkerParameterParser {
      * @return The parsed double value
      * @throws IllegalArgumentException if the parameter cannot be converted to a double
      */
-    public static double parseDouble(final Map<String, Object> parameters, final String fieldName) {
+    public static double parseDouble(final Map<String, Object> parameters, final String fieldName) throws IllegalArgumentException {
         String fieldValueString = parameters.get(fieldName).toString();
         try {
             return NumberUtils.createDouble(fieldValueString);
@@ -157,7 +159,8 @@ public final class ChunkerParameterParser {
      * @return The double value from the parameters map if present, otherwise the default value
      * @throws IllegalArgumentException if the parameter is present but cannot be converted to a double
      */
-    public static double parseDoubleWithDefault(final Map<String, Object> parameters, final String fieldName, final double defaultValue) {
+    public static double parseDoubleWithDefault(final Map<String, Object> parameters, final String fieldName, final double defaultValue)
+        throws IllegalArgumentException {
         if (!parameters.containsKey(fieldName)) {
             // all double parameters are optional
             return defaultValue;

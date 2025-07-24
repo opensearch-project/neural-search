@@ -49,7 +49,7 @@ public final class DelimiterChunker extends Chunker {
      * 2. max_chunk_limit processor level max chunk limit
      */
     @Override
-    public void parse(final Map<String, Object> parameters) {
+    public void parse(final Map<String, Object> parameters) throws IllegalArgumentException {
         super.parse(parameters);
         this.delimiter = parseStringWithDefault(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
     }

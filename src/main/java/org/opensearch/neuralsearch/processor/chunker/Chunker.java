@@ -40,7 +40,7 @@ public abstract class Chunker implements Validator, Parser {
      * @param parameters a map containing non-runtime parameters for chunking algorithms
      */
     @Override
-    public void parse(Map<String, Object> parameters) {
+    public void parse(Map<String, Object> parameters) throws IllegalArgumentException {
         final int maxChunkLimit = parseIntegerWithDefault(parameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
         validateMaxChunkLimit(maxChunkLimit);
         this.maxChunkLimit = maxChunkLimit;
@@ -72,15 +72,17 @@ public abstract class Chunker implements Validator, Parser {
 
     /**
      * Validate the common parameters for a chunker
+     * Throw IllegalArgumentException when parameters are invalid.
+     *
      * @param parameters parameters for a chunker
      */
     @Override
-    public void validate(Map<String, Object> parameters) {
+    public void validate(Map<String, Object> parameters) throws IllegalArgumentException {
         final int maxChunkLimit = parseIntegerWithDefault(parameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
         validateMaxChunkLimit(maxChunkLimit);
     }
 
-    void validateMaxChunkLimit(int maxChunkLimit) {
+    void validateMaxChunkLimit(int maxChunkLimit) throws IllegalArgumentException {
         if (maxChunkLimit <= 0 && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
             throw new IllegalArgumentException(
                 String.format(
