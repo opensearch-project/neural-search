@@ -94,7 +94,7 @@ public final class FixedTokenLengthChunker extends Chunker {
      *
      */
     @Override
-    public void parse(Map<String, Object> parameters) {
+    public void parse(Map<String, Object> parameters) throws IllegalArgumentException {
         super.parse(parameters);
         this.tokenLimit = parsePositiveIntegerWithDefault(parameters, TOKEN_LIMIT_FIELD, DEFAULT_TOKEN_LIMIT);
         final double overlapRate = parseDoubleWithDefault(parameters, OVERLAP_RATE_FIELD, DEFAULT_OVERLAP_RATE);
