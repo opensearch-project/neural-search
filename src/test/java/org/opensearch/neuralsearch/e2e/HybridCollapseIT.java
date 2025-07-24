@@ -32,7 +32,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         super.setUp();
         createTestIndex();
         indexTestDocuments();
-        createSearchPipeline(SEARCH_PIPELINE, "min_max", "arithmetic_mean", Map.of(), false);
+        createSearchPipeline(SEARCH_PIPELINE, "min_max", "arithmetic_mean", Map.of());
     }
 
     public void testCollapse_whenE2E_thenSuccessful() {

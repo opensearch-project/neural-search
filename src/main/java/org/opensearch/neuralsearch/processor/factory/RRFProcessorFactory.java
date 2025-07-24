@@ -21,14 +21,8 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 
-import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
-import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.COMBINATION_CLAUSE;
-import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.SUB_QUERY_SCORES;
-import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.DEFAULT_SUB_QUERY_SCORES;
-import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.TECHNIQUE;
-import static org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory.PARAMETERS;
 
 /**
  * Factory class to instantiate RRF processor based on user provided input.
@@ -36,6 +30,9 @@ import static org.opensearch.neuralsearch.processor.factory.NormalizationProcess
 @AllArgsConstructor
 @Log4j2
 public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResultsProcessor> {
+    public static final String COMBINATION_CLAUSE = "combination";
+    public static final String TECHNIQUE = "technique";
+    public static final String PARAMETERS = "parameters";
 
     private final NormalizationProcessorWorkflow normalizationProcessorWorkflow;
     private ScoreNormalizationFactory scoreNormalizationFactory;
@@ -57,9 +54,7 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
         ScoreCombinationTechnique scoreCombinationTechnique = scoreCombinationFactory.createCombination(
             RRFScoreCombinationTechnique.TECHNIQUE_NAME
         );
-
         Map<String, Object> combinationClause = readOptionalMap(RRFProcessor.TYPE, tag, config, COMBINATION_CLAUSE);
-        boolean subQueryScoresEnabled = readBooleanProperty(RRFProcessor.TYPE, tag, config, SUB_QUERY_SCORES, DEFAULT_SUB_QUERY_SCORES);
         if (Objects.nonNull(combinationClause)) {
             String combinationTechnique = readStringProperty(
                 RRFProcessor.TYPE,
@@ -80,19 +75,11 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
             scoreCombinationTechnique = scoreCombinationFactory.createCombination(combinationTechnique, params);
         }
         log.info(
-            "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}] with sub query scores as [{}]",
+            "Creating search phase results processor of type [{}] with normalization [{}] and combination [{}]",
             RRFProcessor.TYPE,
             normalizationTechnique,
-            scoreCombinationTechnique,
-            subQueryScoresEnabled
+            scoreCombinationTechnique
         );
-        return new RRFProcessor(
-            tag,
-            description,
-            normalizationTechnique,
-            scoreCombinationTechnique,
-            normalizationProcessorWorkflow,
-            subQueryScoresEnabled
-        );
+        return new RRFProcessor(tag, description, normalizationTechnique, scoreCombinationTechnique, normalizationProcessorWorkflow);
     }
 }

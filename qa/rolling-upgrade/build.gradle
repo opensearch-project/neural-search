@@ -67,7 +67,6 @@ def versionsBelow2_19 = versionsBelow2_18 + "2.18"
 def versionsBelow2_20 = versionsBelow2_19 + "2.19"
 def versionsBelow3_0 = versionsBelow2_20 + "2.20"
 def versionsBelow3_1 = versionsBelow3_0 + "3.0"
-def versionsBelow3_2 = versionsBelow3_1 + "3.1"
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
@@ -93,13 +92,6 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
-        }
-    }
-
-    // Excluding sub query scores tests because we introduce this feature in 3.2
-    if (versionsBelow3_2.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.HybridSearchSubQueryScoresIT.*"
         }
     }
 
@@ -150,13 +142,6 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding sub query scores tests because we introduce this feature in 3.2
-    if (versionsBelow3_2.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.HybridSearchSubQueryScoresIT.*"
-        }
-    }
-
     // Excluding KnnRadialSearchIT for 3.0.0 due to known radial search shard failure issue
     // https://github.com/opensearch-project/neural-search/issues/1392
     if (ext.neural_search_bwc_version == "3.0.0") {
@@ -203,13 +188,6 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding sub query scores tests because we introduce this feature in 3.2
-    if (versionsBelow3_2.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.HybridSearchSubQueryScoresIT.*"
-        }
-    }
-
     // Excluding KnnRadialSearchIT for 3.0.0 due to known radial search shard failure issue
     // https://github.com/opensearch-project/neural-search/issues/1392
     if (ext.neural_search_bwc_version == "3.0.0") {
@@ -253,13 +231,6 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SemanticFieldIT.*"
-        }
-    }
-
-    // Excluding sub query scores tests because we introduce this feature in 3.2
-    if (versionsBelow3_2.any { ext.neural_search_bwc_version.startsWith(it) }){
-        filter {
-            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.HybridSearchSubQueryScoresIT.*"
         }
     }
 

@@ -108,8 +108,7 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
                     SEARCH_PIPELINE_NAME,
                     "l2",
                     "arithmetic_mean",
-                    Map.of("weights", Arrays.toString(new float[] { 0.5f, 0.5f })),
-                    false
+                    Map.of("weights", Arrays.toString(new float[] { 0.5f, 0.5f }))
                 );
 
                 // execute hybrid query and store results

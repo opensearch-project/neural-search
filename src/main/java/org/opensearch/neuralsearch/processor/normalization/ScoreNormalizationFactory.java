@@ -32,7 +32,7 @@ public class ScoreNormalizationFactory {
         RRFNormalizationTechnique.TECHNIQUE_NAME,
         params -> new RRFNormalizationTechnique(params, scoreNormalizationUtil),
         ZScoreNormalizationTechnique.TECHNIQUE_NAME,
-        params -> new ZScoreNormalizationTechnique(params, scoreNormalizationUtil)
+        params -> new ZScoreNormalizationTechnique()
     );
 
     private static final Map<String, Set<String>> COMBINATION_TECHNIQUE_FOR_NORMALIZATION_METHODS = Map.of(

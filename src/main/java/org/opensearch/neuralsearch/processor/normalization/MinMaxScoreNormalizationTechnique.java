@@ -37,7 +37,6 @@ import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.get
 import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MAX_BOUND_SCORE;
 import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MIN_BOUND_SCORE;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
-import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.updateDocSubqueryScores;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
 /**
@@ -85,8 +84,7 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
      * - iterate over each result and update score as per formula above where "score" is raw score returned by Hybrid query
      */
     @Override
-    public Map<String, float[]> normalize(final NormalizeScoresDTO normalizeScoresDTO) {
-        Map<String, float[]> docIdToSubqueryScores = new HashMap<>();
+    public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
         MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
         // do normalization using actual score and min and max scores for corresponding sub query
@@ -109,15 +107,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 LowerBound lowerBound = getLowerBound(j);
                 UpperBound upperBound = getUpperBound(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-                    // Initialize or update subquery scores array per doc
-                    updateDocSubqueryScores(
-                        normalizeScoresDTO.isSubQueryScores(),
-                        docIdToSubqueryScores,
-                        compoundQueryTopDocs,
-                        scoreDoc,
-                        j,
-                        topDocsPerSubQuery.size()
-                    );
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         minMaxScores.getMinScoresPerSubquery()[j],
@@ -128,8 +117,6 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
                 }
             }
         }
-
-        return docIdToSubqueryScores;
     }
 
     private boolean isBoundsAndSubQueriesCountMismatched(List<TopDocs> topDocsPerSubQuery) {

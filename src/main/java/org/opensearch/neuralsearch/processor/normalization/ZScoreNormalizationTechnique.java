@@ -10,12 +10,12 @@ import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
-import java.util.Set;
 import java.util.HashMap;
 import java.util.Locale;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 import com.google.common.primitives.Floats;
@@ -25,7 +25,6 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
-import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.updateDocSubqueryScores;
 
 /**
  * Abstracts normalization of scores based on z score method
@@ -36,14 +35,6 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     public static final String TECHNIQUE_NAME = "z_score";
     private static final float SINGLE_RESULT_SCORE = 1.0f;
     private static final float MIN_SCORE = 0.001f;
-
-    public ZScoreNormalizationTechnique() {
-        this(Map.of(), new ScoreNormalizationUtil());
-    }
-
-    public ZScoreNormalizationTechnique(final Map<String, Object> params, final ScoreNormalizationUtil scoreNormalizationUtil) {
-        scoreNormalizationUtil.validateParameters(params, Set.of(), Map.of());
-    }
 
     /**
      * Z-score normalization transforms the data based on its mean and standard deviation, making it more robust to outliers.
@@ -61,8 +52,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
      * and nullable rankConstant that is only used in RRF technique
      */
     @Override
-    public Map<String, float[]> normalize(NormalizeScoresDTO normalizeScoresDTO) {
-        Map<String, float[]> docIdToSubqueryScores = new HashMap<>();
+    public void normalize(NormalizeScoresDTO normalizeScoresDTO) {
         List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
 
         ZScores zscores = getZScoreResults(queryTopDocs);
@@ -76,15 +66,6 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
             for (int j = 0; j < topDocsPerSubQuery.size(); j++) {
                 TopDocs subQueryTopDoc = topDocsPerSubQuery.get(j);
                 for (ScoreDoc scoreDoc : subQueryTopDoc.scoreDocs) {
-                    // Initialize or update subquery scores array per doc
-                    updateDocSubqueryScores(
-                        normalizeScoresDTO.isSubQueryScores(),
-                        docIdToSubqueryScores,
-                        compoundQueryTopDocs,
-                        scoreDoc,
-                        j,
-                        topDocsPerSubQuery.size()
-                    );
                     scoreDoc.score = normalizeSingleScore(
                         scoreDoc.score,
                         zscores.stdPerSubquery[j],
@@ -95,7 +76,6 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
                 }
             }
         }
-        return docIdToSubqueryScores;
     }
 
     @Override
