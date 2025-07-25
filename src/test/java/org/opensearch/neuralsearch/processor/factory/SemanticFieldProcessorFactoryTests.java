@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.semantic.SemanticFieldProcessor;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.Collections;
 import java.util.List;
@@ -37,6 +38,8 @@ public class SemanticFieldProcessorFactoryTests extends OpenSearchTestCase {
     private Environment environment;
     @Mock
     private ClusterService clusterService;
+    @Mock
+    private OpenSearchClient openSearchClient;
 
     private SemanticFieldProcessorFactory factory;
 
@@ -45,7 +48,7 @@ public class SemanticFieldProcessorFactoryTests extends OpenSearchTestCase {
         MockitoAnnotations.openMocks(this);
         // analysisRegistry is a final class so use a real one
         AnalysisRegistry analysisRegistry = getAnalysisRegistry();
-        factory = new SemanticFieldProcessorFactory(mlClientAccessor, environment, clusterService, analysisRegistry);
+        factory = new SemanticFieldProcessorFactory(mlClientAccessor, environment, clusterService, analysisRegistry, openSearchClient);
     }
 
     public void testNewProcessor_noMappings_thenReturnNull() {

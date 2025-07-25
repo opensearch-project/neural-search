@@ -39,6 +39,7 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNK
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SKIP_EXISTING_EMBEDDING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
@@ -175,7 +176,7 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
 
     public void testBuilder_getParameters() {
         final SemanticFieldMapper.Builder builder = new SemanticFieldMapper.Builder(SemanticFieldMapperTestUtil.fieldName);
-        assertEquals(8, builder.getParameters().size());
+        assertEquals(9, builder.getParameters().size());
         List<String> actualParams = builder.getParameters().stream().map(a -> a.name).collect(Collectors.toList());
         List<String> expectedParams = Arrays.asList(
             MODEL_ID,
@@ -185,7 +186,8 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
             CHUNKING,
             SEMANTIC_FIELD_SEARCH_ANALYZER,
             DENSE_EMBEDDING_CONFIG,
-            SPARSE_ENCODING_CONFIG
+            SPARSE_ENCODING_CONFIG,
+            SKIP_EXISTING_EMBEDDING
         );
         assertEquals(expectedParams, actualParams);
     }
