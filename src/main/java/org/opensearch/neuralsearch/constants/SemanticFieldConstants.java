@@ -59,4 +59,11 @@ public class SemanticFieldConstants {
      * {@link org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig}
      */
     public static final String SPARSE_ENCODING_CONFIG = "sparse_encoding_config";
+
+    /**
+     * Name of the field to configure if we should reuse the exist embedding for the semantic field if the original data
+     * and the model is not changed.
+     * {@link org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig}
+     */
+    public static final String REUSE_EXIST_EMBEDDING = "reuse_exist_embedding";
 }
