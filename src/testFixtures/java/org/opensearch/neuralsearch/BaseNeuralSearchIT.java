@@ -83,6 +83,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.HashSet;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -146,6 +147,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected ThreadPool threadPool;
     protected ClusterService clusterService;
+    private static final Set<String> DEPLOYED_MODEL_IDS = new HashSet<>();
 
     @Before
     public void setupSettings() {
@@ -270,6 +272,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelId;
     }
 
+    static private synchronized void loadAndWaitForModelToBeReady(BaseNeuralSearchIT baseNeuralSearchIT, String modelId) throws Exception {
+        if (DEPLOYED_MODEL_IDS.contains(modelId)) {
+            return;
+        }
+        // To avoid race condition with auto deploy after node replacement
+        Thread.sleep(10000);
+        baseNeuralSearchIT.doLoadAndWaitForModelToBeReady(modelId);
+        DEPLOYED_MODEL_IDS.add(modelId);
+    }
+
+    private void doLoadAndWaitForModelToBeReady(String modelId) throws Exception {
+        MLModelState state = getModelState(modelId);
+        logger.info("Model state: " + state);
+        if (MLModelState.LOADED.equals(state) || MLModelState.DEPLOYED.equals(state)) {
+            logger.info("Model is already deployed. Skip loading.");
+            return;
+        }
+        loadModel(modelId);
+        waitForModelToBeReady(modelId);
+    }
+
+    protected void loadAndWaitForModelToBeReady(String modelId) throws Exception {
+        loadAndWaitForModelToBeReady(this, modelId);
+    }
+
     protected void loadModel(final String modelId) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
@@ -298,6 +325,26 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             String.format(Locale.ROOT, "failed to load the model, last task finished with status %s", taskQueryResult.get("state")),
             isComplete
         );
+    }
+
+    protected void waitForModelToBeReady(String modelId) throws Exception {
+        int maxAttempts = 30;
+        int waitTimeInSeconds = 2;
+
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+            if (isModelReadyForInference(modelId)) {
+                logger.info("Model {} is ready for inference after {} attempts", modelId, attempt + 1);
+                return;
+            }
+            logger.info("Waiting for model {} to be ready. Attempt {}/{}", modelId, attempt + 1, maxAttempts);
+            Thread.sleep(waitTimeInSeconds * 1000);
+        }
+        throw new RuntimeException("Model " + modelId + " failed to be ready for inference after " + maxAttempts + " attempts");
+    }
+
+    protected boolean isModelReadyForInference(@NonNull final String modelId) throws IOException, ParseException {
+        MLModelState state = getModelState(modelId);
+        return MLModelState.LOADED.equals(state) || MLModelState.DEPLOYED.equals(state);
     }
 
     /**
