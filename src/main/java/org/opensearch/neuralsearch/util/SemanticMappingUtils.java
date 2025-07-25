@@ -27,6 +27,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.REUSE_EXIST_EMBEDDING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
@@ -502,5 +503,34 @@ public class SemanticMappingUtils {
         }
 
         return (Map<String, Object>) config;
+    }
+
+    /**
+     * Check if the chunking is enabled in the semantic field config. If the field is not defined then return false as
+     * the default value.
+     * @param fieldConfigMap The config for a semantic field.
+     * @return If the chunking is enabled in the semantic filed config.
+     */
+    public static Boolean shouldReuseExistEmbedding(
+        @NonNull final Map<String, Object> fieldConfigMap,
+        @NonNull final String semanticFieldPath
+    ) {
+        if (fieldConfigMap.containsKey(REUSE_EXIST_EMBEDDING)) {
+            final Object reuseExistEmbeddingObject = fieldConfigMap.get(REUSE_EXIST_EMBEDDING);
+            if (reuseExistEmbeddingObject instanceof Boolean) {
+                return (Boolean) reuseExistEmbeddingObject;
+            } else {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "%s should be a boolean for the semantic field at %s",
+                        REUSE_EXIST_EMBEDDING,
+                        semanticFieldPath
+                    )
+                );
+            }
+        }
+
+        return false;
     }
 }

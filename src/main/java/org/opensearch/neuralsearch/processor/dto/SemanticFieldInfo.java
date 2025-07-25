@@ -46,6 +46,10 @@ public class SemanticFieldInfo {
      */
     private String semanticFieldFullPathInMapping;
     /**
+     * The full path to the semantic field in the doc
+     */
+    private String semanticFieldFullPathInDoc;
+    /**
      * The full path to the semantic info fields in the doc. The path in the doc will contain the index of the inter
      * nested object.
      */
@@ -66,6 +70,16 @@ public class SemanticFieldInfo {
     private List<String> chunks;
 
     private SparseEncodingConfig sparseEncodingConfig;
+
+    /**
+     * If we should reuse exist embedding for the semantic field if the original data and the model is not changed.
+     */
+    private Boolean reuseExistEmbedding;
+
+    /**
+     * The id of the doc of the semantic field
+     */
+    private String docId;
 
     /**
      * @return full path to the chunks field of the semantic field in a doc

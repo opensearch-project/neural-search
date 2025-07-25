@@ -52,6 +52,9 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+
 /**
  * The abstract class for text processing use cases. Users provide a field name map and a model id.
  * During ingestion, the processor will use the corresponding model to inference the input texts,
@@ -62,8 +65,6 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     public static final String MODEL_ID_FIELD = "model_id";
     public static final String FIELD_MAP_FIELD = "field_map";
-    public static final String INDEX_FIELD = "_index";
-    public static final String ID_FIELD = "_id";
     public static final String SKIP_EXISTING = "skip_existing";
     public static final boolean DEFAULT_SKIP_EXISTING = false;
     private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {

@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.util.SemanticMappingUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.semantic.SemanticFieldProcessor;
+import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,18 +49,21 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
 
     private final ClusterService clusterService;
     private final AnalysisRegistry analysisRegistry;
+    private final OpenSearchClient openSearchClient;
 
     public SemanticFieldProcessorFactory(
         final MLCommonsClientAccessor mlClientAccessor,
         final Environment environment,
         final ClusterService clusterService,
-        final AnalysisRegistry analysisRegistry
+        final AnalysisRegistry analysisRegistry,
+        final OpenSearchClient openSearchClient
     ) {
         super(PROCESSOR_FACTORY_TYPE);
         this.mlClientAccessor = mlClientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
         this.analysisRegistry = analysisRegistry;
+        this.openSearchClient = openSearchClient;
     }
 
     @SuppressWarnings("unchecked")
@@ -127,7 +131,8 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
             environment,
             clusterService,
             createDefaultTextChunker(),
-            analysisRegistry
+            analysisRegistry,
+            openSearchClient
         );
     }
 
