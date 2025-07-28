@@ -111,7 +111,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
     private NeuralSparseQueryTwoPhaseInfo neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo();
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
-    private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_0_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_1_0;
 
     /**
      * Constructor from stream input

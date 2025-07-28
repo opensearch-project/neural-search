@@ -144,12 +144,15 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOldCluster"
     dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"
-    if(ext.bwcBundleTest){
-        doFirst {
+
+    doFirst {
+        // This is added to prevent the cluster from getting stuck in yellow state
+        println "Waiting for cluster to stabilize after previous test, including data synchronization on replica shards"
+        Thread.sleep(10000) // 10 seconds delay
+
+        if(ext.bwcBundleTest){
             testClusters."${baseName}".goToNextVersion()
-        }
-    }else{
-        doFirst {
+        }else{
             testClusters."${baseName}".upgradeAllNodesAndPluginsToNextVersion(project.ext.plugins)
         }
     }

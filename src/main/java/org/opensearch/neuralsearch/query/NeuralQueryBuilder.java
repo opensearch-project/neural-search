@@ -954,7 +954,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         }
 
         final SemanticFieldMapper.SemanticFieldType semanticFieldType = (SemanticFieldMapper.SemanticFieldType) mappedFieldType;
-        final Boolean chunkingEnabled = semanticFieldType.getSemanticParameters().getChunkingEnabled();
+        final Boolean chunkingEnabled = semanticFieldType.getSemanticParameters().isChunkingEnabled();
         final String semanticFieldSearchAnalyzer = semanticFieldType.getSemanticParameters().getSemanticFieldSearchAnalyzer();
         final NeuralQueryTargetFieldConfig.NeuralQueryTargetFieldConfigBuilder targetFieldConfigBuilder = NeuralQueryTargetFieldConfig
             .builder()

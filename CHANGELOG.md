@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Semantic Field] Support configuring the ingest batch size for the semantic field. ([#1438](https://github.com/opensearch-project/neural-search/pull/1438))
 - [Semantic Field] Allow configuring prune strategies for sparse encoding in semantic fields. ([#1434](https://github.com/opensearch-project/neural-search/pull/1434))
 - Enable inner hits within collapse parameter for hybrid query ([#1447](https://github.com/opensearch-project/neural-search/pull/1447))
+- [Semantic Field] Support configuring the chunking strategies through the semantic field. ([#1446](https://github.com/opensearch-project/neural-search/pull/1446))
 - Add setting for number of documents stored by HybridCollapsingTopDocsCollector ([#1471](https://github.com/opensearch-project/neural-search/pull/1471))
 
 ### Bug Fixes
@@ -20,6 +21,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix the HybridQueryDocIdStream to properly handle upTo value ([#1414](https://github.com/opensearch-project/neural-search/pull/1414))
 - Handle remote dense model properly during mapping transform for the semantic field ([#1427](https://github.com/opensearch-project/neural-search/pull/1427))
 - Handle a hybrid query extended with DLS rules by the security plugin ([#1432](https://github.com/opensearch-project/neural-search/pull/1432))
+- Fix the minimal supported version for neural sparse query analyzer field ([#1475](https://github.com/opensearch-project/neural-search/pull/1475))
 
 ### Infrastructure
 

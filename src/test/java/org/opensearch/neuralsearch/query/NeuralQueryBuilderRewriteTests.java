@@ -34,6 +34,7 @@ import org.opensearch.neuralsearch.common.VectorUtil;
 import org.opensearch.neuralsearch.constants.SemanticFieldConstants;
 import org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
+import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
 import org.opensearch.neuralsearch.mapper.dto.SemanticParameters;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
@@ -675,10 +676,10 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
             .semanticInfoFieldName(semanticInfoFieldName);
         if (Boolean.TRUE.equals(chunkingEnabled)) {
             embeddingFullPath = semanticInfoFieldPath + ".chunks.embedding";
-            semanticParametersBuilder.chunkingEnabled(true);
+            semanticParametersBuilder.chunkingConfig(ChunkingConfig.builder().enabled(true).build());
         } else {
             embeddingFullPath = semanticInfoFieldPath + ".embedding";
-            semanticParametersBuilder.chunkingEnabled(false);
+            semanticParametersBuilder.chunkingConfig(null);
         }
 
         when(queryShardContext.fieldMapper(embeddingFullPath)).thenReturn(knnVectorFieldType);
@@ -864,7 +865,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
                 .modelId(MODEL_ID_2)
                 .rawFieldType(TextFieldMapper.CONTENT_TYPE)
                 .semanticInfoFieldName(CUSTOM_SEMANTIC_INFO_FIELD_NAME)
-                .chunkingEnabled(true)
+                .chunkingConfig(ChunkingConfig.builder().enabled(true).build())
                 .build()
         );
         when(semanticFieldType2.name()).thenReturn(FIELD_NAME);
@@ -997,7 +998,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
                 .modelId(MODEL_ID_2)
                 .rawFieldType(TextFieldMapper.CONTENT_TYPE)
                 .semanticInfoFieldName(CUSTOM_SEMANTIC_INFO_FIELD_NAME)
-                .chunkingEnabled(true)
+                .chunkingConfig(ChunkingConfig.builder().enabled(true).build())
                 .build()
         );
         when(semanticFieldType2.name()).thenReturn(FIELD_NAME);

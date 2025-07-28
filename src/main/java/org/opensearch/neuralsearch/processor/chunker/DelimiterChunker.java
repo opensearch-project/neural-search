@@ -4,6 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
@@ -14,6 +17,7 @@ import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterPars
 /**
  * The implementation {@link Chunker} for delimiter algorithm
  */
+@NoArgsConstructor(access = AccessLevel.PUBLIC)
 public final class DelimiterChunker extends Chunker {
 
     /** The identifier for the delimiter chunking algorithm. */
@@ -33,7 +37,7 @@ public final class DelimiterChunker extends Chunker {
      * @param parameters a map with non-runtime parameters to be parsed
      */
     public DelimiterChunker(final Map<String, Object> parameters) {
-        parseParameters(parameters);
+        parse(parameters);
     }
 
     /**
@@ -45,7 +49,8 @@ public final class DelimiterChunker extends Chunker {
      * 2. max_chunk_limit processor level max chunk limit
      */
     @Override
-    public void parseParameters(Map<String, Object> parameters) {
+    public void parse(final Map<String, Object> parameters) throws IllegalArgumentException {
+        super.parse(parameters);
         this.delimiter = parseStringWithDefault(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
     }
 
@@ -87,5 +92,15 @@ public final class DelimiterChunker extends Chunker {
     @Override
     public String getAlgorithmName() {
         return ALGORITHM_NAME;
+    }
+
+    /**
+     * Validate the parameters for the DelimiterChunker
+     * @param parameters parameters for the DelimiterChunker
+     */
+    @Override
+    public void validate(Map<String, Object> parameters) {
+        super.validate(parameters);
+        parseStringWithDefault(parameters, DELIMITER_FIELD, DEFAULT_DELIMITER);
     }
 }
