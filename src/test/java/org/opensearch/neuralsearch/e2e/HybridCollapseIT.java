@@ -19,7 +19,7 @@ import java.util.Map;
 
 import lombok.SneakyThrows;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 
 public class HybridCollapseIT extends BaseNeuralSearchIT {
 
@@ -137,7 +137,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         String indexConfiguration = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
-            .field(HYBRID_COLLAPSE_DOCS_PER_GROUP.getKey(), DOCS_PER_GROUP_PER_SUBQUERY)
+            .field(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), DOCS_PER_GROUP_PER_SUBQUERY)
             .endObject()
             .startObject("mappings")
             .startObject("properties")

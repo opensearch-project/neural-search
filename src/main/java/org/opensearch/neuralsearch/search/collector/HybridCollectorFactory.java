@@ -18,7 +18,7 @@ import org.opensearch.search.sort.SortAndFormats;
 
 import java.util.Locale;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 
 /**
  * A factory class for creating various types of Hybrid Collectors based on the provided configuration.
@@ -42,7 +42,9 @@ public class HybridCollectorFactory {
         FieldDoc after = hybridCollectorFactoryDTO.getAfter();
         if (collapseContext != null) {
             // Collapse is applied
-            int docsPerGroupPerSubquery = HYBRID_COLLAPSE_DOCS_PER_GROUP.get(searchContext.indexShard().indexSettings().getSettings());
+            int docsPerGroupPerSubquery = HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.get(
+                searchContext.indexShard().indexSettings().getSettings()
+            );
             MappedFieldType fieldType = collapseContext.getFieldType();
             if (fieldType instanceof KeywordFieldMapper.KeywordFieldType) {
                 return HybridCollapsingTopDocsCollector.createKeyword(
