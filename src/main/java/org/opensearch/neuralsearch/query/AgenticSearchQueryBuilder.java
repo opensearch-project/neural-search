@@ -29,6 +29,8 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 import java.io.IOException;
@@ -83,9 +85,13 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     @Override
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         xContentBuilder.startObject(NAME);
-        xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
-        xContentBuilder.field(AGENT_ID.getPreferredName(), agentId);
-        if (queryFields != null && !queryFields.isEmpty()) {
+        if (Objects.nonNull(QUERY_TEXT_FIELD)) {
+            xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
+        }
+        if (Objects.nonNull(AGENT_ID)) {
+            xContentBuilder.field(AGENT_ID.getPreferredName(), agentId);
+        }
+        if (Objects.nonNull(queryFields) && !queryFields.isEmpty()) {
             xContentBuilder.field(QUERY_FIELDS.getPreferredName(), queryFields);
         }
         xContentBuilder.endObject();
@@ -132,6 +138,15 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
                 }
             }
         }
+
+        // Validate mandatory fields
+        if (agenticSearchQueryBuilder.queryText == null || agenticSearchQueryBuilder.queryText.trim().isEmpty()) {
+            throw new ParsingException(parser.getTokenLocation(), "[" + QUERY_TEXT_FIELD.getPreferredName() + "] is required");
+        }
+        if (agenticSearchQueryBuilder.agentId == null || agenticSearchQueryBuilder.agentId.trim().isEmpty()) {
+            throw new ParsingException(parser.getTokenLocation(), "[" + AGENT_ID.getPreferredName() + "] is required");
+        }
+
         return agenticSearchQueryBuilder;
     }
 

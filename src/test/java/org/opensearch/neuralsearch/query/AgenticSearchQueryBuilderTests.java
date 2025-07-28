@@ -161,4 +161,44 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder();
         assertEquals("Field name should match", "agentic_search", queryBuilder.fieldName());
     }
+
+    public void testFromXContent_missingQueryText() throws IOException {
+        String json = "{\n" + "  \"agent_id\": \"" + AGENT_ID + "\"\n" + "}";
+
+        XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry(), null, json);
+        parser.nextToken();
+
+        Exception exception = expectThrows(Exception.class, () -> AgenticSearchQueryBuilder.fromXContent(parser));
+        assertTrue(exception.getMessage().contains("query_text") && exception.getMessage().contains("required"));
+    }
+
+    public void testFromXContent_missingAgentId() throws IOException {
+        String json = "{\n" + "  \"query_text\": \"" + QUERY_TEXT + "\"\n" + "}";
+
+        XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry(), null, json);
+        parser.nextToken();
+
+        Exception exception = expectThrows(Exception.class, () -> AgenticSearchQueryBuilder.fromXContent(parser));
+        assertTrue(exception.getMessage().contains("agent_id") && exception.getMessage().contains("required"));
+    }
+
+    public void testFromXContent_emptyQueryText() throws IOException {
+        String json = "{\n" + "  \"query_text\": \"\",\n" + "  \"agent_id\": \"" + AGENT_ID + "\"\n" + "}";
+
+        XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry(), null, json);
+        parser.nextToken();
+
+        Exception exception = expectThrows(Exception.class, () -> AgenticSearchQueryBuilder.fromXContent(parser));
+        assertTrue(exception.getMessage().contains("query_text") && exception.getMessage().contains("required"));
+    }
+
+    public void testFromXContent_emptyAgentId() throws IOException {
+        String json = "{\n" + "  \"query_text\": \"" + QUERY_TEXT + "\",\n" + "  \"agent_id\": \"\"\n" + "}";
+
+        XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry(), null, json);
+        parser.nextToken();
+
+        Exception exception = expectThrows(Exception.class, () -> AgenticSearchQueryBuilder.fromXContent(parser));
+        assertTrue(exception.getMessage().contains("agent_id") && exception.getMessage().contains("required"));
+    }
 }
