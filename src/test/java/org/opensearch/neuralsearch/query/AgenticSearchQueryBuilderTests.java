@@ -127,8 +127,8 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
             .agentId(AGENT_ID)
             .queryFields(QUERY_FIELDS);
 
-        assertEquals("Identical builders should be equal", builder1, builder2);
-        assertEquals("Identical builders should have same hash code", builder1.hashCode(), builder2.hashCode());
+        assertEquals(builder1, builder2);
+        assertEquals(builder1.hashCode(), builder2.hashCode());
     }
 
     public void testNotEquals() {
@@ -136,8 +136,8 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
         AgenticSearchQueryBuilder builder2 = new AgenticSearchQueryBuilder().queryText("different query").agentId(AGENT_ID);
 
-        assertNotEquals("Different builders should not be equal", builder1, builder2);
-        assertNotEquals("Different builders should have different hash codes", builder1.hashCode(), builder2.hashCode());
+        assertNotEquals(builder1, builder2);
+        assertNotEquals(builder1.hashCode(), builder2.hashCode());
     }
 
     public void testSerialization() throws IOException {
@@ -151,15 +151,15 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         StreamInput input = output.bytes().streamInput();
         AgenticSearchQueryBuilder deserialized = new AgenticSearchQueryBuilder(input);
 
-        assertEquals("Deserialized query should equal original", original, deserialized);
-        assertEquals("Query text should match", QUERY_TEXT, deserialized.queryText());
-        assertEquals("Agent ID should match", AGENT_ID, deserialized.agentId());
-        assertEquals("Fields should match", QUERY_FIELDS, deserialized.queryFields());
+        assertEquals(original, deserialized);
+        assertEquals(QUERY_TEXT, deserialized.queryText());
+        assertEquals(AGENT_ID, deserialized.agentId());
+        assertEquals(QUERY_FIELDS, deserialized.queryFields());
     }
 
     public void testFieldName() {
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder();
-        assertEquals("Field name should match", "agentic_search", queryBuilder.fieldName());
+        assertEquals("agentic_search", queryBuilder.fieldName());
     }
 
     public void testFromXContent_missingQueryText() throws IOException {

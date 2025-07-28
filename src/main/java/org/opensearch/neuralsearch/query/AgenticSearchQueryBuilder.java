@@ -162,11 +162,26 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             );
         }
 
+        QueryCoordinatorContext coordinatorContext = (QueryCoordinatorContext) queryRewriteContext;
+        // TODO Get index mapping from shard context
+        /*String indexMapping = null;
+        try {
+            QueryShardContext shardContext = coordinatorContext.convertToShardContext();
+            XContentBuilder mappingBuilder = XContentBuilder.builder(XContentType.JSON.xContent());
+            shardContext.getMapperService().documentMapper().mapping().toXContent(mappingBuilder, null);
+            indexMapping = mappingBuilder.toString();
+        } catch (Exception e) {
+            throw new IOException("Failed to extract index mapping", e);
+        }*/
+
         CompletableFuture<String> future = new CompletableFuture<>();
-        // TODO Integrate execute agent API
-        /*ML_CLIENT.inferenceSentences(agentId, List.of(queryText), ActionListener.wrap(
+        // TODO Integrate execute agent API with index mapping
+        /*ML_CLIENT.executeAgent(agentId, Map.of(
+            "query_text", queryText,
+            "index_mapping", indexMapping
+        ), ActionListener.wrap(
             response -> {
-                String dslQuery = response.getInferenceResults().get(0).getOutput().get(0).getResult();
+                String dslQuery = response.getResult();
                 future.complete(dslQuery);
             },
             future::completeExceptionally
