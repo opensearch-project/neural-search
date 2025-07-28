@@ -13,7 +13,9 @@ import java.util.Map;
 public interface Validator {
     /**
      * Validate the parameters for a chunker
+     * Throw IllegalArgumentException when parameters are invalid.
+     *
      * @param parameters parameters for a chunker
      */
-    void validate(Map<String, Object> parameters);
+    void validate(Map<String, Object> parameters) throws IllegalArgumentException;
 }

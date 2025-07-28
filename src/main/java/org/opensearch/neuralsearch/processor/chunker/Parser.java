@@ -17,5 +17,5 @@ public interface Parser {
      *
      * @param parameters a map containing non-runtime parameters for chunking algorithms
      */
-    void parse(Map<String, Object> parameters);
+    void parse(Map<String, Object> parameters) throws IllegalArgumentException;
 }
