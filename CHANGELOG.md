@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 - [Hybrid Query] Add upper bound parameter for min-max normalization technique ([#1431](https://github.com/opensearch-project/neural-search/pull/1431))
+- [Experimental] Add agentic search query clause for agentic search
 
 ### Enhancements
 - [Semantic Field] Support configuring the auto-generated knn_vector field through the semantic field. ([#1420](https://github.com/opensearch-project/neural-search/pull/1420))
