@@ -15,7 +15,11 @@ import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.index.query.QueryCoordinatorContext;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.index.Index;
@@ -76,5 +80,49 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
 
         assertEquals(indexMetadata1, indexMetadataList.get(0));
         assertEquals(indexMetadata2, indexMetadataList.get(1));
+    }
+
+    public void testGetIndexMapping() throws Exception {
+        final ClusterService clusterService = mock(ClusterService.class);
+        final ClusterState clusterState = mock(ClusterState.class);
+        final Metadata metadata = mock(Metadata.class);
+        final QueryCoordinatorContext coordinatorContext = mock(QueryCoordinatorContext.class);
+        final SearchRequest searchRequest = mock(SearchRequest.class);
+        final IndexMetadata indexMetadata = mock(IndexMetadata.class);
+        final MappingMetadata mappingMetadata = mock(MappingMetadata.class);
+        final CompressedXContent mappingSource = new CompressedXContent("{\"properties\":{\"field1\":{\"type\":\"text\"}}}");
+
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(coordinatorContext.getSearchRequest()).thenReturn(searchRequest);
+        when(searchRequest.indices()).thenReturn(new String[] { "test-index" });
+        when(metadata.index("test-index")).thenReturn(indexMetadata);
+        when(indexMetadata.mapping()).thenReturn(mappingMetadata);
+        when(mappingMetadata.source()).thenReturn(mappingSource);
+
+        final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
+
+        String result = neuralSearchClusterUtil.getIndexMapping(coordinatorContext);
+
+        assertEquals("{\"properties\":{\"field1\":{\"type\":\"text\"}}}", result);
+    }
+
+    public void testGetIndexMapping_whenNoIndices_thenReturnEmptyMapping() {
+        final ClusterService clusterService = mock(ClusterService.class);
+        final QueryCoordinatorContext coordinatorContext = mock(QueryCoordinatorContext.class);
+        final SearchRequest searchRequest = mock(SearchRequest.class);
+
+        when(coordinatorContext.getSearchRequest()).thenReturn(searchRequest);
+        when(searchRequest.indices()).thenReturn(new String[] {});
+
+        final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
+
+        String result = neuralSearchClusterUtil.getIndexMapping(coordinatorContext);
+
+        assertEquals("{}", result);
     }
 }

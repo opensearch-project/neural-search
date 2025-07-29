@@ -57,9 +57,9 @@ public class MLCommonsClientAccessor {
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
      * point vector as a response.
      *
-     * @param modelId {@link String}
+     * @param modelId   {@link String}
      * @param inputText {@link String}
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
+     * @param listener  {@link ActionListener} which will be called when prediction is completed or errored out
      */
     public void inferenceSentence(
         @NonNull final String modelId,
@@ -92,7 +92,7 @@ public class MLCommonsClientAccessor {
      * need to run only TextEmbedding tasks only.
      *
      * @param inferenceRequest {@link InferenceRequest}
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
+     * @param listener         {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentences(
         @NonNull final TextInferenceRequest inferenceRequest,
@@ -114,7 +114,7 @@ public class MLCommonsClientAccessor {
      * using the actionListener which will have a list of floats in the order of inputText.
      *
      * @param inferenceRequest {@link InferenceRequest}
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
+     * @param listener         {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentencesMap(@NonNull MapInferenceRequest inferenceRequest, @NonNull final ActionListener<List<Number>> listener) {
         retryableInferenceSentencesWithSingleVectorResult(inferenceRequest, 0, listener);
@@ -126,7 +126,7 @@ public class MLCommonsClientAccessor {
      * the similarity scores of the texts w.r.t. the query text, in the order of the input texts.
      *
      * @param inferenceRequest {@link InferenceRequest}
-     * @param listener {@link ActionListener} receives the result of the inference
+     * @param listener         {@link ActionListener} receives the result of the inference
      */
     public void inferenceSimilarity(
         @NonNull SimilarityInferenceRequest inferenceRequest,
@@ -325,7 +325,8 @@ public class MLCommonsClientAccessor {
      * Get model info for multiple model ids. It will send multiple getModel requests to get the model info in parallel.
      * It will fail if any one of the get model request fail. Only return the success result if all model info is
      * successfully retrieved.
-     * @param modelIds a set of model ids
+     *
+     * @param modelIds  a set of model ids
      * @param onSuccess onSuccess consumer
      * @param onFailure onFailure consumer
      */
@@ -435,7 +436,7 @@ public class MLCommonsClientAccessor {
      * This method will highlight relevant sentences in the context based on the question.
      *
      * @param inferenceRequest the request containing the question and context for highlighting
-     * @param listener the listener to be called with the highlighting results
+     * @param listener         the listener to be called with the highlighting results
      */
     public void inferenceSentenceHighlighting(
         @NonNull final SentenceHighlightingRequest inferenceRequest,
@@ -443,4 +444,40 @@ public class MLCommonsClientAccessor {
     ) {
         retryableInferenceSentenceHighlighting(inferenceRequest, 0, listener);
     }
+
+    /**
+     * Execute agent with provided parameters and return DSL query string.
+     *
+     * @param agentId    the agent ID to execute
+     * @param parameters the parameters to pass to the agent
+     * @param listener   the listener to be called with the DSL query result
+     */
+    //TODO add execute Agent
+    /*public void executeAgent(
+        @NonNull final String agentId,
+        @NonNull final Map<String, String> parameters,
+        @NonNull final ActionListener<String> listener
+    ) {
+        retryableExecuteAgent(agentId, parameters, 0, listener);
+    }
+
+    private void retryableExecuteAgent(
+        final String agentId,
+        final Map<String, String> parameters,
+        final int retryTime,
+        final ActionListener<String> listener
+    ) {
+        mlClient.executeAgent(agentId, "POST", parameters, ActionListener.wrap(response -> {
+            // Extract DSL query from inference results
+            String dslQuery = response.getInferenceResults().get(0).get("output").get(0).get("result");
+            listener.onResponse(dslQuery);
+        },
+            e -> RetryUtil.handleRetryOrFailure(
+                e,
+                retryTime,
+                () -> retryableExecuteAgent(agentId, parameters, retryTime + 1, listener),
+                listener
+            )
+        ));
+    }*/
 }

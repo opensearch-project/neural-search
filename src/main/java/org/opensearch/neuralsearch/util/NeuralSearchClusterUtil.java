@@ -15,9 +15,11 @@ import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.core.index.Index;
+import org.opensearch.index.query.QueryCoordinatorContext;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -64,5 +66,21 @@ public class NeuralSearchClusterUtil {
         return Arrays.stream(concreteIndices)
             .map(concreteIndex -> clusterService.state().metadata().index(concreteIndex))
             .collect(Collectors.toList());
+    }
+
+    public String getIndexMapping(QueryCoordinatorContext coordinatorContext) {
+        try {
+            String[] indices = coordinatorContext.getSearchRequest().indices();
+
+            if (indices != null && indices.length > 0) {
+                IndexMetadata indexMetadata = clusterService.state().metadata().index(indices[0]);
+                if (indexMetadata != null) {
+                    return Objects.requireNonNull(indexMetadata.mapping()).source().toString();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Failed to extract index mapping", e);
+        }
+        return "{}";
     }
 }

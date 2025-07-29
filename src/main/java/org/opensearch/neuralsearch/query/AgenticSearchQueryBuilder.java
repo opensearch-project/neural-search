@@ -15,6 +15,7 @@ import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
 import org.opensearch.core.ParseField;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
@@ -29,13 +30,16 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import java.util.Objects;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
 import java.io.IOException;
-import java.util.List;
-import java.util.ArrayList;
 
 /**
  * AgenticSearchQueryBuilder is responsible for agentic_search query type. It executes a root agent to extract the DSL query and parse it to innerQueryBuilder for parsing.
@@ -156,6 +160,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             throw new IllegalStateException("ML client not initialized");
         }
 
+        // the queryRewrite is expected at QueryCoordinator level
         if (!(queryRewriteContext instanceof QueryCoordinatorContext)) {
             throw new IllegalStateException(
                 "Agentic query must be rewritten at the coordinator node. Rewriting at shard level is not supported."
@@ -163,39 +168,24 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         }
 
         QueryCoordinatorContext coordinatorContext = (QueryCoordinatorContext) queryRewriteContext;
-        // TODO Get index mapping from shard context
-        /*String indexMapping = null;
-        try {
-            QueryShardContext shardContext = coordinatorContext.convertToShardContext();
-            XContentBuilder mappingBuilder = XContentBuilder.builder(XContentType.JSON.xContent());
-            shardContext.getMapperService().documentMapper().mapping().toXContent(mappingBuilder, null);
-            indexMapping = mappingBuilder.toString();
-        } catch (Exception e) {
-            throw new IOException("Failed to extract index mapping", e);
-        }*/
 
+        // Get index mapping from cluster state
+        String indexMapping = NeuralSearchClusterUtil.instance().getIndexMapping(coordinatorContext);
+
+        // Execute agent at coordinator level to avoid multiple calls per shard
         CompletableFuture<String> future = new CompletableFuture<>();
-        // TODO Integrate execute agent API with index mapping
-        /*ML_CLIENT.executeAgent(agentId, Map.of(
-            "query_text", queryText,
-            "index_mapping", indexMapping
-        ), ActionListener.wrap(
-            response -> {
-                String dslQuery = response.getResult();
-                future.complete(dslQuery);
-            },
-            future::completeExceptionally
-        ));*/
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put("query_text", queryText);
+        parameters.put("index_mapping", indexMapping);
+        if (queryFields != null && !queryFields.isEmpty()) {
+            parameters.put("query_fields", String.join(",", queryFields));
+        }
+
+//        ML_CLIENT.executeAgent(agentId, parameters, ActionListener.wrap(future::complete, future::completeExceptionally));
 
         try {
-            // String dslQueryString = future.get();
-            String dslQueryString = "{\n"
-                + "                    \"match\": {\n"
-                + "                        \"passage_text\": {\n"
-                + "                            \"query\": \"science\"\n"
-                + "                        }\n"
-                + "                    }\n"
-                + "                }";
+            String dslQueryString = future.get();
+            // String dslQueryString = "{" + "\"match\": {" + "\"passage_text\": {" + "\"query\": \"science\"" + "}" + "}" + "}";
             XContentParser parser = XContentType.JSON.xContent()
                 .createParser(queryRewriteContext.getXContentRegistry(), LoggingDeprecationHandler.INSTANCE, dslQueryString);
             return parseInnerQueryBuilder(parser);
