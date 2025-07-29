@@ -30,4 +30,6 @@ public class SemanticParameters {
         }
         return chunkingConfig.isEnabled();
     }
+
+    private final Boolean skipExistingEmbedding;
 }

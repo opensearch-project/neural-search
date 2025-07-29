@@ -39,6 +39,7 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAU
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SKIP_EXISTING_EMBEDDING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
@@ -196,6 +197,14 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
             }
         }, (value) -> value == null ? null : value.toString());
 
+        @Getter
+        protected final Parameter<Boolean> skipExistingEmbedding = Parameter.boolParam(
+            SKIP_EXISTING_EMBEDDING,
+            true,
+            m -> ((SemanticFieldMapper) m).semanticParameters.getSkipExistingEmbedding(),
+            false
+        );
+
         @Setter
         protected ParametrizedFieldMapper.Builder delegateBuilder;
 
@@ -213,7 +222,8 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 chunkingConfig,
                 semanticFieldSearchAnalyzer,
                 denseEmbeddingConfig,
-                sparseEncodingConfig
+                sparseEncodingConfig,
+                skipExistingEmbedding
             );
         }
 
@@ -244,6 +254,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 .semanticFieldSearchAnalyzer(semanticFieldSearchAnalyzer.getValue())
                 .denseEmbeddingConfig(denseEmbeddingConfig.getValue())
                 .sparseEncodingConfig(sparseEncodingConfig.getValue())
+                .skipExistingEmbedding(skipExistingEmbedding.getValue())
                 .build();
         }
     }

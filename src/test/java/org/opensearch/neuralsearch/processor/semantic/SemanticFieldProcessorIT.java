@@ -269,6 +269,22 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
         assertModelUpdate(originalDoc, updatedDoc, modelId, newModelId);
     }
 
+    public void testReuseExitEmbedding_withSparseModel() throws Exception {
+        String modelId = prepareSparseEncodingModel();
+        loadModel(modelId);
+        createIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/SemanticIndexMappingsSkipExistingEmbedding.json", modelId);
+
+        // Initial ingestion
+        ingestDocument(INDEX_WITH_SPARSE_MODEL, INGEST_DOC1, "1");
+        Map<String, Object> originalDoc = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL, "1").get("_source");
+        assertEmbeddings(originalDoc);
+
+        // Re-ingest and verify changes
+        ingestDocument(INDEX_WITH_SPARSE_MODEL, INGEST_DOC1, "1", true);
+        Map<String, Object> updatedDoc = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL, "1").get("_source");
+        assertEmbeddings(updatedDoc);
+    }
+
     private List<Object> assertEmbeddings(Map<String, Object> source) {
         List<Object> embeddings = new ArrayList<>();
         List<Map<String, Object>> level1 = (List<Map<String, Object>>) source.get(LEVEL_1_FIELD);
