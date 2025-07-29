@@ -83,7 +83,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.HashSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -147,7 +147,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected ThreadPool threadPool;
     protected ClusterService clusterService;
-    private static final Set<String> DEPLOYED_MODEL_IDS = new HashSet<>();
+    private static final Set<String> DEPLOYED_MODEL_IDS = ConcurrentHashMap.newKeySet();
+    private static final int MAX_ATTEMPTS = 30;
+    private static final int WAIT_TIME_IN_SECONDS = 2;
+    private static final long TIMEOUT = 10000;
 
     @Before
     public void setupSettings() {
@@ -277,7 +280,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             return;
         }
         // To avoid race condition with auto deploy after node replacement
-        Thread.sleep(10000);
+        Thread.sleep(TIMEOUT);
         baseNeuralSearchIT.doLoadAndWaitForModelToBeReady(modelId);
         DEPLOYED_MODEL_IDS.add(modelId);
     }
@@ -328,18 +331,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void waitForModelToBeReady(String modelId) throws Exception {
-        int maxAttempts = 30;
-        int waitTimeInSeconds = 2;
-
-        for (int attempt = 0; attempt < maxAttempts; attempt++) {
+        for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
             if (isModelReadyForInference(modelId)) {
                 logger.info("Model {} is ready for inference after {} attempts", modelId, attempt + 1);
                 return;
             }
-            logger.info("Waiting for model {} to be ready. Attempt {}/{}", modelId, attempt + 1, maxAttempts);
-            Thread.sleep(waitTimeInSeconds * 1000);
+            logger.info("Waiting for model {} to be ready. Attempt {}/{}", modelId, attempt + 1, MAX_ATTEMPTS);
+            Thread.sleep(WAIT_TIME_IN_SECONDS * 1000);
         }
-        throw new RuntimeException("Model " + modelId + " failed to be ready for inference after " + maxAttempts + " attempts");
+        throw new RuntimeException("Model " + modelId + " failed to be ready for inference after " + MAX_ATTEMPTS + " attempts");
     }
 
     protected boolean isModelReadyForInference(@NonNull final String modelId) throws IOException, ParseException {
@@ -2393,6 +2393,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 deleteModel(m);
             }
         });
+        DEPLOYED_MODEL_IDS.clear();
     }
 
     @SneakyThrows
