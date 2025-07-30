@@ -31,6 +31,7 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import com.google.gson.Gson;
 
 import java.util.Objects;
 import java.util.HashMap;
@@ -40,6 +41,8 @@ import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
 import java.io.IOException;
+
+import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 
 /**
  * AgenticSearchQueryBuilder is responsible for agentic_search query type. It executes a root agent to extract the DSL query and parse it to innerQueryBuilder for parsing.
@@ -52,13 +55,15 @@ import java.io.IOException;
 public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<AgenticSearchQueryBuilder> implements WithFieldName {
 
     public static final String NAME = "agentic_search";
-    static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
-    static final ParseField AGENT_ID = new ParseField("agent_id");
-    static final ParseField QUERY_FIELDS = new ParseField("query_fields");
+    public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
+    public static final ParseField AGENT_ID = new ParseField("agent_id");
+    public static final ParseField QUERY_FIELDS = new ParseField("query_fields");
+    private static final Gson gson = new Gson();
 
     private String queryText;
     private String agentId;
     private List<String> queryFields;
+    private QueryBuilder rewrittenQuery;
 
     // client to invoke ml-common APIs
     private static MLCommonsClientAccessor ML_CLIENT;
@@ -156,6 +161,11 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+        // Idempotent check - if already rewritten, return the cached result
+        if (rewrittenQuery != null) {
+            return rewrittenQuery;
+        }
+
         if (ML_CLIENT == null) {
             throw new IllegalStateException("ML client not initialized");
         }
@@ -171,24 +181,31 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
         // Get index mapping from cluster state
         String indexMapping = NeuralSearchClusterUtil.instance().getIndexMapping(coordinatorContext);
+        String indexMappingJson = gson.toJson(indexMapping);
 
         // Execute agent at coordinator level to avoid multiple calls per shard
         CompletableFuture<String> future = new CompletableFuture<>();
         Map<String, String> parameters = new HashMap<>();
         parameters.put("query_text", queryText);
-        parameters.put("index_mapping", indexMapping);
+        parameters.put("index_mapping", indexMappingJson);
         if (queryFields != null && !queryFields.isEmpty()) {
             parameters.put("query_fields", String.join(",", queryFields));
         }
 
-//        ML_CLIENT.executeAgent(agentId, parameters, ActionListener.wrap(future::complete, future::completeExceptionally));
+        ML_CLIENT.executeAgent(agentId, parameters, ActionListener.wrap(future::complete, future::completeExceptionally));
 
         try {
-            String dslQueryString = future.get();
-            // String dslQueryString = "{" + "\"match\": {" + "\"passage_text\": {" + "\"query\": \"science\"" + "}" + "}" + "}";
+            String agentResponse = future.get();
+
+            // Extract just the inner query content from the agent response and remove the "query" wrapper
+            String innerQueryContent = extractQueryContent(agentResponse);
+
+            // Parse the inner query
             XContentParser parser = XContentType.JSON.xContent()
-                .createParser(queryRewriteContext.getXContentRegistry(), LoggingDeprecationHandler.INSTANCE, dslQueryString);
-            return parseInnerQueryBuilder(parser);
+                .createParser(queryRewriteContext.getXContentRegistry(), LoggingDeprecationHandler.INSTANCE, innerQueryContent);
+
+            rewrittenQuery = parseInnerQueryBuilder(parser);
+            return rewrittenQuery;
         } catch (Exception e) {
             throw new IOException("Failed to execute agentic search", e);
         }
@@ -223,5 +240,27 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     @Override
     public String fieldName() {
         return NAME;
+    }
+
+    private String extractQueryContent(String agentResponse) throws IOException {
+        XContentParser parser = XContentType.JSON.xContent().createParser(null, LoggingDeprecationHandler.INSTANCE, agentResponse);
+
+        ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
+
+        XContentParser.Token token;
+        while ((token = parser.nextToken()) != XContentParser.Token.END_OBJECT) {
+            if (token == XContentParser.Token.FIELD_NAME && "query".equals(parser.currentName())) {
+                parser.nextToken(); // Move to the query value
+
+                // Use XContentBuilder to extract the inner query as JSON string
+                XContentBuilder builder = XContentBuilder.builder(XContentType.JSON.xContent());
+                builder.copyCurrentStructure(parser);
+                return builder.toString();
+            } else {
+                parser.skipChildren();
+            }
+        }
+
+        throw new IOException("No 'query' field found in agent response");
     }
 }

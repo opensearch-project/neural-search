@@ -27,7 +27,9 @@ import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
 import org.opensearch.ml.common.dataset.TextSimilarityInputDataSet;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
+import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
@@ -234,6 +236,19 @@ public class MLCommonsClientAccessor {
             }
         }
         return resultMaps;
+    }
+
+    private String buildQueryResultFromResponseOfOutput(MLOutput mlOutput) {
+        final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
+        final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+        if (CollectionUtils.isEmpty(tensorOutputList) || CollectionUtils.isEmpty(tensorOutputList.get(0).getMlModelTensors())) {
+            throw new IllegalStateException(
+                "Empty model result produced. Expected at least [1] tensor output and [1] model tensor, but got [0]"
+            );
+        }
+        List<ModelTensor> tensorList = tensorOutputList.get(0).getMlModelTensors();
+        String result = tensorList.get(0).getResult();
+        return result;
     }
 
     private <T extends Number> List<T> buildSingleVectorFromResponse(final MLOutput mlOutput) {
@@ -452,8 +467,7 @@ public class MLCommonsClientAccessor {
      * @param parameters the parameters to pass to the agent
      * @param listener   the listener to be called with the DSL query result
      */
-    //TODO add execute Agent
-    /*public void executeAgent(
+    public void executeAgent(
         @NonNull final String agentId,
         @NonNull final Map<String, String> parameters,
         @NonNull final ActionListener<String> listener
@@ -467,10 +481,19 @@ public class MLCommonsClientAccessor {
         final int retryTime,
         final ActionListener<String> listener
     ) {
-        mlClient.executeAgent(agentId, "POST", parameters, ActionListener.wrap(response -> {
-            // Extract DSL query from inference results
-            String dslQuery = response.getInferenceResults().get(0).get("output").get(0).get("result");
-            listener.onResponse(dslQuery);
+        RemoteInferenceInputDataSet dataset = RemoteInferenceInputDataSet.builder().parameters(parameters).build();
+        AgentMLInput agentMLInput = new AgentMLInput(agentId, null, FunctionName.AGENT, dataset);
+        mlClient.execute(FunctionName.AGENT, agentMLInput, ActionListener.wrap(response -> {
+            try {
+                // Extract DSL query from inference results following the structure:
+                MLOutput mlOutput = (MLOutput) response.getOutput();
+                final String inferenceResults = buildQueryResultFromResponseOfOutput(mlOutput);
+                ;
+
+                listener.onResponse(inferenceResults);
+            } catch (Exception e) {
+                listener.onFailure(new IllegalStateException("Failed to extract result from agent response", e));
+            }
         },
             e -> RetryUtil.handleRetryOrFailure(
                 e,
@@ -479,5 +502,5 @@ public class MLCommonsClientAccessor {
                 listener
             )
         ));
-    }*/
+    }
 }
