@@ -38,6 +38,7 @@ import java.util.Objects;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.Locale;
 import java.util.ArrayList;
 import java.util.concurrent.CompletableFuture;
 
@@ -199,10 +200,10 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         try {
             String agentResponse = future.get();
 
-            // Extract just the inner query content from the agent response and remove the "query" wrapper
-            String innerQueryContent = extractQueryContent(agentResponse);
+            log.info("Generated Query: [{}]", agentResponse);
 
-            log.info("Generated Query: [{}]", innerQueryContent);
+            // Validate agent response format - must contain "query" wrapper
+            String innerQueryContent = extractQueryContent(agentResponse, agentId);
 
             // Parse the inner query
             XContentParser parser = XContentType.JSON.xContent()
@@ -211,7 +212,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             rewrittenQuery = parseInnerQueryBuilder(parser);
             return rewrittenQuery;
         } catch (Exception e) {
-            log.error("Failed to execute agentic search for the query text [{}] and index mapping [{}]", queryText, indexMapping);
+            log.error("Failed to execute agentic search for the query text [{}] and agent id [{}]", queryText, agentId);
             throw new IOException("Failed to execute agentic search", e);
         }
     }
@@ -247,7 +248,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         return NAME;
     }
 
-    private String extractQueryContent(String agentResponse) throws IOException {
+    private String extractQueryContent(String agentResponse, String agentId) throws IOException {
         XContentParser parser = XContentType.JSON.xContent().createParser(null, LoggingDeprecationHandler.INSTANCE, agentResponse);
 
         ensureExpectedToken(XContentParser.Token.START_OBJECT, parser.nextToken(), parser);
@@ -262,10 +263,11 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
                 builder.copyCurrentStructure(parser);
                 return builder.toString();
             } else {
-                parser.skipChildren();
+                throw new IllegalStateException(
+                    "Agent response must contain only a 'query' field. Found unexpected field: " + parser.currentName()
+                );
             }
         }
-
-        throw new IOException("No 'query' field found in agent response");
+        throw new IOException(String.format(Locale.ROOT, "No 'query' field found in agent response of %s", agentId));
     }
 }
