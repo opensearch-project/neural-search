@@ -1,0 +1,6 @@
+{
+  "name": "bedrock claude model",
+  "function_name": "remote",
+  "connector_id": "%s",
+  "description": "test model for agentic search"
+}
