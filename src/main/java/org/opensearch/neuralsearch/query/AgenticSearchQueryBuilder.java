@@ -11,6 +11,7 @@ import lombok.Setter;
 
 import lombok.NoArgsConstructor;
 import lombok.experimental.Accessors;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
@@ -45,16 +46,17 @@ import java.io.IOException;
 import static org.opensearch.core.xcontent.XContentParserUtils.ensureExpectedToken;
 
 /**
- * AgenticSearchQueryBuilder is responsible for agentic_search query type. It executes a root agent to extract the DSL query and parse it to innerQueryBuilder for parsing.
+ * AgenticSearchQueryBuilder is responsible for agentic query type. It executes a root agent to extract the DSL query and parse it to innerQueryBuilder for parsing.
  */
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
 @Getter(AccessLevel.PACKAGE)
 @Setter(AccessLevel.PACKAGE)
+@Log4j2
 public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<AgenticSearchQueryBuilder> implements WithFieldName {
 
-    public static final String NAME = "agentic_search";
+    public static final String NAME = "agentic";
     public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     public static final ParseField AGENT_ID = new ParseField("agent_id");
     public static final ParseField QUERY_FIELDS = new ParseField("query_fields");
@@ -110,7 +112,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
      * Creates AgenticSearchQueryBuilder from XContent.
      * The expected parsing form looks like:
      * {
-     *  "agentic_search": {
+     *  "agentic": {
      *    "query_text": "string",
      *    "agent_id": "string",
      *    "query_fields": ["string", "string"..]
@@ -200,6 +202,8 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             // Extract just the inner query content from the agent response and remove the "query" wrapper
             String innerQueryContent = extractQueryContent(agentResponse);
 
+            log.info("Generated Query: [{}]", innerQueryContent);
+
             // Parse the inner query
             XContentParser parser = XContentType.JSON.xContent()
                 .createParser(queryRewriteContext.getXContentRegistry(), LoggingDeprecationHandler.INSTANCE, innerQueryContent);
@@ -207,6 +211,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             rewrittenQuery = parseInnerQueryBuilder(parser);
             return rewrittenQuery;
         } catch (Exception e) {
+            log.error("Failed to execute agentic search for the query text [{}] and index mapping [{}]", queryText, indexMapping);
             throw new IOException("Failed to execute agentic search", e);
         }
     }

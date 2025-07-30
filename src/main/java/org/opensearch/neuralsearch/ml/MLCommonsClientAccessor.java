@@ -247,8 +247,7 @@ public class MLCommonsClientAccessor {
             );
         }
         List<ModelTensor> tensorList = tensorOutputList.get(0).getMlModelTensors();
-        String result = tensorList.get(0).getResult();
-        return result;
+        return tensorList.get(0).getResult();
     }
 
     private <T extends Number> List<T> buildSingleVectorFromResponse(final MLOutput mlOutput) {
@@ -341,7 +340,7 @@ public class MLCommonsClientAccessor {
      * It will fail if any one of the get model request fail. Only return the success result if all model info is
      * successfully retrieved.
      *
-     * @param modelIds  a set of model ids
+     * @param modelIds a set of model ids
      * @param onSuccess onSuccess consumer
      * @param onFailure onFailure consumer
      */
@@ -451,7 +450,7 @@ public class MLCommonsClientAccessor {
      * This method will highlight relevant sentences in the context based on the question.
      *
      * @param inferenceRequest the request containing the question and context for highlighting
-     * @param listener         the listener to be called with the highlighting results
+     * @param listener the listener to be called with the highlighting results
      */
     public void inferenceSentenceHighlighting(
         @NonNull final SentenceHighlightingRequest inferenceRequest,
@@ -488,7 +487,6 @@ public class MLCommonsClientAccessor {
                 // Extract DSL query from inference results following the structure:
                 MLOutput mlOutput = (MLOutput) response.getOutput();
                 final String inferenceResults = buildQueryResultFromResponseOfOutput(mlOutput);
-                ;
 
                 listener.onResponse(inferenceResults);
             } catch (Exception e) {
