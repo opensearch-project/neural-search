@@ -54,7 +54,7 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         assertNotNull("Query builder should not be null", queryBuilder);
         assertEquals("Query text should match", QUERY_TEXT, queryBuilder.queryText());
         assertEquals("Agent ID should match", AGENT_ID, queryBuilder.agentId());
-        assertEquals("Writable name should match", "agentic_search", queryBuilder.getWriteableName());
+        assertEquals("Writable name should match", "agentic", queryBuilder.getWriteableName());
     }
 
     public void testBuilder_withAllFields() {
@@ -182,7 +182,7 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
     public void testFieldName() {
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder();
-        assertEquals("agentic_search", queryBuilder.fieldName());
+        assertEquals("agentic", queryBuilder.fieldName());
     }
 
     public void testFromXContent_missingQueryText() throws IOException {
@@ -280,7 +280,32 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         MLCommonsClientAccessor mockMLClient = mock(MLCommonsClientAccessor.class);
         AgenticSearchQueryBuilder.initialize(mockMLClient);
 
+        // Mock cluster service and related components
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        IndexMetadata mockIndexMetadata = mock(IndexMetadata.class);
+        MappingMetadata mockMappingMetadata = mock(MappingMetadata.class);
+
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockMetadata.index("test-index")).thenReturn(mockIndexMetadata);
+        when(mockIndexMetadata.mapping()).thenReturn(mockMappingMetadata);
+        when(mockMappingMetadata.source()).thenReturn(new org.opensearch.common.compress.CompressedXContent("{\"properties\":{}}"));
+
+        // Initialize NeuralSearchClusterUtil with mocked cluster service
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
         QueryCoordinatorContext mockContext = mock(QueryCoordinatorContext.class);
+        SearchRequest mockSearchRequest = mock(SearchRequest.class);
+
+        // Mock the coordinator context to return a search request with indices
+        when(mockContext.getSearchRequest()).thenReturn(mockSearchRequest);
+        when(mockSearchRequest.indices()).thenReturn(new String[] { "test-index" });
+        // Create proper XContentRegistry with QueryBuilder parsers
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, java.util.Collections.emptyList());
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());
+        when(mockContext.getXContentRegistry()).thenReturn(namedXContentRegistry);
 
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
 
@@ -299,7 +324,32 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         MLCommonsClientAccessor mockMLClient = mock(MLCommonsClientAccessor.class);
         AgenticSearchQueryBuilder.initialize(mockMLClient);
 
+        // Mock cluster service and related components
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        IndexMetadata mockIndexMetadata = mock(IndexMetadata.class);
+        MappingMetadata mockMappingMetadata = mock(MappingMetadata.class);
+
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockMetadata.index("test-index")).thenReturn(mockIndexMetadata);
+        when(mockIndexMetadata.mapping()).thenReturn(mockMappingMetadata);
+        when(mockMappingMetadata.source()).thenReturn(new org.opensearch.common.compress.CompressedXContent("{\"properties\":{}}"));
+
+        // Initialize NeuralSearchClusterUtil with mocked cluster service
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
         QueryCoordinatorContext mockContext = mock(QueryCoordinatorContext.class);
+        SearchRequest mockSearchRequest = mock(SearchRequest.class);
+
+        // Mock the coordinator context to return a search request with indices
+        when(mockContext.getSearchRequest()).thenReturn(mockSearchRequest);
+        when(mockSearchRequest.indices()).thenReturn(new String[] { "test-index" });
+        // Create proper XContentRegistry with QueryBuilder parsers
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, java.util.Collections.emptyList());
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());
+        when(mockContext.getXContentRegistry()).thenReturn(namedXContentRegistry);
 
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
 
@@ -318,7 +368,32 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         MLCommonsClientAccessor mockMLClient = mock(MLCommonsClientAccessor.class);
         AgenticSearchQueryBuilder.initialize(mockMLClient);
 
+        // Mock cluster service and related components
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        IndexMetadata mockIndexMetadata = mock(IndexMetadata.class);
+        MappingMetadata mockMappingMetadata = mock(MappingMetadata.class);
+
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockMetadata.index("test-index")).thenReturn(mockIndexMetadata);
+        when(mockIndexMetadata.mapping()).thenReturn(mockMappingMetadata);
+        when(mockMappingMetadata.source()).thenReturn(new org.opensearch.common.compress.CompressedXContent("{\"properties\":{}}"));
+
+        // Initialize NeuralSearchClusterUtil with mocked cluster service
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
         QueryCoordinatorContext mockContext = mock(QueryCoordinatorContext.class);
+        SearchRequest mockSearchRequest = mock(SearchRequest.class);
+
+        // Mock the coordinator context to return a search request with indices
+        when(mockContext.getSearchRequest()).thenReturn(mockSearchRequest);
+        when(mockSearchRequest.indices()).thenReturn(new String[] { "test-index" });
+        // Create proper XContentRegistry with QueryBuilder parsers
+        SearchModule searchModule = new SearchModule(Settings.EMPTY, java.util.Collections.emptyList());
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(searchModule.getNamedXContents());
+        when(mockContext.getXContentRegistry()).thenReturn(namedXContentRegistry);
 
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
 

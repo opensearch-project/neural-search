@@ -80,7 +80,8 @@ public class NeuralSearchClusterUtil {
             }
         } catch (Exception e) {
             log.warn("Failed to extract index mapping", e);
+            throw new IllegalStateException("Failed to extract index mapping", e);
         }
-        return "{}";
+        throw new IllegalStateException("No valid index found to extract mapping");
     }
 }
