@@ -6,7 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import org.junit.After;
 import org.junit.Before;
-import org.junit.Ignore;
+import org.apache.lucene.tests.util.LuceneTestCase.AwaitsFix;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 import java.nio.file.Files;
@@ -15,7 +15,7 @@ import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 
-@Ignore("Ignoring until we find a way to fetch access, secret key for remote model")
+@AwaitsFix(bugUrl = "Ignoring until we find a way to fetch access, secret key for remote model")
 public class AgenticSearchQueryIT extends BaseNeuralSearchIT {
 
     private static final String TEST_INDEX = "test-agentic-index";
