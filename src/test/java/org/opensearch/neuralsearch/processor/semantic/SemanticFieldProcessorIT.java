@@ -48,7 +48,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessor_withSparseModel() throws Exception {
         String modelId = prepareSparseEncodingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/SemanticIndexMappings.json", modelId);
 
         // Test single document ingestion
@@ -81,7 +81,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessor_withDenseModel() throws Exception {
         String modelId = prepareModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_DENSE_MODEL, "semantic/SemanticIndexMappingsForDense.json", modelId);
 
         // Test single document ingestion
@@ -94,7 +94,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessor_withChunking_withSparseModel() throws Exception {
         String modelId = prepareSparseEncodingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_SPARSE_MODEL_WITH_CHUNKING, "semantic/SemanticIndexMappingsWithChunking.json", modelId);
 
         // Test document with chunking enabled
@@ -107,7 +107,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessor_withComplexChunking_withSparseModel() throws Exception {
         String modelId = prepareSparseEncodingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         final String targetIndex = INDEX_WITH_SPARSE_MODEL_WITH_COMPLEX_CHUNKING;
         createIndexWithModelId(targetIndex, "semantic/SemanticIndexMappingsWithComplexChunking.json", modelId);
 
@@ -143,7 +143,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessor_withChunking_withDenseModel() throws Exception {
         String modelId = prepareModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_DENSE_MODEL_WITH_CHUNKING, "semantic/SemanticIndexMappingsForDenseWithChunking.json", modelId);
 
         // Test document with chunking enabled
@@ -156,7 +156,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessor_batch_withSparseModel() throws Exception {
         String modelId = prepareSparseEncodingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/SemanticIndexMappings.json", modelId);
 
         // Test batch document ingestion
@@ -179,7 +179,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessorWithChunking_batch_withSparseModel() throws Exception {
         String modelId = prepareSparseEncodingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_SPARSE_MODEL_WITH_CHUNKING, "semantic/SemanticIndexMappingsWithChunking.json", modelId);
 
         // Test batch document ingestion with chunking enabled
@@ -203,7 +203,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessor_batch_withDenseModel() throws Exception {
         String modelId = prepareModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_DENSE_MODEL, "semantic/SemanticIndexMappingsForDense.json", modelId);
 
         // Test batch document ingestion
@@ -226,7 +226,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testSemanticFieldProcessorWithChunking_batch_withDenseModel() throws Exception {
         String modelId = prepareModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_DENSE_MODEL_WITH_CHUNKING, "semantic/SemanticIndexMappingsForDenseWithChunking.json", modelId);
 
         // Test batch document ingestion with chunking enabled
@@ -250,7 +250,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
     public void testUpdateScenarios_withSparseModel() throws Exception {
         String modelId = prepareSparseEncodingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/SemanticIndexMappings.json", modelId);
 
         // Initial ingestion
@@ -259,7 +259,7 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
 
         // Update with new model
         String newModelId = prepareSparseEncodingModel();
-        loadModel(newModelId);
+        loadAndWaitForModelToBeReady(newModelId);
         updateIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/UpdateMappingTemplate.json", newModelId);
 
         // Re-ingest and verify changes
@@ -267,6 +267,22 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
         Map<String, Object> updatedDoc = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL, "1").get("_source");
 
         assertModelUpdate(originalDoc, updatedDoc, modelId, newModelId);
+    }
+
+    public void testReuseExitEmbedding_withSparseModel() throws Exception {
+        String modelId = prepareSparseEncodingModel();
+        loadModel(modelId);
+        createIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/SemanticIndexMappingsSkipExistingEmbedding.json", modelId);
+
+        // Initial ingestion
+        ingestDocument(INDEX_WITH_SPARSE_MODEL, INGEST_DOC1, "1");
+        Map<String, Object> originalDoc = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL, "1").get("_source");
+        assertEmbeddings(originalDoc);
+
+        // Re-ingest and verify changes
+        ingestDocument(INDEX_WITH_SPARSE_MODEL, INGEST_DOC1, "1", true);
+        Map<String, Object> updatedDoc = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL, "1").get("_source");
+        assertEmbeddings(updatedDoc);
     }
 
     private List<Object> assertEmbeddings(Map<String, Object> source) {

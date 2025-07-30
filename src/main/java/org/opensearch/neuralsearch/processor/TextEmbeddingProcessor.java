@@ -27,6 +27,9 @@ import org.opensearch.transport.client.OpenSearchClient;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+
 /**
  * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,
  * and field_map can be used to indicate which fields needs text embedding and the corresponding keys for the text embedding results.

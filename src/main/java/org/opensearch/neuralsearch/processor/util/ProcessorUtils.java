@@ -209,6 +209,71 @@ public class ProcessorUtils {
         return Optional.ofNullable(current);
     }
 
+    /**
+     * Returns the data found in the doc source based on the full path.
+     * e.g.
+     * {
+     *     level1: [
+     *       {
+     *           level2: [
+     *             {
+     *                 level3: value1
+     *             }
+     *           ]
+     *       },
+     *       {
+     *           level2: [
+     *             {
+     *                 level3: value2
+     *             }
+     *           ]
+     *       }
+     *     ]
+     * }
+     *
+     * fullPath: level1.0.level2.0.level3
+     * return: value1
+     *
+     * fullPath: level1.1.level2.0.level3
+     * return: value2
+     *
+     * @param sourceAsMap The source of a doc.
+     * @param fullPath The full path in the doc to the value.
+     * @return The data at the full path in the doc.
+     */
+    public static Object getValueFromSourceByFullPath(final Map<String, Object> sourceAsMap, final String fullPath) {
+        if (sourceAsMap == null || fullPath == null || fullPath.isEmpty()) {
+            return null;
+        }
+
+        String[] parts = fullPath.split("\\.");
+        Object current = sourceAsMap;
+
+        for (String part : parts) {
+            if (current instanceof Map<?, ?> map) {
+                current = map.get(part);
+            } else if (current instanceof List<?> list) {
+                try {
+                    int index = Integer.parseInt(part);
+                    if (index < 0 || index >= list.size()) {
+                        return null;
+                    }
+                    current = list.get(index);
+                } catch (NumberFormatException e) {
+                    return null; // Cannot parse list index
+                }
+            } else {
+                return null; // Neither Map nor List at this path step
+            }
+
+            if (current == null) {
+                return null; // Path resolution failed
+            }
+        }
+
+        return current;
+    }
+
     // iterate each Map Object in given list and return a list of map values with given key
     private static List<Object> parseList(List<Object> list, String key) {
         List<Object> result = new ArrayList<>();

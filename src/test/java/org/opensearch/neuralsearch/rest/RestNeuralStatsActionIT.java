@@ -93,8 +93,12 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         stats = parseInfoStatsResponse(responseBody);
         nodesStats = parseNodeStatsResponse(responseBody);
 
+        int totalExecutions = nodesStats.stream()
+            .mapToInt(nodeStats -> (int) getNestedValue(nodeStats, EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS))
+            .sum();
+
         // Parse json to get stats
-        assertEquals(3, getNestedValue(nodesStats.getFirst(), EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS));
+        assertEquals(3, totalExecutions);
         assertEquals(1, getNestedValue(stats, InfoStatName.TEXT_EMBEDDING_PROCESSORS));
 
         // Aggregated stats should still exist even if include_individual_nodes is false

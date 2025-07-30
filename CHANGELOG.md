@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Semantic Field] Allow configuring prune strategies for sparse encoding in semantic fields. ([#1434](https://github.com/opensearch-project/neural-search/pull/1434))
 - Enable inner hits within collapse parameter for hybrid query ([#1447](https://github.com/opensearch-project/neural-search/pull/1447))
 - [Semantic Field] Support configuring the chunking strategies through the semantic field. ([#1446](https://github.com/opensearch-project/neural-search/pull/1446))
+- [Semantic Field] Support configuring reusing existing embedding for the semantic field. ([#1480](https://github.com/opensearch-project/neural-search/pull/1480/files))
 - Add setting for number of documents stored by HybridCollapsingTopDocsCollector ([#1471](https://github.com/opensearch-project/neural-search/pull/1471))
 
 ### Bug Fixes
@@ -24,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Fix the minimal supported version for neural sparse query analyzer field ([#1475](https://github.com/opensearch-project/neural-search/pull/1475))
 
 ### Infrastructure
+- Support multi node integration testing ([#1320](https://github.com/opensearch-project/neural-search/pull/1320))
 
 ### Documentation
 

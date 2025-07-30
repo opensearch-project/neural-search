@@ -317,7 +317,8 @@ public class NeuralSearch extends Plugin
                 clientAccessor,
                 parameters.env,
                 parameters.ingestService.getClusterService(),
-                parameters.analysisRegistry
+                parameters.analysisRegistry,
+                parameters.client
             )
         );
     }
