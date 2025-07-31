@@ -19,6 +19,8 @@ import java.util.Map;
 
 import lombok.SneakyThrows;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
+
 public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     private static final String COLLAPSE_TEST_INDEX = "collapse-test-index";
@@ -26,6 +28,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_2 = "category";
     private static final String TEST_FLOAT_FIELD = "price";
     private static final String SEARCH_PIPELINE = "test-pipeline";
+    private static final int DOCS_PER_GROUP_PER_SUBQUERY = 5;
 
     @Before
     public void setUp() throws Exception {
@@ -133,6 +136,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private void createTestIndex() {
         String indexConfiguration = XContentFactory.jsonBuilder()
             .startObject()
+            .startObject("settings")
+            .field(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), DOCS_PER_GROUP_PER_SUBQUERY)
+            .endObject()
             .startObject("mappings")
             .startObject("properties")
             .startObject(TEST_TEXT_FIELD_1)
