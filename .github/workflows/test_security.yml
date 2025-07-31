@@ -12,6 +12,9 @@ on:
       - "feature/**"
 
 jobs:
+  Get-Require-Approval:
+    uses: ./.github/workflows/require-approval.yml
+
   Get-CI-Image-Tag:
     uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
     with:
@@ -24,7 +27,9 @@ jobs:
 
     name: Run Security Enabled Integration Tests on Linux
     runs-on: ubuntu-latest
-    needs: Get-CI-Image-Tag
+    needs: [Get-Require-Approval, Get-CI-Image-Tag]
+    if: github.repository == 'opensearch-project/neural-search'
+    environment: ${{ needs.Get-Require-Approval.outputs.is-require-approval }}
     container:
       # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
       # this image tag is subject to change as more dependencies and updates will arrive over time
@@ -33,6 +38,11 @@ jobs:
       options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
 
     steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ML_ROLE }}
+          aws-region: us-west-2
+
       - name: Run start commands
         run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
 
