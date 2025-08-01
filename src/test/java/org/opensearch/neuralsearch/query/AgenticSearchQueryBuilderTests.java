@@ -12,12 +12,14 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Arrays;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
@@ -145,11 +147,34 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testDoRewrite_returnsThis() throws IOException {
+        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
+        AgenticSearchQueryBuilder.initialize(mockSettingsAccessor);
+
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         QueryRewriteContext mockContext = mock(QueryRewriteContext.class);
 
         QueryBuilder result = queryBuilder.doRewrite(mockContext);
         assertEquals("doRewrite should return this", queryBuilder, result);
+    }
+
+    public void testDoRewrite_withAgenticSearchDisabled() throws IOException {
+        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(false);
+        AgenticSearchQueryBuilder.initialize(mockSettingsAccessor);
+
+        AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+
+        QueryRewriteContext mockContext = mock(QueryRewriteContext.class);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> queryBuilder.doRewrite(mockContext));
+
+        assertEquals(
+            "Exception message should match",
+            "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting.",
+            exception.getMessage()
+        );
+
     }
 
     public void testEquals() {

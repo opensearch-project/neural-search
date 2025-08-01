@@ -25,6 +25,7 @@ import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 
 import java.util.Objects;
 import java.util.List;
@@ -47,6 +48,13 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     public static final ParseField QUERY_FIELDS = new ParseField("query_fields");
     public String queryText;
     public List<String> queryFields;
+
+    // setting accessor to retrieve agentic search feature flag
+    private static NeuralSearchSettingsAccessor SETTINGS_ACCESSOR;
+
+    public static void initialize(NeuralSearchSettingsAccessor settingsAccessor) {
+        AgenticSearchQueryBuilder.SETTINGS_ACCESSOR = settingsAccessor;
+    }
 
     public AgenticSearchQueryBuilder(StreamInput in) throws IOException {
         super(in);
@@ -132,6 +140,12 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
+        // feature flag check
+        if (!SETTINGS_ACCESSOR.isAgenticSearchEnabled()) {
+            throw new IllegalStateException(
+                "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
+            );
+        }
         // No rewriting needed
         return this;
     }

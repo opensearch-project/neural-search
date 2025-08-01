@@ -15,6 +15,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.AbstractProcessor;
@@ -163,10 +164,16 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
     public static class Factory implements Processor.Factory<SearchRequestProcessor> {
         private final MLCommonsClientAccessor mlClient;
         private final NamedXContentRegistry xContentRegistry;
+        private final NeuralSearchSettingsAccessor settingsAccessor;
 
-        public Factory(MLCommonsClientAccessor mlClient, NamedXContentRegistry xContentRegistry) {
+        public Factory(
+            MLCommonsClientAccessor mlClient,
+            NamedXContentRegistry xContentRegistry,
+            NeuralSearchSettingsAccessor settingsAccessor
+        ) {
             this.mlClient = mlClient;
             this.xContentRegistry = xContentRegistry;
+            this.settingsAccessor = settingsAccessor;
         }
 
         @Override
@@ -177,7 +184,13 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             boolean ignoreFailure,
             Map<String, Object> config,
             PipelineContext pipelineContext
-        ) throws IllegalArgumentException {
+        ) throws IllegalArgumentException, IllegalStateException {
+            // feature flag check
+            if (!settingsAccessor.isAgenticSearchEnabled()) {
+                throw new IllegalStateException(
+                    "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
+                );
+            }
             String agentId = readStringProperty(TYPE, tag, config, "agent_id");
             if (agentId == null || agentId.trim().isEmpty()) {
                 throw new IllegalArgumentException("agent_id is required for agentic_query_translator processor");

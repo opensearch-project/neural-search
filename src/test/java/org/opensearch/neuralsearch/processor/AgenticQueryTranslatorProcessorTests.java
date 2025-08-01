@@ -26,6 +26,7 @@ import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 
 import static org.mockito.Mockito.when;
 
@@ -43,6 +44,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.any;
 import org.mockito.ArgumentCaptor;
+import static org.mockito.Mockito.when;
 
 public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
@@ -53,6 +55,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     private NamedXContentRegistry mockXContentRegistry;
     private AgenticQueryTranslatorProcessor processor;
     private PipelineProcessingContext mockContext;
+    private NeuralSearchSettingsAccessor mockSettingsAccessor;
 
     @Override
     public void setUp() throws Exception {
@@ -60,9 +63,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         mockMLClient = mock(MLCommonsClientAccessor.class);
         mockXContentRegistry = mock(NamedXContentRegistry.class);
         mockContext = mock(PipelineProcessingContext.class);
+        mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
 
         // Use factory to create processor since constructor is private
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
         processor = factory.create(null, "test-tag", "test-description", false, config, null);
@@ -179,7 +184,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
@@ -191,7 +196,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create_missingAgentId() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
 
         Map<String, Object> config = new HashMap<>();
 
@@ -204,7 +209,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create_emptyAgentId() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", "");
@@ -257,6 +262,26 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         verifyNoInteractions(mockMLClient);
     }
 
+    public void testFactory_create_feature_disabled() {
+        NeuralSearchSettingsAccessor accessor = mock(NeuralSearchSettingsAccessor.class);
+        when(accessor.isAgenticSearchEnabled()).thenReturn(false);
+        QueryRewriterProcessor.Factory factory = new QueryRewriterProcessor.Factory(mockMLClient, mockXContentRegistry, accessor);
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+
+        IllegalStateException exception = expectThrows(
+            IllegalStateException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals(
+            "Exception message should match",
+            "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting.",
+            exception.getMessage()
+        );
+    }
+
     public void testProcessRequestAsync_withAgenticQuery_success() throws IOException {
         // Mock cluster service components
         ClusterService mockClusterService = mock(ClusterService.class);
@@ -280,7 +305,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match"), MatchQueryBuilder::fromXContent));
         NamedXContentRegistry registry = new NamedXContentRegistry(entries);
 
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, registry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, registry, mockSettingsAccessor);
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
         AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);

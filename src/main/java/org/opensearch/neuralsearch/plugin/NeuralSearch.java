@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
 
@@ -159,6 +160,7 @@ public class NeuralSearch extends Plugin
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         settingsAccessor = new NeuralSearchSettingsAccessor(clusterService, environment.settings());
+        AgenticSearchQueryBuilder.initialize(settingsAccessor);
         pipelineServiceUtil = new PipelineServiceUtil(clusterService);
         infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
         EventStatsManager.instance().initialize(settingsAccessor);
@@ -250,7 +252,7 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED, SEMANTIC_INGEST_BATCH_SIZE);
+        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED, SEMANTIC_INGEST_BATCH_SIZE, AGENTIC_SEARCH_ENABLED);
     }
 
     @Override
@@ -263,7 +265,7 @@ public class NeuralSearch extends Plugin
             NeuralSparseTwoPhaseProcessor.TYPE,
             new NeuralSparseTwoPhaseProcessor.Factory(),
             AgenticQueryTranslatorProcessor.TYPE,
-            new AgenticQueryTranslatorProcessor.Factory(clientAccessor, xContentRegistry)
+            new AgenticQueryTranslatorProcessor.Factory(clientAccessor, xContentRegistry, settingsAccessor)
         );
     }
 
