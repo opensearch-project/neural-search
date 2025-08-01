@@ -104,7 +104,7 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
         neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
 
-        String result = neuralSearchClusterUtil.getIndexMapping(coordinatorContext);
+        String result = neuralSearchClusterUtil.getIndexMapping(searchRequest.indices());
 
         assertEquals("{\"properties\":{\"field1\":{\"type\":\"text\"}}}", result);
     }
@@ -123,7 +123,7 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
 
         IllegalStateException exception = expectThrows(
             IllegalStateException.class,
-            () -> neuralSearchClusterUtil.getIndexMapping(coordinatorContext)
+            () -> neuralSearchClusterUtil.getIndexMapping(searchRequest.indices())
         );
         assertEquals("No valid index found to extract mapping", exception.getMessage());
     }

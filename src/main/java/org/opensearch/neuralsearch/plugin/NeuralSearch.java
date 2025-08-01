@@ -55,6 +55,7 @@ import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
+import org.opensearch.neuralsearch.processor.QueryRewriterProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
@@ -149,7 +150,6 @@ public class NeuralSearch extends Plugin
         NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
-        AgenticSearchQueryBuilder.initialize(clientAccessor);
         QueryTextExtractorRegistry queryTextExtractorRegistry = new QueryTextExtractorRegistry();
         SemanticHighlighterEngine semanticHighlighterEngine = SemanticHighlighterEngine.builder()
             .mlCommonsClient(clientAccessor)
@@ -261,7 +261,9 @@ public class NeuralSearch extends Plugin
             NeuralQueryEnricherProcessor.TYPE,
             new NeuralQueryEnricherProcessor.Factory(),
             NeuralSparseTwoPhaseProcessor.TYPE,
-            new NeuralSparseTwoPhaseProcessor.Factory()
+            new NeuralSparseTwoPhaseProcessor.Factory(),
+            QueryRewriterProcessor.TYPE,
+            new QueryRewriterProcessor.Factory(clientAccessor, xContentRegistry)
         );
     }
 
