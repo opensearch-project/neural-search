@@ -2025,36 +2025,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelGroupId;
     }
 
-    protected String registerAgent(final String agentRequestBody) throws Exception {
-        Response response = makeRequest(
-            client(),
-            "POST",
-            "/_plugins/_ml/agents/_register",
-            null,
-            toHttpEntity(agentRequestBody),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
-        );
-        Map<String, Object> responseJson = XContentHelper.convertToMap(
-            XContentType.JSON.xContent(),
-            EntityUtils.toString(response.getEntity()),
-            false
-        );
-        String agentId = responseJson.get("agent_id").toString();
-        assertNotNull(agentId);
-        return agentId;
-    }
-
-    protected void deleteAgent(final String agentId) throws Exception {
-        makeRequest(
-            client(),
-            "DELETE",
-            "/_plugins/_ml/agents/" + agentId,
-            null,
-            toHttpEntity(""),
-            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
-        );
-    }
-
     // Method that waits till the health of nodes in the cluster goes green
     protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
