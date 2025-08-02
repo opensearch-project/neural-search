@@ -35,6 +35,7 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
@@ -177,6 +178,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertNotNull(processors);
         assertNotNull(processors.get(NeuralQueryEnricherProcessor.TYPE));
         assertNotNull(processors.get(NeuralSparseTwoPhaseProcessor.TYPE));
+        assertNotNull(processors.get(AgenticQueryTranslatorProcessor.TYPE));
     }
 
     public void testResponseProcessors() {

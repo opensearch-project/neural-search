@@ -27,7 +27,9 @@ import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
 import org.opensearch.ml.common.dataset.TextSimilarityInputDataSet;
+import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
+import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
@@ -57,9 +59,9 @@ public class MLCommonsClientAccessor {
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
      * point vector as a response.
      *
-     * @param modelId {@link String}
+     * @param modelId   {@link String}
      * @param inputText {@link String}
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out
+     * @param listener  {@link ActionListener} which will be called when prediction is completed or errored out
      */
     public void inferenceSentence(
         @NonNull final String modelId,
@@ -92,7 +94,7 @@ public class MLCommonsClientAccessor {
      * need to run only TextEmbedding tasks only.
      *
      * @param inferenceRequest {@link InferenceRequest}
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
+     * @param listener         {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentences(
         @NonNull final TextInferenceRequest inferenceRequest,
@@ -114,7 +116,7 @@ public class MLCommonsClientAccessor {
      * using the actionListener which will have a list of floats in the order of inputText.
      *
      * @param inferenceRequest {@link InferenceRequest}
-     * @param listener {@link ActionListener} which will be called when prediction is completed or errored out.
+     * @param listener         {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentencesMap(@NonNull MapInferenceRequest inferenceRequest, @NonNull final ActionListener<List<Number>> listener) {
         retryableInferenceSentencesWithSingleVectorResult(inferenceRequest, 0, listener);
@@ -126,7 +128,7 @@ public class MLCommonsClientAccessor {
      * the similarity scores of the texts w.r.t. the query text, in the order of the input texts.
      *
      * @param inferenceRequest {@link InferenceRequest}
-     * @param listener {@link ActionListener} receives the result of the inference
+     * @param listener         {@link ActionListener} receives the result of the inference
      */
     public void inferenceSimilarity(
         @NonNull SimilarityInferenceRequest inferenceRequest,
@@ -236,6 +238,33 @@ public class MLCommonsClientAccessor {
         return resultMaps;
     }
 
+    private String buildQueryResultFromResponseOfOutput(MLOutput mlOutput) {
+        if (!(mlOutput instanceof ModelTensorOutput)) {
+            throw new IllegalStateException("Expected ModelTensorOutput but got: " + mlOutput.getClass().getSimpleName());
+        }
+        final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
+
+        final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+        if (CollectionUtils.isEmpty(tensorOutputList)) {
+            throw new IllegalStateException("Empty model result produced. Expected at least [1] tensor output, but got [0]");
+        }
+
+        // Iterate through all ModelTensors to find the DSL result
+        for (ModelTensors tensors : tensorOutputList) {
+            List<ModelTensor> tensorList = tensors.getMlModelTensors();
+            if (!CollectionUtils.isEmpty(tensorList)) {
+                for (ModelTensor tensor : tensorList) {
+                    String result = tensor.getResult();
+                    if (result != null && !result.trim().isEmpty()) {
+                        return result;
+                    }
+                }
+            }
+        }
+
+        throw new IllegalStateException("No valid DSL result found in model output");
+    }
+
     private <T extends Number> List<T> buildSingleVectorFromResponse(final MLOutput mlOutput) {
         final List<List<T>> vector = buildVectorFromResponse(mlOutput);
         return vector.isEmpty() ? new ArrayList<>() : vector.get(0);
@@ -325,6 +354,7 @@ public class MLCommonsClientAccessor {
      * Get model info for multiple model ids. It will send multiple getModel requests to get the model info in parallel.
      * It will fail if any one of the get model request fail. Only return the success result if all model info is
      * successfully retrieved.
+     *
      * @param modelIds a set of model ids
      * @param onSuccess onSuccess consumer
      * @param onFailure onFailure consumer
@@ -442,5 +472,48 @@ public class MLCommonsClientAccessor {
         @NonNull final ActionListener<List<Map<String, Object>>> listener
     ) {
         retryableInferenceSentenceHighlighting(inferenceRequest, 0, listener);
+    }
+
+    /**
+     * Execute agent with provided parameters and return DSL query string.
+     *
+     * @param agentId    the agent ID to execute
+     * @param parameters the parameters to pass to the agent
+     * @param listener   the listener to be called with the DSL query result
+     */
+    public void executeAgent(
+        @NonNull final String agentId,
+        @NonNull final Map<String, String> parameters,
+        @NonNull final ActionListener<String> listener
+    ) {
+        retryableExecuteAgent(agentId, parameters, 0, listener);
+    }
+
+    private void retryableExecuteAgent(
+        final String agentId,
+        final Map<String, String> parameters,
+        final int retryTime,
+        final ActionListener<String> listener
+    ) {
+        RemoteInferenceInputDataSet dataset = RemoteInferenceInputDataSet.builder().parameters(parameters).build();
+        AgentMLInput agentMLInput = new AgentMLInput(agentId, null, FunctionName.AGENT, dataset);
+        mlClient.execute(FunctionName.AGENT, agentMLInput, ActionListener.wrap(response -> {
+            try {
+                // Extract DSL query from inference results following the structure:
+                MLOutput mlOutput = (MLOutput) response.getOutput();
+                final String inferenceResults = buildQueryResultFromResponseOfOutput(mlOutput);
+
+                listener.onResponse(inferenceResults);
+            } catch (Exception e) {
+                listener.onFailure(new IllegalStateException("Failed to extract result from agent response", e));
+            }
+        },
+            e -> RetryUtil.handleRetryOrFailure(
+                e,
+                retryTime,
+                () -> retryableExecuteAgent(agentId, parameters, retryTime + 1, listener),
+                listener
+            )
+        ));
     }
 }
