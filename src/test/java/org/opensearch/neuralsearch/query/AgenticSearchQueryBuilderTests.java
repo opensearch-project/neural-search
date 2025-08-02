@@ -101,8 +101,45 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> queryBuilder.doToQuery(mockContext));
         assertEquals(
-            "Exception message should match",
-            "Agentic search query should be processed by QueryRewriterProcessor",
+            "Exception message should indicate nested usage is not allowed",
+            "Agentic search query must be used as top-level query, not nested inside other queries",
+            exception.getMessage()
+        );
+    }
+
+    public void testDoToQuery_alwaysThrowsException() {
+        // Test that agentic query builder always rejects being converted to Lucene query
+        // This happens when the processor doesn't intercept it (either nested or misconfigured)
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        QueryShardContext mockContext = mock(QueryShardContext.class);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> { agenticQuery.doToQuery(mockContext); });
+
+        assertEquals(
+            "Agentic query should always reject Lucene conversion",
+            "Agentic search query must be used as top-level query, not nested inside other queries",
+            exception.getMessage()
+        );
+    }
+
+    public void testInvalidAgenticQuery_fromXContent() throws IOException {
+        // Test that agentic query parsing works and doToQuery throws exception for nested usage
+        String agenticJson = "{\n" + "  \"query_text\": \"" + QUERY_TEXT + "\"\n" + "}";
+
+        XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry(), null, agenticJson);
+        parser.nextToken();
+
+        // This should parse successfully
+        AgenticSearchQueryBuilder agenticQuery = AgenticSearchQueryBuilder.fromXContent(parser);
+        assertNotNull("Agentic query should parse", agenticQuery);
+        assertEquals("Query text should match", QUERY_TEXT, agenticQuery.getQueryText());
+
+        // The nested validation happens when doToQuery is called
+        QueryShardContext mockContext = mock(QueryShardContext.class);
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> agenticQuery.doToQuery(mockContext));
+        assertEquals(
+            "Should throw nested query exception",
+            "Agentic search query must be used as top-level query, not nested inside other queries",
             exception.getMessage()
         );
     }
@@ -161,5 +198,24 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
     public void testNullQueryFields() {
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         assertNull("Query fields should be null by default", queryBuilder.getQueryFields());
+    }
+
+    public void testFromXContent_tooManyFields() throws IOException {
+        // Create JSON with 26 fields (exceeds limit of 25)
+        StringBuilder jsonBuilder = new StringBuilder();
+        jsonBuilder.append("{\n");
+        jsonBuilder.append("  \"query_text\": \"").append(QUERY_TEXT).append("\",\n");
+        jsonBuilder.append("  \"query_fields\": [");
+        for (int i = 1; i <= 26; i++) {
+            jsonBuilder.append("\"field").append(i).append("\"");
+            if (i < 26) jsonBuilder.append(", ");
+        }
+        jsonBuilder.append("]\n}");
+
+        XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry(), null, jsonBuilder.toString());
+        parser.nextToken();
+
+        Exception exception = expectThrows(Exception.class, () -> AgenticSearchQueryBuilder.fromXContent(parser));
+        assertTrue(exception.getMessage().contains("Too many query fields. Maximum allowed is 25"));
     }
 }

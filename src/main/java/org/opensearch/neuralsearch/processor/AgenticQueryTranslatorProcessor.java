@@ -32,16 +32,16 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 
 @Log4j2
-public class QueryRewriterProcessor extends AbstractProcessor implements SearchRequestProcessor {
+public class AgenticQueryTranslatorProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
-    public static final String TYPE = "query_rewriter";
+    public static final String TYPE = "agentic_query_translator";
     private final MLCommonsClientAccessor mlClient;
     private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
     private static final Gson gson = new Gson();
     private static final Map<String, String> indexMappingCache = new ConcurrentHashMap<>();
 
-    QueryRewriterProcessor(
+    AgenticQueryTranslatorProcessor(
         String tag,
         String description,
         boolean ignoreFailure,
@@ -73,8 +73,28 @@ public class QueryRewriterProcessor extends AbstractProcessor implements SearchR
             return;
         }
 
+        // Validate that agentic query is used alone without other search features
+        if (hasOtherSearchFeatures(sourceBuilder)) {
+            requestListener.onFailure(
+                new IllegalArgumentException(
+                    "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc."
+                )
+            );
+            return;
+        }
+
         AgenticSearchQueryBuilder agenticQuery = (AgenticSearchQueryBuilder) query;
         executeAgentAsync(agenticQuery, request, requestListener);
+    }
+
+    private boolean hasOtherSearchFeatures(SearchSourceBuilder sourceBuilder) {
+        return sourceBuilder.aggregations() != null
+            || sourceBuilder.sorts() != null && !sourceBuilder.sorts().isEmpty()
+            || sourceBuilder.highlighter() != null
+            || sourceBuilder.postFilter() != null
+            || sourceBuilder.suggest() != null
+            || sourceBuilder.rescores() != null && !sourceBuilder.rescores().isEmpty()
+            || sourceBuilder.collapse() != null;
     }
 
     private void executeAgentAsync(
@@ -126,7 +146,7 @@ public class QueryRewriterProcessor extends AbstractProcessor implements SearchR
             }
         }, e -> {
             log.error("Failed to execute agent", e);
-            requestListener.onFailure(new IOException("Failed to execute agentic search", e));
+            requestListener.onFailure(new RuntimeException("Failed to execute agentic search", e));
         }));
     }
 
@@ -150,7 +170,7 @@ public class QueryRewriterProcessor extends AbstractProcessor implements SearchR
         }
 
         @Override
-        public QueryRewriterProcessor create(
+        public AgenticQueryTranslatorProcessor create(
             Map<String, Processor.Factory<SearchRequestProcessor>> processorFactories,
             String tag,
             String description,
@@ -160,9 +180,9 @@ public class QueryRewriterProcessor extends AbstractProcessor implements SearchR
         ) throws IllegalArgumentException {
             String agentId = readStringProperty(TYPE, tag, config, "agent_id");
             if (agentId == null || agentId.trim().isEmpty()) {
-                throw new IllegalArgumentException("agent_id is required for query_rewriter processor");
+                throw new IllegalArgumentException("agent_id is required for agentic_query_translator processor");
             }
-            return new QueryRewriterProcessor(tag, description, ignoreFailure, mlClient, agentId, xContentRegistry);
+            return new AgenticQueryTranslatorProcessor(tag, description, ignoreFailure, mlClient, agentId, xContentRegistry);
         }
     }
 }

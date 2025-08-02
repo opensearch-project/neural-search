@@ -110,6 +110,9 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
                 if (QUERY_FIELDS.match(currentFieldName, parser.getDeprecationHandler())) {
                     List<String> fieldsList = new ArrayList<>();
                     while ((token = parser.nextToken()) != XContentParser.Token.END_ARRAY) {
+                        if (fieldsList.size() >= 25) {
+                            throw new ParsingException(parser.getTokenLocation(), "Too many query fields. Maximum allowed is 25");
+                        }
                         fieldsList.add(parser.text());
                     }
                     agenticSearchQueryBuilder.queryFields = fieldsList;
@@ -135,7 +138,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
-        throw new IllegalStateException("Agentic search query should be processed by QueryRewriterProcessor");
+        throw new IllegalStateException("Agentic search query must be used as top-level query, not nested inside other queries");
     }
 
     @Override

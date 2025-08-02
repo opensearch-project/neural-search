@@ -13,6 +13,7 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.core.action.ActionListener;
@@ -41,15 +42,16 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.any;
+import org.mockito.ArgumentCaptor;
 
-public class QueryRewriterProcessorTests extends OpenSearchTestCase {
+public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
     private static final String AGENT_ID = "test-agent";
     private static final String QUERY_TEXT = "find red cars";
 
     private MLCommonsClientAccessor mockMLClient;
     private NamedXContentRegistry mockXContentRegistry;
-    private QueryRewriterProcessor processor;
+    private AgenticQueryTranslatorProcessor processor;
     private PipelineProcessingContext mockContext;
 
     @Override
@@ -60,7 +62,7 @@ public class QueryRewriterProcessorTests extends OpenSearchTestCase {
         mockContext = mock(PipelineProcessingContext.class);
 
         // Use factory to create processor since constructor is private
-        QueryRewriterProcessor.Factory factory = new QueryRewriterProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
         processor = factory.create(null, "test-tag", "test-description", false, config, null);
@@ -136,7 +138,7 @@ public class QueryRewriterProcessorTests extends OpenSearchTestCase {
         processor.processRequestAsync(request, mockContext, listener);
 
         verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
-        verify(listener).onFailure(any(IOException.class));
+        verify(listener).onFailure(any(RuntimeException.class));
     }
 
     public void testProcessRequestAsync_withAgenticQuery_parseFailure() {
@@ -173,23 +175,23 @@ public class QueryRewriterProcessorTests extends OpenSearchTestCase {
     }
 
     public void testGetType() {
-        assertEquals("query_rewriter", processor.getType());
+        assertEquals("agentic_query_translator", processor.getType());
     }
 
     public void testFactory_create() {
-        QueryRewriterProcessor.Factory factory = new QueryRewriterProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
 
-        QueryRewriterProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+        AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
         assertNotNull(createdProcessor);
-        assertEquals("query_rewriter", createdProcessor.getType());
+        assertEquals("agentic_query_translator", createdProcessor.getType());
     }
 
     public void testFactory_create_missingAgentId() {
-        QueryRewriterProcessor.Factory factory = new QueryRewriterProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
 
         Map<String, Object> config = new HashMap<>();
 
@@ -202,7 +204,7 @@ public class QueryRewriterProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create_emptyAgentId() {
-        QueryRewriterProcessor.Factory factory = new QueryRewriterProcessor.Factory(mockMLClient, mockXContentRegistry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry);
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", "");
@@ -212,7 +214,47 @@ public class QueryRewriterProcessorTests extends OpenSearchTestCase {
             () -> factory.create(null, "test-tag", "test-description", false, config, null)
         );
 
-        assertEquals("agent_id is required for query_rewriter processor", exception.getMessage());
+        assertEquals("agent_id is required for agentic_query_translator processor", exception.getMessage());
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_andAggregations() {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(agenticQuery);
+        sourceBuilder.aggregation(AggregationBuilders.terms("test_agg").field("field"));
+        request.source(sourceBuilder);
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertEquals(
+            "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc.",
+            exceptionCaptor.getValue().getMessage()
+        );
+        verifyNoInteractions(mockMLClient);
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_andSort() {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(agenticQuery);
+        sourceBuilder.sort("field");
+        request.source(sourceBuilder);
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertEquals(
+            "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc.",
+            exceptionCaptor.getValue().getMessage()
+        );
+        verifyNoInteractions(mockMLClient);
     }
 
     public void testProcessRequestAsync_withAgenticQuery_success() throws IOException {
@@ -238,10 +280,10 @@ public class QueryRewriterProcessorTests extends OpenSearchTestCase {
         entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match"), MatchQueryBuilder::fromXContent));
         NamedXContentRegistry registry = new NamedXContentRegistry(entries);
 
-        QueryRewriterProcessor.Factory factory = new QueryRewriterProcessor.Factory(mockMLClient, registry);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, registry);
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
-        QueryRewriterProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
 

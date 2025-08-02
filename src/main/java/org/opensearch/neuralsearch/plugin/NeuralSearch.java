@@ -55,7 +55,7 @@ import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
-import org.opensearch.neuralsearch.processor.QueryRewriterProcessor;
+import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
@@ -262,8 +262,8 @@ public class NeuralSearch extends Plugin
             new NeuralQueryEnricherProcessor.Factory(),
             NeuralSparseTwoPhaseProcessor.TYPE,
             new NeuralSparseTwoPhaseProcessor.Factory(),
-            QueryRewriterProcessor.TYPE,
-            new QueryRewriterProcessor.Factory(clientAccessor, xContentRegistry)
+            AgenticQueryTranslatorProcessor.TYPE,
+            new AgenticQueryTranslatorProcessor.Factory(clientAccessor, xContentRegistry)
         );
     }
 
