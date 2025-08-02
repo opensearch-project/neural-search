@@ -25,7 +25,9 @@ import org.opensearch.core.action.ActionListener;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 
@@ -37,6 +39,7 @@ public class QueryRewriterProcessor extends AbstractProcessor implements SearchR
     private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
     private static final Gson gson = new Gson();
+    private static final Map<String, String> indexMappingCache = new ConcurrentHashMap<>();
 
     QueryRewriterProcessor(
         String tag,
@@ -85,9 +88,17 @@ public class QueryRewriterProcessor extends AbstractProcessor implements SearchR
         // Get index mapping from the search request
         if (request.indices() != null && request.indices().length > 0) {
             try {
-                String indexMapping = NeuralSearchClusterUtil.instance().getIndexMapping(request.indices());
-                String indexMappingJson = gson.toJson(indexMapping);
-                parameters.put("index_mapping", indexMappingJson);
+                String cacheKey = String.join(",", request.indices());
+                String cachedMappingJson = indexMappingCache.get(cacheKey);
+
+                if (cachedMappingJson == null) {
+                    List<String> indexMappings = NeuralSearchClusterUtil.instance().getIndexMapping(request.indices());
+                    String combinedMapping = String.join(", ", indexMappings);
+                    cachedMappingJson = gson.toJson(combinedMapping);
+                    indexMappingCache.put(cacheKey, cachedMappingJson);
+                }
+
+                parameters.put("index_mapping", cachedMappingJson);
             } catch (Exception e) {
                 log.warn("Failed to get index mapping", e);
             }

@@ -239,15 +239,30 @@ public class MLCommonsClientAccessor {
     }
 
     private String buildQueryResultFromResponseOfOutput(MLOutput mlOutput) {
-        final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
-        final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
-        if (CollectionUtils.isEmpty(tensorOutputList) || CollectionUtils.isEmpty(tensorOutputList.get(0).getMlModelTensors())) {
-            throw new IllegalStateException(
-                "Empty model result produced. Expected at least [1] tensor output and [1] model tensor, but got [0]"
-            );
+        if (!(mlOutput instanceof ModelTensorOutput)) {
+            throw new IllegalStateException("Expected ModelTensorOutput but got: " + mlOutput.getClass().getSimpleName());
         }
-        List<ModelTensor> tensorList = tensorOutputList.get(0).getMlModelTensors();
-        return tensorList.get(0).getResult();
+        final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
+
+        final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+        if (CollectionUtils.isEmpty(tensorOutputList)) {
+            throw new IllegalStateException("Empty model result produced. Expected at least [1] tensor output, but got [0]");
+        }
+
+        // Iterate through all ModelTensors to find the DSL result
+        for (ModelTensors tensors : tensorOutputList) {
+            List<ModelTensor> tensorList = tensors.getMlModelTensors();
+            if (!CollectionUtils.isEmpty(tensorList)) {
+                for (ModelTensor tensor : tensorList) {
+                    String result = tensor.getResult();
+                    if (result != null && !result.trim().isEmpty()) {
+                        return result;
+                    }
+                }
+            }
+        }
+
+        throw new IllegalStateException("No valid DSL result found in model output");
     }
 
     private <T extends Number> List<T> buildSingleVectorFromResponse(final MLOutput mlOutput) {
