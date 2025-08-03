@@ -200,30 +200,15 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     }
 
     /**
-     * Class that inherits ConcurrentQueryPhaseSearcher implementation but calls its search with only
-     * empty query collector context
+     * Class that inherits ConcurrentQueryPhaseSearcher implementation
      */
     @NoArgsConstructor(access = AccessLevel.PRIVATE)
     final class ConcurrentQueryPhaseSearcherWithEmptyQueryCollectorContext extends ConcurrentQueryPhaseSearcher {
 
-        @Override
-        protected boolean searchWithCollector(
-            SearchContext searchContext,
-            ContextIndexSearcher searcher,
-            Query query,
-            LinkedList<QueryCollectorContext> collectors,
-            boolean hasFilterCollector,
-            boolean hasTimeout
-        ) throws IOException {
-            return searchWithCollector(
-                searchContext,
-                searcher,
-                query,
-                collectors,
-                QueryCollectorContext.EMPTY_CONTEXT,
-                hasFilterCollector,
-                hasTimeout
-            );
+        protected QueryCollectorContext getQueryCollectorContext(SearchContext searchContext, boolean shouldCollect) {
+            // Return empty context to skip the default collector for hybrid queries
+            // This optimization improves performance by avoiding unnecessary collection
+            return QueryCollectorContext.EMPTY_CONTEXT;
         }
     }
 
@@ -234,24 +219,10 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     @NoArgsConstructor(access = AccessLevel.PACKAGE)
     final class DefaultQueryPhaseSearcherWithEmptyQueryCollectorContext extends QueryPhase.DefaultQueryPhaseSearcher {
 
-        @Override
-        protected boolean searchWithCollector(
-            SearchContext searchContext,
-            ContextIndexSearcher searcher,
-            Query query,
-            LinkedList<QueryCollectorContext> collectors,
-            boolean hasFilterCollector,
-            boolean hasTimeout
-        ) throws IOException {
-            return searchWithCollector(
-                searchContext,
-                searcher,
-                query,
-                collectors,
-                QueryCollectorContext.EMPTY_CONTEXT,
-                hasFilterCollector,
-                hasTimeout
-            );
+        protected QueryCollectorContext getQueryCollectorContext(SearchContext searchContext, boolean shouldCollect) throws IOException {
+            // Return empty context to skip the default collector for hybrid queries
+            // This optimization improves performance by avoiding unnecessary collection
+            return QueryCollectorContext.EMPTY_CONTEXT;
         }
     }
 }
