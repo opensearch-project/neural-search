@@ -281,7 +281,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     public void testFactory_create_feature_disabled() {
         NeuralSearchSettingsAccessor accessor = mock(NeuralSearchSettingsAccessor.class);
         when(accessor.isAgenticSearchEnabled()).thenReturn(false);
-        QueryRewriterProcessor.Factory factory = new QueryRewriterProcessor.Factory(mockMLClient, mockXContentRegistry, accessor);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            accessor
+        );
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);

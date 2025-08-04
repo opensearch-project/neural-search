@@ -26,6 +26,16 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
     private static final String QUERY_TEXT = "Find me red car";
     private static final List<String> QUERY_FIELDS = Arrays.asList("title", "description");
 
+    private NeuralSearchSettingsAccessor mockSettingsAccessor;
+
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
+        AgenticSearchQueryBuilder.initialize(mockSettingsAccessor);
+    }
+
     public void testBuilder_withRequiredFields() {
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
 
@@ -156,25 +166,6 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
         QueryBuilder result = queryBuilder.doRewrite(mockContext);
         assertEquals("doRewrite should return this", queryBuilder, result);
-    }
-
-    public void testDoRewrite_withAgenticSearchDisabled() throws IOException {
-        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
-        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(false);
-        AgenticSearchQueryBuilder.initialize(mockSettingsAccessor);
-
-        AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
-
-        QueryRewriteContext mockContext = mock(QueryRewriteContext.class);
-
-        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> queryBuilder.doRewrite(mockContext));
-
-        assertEquals(
-            "Exception message should match",
-            "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting.",
-            exception.getMessage()
-        );
-
     }
 
     public void testEquals() {

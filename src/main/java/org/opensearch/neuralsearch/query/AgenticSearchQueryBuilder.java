@@ -72,12 +72,24 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
+        // feature flag check
+        if (!SETTINGS_ACCESSOR.isAgenticSearchEnabled()) {
+            throw new IllegalStateException(
+                "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
+            );
+        }
         out.writeString(this.queryText);
         out.writeOptionalStringCollection(this.queryFields);
     }
 
     @Override
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
+        // feature flag check
+        if (!SETTINGS_ACCESSOR.isAgenticSearchEnabled()) {
+            throw new IllegalStateException(
+                "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
+            );
+        }
         xContentBuilder.startObject(NAME);
         if (Objects.nonNull(QUERY_TEXT_FIELD)) {
             xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);
@@ -140,12 +152,6 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
-        // feature flag check
-        if (!SETTINGS_ACCESSOR.isAgenticSearchEnabled()) {
-            throw new IllegalStateException(
-                "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
-            );
-        }
         // No rewriting needed
         return this;
     }
