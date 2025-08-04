@@ -67,7 +67,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
 
         // Use factory to create processor since constructor is private
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
         processor = factory.create(null, "test-tag", "test-description", false, config, null);
@@ -184,7 +188,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
@@ -196,7 +204,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create_missingAgentId() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
 
         Map<String, Object> config = new HashMap<>();
 
@@ -209,7 +221,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create_emptyAgentId() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, mockXContentRegistry, mockSettingsAccessor);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", "");
@@ -305,7 +321,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match"), MatchQueryBuilder::fromXContent));
         NamedXContentRegistry registry = new NamedXContentRegistry(entries);
 
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(mockMLClient, registry, mockSettingsAccessor);
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            registry,
+            mockSettingsAccessor
+        );
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
         AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
