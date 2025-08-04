@@ -138,7 +138,9 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
-        throw new IllegalStateException("Agentic search query must be used as top-level query, not nested inside other queries");
+        throw new IllegalStateException(
+            "Agentic search query must be used as top-level query, not nested inside other queries. Should be used with agentic_query_translator search processor"
+        );
     }
 
     @Override

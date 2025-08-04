@@ -27,7 +27,6 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 
@@ -38,8 +37,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
     private final MLCommonsClientAccessor mlClient;
     private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
-    private static final Gson gson = new Gson();
-    private static final Map<String, String> indexMappingCache = new ConcurrentHashMap<>();
+    private static final Gson gson = new Gson();;
 
     AgenticQueryTranslatorProcessor(
         String tag,
@@ -108,17 +106,9 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         // Get index mapping from the search request
         if (request.indices() != null && request.indices().length > 0) {
             try {
-                String cacheKey = String.join(",", request.indices());
-                String cachedMappingJson = indexMappingCache.get(cacheKey);
-
-                if (cachedMappingJson == null) {
-                    List<String> indexMappings = NeuralSearchClusterUtil.instance().getIndexMapping(request.indices());
-                    String combinedMapping = String.join(", ", indexMappings);
-                    cachedMappingJson = gson.toJson(combinedMapping);
-                    indexMappingCache.put(cacheKey, cachedMappingJson);
-                }
-
-                parameters.put("index_mapping", cachedMappingJson);
+                List<String> indexMappings = NeuralSearchClusterUtil.instance().getIndexMapping(request.indices());
+                String indexMappingsJson = gson.toJson(indexMappings);
+                parameters.put("index_mapping", indexMappingsJson);
             } catch (Exception e) {
                 log.warn("Failed to get index mapping", e);
             }
@@ -132,6 +122,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             try {
                 log.info("Generated Query: [{}]", agentResponse);
 
+                // TODO: Add query validations
                 // Parse the agent response to get the new search source
                 BytesReference bytes = new BytesArray(agentResponse);
                 try (XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry, null, bytes.streamInput())) {

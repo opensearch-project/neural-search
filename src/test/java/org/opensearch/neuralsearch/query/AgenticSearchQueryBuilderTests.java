@@ -102,7 +102,7 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> queryBuilder.doToQuery(mockContext));
         assertEquals(
             "Exception message should indicate nested usage is not allowed",
-            "Agentic search query must be used as top-level query, not nested inside other queries",
+            "Agentic search query must be used as top-level query, not nested inside other queries. Should be used with agentic_query_translator search processor",
             exception.getMessage()
         );
     }
@@ -117,7 +117,7 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
         assertEquals(
             "Agentic query should always reject Lucene conversion",
-            "Agentic search query must be used as top-level query, not nested inside other queries",
+            "Agentic search query must be used as top-level query, not nested inside other queries. Should be used with agentic_query_translator search processor",
             exception.getMessage()
         );
     }
@@ -139,7 +139,7 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> agenticQuery.doToQuery(mockContext));
         assertEquals(
             "Should throw nested query exception",
-            "Agentic search query must be used as top-level query, not nested inside other queries",
+            "Agentic search query must be used as top-level query, not nested inside other queries. Should be used with agentic_query_translator search processor",
             exception.getMessage()
         );
     }

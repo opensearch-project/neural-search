@@ -72,8 +72,8 @@ public class NeuralSearchClusterUtil {
             if (indices != null && indices.length > 0) {
                 return Arrays.stream(indices).map(indexName -> {
                     IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
-                    if (indexMetadata != null) {
-                        String mapping = Objects.requireNonNull(indexMetadata.mapping()).source().toString();
+                    if (indexMetadata != null && indexMetadata.mapping() != null) {
+                        String mapping = indexMetadata.mapping().source().toString();
                         return indexName + ":" + mapping;
                     }
                     return null;
