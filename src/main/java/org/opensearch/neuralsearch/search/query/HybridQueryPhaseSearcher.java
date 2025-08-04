@@ -207,7 +207,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
         protected QueryCollectorContext getQueryCollectorContext(SearchContext searchContext, boolean shouldCollect) {
             // Return empty context to skip the default collector for hybrid queries
-            // This optimization improves performance by avoiding unnecessary collection
             return QueryCollectorContext.EMPTY_CONTEXT;
         }
     }
@@ -221,7 +220,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
         protected QueryCollectorContext getQueryCollectorContext(SearchContext searchContext, boolean shouldCollect) throws IOException {
             // Return empty context to skip the default collector for hybrid queries
-            // This optimization improves performance by avoiding unnecessary collection
             return QueryCollectorContext.EMPTY_CONTEXT;
         }
     }
