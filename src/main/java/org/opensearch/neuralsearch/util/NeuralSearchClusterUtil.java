@@ -18,7 +18,7 @@ import org.opensearch.core.index.Index;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Objects;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -67,17 +67,16 @@ public class NeuralSearchClusterUtil {
             .collect(Collectors.toList());
     }
 
-    public List<String> getIndexMapping(String[] indices) {
+    public Map<String, String> getIndexMapping(String[] indices) {
         try {
             if (indices != null && indices.length > 0) {
-                return Arrays.stream(indices).map(indexName -> {
+                return Arrays.stream(indices).filter(indexName -> {
                     IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
-                    if (indexMetadata != null && indexMetadata.mapping() != null) {
-                        String mapping = indexMetadata.mapping().source().toString();
-                        return indexName + ":" + mapping;
-                    }
-                    return null;
-                }).filter(Objects::nonNull).collect(Collectors.toList());
+                    return indexMetadata != null && indexMetadata.mapping() != null;
+                }).collect(Collectors.toMap(indexName -> indexName, indexName -> {
+                    IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
+                    return indexMetadata.mapping().source().toString();
+                }));
             }
         } catch (Exception e) {
             log.warn("Failed to extract index mapping", e);

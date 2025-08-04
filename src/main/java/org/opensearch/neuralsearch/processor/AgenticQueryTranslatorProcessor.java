@@ -25,7 +25,6 @@ import org.opensearch.core.action.ActionListener;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
@@ -106,16 +105,15 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         // Get index mapping from the search request
         if (request.indices() != null && request.indices().length > 0) {
             try {
-                List<String> indexMappings = NeuralSearchClusterUtil.instance().getIndexMapping(request.indices());
-                String indexMappingsJson = gson.toJson(indexMappings);
-                parameters.put("index_mapping", indexMappingsJson);
+                Map<String, String> indexMappings = NeuralSearchClusterUtil.instance().getIndexMapping(request.indices());
+                parameters.put("index_mapping", indexMappings.toString());
             } catch (Exception e) {
                 log.warn("Failed to get index mapping", e);
             }
         }
 
         if (agenticQuery.getQueryFields() != null && !agenticQuery.getQueryFields().isEmpty()) {
-            parameters.put("query_fields", String.join(",", agenticQuery.getQueryFields()));
+            parameters.put("query_fields", gson.toJson(agenticQuery.getQueryFields()));
         }
 
         mlClient.executeAgent(agentId, parameters, ActionListener.wrap(agentResponse -> {

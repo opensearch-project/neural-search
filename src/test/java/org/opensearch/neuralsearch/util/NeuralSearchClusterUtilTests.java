@@ -24,6 +24,7 @@ import org.opensearch.core.index.Index;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.List;
+import java.util.Map;
 
 public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
 
@@ -104,11 +105,11 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
         neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
 
-        List<String> result = neuralSearchClusterUtil.getIndexMapping(new String[] { "test-index1", "test-index2" });
+        Map<String, String> result = neuralSearchClusterUtil.getIndexMapping(new String[] { "test-index1", "test-index2" });
 
         assertEquals(2, result.size());
-        assertEquals("test-index1:{\"properties\":{\"field1\":{\"type\":\"text\"}}}", result.get(0));
-        assertEquals("test-index2:{\"properties\":{\"field2\":{\"type\":\"keyword\"}}}", result.get(1));
+        assertEquals("{\"properties\":{\"field1\":{\"type\":\"text\"}}}", result.get("test-index1"));
+        assertEquals("{\"properties\":{\"field2\":{\"type\":\"keyword\"}}}", result.get("test-index2"));
     }
 
     public void testGetIndexMappingWithSingleIndex() throws Exception {
@@ -129,10 +130,10 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
         neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
 
-        List<String> result = neuralSearchClusterUtil.getIndexMapping(new String[] { "single-index" });
+        Map<String, String> result = neuralSearchClusterUtil.getIndexMapping(new String[] { "single-index" });
 
         assertEquals(1, result.size());
-        assertEquals("single-index:{\"properties\":{\"title\":{\"type\":\"text\"}}}", result.get(0));
+        assertEquals("{\"properties\":{\"title\":{\"type\":\"text\"}}}", result.get("single-index"));
     }
 
     public void testGetIndexMapping_whenNoIndices_thenThrowException() {
