@@ -58,7 +58,16 @@ public final class NeuralSearchSettings {
         0,
         0,
         1000,
-        Setting.Property.IndexScope,
+        Setting.Property.IndexScope
+    );
+
+    /**
+     * Enables or disables agentic query clause
+     */
+    public static final Setting<Boolean> AGENTIC_SEARCH_ENABLED = Setting.boolSetting(
+        "plugins.neural_search.agentic_search_enabled",
+        false,
+        Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
 }
