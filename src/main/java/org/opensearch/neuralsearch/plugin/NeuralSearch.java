@@ -258,7 +258,7 @@ public class NeuralSearch extends Plugin
             NEURAL_STATS_ENABLED,
             SEMANTIC_INGEST_BATCH_SIZE,
             HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
-                AGENTIC_SEARCH_ENABLED
+            AGENTIC_SEARCH_ENABLED
         );
     }
 
