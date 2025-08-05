@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -36,6 +37,7 @@ import org.opensearch.ml.common.output.model.MLResultDataType;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
+import org.opensearch.ml.common.transport.execute.MLExecuteTaskResponse;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.test.OpenSearchTestCase;
@@ -612,5 +614,80 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         final String expectedMessage = "Failed to fetch model [dummyModel2]: dummyModel2 not found";
         assertEquals(expectedMessage, resultCaptor.getValue().getMessage());
+    }
+
+    public void testExecuteAgent_Success() {
+        final String agentId = "test-agent-id";
+        final Map<String, String> parameters = Map.of("query_text", "test query", "index_mapping", "{}");
+        final ActionListener<String> listener = mock(ActionListener.class);
+        final String expectedResponse = "{\"query\": {\"match\": {\"field\": \"value\"}}}";
+
+        // Mock the ML client execute method
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            // Create mock response with the expected structure
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createModelTensorOutputWithResult(expectedResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        accessor.executeAgent(agentId, parameters, listener);
+
+        verify(client).execute(any(), any(), any());
+        verify(listener).onResponse(expectedResponse);
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_Failure() {
+        final String agentId = "test-agent-id";
+        final Map<String, String> parameters = Map.of("query_text", "test query");
+        final ActionListener<String> listener = mock(ActionListener.class);
+        final RuntimeException exception = new RuntimeException("Agent execution failed");
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            actionListener.onFailure(exception);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        accessor.executeAgent(agentId, parameters, listener);
+
+        verify(client).execute(any(), any(), any());
+        verify(listener).onFailure(exception);
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_WithRetry() {
+        final String agentId = "test-agent-id";
+        final Map<String, String> parameters = Map.of("query_text", "test query");
+        final ActionListener<String> listener = mock(ActionListener.class);
+        final NodeNotConnectedException nodeNotConnectedException = new NodeNotConnectedException(
+            mock(DiscoveryNode.class),
+            "Node not connected"
+        );
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            actionListener.onFailure(nodeNotConnectedException);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        accessor.executeAgent(agentId, parameters, listener);
+
+        // Verify client.execute is called 4 times (1 initial + 3 retries)
+        verify(client, times(4)).execute(any(), any(), any());
+        verify(listener).onFailure(nodeNotConnectedException);
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    private ModelTensorOutput createModelTensorOutputWithResult(String result) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, result, Map.of());
+        mlModelTensorList.add(tensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
     }
 }
