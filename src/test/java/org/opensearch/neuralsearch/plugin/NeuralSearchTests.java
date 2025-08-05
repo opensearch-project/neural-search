@@ -9,9 +9,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.Before;
 import org.mockito.Mock;
@@ -95,7 +95,10 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         when(environment.settings()).thenReturn(settings);
 
         // Mock ClusterSettings
-        ClusterSettings clusterSettings = new ClusterSettings(settings, Collections.singleton(NeuralSearchSettings.NEURAL_STATS_ENABLED));
+        ClusterSettings clusterSettings = new ClusterSettings(
+            settings,
+            Set.of(NeuralSearchSettings.NEURAL_STATS_ENABLED, NeuralSearchSettings.AGENTIC_SEARCH_ENABLED)
+        );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
 
         Collection<Object> components = plugin.createComponents(
@@ -168,7 +171,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(3, settings.size());
+        assertEquals(4, settings.size());
     }
 
     public void testRequestProcessors() {

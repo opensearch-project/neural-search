@@ -12,17 +12,29 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Arrays;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
     private static final String QUERY_TEXT = "Find me red car";
     private static final List<String> QUERY_FIELDS = Arrays.asList("title", "description");
+
+    private NeuralSearchSettingsAccessor mockSettingsAccessor;
+
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
+        AgenticSearchQueryBuilder.initialize(mockSettingsAccessor);
+    }
 
     public void testBuilder_withRequiredFields() {
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
@@ -145,6 +157,10 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
     }
 
     public void testDoRewrite_returnsThis() throws IOException {
+        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
+        AgenticSearchQueryBuilder.initialize(mockSettingsAccessor);
+
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         QueryRewriteContext mockContext = mock(QueryRewriteContext.class);
 
