@@ -53,11 +53,8 @@ jobs:
       - name: Upload Coverage Report
         if: ${{ !cancelled() && contains(matrix.os, 'ubuntu') && contains(matrix.java, '21') }}
         uses: codecov/codecov-action@v3
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          file: ./build/reports/jacoco/test/jacocoTestReport.xml
 
   Check-neural-search-windows:
     strategy:

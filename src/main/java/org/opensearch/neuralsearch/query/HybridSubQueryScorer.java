@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.Data;
-import lombok.EqualsAndHashCode;
 import org.apache.lucene.search.Scorable;
 
 import java.io.IOException;
@@ -15,7 +14,6 @@ import java.util.Arrays;
  * Scorer implementation for Hybrid Query. This object is light and expected to be re-used between different doc ids
  */
 @Data
-@EqualsAndHashCode(callSuper = false)
 public class HybridSubQueryScorer extends Scorable {
     // array of scores from all sub-queries for a single doc id
     private final float[] subQueryScores;
