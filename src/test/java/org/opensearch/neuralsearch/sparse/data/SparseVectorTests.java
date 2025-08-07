@@ -39,17 +39,17 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item1 = iterator.next();
         Assert.assertEquals(1, item1.getToken());
-        Assert.assertEquals(20, ByteQuantizer.getUnsignedByte(item1.getFreq()));
+        Assert.assertEquals(20, ByteQuantizer.getUnsignedByte(item1.getWeight()));
 
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item2 = iterator.next();
         Assert.assertEquals(2, item2.getToken());
-        Assert.assertEquals(30, ByteQuantizer.getUnsignedByte(item2.getFreq()));
+        Assert.assertEquals(30, ByteQuantizer.getUnsignedByte(item2.getWeight()));
 
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item3 = iterator.next();
         Assert.assertEquals(3, item3.getToken());
-        Assert.assertEquals(10, ByteQuantizer.getUnsignedByte(item3.getFreq()));
+        Assert.assertEquals(10, ByteQuantizer.getUnsignedByte(item3.getWeight()));
 
         Assert.assertFalse(iterator.hasNext());
     }

@@ -33,7 +33,7 @@ import java.util.stream.Collectors;
 public class SparseVector implements Accountable {
     // tokens will be stored in order
     private final short[] tokens;
-    private final byte[] freqs;
+    private final byte[] weights;
 
     public SparseVector(BytesRef bytesRef) throws IOException {
         this(readToMap(bytesRef));
@@ -60,10 +60,10 @@ public class SparseVector implements Accountable {
         items.sort(Comparator.comparingInt(Item::getToken));
         int size = items.size();
         this.tokens = new short[size];
-        this.freqs = new byte[size];
+        this.weights = new byte[size];
         for (int i = 0; i < size; ++i) {
             this.tokens[i] = (short) items.get(i).getToken();
-            this.freqs[i] = items.get(i).getFreq();
+            this.weights[i] = items.get(i).getWeight();
         }
     }
 
@@ -97,7 +97,7 @@ public class SparseVector implements Accountable {
         int maxToken = this.tokens[size - 1];
         byte[] denseVector = new byte[maxToken + 1];
         for (int i = 0; i < size; ++i) {
-            denseVector[this.tokens[i]] = this.freqs[i];
+            denseVector[this.tokens[i]] = this.weights[i];
         }
         return denseVector;
     }
@@ -119,25 +119,25 @@ public class SparseVector implements Accountable {
             if (this.tokens[i] >= denseVector.length) {
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.freqs[i], denseVector[this.tokens[i]]);
+            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
 
             if (this.tokens[i + 1] >= denseVector.length) {
                 ++i;
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.freqs[i + 1], denseVector[this.tokens[i + 1]]);
+            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i + 1], denseVector[this.tokens[i + 1]]);
 
             if (this.tokens[i + 2] >= denseVector.length) {
                 i += 2;
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.freqs[i + 2], denseVector[this.tokens[i + 2]]);
+            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i + 2], denseVector[this.tokens[i + 2]]);
 
             if (this.tokens[i + 3] >= denseVector.length) {
                 i += 3;
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.freqs[i + 3], denseVector[this.tokens[i + 3]]);
+            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i + 3], denseVector[this.tokens[i + 3]]);
         }
 
         // Handle remaining elements
@@ -145,7 +145,7 @@ public class SparseVector implements Accountable {
             if (this.tokens[i] >= denseVector.length) {
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.freqs[i], denseVector[this.tokens[i]]);
+            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
         }
 
         return score;
@@ -167,7 +167,7 @@ public class SparseVector implements Accountable {
                     return null;
                 }
                 ++current;
-                return new Item(tokens[current], freqs[current]);
+                return new Item(tokens[current], weights[current]);
             }
         });
     }
@@ -175,7 +175,7 @@ public class SparseVector implements Accountable {
     @Override
     public long ramBytesUsed() {
         return RamUsageEstimator.shallowSizeOfInstance(SparseVector.class) + RamUsageEstimator.sizeOf(tokens) + RamUsageEstimator.sizeOf(
-            freqs
+            weights
         );
     }
 
@@ -184,14 +184,14 @@ public class SparseVector implements Accountable {
     @EqualsAndHashCode
     public static class Item {
         int token;
-        byte freq;
+        byte weight;
 
-        static Item of(int token, byte freq) {
-            return new Item(token, freq);
+        static Item of(int token, byte weight) {
+            return new Item(token, weight);
         }
 
-        public int getIntFreq() {
-            return ByteQuantizer.getUnsignedByte(freq);
+        public int getIntWeight() {
+            return ByteQuantizer.getUnsignedByte(weight);
         }
     }
 }
