@@ -151,13 +151,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final int MAX_ATTEMPTS = 30;
     private static final int WAIT_TIME_IN_SECONDS = 2;
     private static final long TIMEOUT = 10000;
+    protected String numOfNode;
 
     @Before
     public void setupSettings() {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-
+        numOfNode = System.getProperty("cluster.number_of_nodes", "1");
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
@@ -2025,11 +2026,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelGroupId;
     }
 
-    // Method that waits till the health of nodes in the cluster goes green
     protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds) throws IOException {
+        // default value for `wait_for_active_shards` is 0
+        waitForClusterHealthGreen(numOfNodes, timeoutInSeconds, "0");
+    }
+
+    // Method that waits till the health of nodes in the cluster goes green
+    protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds, final String activeShards)
+        throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
         waitForGreen.addParameter("wait_for_nodes", numOfNodes);
         waitForGreen.addParameter("wait_for_status", "green");
+        waitForGreen.addParameter("wait_for_active_shards", activeShards);
         waitForGreen.addParameter("cluster_manager_timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
         waitForGreen.addParameter("timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
         client().performRequest(waitForGreen);
