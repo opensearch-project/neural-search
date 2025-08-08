@@ -197,7 +197,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.jvm_heap_memory_threshold", 95);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
-
+        updateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
     }
 
     @SneakyThrows
