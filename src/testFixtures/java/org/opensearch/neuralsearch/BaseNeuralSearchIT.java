@@ -204,7 +204,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Optional<String> bwcVersion = Optional.ofNullable(System.getProperty(BWC_VERSION, null));
         // only handle BWC tests
         if (bwcVersion.isPresent()) {
-            Version bwcVer = Version.fromString(bwcVersion.get());
+            Version bwcVer = Version.fromString(bwcVersion.get().replace("-SNAPSHOT", ""));
             if (bwcVer.onOrAfter(DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION)) {
                 updateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
             }
