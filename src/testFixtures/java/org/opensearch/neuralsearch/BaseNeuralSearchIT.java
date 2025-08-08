@@ -24,6 +24,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.After;
 import org.junit.Before;
+import org.opensearch.Version;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
@@ -90,6 +91,7 @@ import java.util.stream.Collectors;
 
 import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
+import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
@@ -136,6 +138,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
     protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
+    protected static final Version DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION = Version.fromString("2.16.0");
 
     private final Set<String> IMMUTABLE_INDEX_PREFIXES = Set.of(
         SECURITY_AUDITLOG_PREFIX,
@@ -197,7 +200,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.jvm_heap_memory_threshold", 95);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
-        updateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
+
+        Optional<String> bwcVersion = Optional.ofNullable(System.getProperty(BWC_VERSION, null));
+        // only handle BWC tests
+        if (bwcVersion.isPresent()) {
+            Version bwcVer = Version.fromString(bwcVersion.get());
+            if (bwcVer.onOrAfter(DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION)) {
+                updateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
+            }
+        }
     }
 
     @SneakyThrows
