@@ -138,7 +138,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
     protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
-    protected static final Version DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION = Version.fromString("2.16.0");
+    protected static final Version DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION = Version.V_2_16_0;
 
     private final Set<String> IMMUTABLE_INDEX_PREFIXES = Set.of(
         SECURITY_AUDITLOG_PREFIX,
