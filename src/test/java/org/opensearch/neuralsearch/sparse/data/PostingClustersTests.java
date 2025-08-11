@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.sparse.data;
 
-import org.junit.Test;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 
@@ -17,14 +16,12 @@ import static org.mockito.Mockito.when;
 
 public class PostingClustersTests extends AbstractSparseTestBase {
 
-    @Test
     public void testConstructorWithNullClusters() {
         PostingClusters postingClusters = new PostingClusters(null);
         assertEquals(0, postingClusters.getSize());
         assertNull(postingClusters.getClusters());
     }
 
-    @Test
     public void testConstructorWithEmptyClusters() {
         List<DocumentCluster> clusters = new ArrayList<>();
         PostingClusters postingClusters = new PostingClusters(clusters);
@@ -32,7 +29,6 @@ public class PostingClustersTests extends AbstractSparseTestBase {
         assertEquals(clusters, postingClusters.getClusters());
     }
 
-    @Test
     public void testConstructorWithClusters() {
         DocumentCluster cluster1 = mock(DocumentCluster.class);
         DocumentCluster cluster2 = mock(DocumentCluster.class);
@@ -46,7 +42,6 @@ public class PostingClustersTests extends AbstractSparseTestBase {
         assertEquals(clusters, postingClusters.getClusters());
     }
 
-    @Test
     public void testIterator() {
         DocumentCluster cluster1 = mock(DocumentCluster.class);
         DocumentCluster cluster2 = mock(DocumentCluster.class);
@@ -62,7 +57,6 @@ public class PostingClustersTests extends AbstractSparseTestBase {
         assertEquals(cluster2, iterator.next());
     }
 
-    @Test
     public void testRamBytesUsed() {
         DocumentCluster cluster1 = mock(DocumentCluster.class);
         DocumentCluster cluster2 = mock(DocumentCluster.class);

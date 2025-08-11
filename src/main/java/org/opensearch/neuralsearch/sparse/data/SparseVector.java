@@ -67,7 +67,7 @@ public class SparseVector implements Accountable {
         }
     }
 
-    private static Map<String, Float> readToMap(BytesRef bytesRef) {
+    private static Map<String, Float> readToMap(BytesRef bytesRef) throws IOException {
         Map<String, Float> map = new HashMap<>();
         try (
             ByteArrayInputStream bais = new ByteArrayInputStream(
@@ -83,8 +83,6 @@ public class SparseVector implements Accountable {
                 float value = dis.readFloat();
                 map.put(key, value);
             }
-        } catch (Exception e) {
-            throw new RuntimeException(e);
         }
         return map;
     }
@@ -107,7 +105,7 @@ public class SparseVector implements Accountable {
         int size = getSize();
 
         // Early exit for empty vectors
-        if (size == 0 || denseVector.length == 0) return 0;
+        if (size == 0 || denseVector == null || denseVector.length == 0) return 0;
 
         // Loop unrolling for better performance
         final int unrollFactor = 4;

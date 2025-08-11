@@ -168,6 +168,16 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertEquals(0, vector.dotProduct(new byte[0]));
     }
 
+    public void testDotProductWithNullVectors() {
+        List<SparseVector.Item> items = new ArrayList<>();
+        items.add(new SparseVector.Item(0, (byte) 10));
+        items.add(new SparseVector.Item(2, (byte) 20));
+        items.add(new SparseVector.Item(4, (byte) 30));
+        SparseVector vector = new SparseVector(items);
+
+        assertEquals(0, vector.dotProduct(null));
+    }
+
     public void testDotProductWithDenseShorterThanSparse() {
         // Create sparse vector with tokens beyond dense vector length
         List<SparseVector.Item> items = new ArrayList<>();
