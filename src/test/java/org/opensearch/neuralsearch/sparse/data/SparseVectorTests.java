@@ -112,6 +112,40 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertEquals(3, item3.getToken());
     }
 
+    public void testConstructorWithTokenIdLargerThanShort() {
+        // Create items
+        List<SparseVector.Item> items = new ArrayList<>();
+        items.add(new SparseVector.Item(1, (byte) 10));
+        items.add(new SparseVector.Item(65537, (byte) 20));
+        items.add(new SparseVector.Item(131074, (byte) 20)); // % 65536 = 2
+        items.add(new SparseVector.Item(2, (byte) 30));
+        items.add(new SparseVector.Item(65539, (byte) 40));
+
+        // Create sparse vector
+        SparseVector vector = new SparseVector(items);
+
+        // Verify size
+        Assert.assertEquals(3, vector.getSize());
+
+        IteratorWrapper<SparseVector.Item> iterator = vector.iterator();
+        Assert.assertTrue(iterator.hasNext());
+        SparseVector.Item item1 = iterator.next();
+        Assert.assertEquals(1, item1.getToken());
+        Assert.assertEquals(20, ByteQuantizer.getUnsignedByte(item1.getWeight()));
+
+        Assert.assertTrue(iterator.hasNext());
+        SparseVector.Item item2 = iterator.next();
+        Assert.assertEquals(2, item2.getToken());
+        Assert.assertEquals(30, ByteQuantizer.getUnsignedByte(item2.getWeight()));
+
+        Assert.assertTrue(iterator.hasNext());
+        SparseVector.Item item3 = iterator.next();
+        Assert.assertEquals(3, item3.getToken());
+        Assert.assertEquals(40, ByteQuantizer.getUnsignedByte(item3.getWeight()));
+
+        Assert.assertFalse(iterator.hasNext());
+    }
+
     public void testToDenseVector() {
         // Create items
         List<SparseVector.Item> items = new ArrayList<>();

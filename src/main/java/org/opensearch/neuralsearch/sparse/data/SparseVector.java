@@ -19,12 +19,15 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
 
 /**
  * Sparse vector implementation, which is a list of (token, freq) pairs
@@ -57,14 +60,36 @@ public class SparseVector implements Accountable {
     }
 
     public SparseVector(List<Item> items) {
-        items.sort(Comparator.comparingInt(Item::getToken));
-        int size = items.size();
+        List<Item> processedItems = processListItems(items);
+        int size = processedItems.size();
         this.tokens = new short[size];
         this.weights = new byte[size];
         for (int i = 0; i < size; ++i) {
-            this.tokens[i] = (short) items.get(i).getToken();
-            this.weights[i] = items.get(i).getWeight();
+            this.tokens[i] = (short) processedItems.get(i).getToken();
+            this.weights[i] = processedItems.get(i).getWeight();
         }
+    }
+
+    private List<Item> processListItems(List<Item> items) {
+        // processItems contains token already mod by MODULUS_FOR_SHORT and max weight
+        List<Item> processedItems = new ArrayList<>();
+        if (items.isEmpty()) {
+            return processedItems;
+        }
+        items.sort(Comparator.comparingInt(item -> item.getToken() % MODULUS_FOR_SHORT));
+        processedItems.add(new Item(items.getFirst().getToken() % MODULUS_FOR_SHORT, items.getFirst().getWeight()));
+        for (int i = 1; i < items.size(); ++i) {
+            int token = items.get(i).getToken() % MODULUS_FOR_SHORT;
+            if (token == processedItems.getLast().getToken()) {
+                if (ByteQuantizer.compareUnsignedByte(processedItems.getLast().weight, items.get(i).getWeight()) < 0) {
+                    // merge
+                    processedItems.getLast().weight = items.get(i).getWeight();
+                }
+            } else {
+                processedItems.add(new Item(token, items.get(i).getWeight()));
+            }
+        }
+        return processedItems;
     }
 
     private static Map<String, Float> readToMap(BytesRef bytesRef) throws IOException {
