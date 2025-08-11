@@ -76,13 +76,13 @@ public class SparseVector implements Accountable {
         if (items.isEmpty()) {
             return processedItems;
         }
-        items.sort(Comparator.comparingInt(item -> item.getToken() % MODULUS_FOR_SHORT));
-        processedItems.add(new Item(items.getFirst().getToken() % MODULUS_FOR_SHORT, items.getFirst().getWeight()));
+        items.sort(Comparator.comparingInt(item -> prepareTokenForShortType(item.getToken())));
+        processedItems.add(new Item(prepareTokenForShortType(items.getFirst().getToken()), items.getFirst().getWeight()));
         for (int i = 1; i < items.size(); ++i) {
-            int token = items.get(i).getToken() % MODULUS_FOR_SHORT;
+            int token = prepareTokenForShortType(items.get(i).getToken());
             if (token == processedItems.getLast().getToken()) {
                 if (ByteQuantizer.compareUnsignedByte(processedItems.getLast().weight, items.get(i).getWeight()) < 0) {
-                    // merge
+                    // merge by taking the maximum value
                     processedItems.getLast().weight = items.get(i).getWeight();
                 }
             } else {
@@ -90,6 +90,10 @@ public class SparseVector implements Accountable {
             }
         }
         return processedItems;
+    }
+
+    public static int prepareTokenForShortType(int token) {
+        return token % MODULUS_FOR_SHORT;
     }
 
     private static Map<String, Float> readToMap(BytesRef bytesRef) throws IOException {
