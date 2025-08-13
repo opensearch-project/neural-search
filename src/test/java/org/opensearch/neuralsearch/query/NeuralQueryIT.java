@@ -244,7 +244,7 @@ public class NeuralQueryIT extends BaseNeuralSearchIT {
             .build();
 
         // Test with a Filter Applied
-        neuralQueryBuilder.filter(new MatchQueryBuilder("_id", "3"));
+        neuralQueryBuilder.queryfilter(new MatchQueryBuilder("_id", "3"));
         Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, neuralQueryBuilder, 3);
         assertEquals(1, getHitCount(searchResponseAsMap));
         Map<String, Object> firstInnerHit = getFirstInnerHit(searchResponseAsMap);
