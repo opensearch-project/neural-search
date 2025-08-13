@@ -197,10 +197,6 @@ public class NeuralSearch extends Plugin
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
     public static final String NEURAL_BASE_URI = "/_plugins/_neural";
 
-    public NeuralSearch() {
-        this.semanticHighlighter = new SemanticHighlighter();
-    }
-
     @Override
     public Collection<Object> createComponents(
         final Client client,
@@ -398,6 +394,9 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
+            new ExplanationResponseProcessorFactory(),
+            SemanticHighlightingConstants.PROCESSOR_TYPE,
+            new SemanticHighlightingResponseProcessorFactory(clientAccessor)
             new ExplanationResponseProcessorFactory(),
             AgenticContextResponseProcessor.TYPE,
             new AgenticContextResponseProcessor.Factory()

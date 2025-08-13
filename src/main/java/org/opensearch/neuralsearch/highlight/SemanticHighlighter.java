@@ -25,9 +25,9 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Semantic highlighter that uses ML models to identify relevant text spans for highlighting
+ * Minimal semantic highlighter that validates "semantic" highlighter type
+ * but delegates actual highlighting to SemanticHighlightingResponseProcessor
  */
-@Log4j2
 public class SemanticHighlighter implements Highlighter {
     private SemanticHighlighterEngine semanticHighlighterEngine;
     @Setter
@@ -47,12 +47,6 @@ public class SemanticHighlighter implements Highlighter {
         return true;
     }
 
-    /**
-     * Highlights a field using semantic highlighting
-     *
-     * @param fieldContext The field context containing the query and field information
-     * @return The highlighted field or null if highlighting is not possible
-     */
     @Override
     public HighlightField highlight(FieldHighlightContext fieldContext) {
         // Extract batch_inference option from field options
