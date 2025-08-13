@@ -27,10 +27,9 @@ import org.opensearch.index.mapper.Mapper;
 import org.opensearch.indices.breaker.BreakerSettings;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
-import org.opensearch.neuralsearch.highlight.SemanticHighlighterEngine;
-import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
 import com.google.common.collect.ImmutableList;
 import org.opensearch.action.ActionRequest;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -84,6 +83,7 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
+import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
@@ -153,13 +153,8 @@ public class NeuralSearch extends Plugin
     private InfoStatsManager infoStatsManager;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
-    private final SemanticHighlighter semanticHighlighter;
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
     public static final String NEURAL_BASE_URI = "/_plugins/_neural";
-
-    public NeuralSearch() {
-        this.semanticHighlighter = new SemanticHighlighter();
-    }
 
     @Override
     public Collection<Object> createComponents(
@@ -178,12 +173,6 @@ public class NeuralSearch extends Plugin
         NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
-        QueryTextExtractorRegistry queryTextExtractorRegistry = new QueryTextExtractorRegistry();
-        SemanticHighlighterEngine semanticHighlighterEngine = SemanticHighlighterEngine.builder()
-            .mlCommonsClient(clientAccessor)
-            .queryTextExtractorRegistry(queryTextExtractorRegistry)
-            .build();
-        semanticHighlighter.initialize(semanticHighlighterEngine);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         settingsAccessor = new NeuralSearchSettingsAccessor(clusterService, environment.settings());
@@ -325,7 +314,9 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory()
+            new ExplanationResponseProcessorFactory(),
+            SemanticHighlightingConstants.PROCESSOR_TYPE,
+            new SemanticHighlightingResponseProcessorFactory(clientAccessor)
         );
     }
 
@@ -349,11 +340,12 @@ public class NeuralSearch extends Plugin
     }
 
     /**
-     * Register semantic highlighter
+     * Register minimal semantic highlighter for type validation
+     * Actual highlighting is done by SemanticHighlightingResponseProcessor
      */
     @Override
     public Map<String, Highlighter> getHighlighters() {
-        return Collections.singletonMap(SemanticHighlighter.NAME, semanticHighlighter);
+        return Collections.singletonMap(SemanticHighlighter.NAME, new SemanticHighlighter());
     }
 
     @Override

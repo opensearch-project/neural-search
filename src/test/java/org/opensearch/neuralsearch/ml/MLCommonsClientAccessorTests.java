@@ -15,6 +15,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -689,5 +690,149 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);
+    }
+
+    // ========== Batch Sentence Highlighting Tests ==========
+
+    /**
+     * Tests successful batch sentence highlighting inference with valid input.
+     */
+    public void testBatchInferenceSentenceHighlighting_whenValidInput_thenSuccess() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder()
+                .modelId("test-model")
+                .question("What is AI?")
+                .context("Artificial Intelligence is a field of computer science.")
+                .build(),
+            SentenceHighlightingRequest.builder()
+                .modelId("test-model")
+                .question("What is ML?")
+                .context("Machine Learning is a subset of AI.")
+                .build()
+        );
+
+        // Create batch response with highlights for both documents
+        Map<String, Object> dataMap = new HashMap<>();
+        dataMap.put(
+            "highlights",
+            List.of(
+                List.of(Map.of("start", 0, "end", 22), Map.of("start", 26, "end", 31)),
+                List.of(Map.of("start", 0, "end", 16), Map.of("start", 20, "end", 25))
+            )
+        );
+
+        ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataMap);
+        ModelTensors tensors = new ModelTensors(List.of(tensor));
+        ModelTensorOutput mlOutput = new ModelTensorOutput(List.of(tensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mlOutput);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, batchResultListener);
+
+        ArgumentCaptor<List<List<Map<String, Object>>>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(batchResultListener).onResponse(resultCaptor.capture());
+
+        List<List<Map<String, Object>>> result = resultCaptor.getValue();
+        assertEquals(2, result.size());
+        assertEquals(2, result.get(0).size()); // First doc has 2 highlights
+        assertEquals(2, result.get(1).size()); // Second doc has 2 highlights
+    }
+
+    /**
+     * Tests batch sentence highlighting with mixed results (some with highlights, some without).
+     */
+    public void testBatchInferenceSentenceHighlighting_whenMixedResults_thenHandleCorrectly() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q1").context("C1").build(),
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q2").context("C2").build()
+        );
+
+        // Create response with highlights for first doc, empty for second
+        Map<String, Object> dataMap = new HashMap<>();
+        dataMap.put("highlights", List.of(List.of(Map.of("start", 0, "end", 10)), Collections.emptyList()));
+
+        ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataMap);
+        ModelTensors tensors = new ModelTensors(List.of(tensor));
+        ModelTensorOutput mlOutput = new ModelTensorOutput(List.of(tensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mlOutput);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, batchResultListener);
+
+        ArgumentCaptor<List<List<Map<String, Object>>>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(batchResultListener).onResponse(resultCaptor.capture());
+
+        List<List<Map<String, Object>>> result = resultCaptor.getValue();
+        assertEquals(2, result.size());
+        assertEquals(1, result.get(0).size()); // First doc has 1 highlight
+        assertEquals(0, result.get(1).size()); // Second doc has no highlights
+    }
+
+    /**
+     * Tests batch sentence highlighting with malformed response.
+     */
+    public void testBatchInferenceSentenceHighlighting_whenMalformedResponse_thenHandleGracefully() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q1").context("C1").build()
+        );
+
+        // Create malformed response without highlights key
+        Map<String, Object> dataMap = new HashMap<>();
+        dataMap.put("wrong_key", "wrong_value");
+
+        ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataMap);
+        ModelTensors tensors = new ModelTensors(List.of(tensor));
+        ModelTensorOutput mlOutput = new ModelTensorOutput(List.of(tensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mlOutput);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, batchResultListener);
+
+        ArgumentCaptor<List<List<Map<String, Object>>>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(batchResultListener).onResponse(resultCaptor.capture());
+
+        List<List<Map<String, Object>>> result = resultCaptor.getValue();
+        assertEquals(1, result.size());
+        assertEquals(0, result.get(0).size()); // Should return empty list for malformed response
+    }
+
+    /**
+     * Tests batch sentence highlighting with failure handling.
+     */
+    public void testBatchInferenceSentenceHighlighting_whenException_thenPropagateFailure() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+        final RuntimeException exception = new RuntimeException("Batch inference failed");
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q1").context("C1").build()
+        );
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(exception);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, batchResultListener);
+
+        verify(batchResultListener).onFailure(exception);
     }
 }
