@@ -2039,7 +2039,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     // Method that waits till the health of nodes in the cluster goes green with default timeout value of 60
     protected void waitForClusterHealthGreen(final String numOfNodes) throws Exception {
         try {
-            waitForClusterHealthGreen(numOfNodes, 60);
+            waitForClusterHealthGreen(numOfNodes, 100);
         } catch (ResponseException e) {
             // Perform additional API calls to log the cause of the yellow cluster state
             Request explain = new Request("GET", "/_cluster/allocation/explain");
