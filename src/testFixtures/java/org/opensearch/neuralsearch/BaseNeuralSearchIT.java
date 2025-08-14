@@ -91,7 +91,6 @@ import java.util.stream.Collectors;
 
 import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
-import static org.opensearch.neuralsearch.util.TestUtils.BWC_VERSION;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUERY_INTERVAL_IN_MILLISECOND;
@@ -200,15 +199,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.jvm_heap_memory_threshold", 95);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
-
-        Optional<String> bwcVersion = Optional.ofNullable(System.getProperty(BWC_VERSION, null));
-        // only handle BWC tests
-        if (bwcVersion.isPresent()) {
-            Version bwcVer = Version.fromString(bwcVersion.get().replace("-SNAPSHOT", ""));
-            if (bwcVer.onOrAfter(DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION)) {
-                updateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
-            }
-        }
+        // disable disk circuit breaker, it doesn't validate response as the setting is only supported since 2.16
+        tryUpdateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
     }
 
     @SneakyThrows
@@ -227,8 +219,30 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(builder.toString()),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
         );
-
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
+    @SneakyThrows
+    protected Response tryUpdateClusterSettings(final String settingKey, final Object value) {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("persistent")
+            .field(settingKey, value)
+            .endObject()
+            .endObject();
+        try {
+            return makeRequest(
+                client(),
+                "PUT",
+                "_cluster/settings",
+                null,
+                toHttpEntity(builder.toString()),
+                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
+            );
+        } catch (Exception e) {
+            log.error("Failed to update cluster settings, swallow exception");
+        }
+        return null;
     }
 
     protected String registerModelGroupAndUploadModel(final String requestBody) throws Exception {
