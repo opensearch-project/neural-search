@@ -496,6 +496,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
             String ingestBulkPayload = Files.readString(Path.of(classLoader.getResource("processor/ingest_bulk.json").toURI()))
                 .replace("\"{indexname}\"", "\"" + index + "\"");
 
+            // wait until cluster is healthy before running ingest to reduce flakiness
+            waitForClusterHealthGreen(numOfNodes);
             bulkIngest(ingestBulkPayload, null);
         }
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
