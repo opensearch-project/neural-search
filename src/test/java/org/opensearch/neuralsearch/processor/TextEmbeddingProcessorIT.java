@@ -69,7 +69,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessor() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOC1);
@@ -78,7 +78,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessorWithSkipExisting() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOC1, "1");
@@ -89,7 +89,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessor_batch() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING, 2);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestBatchDocumentWithBulk(
@@ -112,7 +112,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessor_WithSkipExisting_batchUpdate() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING, 2);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestBatchDocumentWithBulk(
@@ -147,7 +147,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testNestedFieldMapping_whenDocumentsIngested_thenSuccessful() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOC3, "3");
@@ -192,7 +192,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testNestedFieldMapping_whenDocumentsIngested_WithSkipExisting_thenSuccessful() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING_WITH_SKIP_EXISTING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOC3, "3");
@@ -239,7 +239,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testNestedFieldMapping_whenDocumentInListIngestedAndUpdated_WithSkipExisting_thenSuccessful() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOC5, "5");
@@ -307,7 +307,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessor_updateWithSkipExisting_withBatchSizeInProcessor() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         URL pipelineURLPath = classLoader.getResource("processor/PipelineConfigurationWithBatchSizeWithSkipExisting.json");
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
@@ -358,7 +358,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessor_withBatchSizeInProcessor() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         URL pipelineURLPath = classLoader.getResource("processor/PipelineConfigurationWithBatchSize.json");
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
@@ -393,7 +393,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
 
     public void testTextEmbeddingProcessor_withFailureAndSkip() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         URL pipelineURLPath = classLoader.getResource("processor/PipelineConfigurationWithBatchSize.json");
         Objects.requireNonNull(pipelineURLPath);
         String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
@@ -429,7 +429,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     @SuppressWarnings("unchecked")
     public void testNestedFieldMapping_whenDocumentInListIngested_thenSuccessful() throws Exception {
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_NESTED_FIELDS_MAPPING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOC5, "5");
@@ -471,7 +471,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         ingestDocument(fromIndexName, "{ \"text\": \"hello world\" }");
         // create text embedding index for reindex
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         String toIndexName = "test-reindex-to";
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING);
         createIndexWithPipeline(toIndexName, "IndexMappings.json", PIPELINE_NAME);
@@ -482,7 +482,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     public void testTextEmbeddingProcessor_processorStats_successful() throws Exception {
         enableStats();
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestDocument(INDEX_NAME, INGEST_DOC1, "1");
@@ -507,7 +507,7 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
     public void testTextEmbeddingProcessor_batch_processorStats_successful() throws Exception {
         enableStats();
         String modelId = uploadTextEmbeddingModel();
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING);
         createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
         ingestBatchDocumentWithBulk(

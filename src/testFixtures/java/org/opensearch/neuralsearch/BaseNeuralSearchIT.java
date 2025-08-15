@@ -24,6 +24,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.After;
 import org.junit.Before;
+import org.opensearch.Version;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
@@ -136,6 +137,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
     protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
+    protected static final Version DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION = Version.V_2_16_0;
 
     private final Set<String> IMMUTABLE_INDEX_PREFIXES = Set.of(
         SECURITY_AUDITLOG_PREFIX,
@@ -198,7 +200,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.jvm_heap_memory_threshold", 95);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
-
+        // disable disk circuit breaker, it doesn't validate response as the setting is only supported since 2.16
+        tryUpdateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
     }
 
     @SneakyThrows
@@ -217,8 +220,30 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(builder.toString()),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
         );
-
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
+    @SneakyThrows
+    protected Response tryUpdateClusterSettings(final String settingKey, final Object value) {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("persistent")
+            .field(settingKey, value)
+            .endObject()
+            .endObject();
+        try {
+            return makeRequest(
+                client(),
+                "PUT",
+                "_cluster/settings",
+                null,
+                toHttpEntity(builder.toString()),
+                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
+            );
+        } catch (Exception e) {
+            log.error("Failed to update cluster settings, swallow exception");
+        }
+        return null;
     }
 
     protected String registerModelGroupAndUploadModel(final String requestBody) throws Exception {
