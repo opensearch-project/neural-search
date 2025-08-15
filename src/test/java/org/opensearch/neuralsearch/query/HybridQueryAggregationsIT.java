@@ -497,7 +497,7 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 .replace("\"{indexname}\"", "\"" + index + "\"");
 
             // wait until cluster is healthy before running ingest to reduce flakiness
-            waitForClusterHealthGreen(numOfNode, 100);
+            waitForClusterHealthGreen(numOfNodes);
             bulkIngest(ingestBulkPayload, null);
         }
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);

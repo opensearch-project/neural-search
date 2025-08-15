@@ -153,14 +153,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final int MAX_ATTEMPTS = 30;
     private static final int WAIT_TIME_IN_SECONDS = 2;
     private static final long TIMEOUT = 10000;
-    protected String numOfNode;
+    protected String numOfNodes;
 
     @Before
     public void setupSettings() {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-        numOfNode = System.getProperty("cluster.number_of_nodes", "1");
+        numOfNodes = System.getProperty("cluster.number_of_nodes", "1");
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
@@ -1661,10 +1661,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> dateFields,
         final int numberOfShards
     ) {
+        int numberOfReplica = numOfNodes.equals("1") ? 0 : 1;
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
             .field("number_of_shards", numberOfShards)
+            .field("number_of_replicas", numberOfReplica)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -1733,10 +1735,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final int numberOfShards,
         final String semanticFieldSearchAnalyzer
     ) {
+        int numberOfReplica = numOfNodes.equals("1") ? 0 : 1;
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
             .field("number_of_shards", numberOfShards)
+            .field("number_of_replicas", numberOfReplica)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -2064,7 +2068,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     // Method that waits till the health of nodes in the cluster goes green with default timeout value of 60
     protected void waitForClusterHealthGreen(final String numOfNodes) throws Exception {
         try {
-            waitForClusterHealthGreen(numOfNodes, 100);
+            waitForClusterHealthGreen(numOfNodes, 60);
         } catch (ResponseException e) {
             // Perform additional API calls to log the cause of the yellow cluster state
             Request explain = new Request("GET", "/_cluster/allocation/explain");
