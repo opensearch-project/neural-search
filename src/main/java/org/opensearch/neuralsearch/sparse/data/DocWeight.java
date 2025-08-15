@@ -24,7 +24,7 @@ public final class DocWeight implements Comparable<DocWeight> {
         return Integer.compare(this.docID, o.docID);
     }
 
-    public int getIntFreq() {
+    public int getIntWeight() {
         return ByteQuantizer.getUnsignedByte(weight);
     }
 }
