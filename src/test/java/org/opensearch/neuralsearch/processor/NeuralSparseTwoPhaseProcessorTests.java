@@ -6,9 +6,11 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
 import org.junit.Before;
+import org.mockito.Mockito;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -20,6 +22,10 @@ import org.opensearch.test.OpenSearchTestCase;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 
 public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     static final private String PARAMETER_KEY = "two_phase_parameter";
@@ -92,7 +98,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder copy = (NeuralSparseQueryBuilder) ((BoolQueryBuilder) ((QueryRescorerBuilder) searchRequest.source()
             .rescores()
             .getFirst()).getRescoreQuery()).should().getFirst();
-        assertNull("queryTokens of the copy should be null since raw query tokens are not provided.", copy.queryTokensSupplier().get());
+        assertNull("queryTokens of the copy should be null since raw query tokens are not provided.", copy.queryTokensMapSupplier().get());
         assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
         assertNotNull(searchRequest.source().rescores());
     }
@@ -100,7 +106,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     public void testProcessRequest_whenTwoPhaseEnabledWithRawQueryTokens_thenSuccess() throws Exception {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
-        neuralQueryBuilder.queryTokensSupplier(() -> Map.of("key", 0.1f));
+        neuralQueryBuilder.queryTokensMapSupplier(() -> Map.of("key", 0.1f));
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
@@ -111,7 +117,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
             .getFirst()).getRescoreQuery()).should().getFirst();
         assertNotNull(
             "queryTokens of the copy should not be null since raw query tokens are not provided.",
-            copy.queryTokensSupplier().get()
+            copy.queryTokensMapSupplier().get()
         );
         assertEquals(queryBuilder.neuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), 0.5f, 1e-3);
         assertNotNull(searchRequest.source().rescores());
@@ -195,6 +201,44 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 400.0f, 100);
         SearchRequest returnRequest = processor.processRequest(searchRequest);
         assertNull(returnRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenTwoPhaseEnabledWithNeuralQuerySparseEmbedding_thenSuccess() throws Exception {
+        setUpClusterService();
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralQueryBuilder neuralQueryBuilder = Mockito.mock(NeuralQueryBuilder.class);
+        NeuralQueryBuilder copy = Mockito.mock(NeuralQueryBuilder.class);
+
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+
+        when(neuralQueryBuilder.isTargetSparseEmbedding(searchRequest)).thenReturn(true);
+        when(neuralQueryBuilder.prepareTwoPhaseQuery(eq(0.5f), eq(PruneType.MAX_RATIO))).thenReturn(copy);
+
+        processor.processRequest(searchRequest);
+
+        NeuralQueryBuilder actualCopy = (NeuralQueryBuilder) ((BoolQueryBuilder) ((QueryRescorerBuilder) searchRequest.source()
+            .rescores()
+            .getFirst()).getRescoreQuery()).should().getFirst();
+
+        assertEquals(copy, actualCopy);
+    }
+
+    public void testProcessRequest_whenTwoPhaseEnabledWithNeuralQueryNonSparseEmbedding_thenNoRescorer() throws Exception {
+        setUpClusterService();
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralQueryBuilder neuralQueryBuilder = Mockito.mock(NeuralQueryBuilder.class);
+
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+
+        when(neuralQueryBuilder.isTargetSparseEmbedding(searchRequest)).thenReturn(false);
+
+        processor.processRequest(searchRequest);
+
+        assertNull(searchRequest.source().rescores());
     }
 
     public void testType() throws Exception {

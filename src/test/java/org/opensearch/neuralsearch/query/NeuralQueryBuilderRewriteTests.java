@@ -9,6 +9,7 @@ import lombok.Data;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import org.junit.Before;
+import org.mockito.Mockito;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
@@ -42,6 +43,7 @@ import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TestUtils;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.client.Client;
 
@@ -64,6 +66,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_ONE;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_TWO;
 import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 
 public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
@@ -90,6 +94,13 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
     private static final List<Map<String, ?>> TEST_QUERY_TOKENS_2 = List.of(
         Map.of("response", List.of(Map.of("key1", 2.0f, "key2", 1.0f)))
     );
+    private static final List<Map<String, ?>> TEST_QUERY_TOKENS_3 = List.of(
+        Map.of("response", List.of(Map.of("high_score_token", 0.6f, "low_score_token", 0.1f)))
+    );
+
+    private static final Float DELTA = 1e-4f;
+    private static final float PRUNE_RATIO = 0.4f;
+    private static final PruneType PRUNE_TYPE = PruneType.MAX_RATIO;
 
     private MLCommonsClientAccessor mlClient;
 
@@ -237,7 +248,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         QueryBuilder queryBuilder = neuralQueryBuilder.doRewrite(null);
         assertTrue(queryBuilder instanceof NeuralKNNQueryBuilder);
         NeuralKNNQueryBuilder neuralKNNQueryBuilder = (NeuralKNNQueryBuilder) queryBuilder;
-        assertEquals(neuralQueryBuilder.filter(), neuralKNNQueryBuilder.getKnnQueryBuilder().getFilter());
+        assertEquals(neuralQueryBuilder.queryfilter(), neuralKNNQueryBuilder.getKnnQueryBuilder().getFilter());
     }
 
     public void testRewrite_whenTargetKnnInRemoteCluster_3_0_0_thenKnnQueryBuilder() {
@@ -747,7 +758,10 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // verify the query should be rewritten as NeuralKNNQueryBuilder in a NestedQueryBuilder
         assertTrue(rewritten2 instanceof NestedQueryBuilder);
         assertTrue(((NestedQueryBuilder) rewritten2).query() instanceof NeuralSparseQueryBuilder);
-        assertEquals(expectedTokenMap, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten2).query()).queryTokensSupplier().get());
+        assertEquals(
+            expectedTokenMap,
+            ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten2).query()).queryTokensMapSupplier().get()
+        );
     }
 
     public void testRewriteTargetSemanticRankFeatures_whenMultipleTargetIndices_thenSuccess() {
@@ -850,7 +864,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // verify the query should be rewritten as NeuralSparseQueryBuilder since the chunking is disabled
         assertTrue(rewritten3 instanceof NeuralSparseQueryBuilder);
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) rewritten3;
-        assertEquals(expectedTokens1, neuralSparseQueryBuilder.queryTokensSupplier().get());
+        assertEquals(expectedTokens1, neuralSparseQueryBuilder.queryTokensMapSupplier().get());
 
         // prepare data for rewrite on the shard level for the second index LOCAL_INDEX_NAME_2
         final QueryShardContext queryShardContext2 = mock(QueryShardContext.class);
@@ -877,7 +891,10 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // verify the query should be rewritten as NeuralSparseQueryBuilder in a NestedQueryBuilder
         assertTrue(rewritten4 instanceof NestedQueryBuilder);
         assertTrue(((NestedQueryBuilder) rewritten4).query() instanceof NeuralSparseQueryBuilder);
-        assertEquals(expectedTokens2, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten4).query()).queryTokensSupplier().get());
+        assertEquals(
+            expectedTokens2,
+            ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten4).query()).queryTokensMapSupplier().get()
+        );
     }
 
     public void testRewriteTargetSemanticRankFeatures_whenMultipleTargetIndicesOneWithAnalyzer_thenSuccess() {
@@ -920,7 +937,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
 
         // verify
         // first rewrite we start one async action to generate the embedding since the one target index is using search
-        // analyzer and another is using the model. Then return a new neural query instance with the same parameters
+        // searchAnalyzer and another is using the model. Then return a new neural query instance with the same parameters
         // and vector supplier is set.
         assertTrue(rewritten1 instanceof NeuralQueryBuilder);
         assertNotNull(((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap());
@@ -983,7 +1000,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // verify the query should be rewritten as NeuralSparseQueryBuilder since the chunking is disabled
         assertTrue(rewritten3 instanceof NeuralSparseQueryBuilder);
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) rewritten3;
-        assertEquals(SEARCH_ANALYZER, neuralSparseQueryBuilder.analyzer());
+        assertEquals(SEARCH_ANALYZER, neuralSparseQueryBuilder.searchAnalyzer());
 
         // prepare data for rewrite on the shard level for the second index LOCAL_INDEX_NAME_2
         final QueryShardContext queryShardContext2 = mock(QueryShardContext.class);
@@ -1010,7 +1027,10 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // verify the query should be rewritten as NeuralSparseQueryBuilder in a NestedQueryBuilder
         assertTrue(rewritten4 instanceof NestedQueryBuilder);
         assertTrue(((NestedQueryBuilder) rewritten4).query() instanceof NeuralSparseQueryBuilder);
-        assertEquals(expectedTokens2, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten4).query()).queryTokensSupplier().get());
+        assertEquals(
+            expectedTokens2,
+            ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten4).query()).queryTokensMapSupplier().get()
+        );
     }
 
     public void testRewriteTargetSemanticRankFeatures_whenWithRawTokens_thenNestedNeuralSparseQueryBuilder() {
@@ -1049,7 +1069,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
         assertEquals(
             Map.of("key1", 1.0f),
-            ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).queryTokensSupplier().get()
+            ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).queryTokensMapSupplier().get()
         );
     }
 
@@ -1088,7 +1108,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // tokens and only target one index
         assertTrue(rewritten1 instanceof NestedQueryBuilder);
         assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
-        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
+        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).searchAnalyzer());
     }
 
     public void testRewriteTargetSemanticRankFeatures_whenSearchAnalyzerInMapping_thenNestedNeuralSparseQueryBuilder() {
@@ -1123,7 +1143,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // tokens and only target one index
         assertTrue(rewritten1 instanceof NestedQueryBuilder);
         assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
-        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
+        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).searchAnalyzer());
     }
 
     public void testRewriteTargetSemanticRankFeatures_whenBothModelIdAndSearchAnalyzerAreProvidedInQuery_thenException() {
@@ -1202,7 +1222,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // tokens and only target one index
         assertTrue(rewritten1 instanceof NestedQueryBuilder);
         assertTrue(((NestedQueryBuilder) rewritten1).query() instanceof NeuralSparseQueryBuilder);
-        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).analyzer());
+        assertEquals(SEARCH_ANALYZER, ((NeuralSparseQueryBuilder) ((NestedQueryBuilder) rewritten1).query()).searchAnalyzer());
     }
 
     private void mockIndexMapping(final Map<String, Map<String, Object>> indexToMappingMap, final IndicesRequest indicesRequest) {
@@ -1245,6 +1265,182 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
 
         // verify the rewritten equals to the original query builder
         assertEquals(rewritten, neuralQueryBuilder);
+    }
+
+    public void testIsTargetSparseEmbedding_whenRemoteIndices_returnsFalse() {
+        setUpClusterService();
+        final IndicesRequest searchRequest = Mockito.mock(IndicesRequest.class);
+        final NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).build();
+
+        when(searchRequest.indices()).thenReturn(new String[] { "remote:index" });
+
+        assertFalse(neuralQueryBuilder.isTargetSparseEmbedding(searchRequest));
+    }
+
+    public void testIsTargetSparseEmbedding_whenNotSparseEmbedding_returnsFalse() {
+        setUpClusterService();
+        final IndicesRequest searchRequest = mock(IndicesRequest.class);
+        when(searchRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder().modelId(MODEL_ID_1).embeddingFieldType(KNNVectorFieldMapper.CONTENT_TYPE).build()
+                )
+            ),
+            searchRequest
+        );
+
+        final NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).build();
+
+        assertFalse(neuralQueryBuilder.isTargetSparseEmbedding(searchRequest));
+    }
+
+    public void testIsTargetSparseEmbedding_whenSparseEmbedding_returnsTrue() {
+        setUpClusterService();
+        final IndicesRequest searchRequest = mock(IndicesRequest.class);
+        when(searchRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder().modelId(MODEL_ID_1).embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE).build()
+                )
+            ),
+            searchRequest
+        );
+
+        final NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).build();
+
+        assertTrue(neuralQueryBuilder.isTargetSparseEmbedding(searchRequest));
+    }
+
+    public void testRewriteSparseTwoPhase_whenUseModel() {
+        setUpClusterService();
+        final NeuralQueryBuilder original = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .neuralSparseQueryTwoPhaseInfo(new NeuralSparseQueryTwoPhaseInfo(PHASE_ONE, PRUNE_RATIO, PRUNE_TYPE))
+            .build();
+        final NeuralQueryBuilder copy = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .neuralSparseQueryTwoPhaseInfo(new NeuralSparseQueryTwoPhaseInfo(PHASE_TWO, PRUNE_RATIO, PRUNE_TYPE))
+            .modelIdToTwoPhaseSharedQueryTokenSupplier(original::modelIdToTwoPhaseSharedQueryToken)
+            .build();
+
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder().modelId(MODEL_ID_1).embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE).build()
+                )
+            ),
+            indicesRequest
+        );
+
+        final List<BiConsumer<Client, ActionListener<Void>>> asyncActions = mockRegisterAsyncAction(queryCoordinatorContext);
+
+        // first rewrite the original query on the coordinate level
+        final QueryBuilder rewritten1 = original.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // first rewrite we start one async actions to generate the embedding. Then return a new neural query
+        // instance with the same parameters and vector supplier is set.
+        assertTrue(rewritten1 instanceof NeuralQueryBuilder);
+        assertNotNull(((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap());
+        assertNull(((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap().get(MODEL_ID_1).get());
+        assertEquals(1, ((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap().size());
+        assertEquals(1, asyncActions.size());
+
+        // rewrite the copy as part of the rescorer of the query
+        final QueryBuilder copyRewritten1 = copy.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // directly rewrite it as NeuralSparseQueryBuilder since it's phase 2, and we target one index
+        assertTrue(copyRewritten1 instanceof NeuralSparseQueryBuilder);
+        // no inference call initiated for the copy since it will rely on the original query to share the tokens
+        assertEquals(1, asyncActions.size());
+        // for the query tokens are still null since inference call of the original query is not done yet
+        assertNull(((NeuralSparseQueryBuilder) copyRewritten1).queryTokensMapSupplier.get());
+
+        // mock async action is done
+        doAnswer(invocation -> {
+            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[1];
+            listener.onResponse(TEST_QUERY_TOKENS_3);
+            return null;
+        }).when(mlClient).inferenceSentencesWithMapResult(any(), any());
+
+        asyncActions.get(0).accept(mock(Client.class), mock(ActionListener.class));
+
+        // verify the higher score tokens is set for the original query
+        final Map<String, Float> highScoreToken = Map.of("high_score_token", 0.6f);
+        assertEquals(highScoreToken, ((NeuralQueryBuilder) rewritten1).modelIdToQueryTokensSupplierMap().get(MODEL_ID_1).get());
+        // verify the copy also have the lower score tokens set
+        final Map<String, Float> lowScoreToken = Map.of("low_score_token", 0.1f);
+        assertEquals(lowScoreToken, ((NeuralSparseQueryBuilder) copyRewritten1).queryTokensMapSupplier.get());
+
+        // second rewrite the original query on the coordinate level
+        QueryBuilder rewritten2 = ((NeuralQueryBuilder) rewritten1).doRewrite(queryCoordinatorContext);
+
+        // verify the original query should be rewritten as NeuralSparseQueryBuilder
+        assertTrue(rewritten2 instanceof NeuralSparseQueryBuilder);
+        assertEquals(highScoreToken, ((NeuralSparseQueryBuilder) rewritten2).queryTokensMapSupplier().get());
+    }
+
+    public void testRewriteSparseTwoPhase_whenUseSearchAnalyzer() {
+        setUpClusterService();
+        final NeuralQueryBuilder original = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .neuralSparseQueryTwoPhaseInfo(new NeuralSparseQueryTwoPhaseInfo(PHASE_ONE, PRUNE_RATIO, PRUNE_TYPE))
+            .build();
+        final NeuralQueryBuilder copy = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .neuralSparseQueryTwoPhaseInfo(new NeuralSparseQueryTwoPhaseInfo(PHASE_TWO, PRUNE_RATIO, PRUNE_TYPE))
+            .modelIdToTwoPhaseSharedQueryTokenSupplier(original::modelIdToTwoPhaseSharedQueryToken)
+            .build();
+
+        // prepare data to rewrite on coordinate level
+        final QueryCoordinatorContext queryCoordinatorContext = mock(QueryCoordinatorContext.class);
+        final IndicesRequest indicesRequest = mock(IndicesRequest.class);
+        when(queryCoordinatorContext.convertToCoordinatorContext()).thenReturn(queryCoordinatorContext);
+        when(queryCoordinatorContext.getSearchRequest()).thenReturn(indicesRequest);
+        when(indicesRequest.indices()).thenReturn(List.of(LOCAL_INDEX_NAME).toArray(new String[0]));
+        mockIndexMapping(
+            Map.of(
+                LOCAL_INDEX_NAME,
+                createIndexMappingWithSemanticField(
+                    TestSemanticFieldConfig.builder()
+                        .modelId(MODEL_ID_1)
+                        .searchAnalyzer(SEARCH_ANALYZER)
+                        .embeddingFieldType(RankFeaturesFieldMapper.CONTENT_TYPE)
+                        .build()
+                )
+            ),
+            indicesRequest
+        );
+
+        // first rewrite the original query on the coordinate level
+        final QueryBuilder rewritten1 = original.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // directly rewrite it as NeuralSparseQueryBuilder since we are using search analyzer and we target single index
+        assertTrue(rewritten1 instanceof NeuralSparseQueryBuilder);
+
+        // rewrite the copy as part of the rescorer of the query
+        final QueryBuilder copyRewritten1 = copy.doRewrite(queryCoordinatorContext);
+
+        // verify
+        // directly rewrite it as NeuralSparseQueryBuilder since it's phase 2, and we target one index
+        assertTrue(copyRewritten1 instanceof NeuralSparseQueryBuilder);
     }
 
     @Builder

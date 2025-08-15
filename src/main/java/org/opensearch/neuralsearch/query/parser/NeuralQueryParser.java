@@ -138,6 +138,12 @@ public class NeuralQueryParser {
         }
     }
 
+    /**
+     *
+     * @param in
+     * @return
+     * @throws IOException
+     */
     public static Map<String, Supplier<Map<String, Float>>> modelIdToQueryTokensSupplierMapStreamInput(@NonNull final StreamInput in)
         throws IOException {
         if (in.readBoolean() == false) {
@@ -191,6 +197,113 @@ public class NeuralQueryParser {
                     e
                 );
             }
+        }
+    }
+
+    /**
+     * modelIdToTwoPhaseSharedQueryTokenStreamInput
+     * @param in input stream
+     * @return modelIdToTwoPhaseSharedQueryToken
+     * @throws IOException
+     */
+    public static Map<String, Map<String, Float>> modelIdToTwoPhaseSharedQueryTokenStreamInput(@NonNull final StreamInput in)
+        throws IOException {
+        if (in.readBoolean() == false) {
+            return null;
+        } else {
+            final Map<String, Map<String, Float>> modelIdToTwoPhaseSharedQueryToken = new HashMap<>();
+            final int size = in.readVInt();
+            for (int i = 0; i < size; i++) {
+                final String modelId = in.readString();
+                final Map<String, Float> twoPhaseSharedQueryToken = in.readMap(StreamInput::readString, StreamInput::readFloat);
+                modelIdToTwoPhaseSharedQueryToken.put(modelId, twoPhaseSharedQueryToken);
+            }
+            return modelIdToTwoPhaseSharedQueryToken;
+        }
+    }
+
+    /**
+     * modelIdToTwoPhaseSharedQueryTokenStreamOutput
+     * @param out output stream
+     * @param modelIdToTwoPhaseSharedQueryToken
+     * @throws IOException
+     */
+    public static void modelIdToTwoPhaseSharedQueryTokenStreamOutput(
+        @NonNull final StreamOutput out,
+        final Map<String, Map<String, Float>> modelIdToTwoPhaseSharedQueryToken
+    ) throws IOException {
+        if (modelIdToTwoPhaseSharedQueryToken == null) {
+            out.writeBoolean(false);
+            return;
+        }
+        out.writeBoolean(true);
+
+        int size = modelIdToTwoPhaseSharedQueryToken.size();
+        out.writeVInt(size);
+
+        for (Map.Entry<String, Map<String, Float>> entry : modelIdToTwoPhaseSharedQueryToken.entrySet()) {
+            try {
+                out.writeString(entry.getKey());
+                out.writeMap(entry.getValue(), StreamOutput::writeString, StreamOutput::writeFloat);
+            } catch (Exception e) {
+                throw new RuntimeException(
+                    String.format(
+                        Locale.ROOT,
+                        "Failed to write modelIdToTwoPhaseSharedQueryToken to StreamOutput for the neural query due to: %s",
+                        e.getMessage()
+                    ),
+                    e
+                );
+            }
+        }
+    }
+
+    /**
+     * modelIdToTwoPhaseSharedQueryTokenSupplierStreamInput
+     * @param in input stream
+     * @return modelIdToTwoPhaseSharedQueryTokenSupplier
+     * @throws IOException
+     */
+    public static Supplier<Map<String, Map<String, Float>>> modelIdToTwoPhaseSharedQueryTokenSupplierStreamInput(
+        @NonNull final StreamInput in
+    ) throws IOException {
+        if (in.readBoolean() == false) {
+            return null;
+        }
+        Map<String, Map<String, Float>> modelIdToTwoPhaseSharedQueryToken = modelIdToTwoPhaseSharedQueryTokenStreamInput(in);
+        if (modelIdToTwoPhaseSharedQueryToken == null) {
+            return null;
+        } else {
+            return () -> modelIdToTwoPhaseSharedQueryToken;
+        }
+    }
+
+    /**
+     * modelIdToTwoPhaseSharedQueryTokenSupplierStreamOutput
+     * @param out output stream
+     * @param modelIdToTwoPhaseSharedQueryTokenSupplier
+     * @throws IOException
+     */
+    public static void modelIdToTwoPhaseSharedQueryTokenSupplierStreamOutput(
+        @NonNull final StreamOutput out,
+        final Supplier<Map<String, Map<String, Float>>> modelIdToTwoPhaseSharedQueryTokenSupplier
+    ) throws IOException {
+        if (modelIdToTwoPhaseSharedQueryTokenSupplier == null) {
+            out.writeBoolean(false);
+            return;
+        }
+        out.writeBoolean(true);
+        try {
+            modelIdToTwoPhaseSharedQueryTokenStreamOutput(out, modelIdToTwoPhaseSharedQueryTokenSupplier.get());
+        } catch (Exception e) {
+            throw new RuntimeException(
+                String.format(
+                    Locale.ROOT,
+                    "Failed to write modelIdToTwoPhaseSharedQueryTokenSupplier to StreamOutput for the neural query due to: %s",
+                    e.getMessage()
+                ),
+                e
+            );
         }
     }
 }

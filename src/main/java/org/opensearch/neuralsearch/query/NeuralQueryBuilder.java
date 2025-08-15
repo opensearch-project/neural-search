@@ -11,6 +11,7 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.METHOD_PARAMS_FIELD
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForDefaultDenseModelIdSupport;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForRadialSearch;
@@ -23,6 +24,10 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
 import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToQueryTokensSupplierMapStreamInput;
 import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToQueryTokensSupplierMapStreamOutput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToTwoPhaseSharedQueryTokenStreamInput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToTwoPhaseSharedQueryTokenStreamOutput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToTwoPhaseSharedQueryTokenSupplierStreamInput;
+import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToTwoPhaseSharedQueryTokenSupplierStreamOutput;
 import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToVectorSupplierMapStreamInput;
 import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToVectorSupplierMapStreamOutput;
 import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.queryTokensMapSupplierStreamInput;
@@ -48,6 +53,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 import lombok.NonNull;
+import lombok.experimental.Accessors;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.lucene.search.MatchNoDocsQuery;
@@ -56,6 +62,7 @@ import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.SetOnce;
+import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
@@ -67,7 +74,6 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.mapper.RankFeaturesFieldMapper;
-import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryCoordinatorContext;
@@ -91,16 +97,16 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import com.google.common.annotations.VisibleForTesting;
 
 import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.query.dto.NeuralQueryTargetFieldConfig;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.transport.RemoteClusterService;
 
 /**
@@ -114,16 +120,10 @@ import org.opensearch.transport.RemoteClusterService;
 @Setter
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
-public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder> implements ModelInferenceQueryBuilder, WithFieldName {
+public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBuilder> implements WithFieldName {
 
     public static final String NAME = "neural";
 
-    // common fields used for both dense and sparse model
-    @VisibleForTesting
-    public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
-
-    public static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
     public static final ParseField SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD = new ParseField("semantic_field_search_analyzer");
 
     // fields only used for dense model
@@ -138,9 +138,6 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         KNNVectorFieldMapper.CONTENT_TYPE
     );
 
-    // fields for sparse model
-    public static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
-
     // client to invoke ml-common APIs
     private static MLCommonsClientAccessor ML_CLIENT;
 
@@ -149,9 +146,6 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     }
 
     // common fields used for both dense and sparse model
-    private String fieldName;
-    private String queryText;
-    private String modelId;
     private String embeddingFieldType;
 
     // fields only used for dense model
@@ -164,17 +158,18 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     @Getter(AccessLevel.PACKAGE)
     @Setter(AccessLevel.PACKAGE)
     private Supplier<float[]> vectorSupplier;
-    private QueryBuilder filter;
+    private QueryBuilder queryfilter;
     private Map<String, ?> methodParameters;
     private RescoreContext rescoreContext;
     // fields to support the semantic field for dense model
     private Map<String, Supplier<float[]>> modelIdToVectorSupplierMap;
 
-    // fields only used for sparse model
-    private Supplier<Map<String, Float>> queryTokensMapSupplier;
     // fields to support the semantic field for sparse model
     private Map<String, Supplier<Map<String, Float>>> modelIdToQueryTokensSupplierMap;
-    private String searchAnalyzer;
+    // A field that for neural_sparse_two_phase_processor. Original query builder will set the lower score tokens to
+    // this field so that the rescore query can use it to save inference calls.
+    private Map<String, Map<String, Float>> modelIdToTwoPhaseSharedQueryToken;
+    private Supplier<Map<String, Map<String, Float>>> modelIdToTwoPhaseSharedQueryTokenSupplier;
 
     /**
      * A custom builder class to enforce valid Neural Query Builder instantiation
@@ -201,6 +196,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         private Map<String, Supplier<Map<String, Float>>> modelIdToQueryTokensSupplierMap;
         private Boolean isSemanticField = false;
         private NeuralQueryBuildStage buildStage;
+        private NeuralSparseQueryTwoPhaseInfo neuralSparseQueryTwoPhaseInfo;
+        private Map<String, Map<String, Float>> modelIdToTwoPhaseSharedQueryToken;
+        private Supplier<Map<String, Map<String, Float>>> modelIdToTwoPhaseSharedQueryTokenSupplier;
 
         public Builder() {}
 
@@ -309,28 +307,50 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             return this;
         }
 
+        public Builder neuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo neuralSparseQueryTwoPhaseInfo) {
+            this.neuralSparseQueryTwoPhaseInfo = neuralSparseQueryTwoPhaseInfo;
+            return this;
+        }
+
+        public Builder modelIdToTwoPhaseSharedQueryToken(Map<String, Map<String, Float>> modelIdToTwoPhaseSharedQueryToken) {
+            this.modelIdToTwoPhaseSharedQueryToken = modelIdToTwoPhaseSharedQueryToken;
+            return this;
+        }
+
+        public Builder modelIdToTwoPhaseSharedQueryTokenSupplier(
+            Supplier<Map<String, Map<String, Float>>> modelIdToTwoPhaseSharedQueryTokenSupplier
+        ) {
+            this.modelIdToTwoPhaseSharedQueryTokenSupplier = modelIdToTwoPhaseSharedQueryTokenSupplier;
+            return this;
+        }
+
         public NeuralQueryBuilder build() {
             requireValue(fieldName, "Field name must be provided for neural query");
 
-            final NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder(
-                fieldName,
-                queryText,
-                modelId,
-                embeddingFieldType,
-                queryImage,
-                k,
-                maxDistance,
-                minScore,
-                expandNested,
-                vectorSupplier,
-                filter,
-                methodParameters,
-                rescoreContext,
-                modelIdToVectorSupplierMap,
-                queryTokensMapSupplier,
-                modelIdToQueryTokensSupplierMap,
-                searchAnalyzer
-            ).boost(boost).queryName(queryName);
+            final NeuralQueryBuilder neuralQueryBuilder = new NeuralQueryBuilder().fieldName(fieldName)
+                .queryText(queryText)
+                .modelId(modelId)
+                .embeddingFieldType(embeddingFieldType)
+                .queryImage(queryImage)
+                .k(k)
+                .maxDistance(maxDistance)
+                .minScore(minScore)
+                .expandNested(expandNested)
+                .vectorSupplier(vectorSupplier)
+                .queryfilter(filter)
+                .methodParameters(methodParameters)
+                .rescoreContext(rescoreContext)
+                .modelIdToVectorSupplierMap(modelIdToVectorSupplierMap)
+                .queryTokensMapSupplier(queryTokensMapSupplier)
+                .modelIdToQueryTokensSupplierMap(modelIdToQueryTokensSupplierMap)
+                .searchAnalyzer(searchAnalyzer)
+                .neuralSparseQueryTwoPhaseInfo(
+                    neuralSparseQueryTwoPhaseInfo == null ? new NeuralSparseQueryTwoPhaseInfo() : neuralSparseQueryTwoPhaseInfo
+                )
+                .modelIdToTwoPhaseSharedQueryToken(modelIdToTwoPhaseSharedQueryToken)
+                .modelIdToTwoPhaseSharedQueryTokenSupplier(modelIdToTwoPhaseSharedQueryTokenSupplier)
+                .boost(boost)
+                .queryName(queryName);
 
             validateNeuralQueryBuilder(neuralQueryBuilder, buildStage, isSemanticField, embeddingFieldType);
 
@@ -405,7 +425,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             this.k = in.readVInt();
         }
-        this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
+        this.queryfilter = in.readOptionalNamedWriteable(QueryBuilder.class);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
             this.maxDistance = in.readOptionalFloat();
             this.minScore = in.readOptionalFloat();
@@ -423,6 +443,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             this.modelIdToVectorSupplierMap = modelIdToVectorSupplierMapStreamInput(in);
             this.modelIdToQueryTokensSupplierMap = modelIdToQueryTokensSupplierMapStreamInput(in);
             this.searchAnalyzer = in.readOptionalString();
+        }
+        if (in.getVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE)) {
+            this.neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo(in);
+            this.modelIdToTwoPhaseSharedQueryToken = modelIdToTwoPhaseSharedQueryTokenStreamInput(in);
+            this.modelIdToTwoPhaseSharedQueryTokenSupplier = modelIdToTwoPhaseSharedQueryTokenSupplierStreamInput(in);
         }
     }
 
@@ -450,7 +475,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         } else {
             out.writeVInt(this.k);
         }
-        out.writeOptionalNamedWriteable(this.filter);
+        out.writeOptionalNamedWriteable(this.queryfilter);
         if (isClusterOnOrAfterMinReqVersionForRadialSearch()) {
             out.writeOptionalFloat(this.maxDistance);
             out.writeOptionalFloat(this.minScore);
@@ -471,6 +496,12 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             modelIdToQueryTokensSupplierMapStreamOutput(out, modelIdToQueryTokensSupplierMap);
             out.writeOptionalString(this.searchAnalyzer);
         }
+
+        if (out.getVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE)) {
+            this.neuralSparseQueryTwoPhaseInfo.writeTo(out);
+            modelIdToTwoPhaseSharedQueryTokenStreamOutput(out, modelIdToTwoPhaseSharedQueryToken);
+            modelIdToTwoPhaseSharedQueryTokenSupplierStreamOutput(out, modelIdToTwoPhaseSharedQueryTokenSupplier);
+        }
     }
 
     /**
@@ -478,14 +509,15 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
      * @param filterToBeAdded filter to be added
      * @return return itself with underlying filter combined with passed in filter
      */
+    @Override
     public QueryBuilder filter(QueryBuilder filterToBeAdded) {
         if (validateFilterParams(filterToBeAdded) == false) {
             return this;
         }
-        if (filter == null) {
-            filter = filterToBeAdded;
+        if (this.queryfilter == null) {
+            this.queryfilter = filterToBeAdded;
         } else {
-            filter = filter.filter(filterToBeAdded);
+            this.queryfilter = this.queryfilter.filter(filterToBeAdded);
         }
         return this;
 
@@ -507,8 +539,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (Objects.nonNull(k)) {
             xContentBuilder.field(K_FIELD.getPreferredName(), k);
         }
-        if (Objects.nonNull(filter)) {
-            xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);
+        if (Objects.nonNull(queryfilter)) {
+            xContentBuilder.field(FILTER_FIELD.getPreferredName(), queryfilter);
         }
         if (Objects.nonNull(maxDistance)) {
             xContentBuilder.field(MAX_DISTANCE_FIELD.getPreferredName(), maxDistance);
@@ -691,7 +723,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                 && getSearchAnalyzer(firstTargetFieldConfig) != null;
             final boolean canRewriteSingleTargetIndex = isModelGeneratedEmbeddingAvailable
                 || queryTokensMapSupplier != null
-                || canUseSearchAnalyzerForSingleTargetIndex;
+                || canUseSearchAnalyzerForSingleTargetIndex
+                || isSparseTwoPhaseTwo();
 
             // If we only have one target index it means we know the path to the target embedding field so we can
             // continue the rewrite
@@ -713,7 +746,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                         .isEmpty());
             final boolean canSkipInference = isModelGeneratedEmbeddingAvailable
                 || queryTokensMapSupplier != null
-                || canUseAnalyzerForAllTargetIndices;
+                || canUseAnalyzerForAllTargetIndices
+                || isSparseTwoPhaseTwo();
             if (canSkipInference) {
                 return this;
             }
@@ -762,21 +796,26 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             final boolean useModelGeneratedEmbedding = modelId != null
                 || (queryTokensMapSupplier == null && semanticFieldSearchAnalyzer == null);
             if (useModelGeneratedEmbedding) {
-                if (modelIdToQueryTokensSupplierMap == null || modelIdToQueryTokensSupplierMap.get(searchModelId) == null) {
-                    throw new RuntimeException(
-                        getErrorMessageWithBaseErrorForSemantic(
-                            "Not able to find the sparse embedding when try to rewrite it to neural sparse query."
-                        )
-                    );
+                if (isSparseTwoPhaseTwo()) {
+                    queryTokensSupplier = () -> modelIdToTwoPhaseSharedQueryTokenSupplier.get().get(searchModelId);
+                } else {
+                    if (modelIdToQueryTokensSupplierMap == null || modelIdToQueryTokensSupplierMap.get(searchModelId) == null) {
+                        throw new RuntimeException(
+                            getErrorMessageWithBaseErrorForSemantic(
+                                "Not able to find the sparse embedding when try to rewrite it to neural sparse query."
+                            )
+                        );
+                    }
+                    queryTokensSupplier = modelIdToQueryTokensSupplierMap.get(searchModelId);
                 }
-                queryTokensSupplier = modelIdToQueryTokensSupplierMap.get(searchModelId);
             }
 
-            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldPath);
+            NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(embeddingFieldPath)
+                .neuralSparseQueryTwoPhaseInfo(neuralSparseQueryTwoPhaseInfo);
             if (queryTokensSupplier != null) {
-                neuralSparseQueryBuilder = neuralSparseQueryBuilder.queryTokensSupplier(queryTokensSupplier);
+                neuralSparseQueryBuilder = neuralSparseQueryBuilder.queryTokensMapSupplier(queryTokensSupplier);
             } else if (semanticFieldSearchAnalyzer != null) {
-                neuralSparseQueryBuilder = neuralSparseQueryBuilder.analyzer(semanticFieldSearchAnalyzer).queryText(this.queryText);
+                neuralSparseQueryBuilder = neuralSparseQueryBuilder.searchAnalyzer(semanticFieldSearchAnalyzer).queryText(this.queryText);
             } else {
                 throw new IllegalStateException(
                     getErrorMessageWithBaseErrorForSemantic(
@@ -813,6 +852,24 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         return Arrays.stream(searchRequest.indices())
             .filter(index -> index.indexOf(RemoteClusterService.REMOTE_CLUSTER_INDEX_SEPARATOR) >= 0)
             .collect(Collectors.toList());
+    }
+
+    /**
+     * We will check the target field config to see if this neural query is for a sparse embedding.
+     * @param searchRequest A search request
+     * @return If this neural query in the search request is for a sparse embedding
+     */
+    public boolean isTargetSparseEmbedding(@NonNull final IndicesRequest searchRequest) {
+        // currently we cannot support the sparse embedding in the remote cluster so return false
+        if (getRemoteIndices(searchRequest).isEmpty() == false) {
+            return false;
+        }
+
+        // since in getIndexToTargetFieldConfigMap we already validate the target field in multiple indices case should
+        // have the same embedding field type so we just need to do any match to see if the target is the sparse embedding.
+        return getIndexToTargetFieldConfigMap(searchRequest).values()
+            .stream()
+            .anyMatch(config -> RankFeaturesFieldMapper.CONTENT_TYPE.equals(config.getEmbeddingFieldType()));
     }
 
     private NeuralQueryTargetFieldConfig getFirstTargetFieldConfig(
@@ -879,7 +936,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             NeuralKNNQueryBuilder.Builder builder = NeuralKNNQueryBuilder.builder()
                 .fieldName(fieldName)
                 .vector(vector)
-                .filter(filter())
+                .filter(queryfilter())
                 .expandNested(expandNested())
                 .methodParameters(methodParameters())
                 .rescoreContext(rescoreContext())
@@ -895,7 +952,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             return KNNQueryBuilder.builder()
                 .fieldName(fieldName)
                 .vector(vector)
-                .filter(filter())
+                .filter(queryfilter())
                 .maxDistance(maxDistance())
                 .minScore(minScore())
                 .expandNested(expandNested())
@@ -922,7 +979,7 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             .minScore(minScore())
             .expandNested(expandNested())
             .vectorSupplier(vectorSupplier)
-            .filter(filter())
+            .filter(queryfilter())
             .methodParameters(methodParameters())
             .rescoreContext(rescoreContext())
             .isSemanticField(isSemanticField)
@@ -931,6 +988,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             .modelIdToQueryTokensSupplierMap(modelIdToQueryTokensSupplierMap())
             .modelIdToVectorSupplierMap(modelIdToVectorSupplierMap())
             .searchAnalyzer(searchAnalyzer())
+            .neuralSparseQueryTwoPhaseInfo(neuralSparseQueryTwoPhaseInfo())
+            .modelIdToTwoPhaseSharedQueryToken(modelIdToTwoPhaseSharedQueryToken())
+            .modelIdToTwoPhaseSharedQueryTokenSupplier(modelIdToTwoPhaseSharedQueryTokenSupplier())
             .build();
     }
 
@@ -992,7 +1052,8 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         if (modelIdToVectorSupplierMap == null
             && modelIdToQueryTokensSupplierMap == null
             && queryTokensMapSupplier == null
-            && getSearchAnalyzer(targetFieldConfig) == null) {
+            && getSearchAnalyzer(targetFieldConfig) == null
+            && isSparseTwoPhaseTwo() == false) {
             return inferenceForSemanticField(shardContext, Set.of(targetFieldConfig.getSearchModelId()), embeddingFieldTypeName);
         }
 
@@ -1058,6 +1119,9 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             modelIdToVectorSupplierMap = new HashMap<>(modelIds.size());
         } else if (RankFeaturesFieldMapper.CONTENT_TYPE.equals(embeddingFieldType)) {
             modelIdToQueryTokensSupplierMap = new HashMap<>(modelIds.size());
+            if (isSparseTwoPhaseOne()) {
+                modelIdToTwoPhaseSharedQueryToken = new HashMap<>(modelIds.size());
+            }
         } else {
             throw new RuntimeException(
                 String.format(
@@ -1096,9 +1160,17 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
                     TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(queryText)).build(),
                     ActionListener.wrap(mapResultList -> {
                         final Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
-                        // Currently we don't support NeuralSparseTwoPhaseProcessor which can be supported
-                        // in the future.
-                        setOnce.set(queryTokens);
+                        if (isSparseTwoPhaseOne()) {
+                            Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = PruneUtils.splitSparseVector(
+                                neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(),
+                                neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(),
+                                queryTokens
+                            );
+                            setOnce.set(splitQueryTokens.v1());
+                            modelIdToTwoPhaseSharedQueryToken.put(modelId, splitQueryTokens.v2());
+                        } else {
+                            setOnce.set(queryTokens);
+                        }
                         actionListener.onResponse(null);
                     }, actionListener::onFailure)
                 ))
@@ -1166,10 +1238,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
         equalsBuilder.append(minScore, obj.minScore);
         equalsBuilder.append(expandNested, obj.expandNested);
         equalsBuilder.append(getVector(vectorSupplier), getVector(obj.vectorSupplier));
-        equalsBuilder.append(filter, obj.filter);
+        equalsBuilder.append(queryfilter, obj.queryfilter);
         equalsBuilder.append(methodParameters, obj.methodParameters);
         equalsBuilder.append(rescoreContext, obj.rescoreContext);
         equalsBuilder.append(getQueryTokenMap(queryTokensMapSupplier), getQueryTokenMap(obj.queryTokensMapSupplier));
+        equalsBuilder.append(neuralSparseQueryTwoPhaseInfo, obj.neuralSparseQueryTwoPhaseInfo);
         return equalsBuilder.isEquals();
     }
 
@@ -1186,10 +1259,11 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
             minScore,
             expandNested,
             Arrays.hashCode(getVector(vectorSupplier)),
-            filter,
+            queryfilter,
             methodParameters,
             rescoreContext,
-            getQueryTokenMap(queryTokensMapSupplier)
+            getQueryTokenMap(queryTokensMapSupplier),
+            neuralSparseQueryTwoPhaseInfo
         );
     }
 
@@ -1207,12 +1281,43 @@ public class NeuralQueryBuilder extends AbstractQueryBuilder<NeuralQueryBuilder>
     }
 
     /**
-     * Gets the field name that this query is searching against.
-     *
-     * @return The field name used in the Neural query
+     * Copy this QueryBuilder for two phase rescorer. This function will be invoked by the search processor
+     * NeuralSparseTwoPhaseProcessor which happens before the rewrite phase.
+     * @param pruneRatio the parameter of the NeuralSparseTwoPhaseProcessor, control the ratio of splitting the queryTokens to two phase.
+     * @param pruneType the parameter of the NeuralSparseTwoPhaseProcessor, control how to split the queryTokens to two phase.
+     * @return A copy NeuralQueryBuilder for twoPhase, it will be added to the rescorer.
      */
     @Override
-    public String fieldName() {
-        return this.fieldName;
+    public NeuralQueryBuilder prepareTwoPhaseQuery(float pruneRatio, PruneType pruneType) {
+        this.neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo(
+            NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_ONE,
+            pruneRatio,
+            pruneType
+        );
+
+        // only copy the fields used for sparse embedding and available before the rewrite
+        final NeuralQueryBuilder copy = new NeuralQueryBuilder().queryName(queryName)
+            .fieldName(fieldName)
+            .queryText(queryText)
+            .modelId(modelId)
+            .searchAnalyzer(searchAnalyzer)
+            .neuralSparseQueryTwoPhaseInfo(
+                new NeuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_TWO, pruneRatio, pruneType)
+            );
+
+        // If raw tokens are provided directly in the query, split them without additional processing
+        if (Objects.nonNull(this.queryTokensMapSupplier)) {
+            Map<String, Float> tokens = queryTokensMapSupplier.get();
+            // Splitting tokens based on a threshold value: tokens greater than the threshold are stored in v1,
+            // while those less than or equal to the threshold are stored in v2.
+            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.splitSparseVector(pruneType, pruneRatio, tokens);
+            this.queryTokensMapSupplier(splitTokens::v1);
+            copy.queryTokensMapSupplier(splitTokens::v2);
+        } else {
+            // Need to use a supplier to delay setting the modelIdToTwoPhaseSharedQueryToken for the copy since now
+            // we haven't invoked the inference call to generate the tokens for the original query builder.
+            copy.modelIdToTwoPhaseSharedQueryTokenSupplier(() -> modelIdToTwoPhaseSharedQueryToken);
+        }
+        return copy;
     }
 }

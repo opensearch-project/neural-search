@@ -15,6 +15,8 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.MAX_DISTANCE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.MIN_SCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_OVERSAMPLE_FIELD;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
@@ -60,13 +62,11 @@ import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
-import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.util.TestUtils;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
-
-import static org.junit.Assert.assertArrayEquals;
 
 public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
@@ -83,15 +83,26 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     private static final String TERM_QUERY_FIELD_NAME = "termQueryFiledName";
     private static final String TERM_QUERY_FIELD_VALUE = "termQueryFiledValue";
     private static final Supplier<float[]> TEST_VECTOR_SUPPLIER = () -> new float[10];
-    private static final Supplier<Map<String, Float>> TEST_QUERY_TOKENS_MAP_SUPPLIER = () -> Map.of("key", 1.0f);
+    private static final Map<String, Float> TEST_QUERY_TOKENS_MAP = Map.of("key", 1.0f);
+    private static final Supplier<Map<String, Float>> TEST_QUERY_TOKENS_MAP_SUPPLIER = () -> TEST_QUERY_TOKENS_MAP;
     private static final Map<String, Supplier<Map<String, Float>>> TEST_MODEL_ID_TO_QUERY_TOKENS_SUPPLIER_MAP = Map.of(
         MODEL_ID,
         TEST_QUERY_TOKENS_MAP_SUPPLIER
     );
     private static final Map<String, Supplier<float[]>> TEST_MODEL_ID_TO_VECTOR_SUPPLIER_MAP = Map.of(MODEL_ID, TEST_VECTOR_SUPPLIER);
+    private static final NeuralSparseQueryTwoPhaseInfo TEST_SPARSE_TWO_PHASE_INFO = new NeuralSparseQueryTwoPhaseInfo();
+    private static final Map<String, Map<String, Float>> TEST_MODEL_ID_TO_TWO_PHASE_SHARED_QUERY_TOKEN = Map.of(
+        MODEL_ID,
+        TEST_QUERY_TOKENS_MAP
+    );;
+    private Supplier<Map<String, Map<String, Float>>> TEST_MODEL_ID_TO_TWO_PHASE_SHARED_QUERY_TOKEN_SUPPLIER =
+        () -> TEST_MODEL_ID_TO_TWO_PHASE_SHARED_QUERY_TOKEN;
 
     private static final QueryBuilder TEST_FILTER = new MatchAllQueryBuilder();
     private static final QueryBuilder ADDITIONAL_TEST_FILTER = new TermQueryBuilder(TERM_QUERY_FIELD_NAME, TERM_QUERY_FIELD_VALUE);
+    private static final Float DELTA = 1e-4f;
+    private static final float PRUNE_RATIO = 0.4f;
+    private static final PruneType PRUNE_TYPE = PruneType.MAX_RATIO;
 
     @Before
     public void setup() throws Exception {
@@ -340,7 +351,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(K, neuralQueryBuilder.k());
         assertEquals(BOOST, neuralQueryBuilder.boost(), 0.0);
         assertEquals(QUERY_NAME, neuralQueryBuilder.queryName());
-        assertEquals(TEST_FILTER, neuralQueryBuilder.filter());
+        assertEquals(TEST_FILTER, neuralQueryBuilder.queryfilter());
     }
 
     @SneakyThrows
@@ -523,55 +534,28 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         );
     }
 
-    @SneakyThrows
-    public void testStreams_whenClusterServiceWithDifferentVersions() {
-        setUpClusterService(Version.V_2_10_0);
-        testStreams();
-        setUpClusterService();
-        testStreams();
-    }
-
-    @SneakyThrows
-    private void testStreams() {
-        NeuralQueryBuilder original = NeuralQueryBuilder.builder()
-            .fieldName(FIELD_NAME)
-            .queryText(QUERY_TEXT)
-            .modelId(MODEL_ID)
-            .k(K)
-            .boost(BOOST)
-            .queryName(QUERY_NAME)
-            .filter(TEST_FILTER)
-            .build();
-
-        if (MinClusterVersionUtil.isClusterOnOrAfterMinReqVersion(QUERY_IMAGE_FIELD.getPreferredName())) {
-            original.queryImage(IMAGE_TEXT);
-        }
-
-        BytesStreamOutput streamOutput = new BytesStreamOutput();
-        original.writeTo(streamOutput);
-
-        FilterStreamInput filterStreamInput = new NamedWriteableAwareStreamInput(
-            streamOutput.bytes().streamInput(),
-            new NamedWriteableRegistry(
-                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, MatchAllQueryBuilder.NAME, MatchAllQueryBuilder::new))
-            )
+    public void testStreams_whenOnOrAfterSpecificVersion() throws IOException {
+        List<Version> versions = List.of(
+            Version.V_2_10_0,
+            Version.V_2_11_0,
+            Version.V_2_14_0,
+            Version.V_2_19_0,
+            Version.V_3_0_0,
+            Version.V_3_1_0,
+            Version.V_3_2_0
         );
+        for (Version version : versions) {
+            Pair<NeuralQueryBuilder, FilterStreamInput> pair = createStreamOnOrAfter(version);
+            NeuralQueryBuilder original = pair.getLeft();
+            FilterStreamInput filterStreamInput = pair.getRight();
 
-        NeuralQueryBuilder copy = new NeuralQueryBuilder(filterStreamInput);
-        assertEquals(original, copy);
-    }
-
-    public void testStreams_whenOnOrAfter3_1_0() throws IOException {
-        Pair<NeuralQueryBuilder, FilterStreamInput> pair = createStreamOnOrAfter3_1_0();
-        NeuralQueryBuilder original = pair.getLeft();
-        FilterStreamInput filterStreamInput = pair.getRight();
-
-        NeuralQueryBuilder copy = new NeuralQueryBuilder(filterStreamInput);
-        assertEquals(original, copy);
+            NeuralQueryBuilder copy = new NeuralQueryBuilder(filterStreamInput);
+            assertEquals("testStreams_whenOnOrAfter " + version, original, copy);
+        }
     }
 
     public void testStreams_whenMix3_0_0AndOnOrAfter3_1_0() throws IOException {
-        Pair<NeuralQueryBuilder, FilterStreamInput> pair = createStreamOnOrAfter3_1_0();
+        Pair<NeuralQueryBuilder, FilterStreamInput> pair = createStreamOnOrAfter(Version.V_3_1_0);
         NeuralQueryBuilder original = pair.getLeft();
         FilterStreamInput filterStreamInput = pair.getRight();
         setUpClusterService(Version.V_3_0_0);
@@ -581,25 +565,40 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         original.queryTokensMapSupplier(null);
         original.modelIdToQueryTokensSupplierMap(null);
         original.modelIdToVectorSupplierMap(null);
+        original.searchAnalyzer(null);
         assertEquals(original, copy);
     }
 
-    private Pair<NeuralQueryBuilder, FilterStreamInput> createStreamOnOrAfter3_1_0() throws IOException {
+    private Pair<NeuralQueryBuilder, FilterStreamInput> createStreamOnOrAfter(Version version) throws IOException {
         setUpClusterService();
-        NeuralQueryBuilder original = NeuralQueryBuilder.builder()
+        NeuralQueryBuilder.Builder originalBuilder = NeuralQueryBuilder.builder()
             .fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .k(K)
             .boost(BOOST)
             .queryName(QUERY_NAME)
-            .filter(TEST_FILTER)
-            .vectorSupplier(TEST_VECTOR_SUPPLIER)
-            .queryTokensMapSupplier(TEST_QUERY_TOKENS_MAP_SUPPLIER)
-            .modelIdToQueryTokensSupplierMap(TEST_MODEL_ID_TO_QUERY_TOKENS_SUPPLIER_MAP)
-            .modelIdToVectorSupplierMap(TEST_MODEL_ID_TO_VECTOR_SUPPLIER_MAP)
-            .build();
+            .filter(TEST_FILTER);
 
+        if (version.onOrAfter(Version.V_2_19_0)) {
+            originalBuilder.queryImage(IMAGE_TEXT);
+            originalBuilder.expandNested(true);
+        }
+
+        if (version.onOrAfter(MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD)) {
+            originalBuilder.vectorSupplier(TEST_VECTOR_SUPPLIER)
+                .queryTokensMapSupplier(TEST_QUERY_TOKENS_MAP_SUPPLIER)
+                .modelIdToQueryTokensSupplierMap(TEST_MODEL_ID_TO_QUERY_TOKENS_SUPPLIER_MAP)
+                .modelIdToVectorSupplierMap(TEST_MODEL_ID_TO_VECTOR_SUPPLIER_MAP)
+                .searchAnalyzer(SEARCH_ANALYZER);
+        }
+
+        if (version.onOrAfter(MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE)) {
+            originalBuilder.neuralSparseQueryTwoPhaseInfo(TEST_SPARSE_TWO_PHASE_INFO)
+                .modelIdToTwoPhaseSharedQueryToken(TEST_MODEL_ID_TO_TWO_PHASE_SHARED_QUERY_TOKEN)
+                .modelIdToTwoPhaseSharedQueryTokenSupplier(TEST_MODEL_ID_TO_TWO_PHASE_SHARED_QUERY_TOKEN_SUPPLIER);
+        }
+        NeuralQueryBuilder original = originalBuilder.build();
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         streamOutput.setVersion(Version.CURRENT);
         original.writeTo(streamOutput);
@@ -700,7 +699,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
         // Identical to neuralQueryBuilder_baseline except diff filter
         final NeuralQueryBuilder neuralQueryBuilder_diffFilter = getBaselineNeuralQueryBuilder();
-        neuralQueryBuilder_diffFilter.filter(filter2);
+        neuralQueryBuilder_diffFilter.queryfilter(filter2);
 
         // Identical to neuralQueryBuilder_baseline except diff methodParameters
         final NeuralQueryBuilder neuralQueryBuilder_diffMethodParameters = getBaselineNeuralQueryBuilder();
@@ -807,7 +806,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         setUpClusterService();
         // Test for Null Case
         NeuralQueryBuilder neuralQueryBuilder = getBaselineNeuralQueryBuilder();
-        QueryBuilder updatedNeuralQueryBuilder = neuralQueryBuilder.filter(null);
+        QueryBuilder updatedNeuralQueryBuilder = neuralQueryBuilder.queryfilter(null);
         assertEquals(neuralQueryBuilder, updatedNeuralQueryBuilder);
 
         // Test for valid case
@@ -817,14 +816,14 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         expectedUpdatedQueryFilter.must(TEST_FILTER);
         expectedUpdatedQueryFilter.filter(ADDITIONAL_TEST_FILTER);
         assertEquals(neuralQueryBuilder, updatedNeuralQueryBuilder);
-        assertEquals(expectedUpdatedQueryFilter, neuralQueryBuilder.filter());
+        assertEquals(expectedUpdatedQueryFilter, neuralQueryBuilder.queryfilter());
 
         // Test for queryBuilder without filter initialized where filter function would
         // simply assign filter to its filter field.
         neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).modelId(MODEL_ID).k(K).build();
-        updatedNeuralQueryBuilder = neuralQueryBuilder.filter(TEST_FILTER);
+        updatedNeuralQueryBuilder = neuralQueryBuilder.queryfilter(TEST_FILTER);
         assertEquals(neuralQueryBuilder, updatedNeuralQueryBuilder);
-        assertEquals(TEST_FILTER, neuralQueryBuilder.filter());
+        assertEquals(TEST_FILTER, neuralQueryBuilder.queryfilter());
     }
 
     public void testQueryCreation_whenCreateQueryWithDoToQuery_thenFail() {
@@ -1148,6 +1147,63 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         );
         // For radial search, KNNQueryBuilder defaults K to 0 when not specified
         assertEquals("K should be 0 for radial search when not specified", 0, returnedKNNQueryBuilder.getK());
+    }
 
+    public void testPrepareTwoPhase_Query_whenRawTokensAvailable() {
+        setUpClusterService();
+        final Map<String, Float> rawTokens = Map.of("high_score_token", 0.6f, "low_score_token", 0.1f);
+        final NeuralQueryBuilder original = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .queryTokensMapSupplier(() -> rawTokens)
+            .build();
+        final NeuralQueryBuilder copy = original.prepareTwoPhaseQuery(PRUNE_RATIO, PRUNE_TYPE);
+
+        // verify
+        verifyTwoPhaseInfo(original, copy);
+        assertEquals(Map.of("high_score_token", 0.6f), original.getQueryTokensMapSupplier().get());
+        assertEquals(FIELD_NAME, copy.fieldName());
+        assertEquals(QUERY_TEXT, copy.queryText());
+        assertEquals(Map.of("low_score_token", 0.1f), copy.getQueryTokensMapSupplier().get());
+    }
+
+    public void testPrepareTwoPhase_Query_whenModelId() {
+        setUpClusterService();
+        final NeuralQueryBuilder original = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .build();
+        final NeuralQueryBuilder copy = original.prepareTwoPhaseQuery(PRUNE_RATIO, PRUNE_TYPE);
+
+        // verify
+        verifyTwoPhaseInfo(original, copy);
+        assertEquals(MODEL_ID, copy.modelId());
+        assertEquals(original.modelIdToTwoPhaseSharedQueryToken(), copy.modelIdToTwoPhaseSharedQueryTokenSupplier().get());
+    }
+
+    public void testPrepareTwoPhase_Query_whenSearchAnalyzer() {
+        setUpClusterService();
+        final NeuralQueryBuilder original = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .searchAnalyzer(SEARCH_ANALYZER)
+            .build();
+        final NeuralQueryBuilder copy = original.prepareTwoPhaseQuery(PRUNE_RATIO, PRUNE_TYPE);
+
+        // verify
+        verifyTwoPhaseInfo(original, copy);
+        assertEquals(SEARCH_ANALYZER, copy.searchAnalyzer());
+        assertEquals(original.modelIdToTwoPhaseSharedQueryToken(), copy.modelIdToTwoPhaseSharedQueryTokenSupplier().get());
+    }
+
+    private void verifyTwoPhaseInfo(NeuralQueryBuilder original, NeuralQueryBuilder copy) {
+        assertEquals(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_ONE, original.getNeuralSparseQueryTwoPhaseInfo().getStatus());
+        assertEquals(PRUNE_RATIO, original.getNeuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), DELTA);
+        assertEquals(PRUNE_TYPE, original.getNeuralSparseQueryTwoPhaseInfo().getTwoPhasePruneType());
+
+        assertEquals(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_TWO, copy.getNeuralSparseQueryTwoPhaseInfo().getStatus());
+        assertEquals(PRUNE_RATIO, copy.getNeuralSparseQueryTwoPhaseInfo().getTwoPhasePruneRatio(), DELTA);
+        assertEquals(PRUNE_TYPE, copy.getNeuralSparseQueryTwoPhaseInfo().getTwoPhasePruneType());
     }
 }

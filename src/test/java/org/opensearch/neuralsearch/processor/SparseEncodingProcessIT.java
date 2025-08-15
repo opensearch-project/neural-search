@@ -50,7 +50,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         neuralSparseQueryBuilder.fieldName("title_sparse");
-        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        neuralSparseQueryBuilder.queryTokensMapSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
         Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
         assertFalse(searchResponse.isEmpty());
         double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
@@ -66,7 +66,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         neuralSparseQueryBuilder.fieldName("title_sparse");
-        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        neuralSparseQueryBuilder.queryTokensMapSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
         Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
         assertFalse(searchResponse.isEmpty());
         double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
@@ -99,7 +99,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         neuralSparseQueryBuilder.fieldName("title_sparse");
-        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        neuralSparseQueryBuilder.queryTokensMapSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
         Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
         assertFalse(searchResponse.isEmpty());
         double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
@@ -118,7 +118,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         neuralSparseQueryBuilder.fieldName("title_sparse");
-        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        neuralSparseQueryBuilder.queryTokensMapSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
         Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
         assertFalse(searchResponse.isEmpty());
         double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");
@@ -137,7 +137,7 @@ public class SparseEncodingProcessIT extends BaseNeuralSearchIT {
 
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder();
         neuralSparseQueryBuilder.fieldName("title_sparse");
-        neuralSparseQueryBuilder.queryTokensSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
+        neuralSparseQueryBuilder.queryTokensMapSupplier(() -> Map.of("good", 1.0f, "a", 2.0f));
         Map<String, Object> searchResponse = search(INDEX_NAME, neuralSparseQueryBuilder, 2);
         assertFalse(searchResponse.isEmpty());
         double maxScore = (Double) ((Map) searchResponse.get("hits")).get("max_score");

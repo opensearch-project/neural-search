@@ -155,7 +155,7 @@ public class NeuralQueryBuilderBuilderTests extends OpenSearchTestCase {
         assertEquals(MODEL_ID, neuralQueryBuilder.modelId());
         assertEquals(K, neuralQueryBuilder.k());
         assertEquals(BOOST, neuralQueryBuilder.boost(), 0.0);
-        assertEquals(TEST_FILTER, neuralQueryBuilder.filter());
+        assertEquals(TEST_FILTER, neuralQueryBuilder.queryfilter());
         assertEquals(TEST_VECTOR_SUPPLIER, neuralQueryBuilder.vectorSupplier());
         assertEquals(QUERY_NAME, neuralQueryBuilder.queryName());
         assertEquals(Boolean.TRUE, neuralQueryBuilder.expandNested());
