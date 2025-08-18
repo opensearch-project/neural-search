@@ -27,6 +27,8 @@ public final class MinClusterVersionUtil {
     private static final Version MINIMAL_SUPPORTED_VERSION_PAGINATION_IN_HYBRID_QUERY = Version.V_2_19_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_ORIGINAL_QUERY_TEXT = Version.V_3_0_0;
     public static final Version MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD = Version.V_3_1_0;
+    // TODO update it to 3.3 once it's available
+    public static final Version MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE = Version.V_3_2_0;
     public static final Version MINIMAL_SUPPORTED_VERSION_STATS_CATEGORY_FILTERING = Version.V_3_1_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER = Version.V_3_0_0;
 
