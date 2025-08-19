@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.sparse.mapper;
 
 import org.apache.lucene.document.FieldType;
 import org.junit.Before;
-import org.junit.Test;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.ToXContent;
@@ -322,12 +321,10 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         verify(doc, times(1)).addWithKey(any(), any()); // FeatureField is added with key
     }
 
-    @Test
     public void testParseCreateField_withValueNumber_parsesSuccessfully() throws IOException {
         testParseCreateField_withValidJsonObject_parsesSuccessfully(XContentParser.Token.VALUE_NUMBER);
     }
 
-    @Test
     public void testParseCreateField_withValueString_parsesSuccessfully() throws IOException {
         testParseCreateField_withValidJsonObject_parsesSuccessfully(XContentParser.Token.VALUE_STRING);
     }
