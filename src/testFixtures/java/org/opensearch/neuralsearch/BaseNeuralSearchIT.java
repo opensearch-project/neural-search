@@ -151,13 +151,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final int MAX_ATTEMPTS = 30;
     private static final int WAIT_TIME_IN_SECONDS = 2;
     private static final long TIMEOUT = 10000;
+    protected String numOfNodes;
 
     @Before
     public void setupSettings() {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-
+        numOfNodes = System.getProperty("cluster.number_of_nodes", "1");
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
@@ -1635,10 +1636,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> dateFields,
         final int numberOfShards
     ) {
+        int numberOfReplica = numOfNodes.equals("1") ? 0 : 1;
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
             .field("number_of_shards", numberOfShards)
+            .field("number_of_replicas", numberOfReplica)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -1707,10 +1710,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final int numberOfShards,
         final String semanticFieldSearchAnalyzer
     ) {
+        int numberOfReplica = numOfNodes.equals("1") ? 0 : 1;
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
             .field("number_of_shards", numberOfShards)
+            .field("number_of_replicas", numberOfReplica)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -2025,11 +2030,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelGroupId;
     }
 
-    // Method that waits till the health of nodes in the cluster goes green
     protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
         waitForGreen.addParameter("wait_for_nodes", numOfNodes);
         waitForGreen.addParameter("wait_for_status", "green");
+        waitForGreen.addParameter("wait_for_active_shards", "all");
         waitForGreen.addParameter("cluster_manager_timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
         waitForGreen.addParameter("timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
         client().performRequest(waitForGreen);
