@@ -39,29 +39,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_SUMMARY_PRUNE_RATIO;
 
 /**
- * Field mapper implementation for sparse tokens in neural search.
- *
- * <p>This mapper handles the indexing and mapping of sparse token fields,
- * which store sparse vector representations for neural search operations.
- * It processes JSON objects containing token-weight pairs and converts
- * them into appropriate Lucene field structures.
- *
- * <p>Key features:
- * <ul>
- *   <li>Parses JSON objects with token-weight mappings</li>
- *   <li>Creates FeatureField instances for individual tokens</li>
- *   <li>Stores binary representations of sparse vectors</li>
- *   <li>Integrates with sparse method configurations</li>
- *   <li>Supports SEISMIC algorithm parameters</li>
- * </ul>
- *
- * <p>The mapper validates input format and prevents duplicate token indexing
- * within the same document. It also handles field type configuration based
- * on the specified sparse method context.
- *
- * @see ParametrizedFieldMapper
- * @see SparseTokensField
- * @see SparseMethodContext
+ * Field mapper for sparse token fields with feature-based indexing.
  */
 @Getter
 public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
@@ -74,17 +52,6 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
     protected boolean hasDocValues;
     private FieldType tokenFieldType;
 
-    /**
-     * Constructs a SparseTokensFieldMapper with the specified configuration.
-     *
-     * @param simpleName the simple field name
-     * @param mappedFieldType the mapped field type
-     * @param multiFields the multi-fields configuration
-     * @param copyTo the copy-to configuration
-     * @param sparseMethodContext the sparse method context
-     * @param stored whether the field should be stored
-     * @param hasDocValues whether the field has doc values
-     */
     private SparseTokensFieldMapper(
         String simpleName,
         MappedFieldType mappedFieldType,
@@ -112,13 +79,6 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         return ((SparseTokensFieldMapper) in).fieldType();
     }
 
-    /**
-     * Builder class for constructing SparseTokensFieldMapper instances.
-     *
-     * <p>This builder provides a fluent interface for configuring sparse token
-     * field mappers with various parameters including storage options, doc values,
-     * and sparse method contexts.
-     */
     public static class Builder extends ParametrizedFieldMapper.Builder {
         protected final Parameter<Boolean> stored = Parameter.storeParam(m -> ft(m).stored, false);
         protected final Parameter<Boolean> hasDocValues = Parameter.docValuesParam(m -> ft(m).hasDocValues, true);
@@ -134,32 +94,16 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
             b.endObject();
         }), m -> m.getName());
 
-        /**
-         * Creates a new Builder with the specified field name.
-         *
-         * @param name the field name for the mapper
-         */
         protected Builder(String name) {
             super(name);
             builder = this;
         }
 
-        /**
-         * Returns the list of configurable parameters for this builder.
-         *
-         * @return list of parameters including stored, hasDocValues, and sparseMethodContext
-         */
         @Override
         protected List<Parameter<?>> getParameters() {
             return List.of(stored, hasDocValues, sparseMethodContext);
         }
 
-        /**
-         * Builds a SparseTokensFieldMapper instance with the configured parameters.
-         *
-         * @param context the builder context
-         * @return a new SparseTokensFieldMapper instance
-         */
         @Override
         public ParametrizedFieldMapper build(BuilderContext context) {
             return new SparseTokensFieldMapper(
@@ -179,56 +123,26 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         }
     }
 
-    /**
-     * Creates a merge builder for this field mapper.
-     *
-     * @return a new builder initialized with this mapper's configuration
-     */
     @Override
     public ParametrizedFieldMapper.Builder getMergeBuilder() {
         return new Builder(simpleName()).init(this);
     }
 
-    /**
-     * Returns the content type identifier for sparse tokens fields.
-     *
-     * @return the content type string
-     */
     @Override
     protected String contentType() {
         return CONTENT_TYPE;
     }
 
-    /**
-     * Creates a clone of this field mapper.
-     *
-     * @return a cloned SparseTokensFieldMapper instance
-     */
     @Override
     protected SparseTokensFieldMapper clone() {
         return (SparseTokensFieldMapper) super.clone();
     }
 
-    /**
-     * Returns the field type for this mapper.
-     *
-     * @return the SparseTokensFieldType instance
-     */
     @Override
     public SparseTokensFieldType fieldType() {
         return (SparseTokensFieldType) super.fieldType();
     }
 
-    /**
-     * Parses and creates fields from the input JSON object.
-     *
-     * <p>Expects a JSON object with token-weight pairs. Creates FeatureField
-     * instances for each token and stores the complete sparse vector as binary data.
-     *
-     * @param context the parse context containing the input data
-     * @throws IOException if parsing fails or invalid input is encountered
-     * @throws IllegalArgumentException if input format is invalid or contains duplicates
-     */
     @Override
     protected void parseCreateField(ParseContext context) throws IOException {
         if (context.externalValueSet()) {
@@ -258,14 +172,12 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
                             "["
                                 + CONTENT_TYPE
                                 + "] fields do not support indexing multiple values for the same "
-                                + "rank feature ["
+                                + "key ["
                                 + key
                                 + "] in the same document"
                         );
                     }
-                    FeatureField featureField = new FeatureField(name(), feature, value);// this.tokenFieldType);
-                    setFieldTypeAttributes((FieldType) featureField.fieldType(), sparseMethodContext);
-
+                    FeatureField featureField = new FeatureField(name(), feature, value);
                     context.doc().addWithKey(key, featureField);
                     byte[] featureBytes = feature.getBytes(StandardCharsets.UTF_8);
                     dos.writeInt(featureBytes.length);
@@ -302,6 +214,9 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         }
     }
 
+    /**
+     * Default field type configurations.
+     */
     public static class Defaults {
         public static final FieldType FIELD_TYPE = new FieldType();
         public static final FieldType TOKEN_FIELD_TYPE = new FieldType();
@@ -318,6 +233,9 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         }
     }
 
+    /**
+     * Parser for sparse tokens field type.
+     */
     public static class SparseTypeParser implements Mapper.TypeParser {
 
         @Override
@@ -327,9 +245,6 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
             SparseMethodContext context = builder.sparseMethodContext.getValue();
             if (context == null) {
                 throw new MapperParsingException("[" + CONTENT_TYPE + "] requires [method] parameter");
-            }
-            if (context.getName() == null) {
-                throw new MapperParsingException("[" + CONTENT_TYPE + "] requires [method.name] parameter");
             }
             if (!SparseAlgoType.SEISMIC.getName().equals(context.getName())) {
                 throw new MapperParsingException("[method.name]: " + context.getName() + " is not supported");

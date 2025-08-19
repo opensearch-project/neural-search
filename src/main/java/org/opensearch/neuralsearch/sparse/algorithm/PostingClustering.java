@@ -14,18 +14,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Preprocesses and clusters document postings for sparse neural search optimization.
- *
- * <p>This class combines preprocessing and clustering operations to optimize
- * document postings for neural search. It first applies preprocessing to select
- * the top-K postings, then applies clustering algorithms to group similar documents.
- *
- * <p>The class handles edge cases such as empty postings and small document sets
- * that don't meet the minimum clustering threshold.
- *
- * @see Clustering
- * @see PostingsProcessor
- * @see DocumentCluster
+ * Preprocesses and clusters document postings.
  */
 public class PostingClustering {
 
@@ -36,8 +25,8 @@ public class PostingClustering {
     /**
      * Constructs a PostingClustering instance.
      *
-     * @param nPostings the maximum number of postings to consider after preprocessing
-     * @param clustering the clustering algorithm to use for grouping documents
+     * @param nPostings maximum number of postings to consider
+     * @param clustering clustering algorithm
      */
     public PostingClustering(int nPostings, Clustering clustering) {
         this.nPostings = nPostings;
@@ -45,25 +34,21 @@ public class PostingClustering {
     }
 
     /**
-     * Preprocesses postings by selecting the top-K documents by weight.
+     * Preprocess postings by selecting top-K documents by weight.
      *
-     * @param postings the input postings to preprocess
-     * @return the top-K postings based on document weights
+     * @param postings input postings
+     * @return top-K postings
      */
     private List<DocWeight> preprocess(List<DocWeight> postings) {
         return PostingsProcessor.getTopK(postings, nPostings);
     }
 
     /**
-     * Clusters document postings after preprocessing.
+     * Clusters document postings using the provided {@link Clustering} algorithm.
      *
-     * <p>This method first preprocesses the postings to select top-K documents,
-     * then applies clustering if the document count meets the minimum threshold.
-     * For small document sets, returns a single cluster containing all documents.
-     *
-     * @param postings the document postings to cluster
-     * @return a list of document clusters, empty if no postings provided
-     * @throws IOException if clustering operation fails
+     * @param postings document postings to cluster
+     * @return list of document clusters
+     * @throws IOException if clustering fails
      */
     public List<DocumentCluster> cluster(List<DocWeight> postings) throws IOException {
         if (CollectionUtils.isEmpty(postings)) {

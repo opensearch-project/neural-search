@@ -22,19 +22,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
 
 /**
- * SEISMIC (Sparse Efficient Index Search with Machine Intelligence and Clustering) algorithm implementation.
- *
- * <p>This class implements parameter validation for the SEISMIC sparse algorithm,
- * which is designed for efficient neural search operations. It validates configuration
- * parameters including summary pruning ratios, posting limits, cluster ratios, and
- * approximation thresholds.
- *
- * <p>The SEISMIC algorithm optimizes sparse vector search through intelligent
- * clustering and approximation techniques, providing improved search performance
- * while maintaining result quality.
- *
- * @see SparseAlgorithm
- * @see SparseMethodContext
+ * A class representing SEISMIC algorithm. It now only supports parameter validation.
  */
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class Seismic implements SparseAlgorithm {
@@ -45,18 +33,10 @@ public class Seismic implements SparseAlgorithm {
     }
 
     /**
-     * Validates SEISMIC algorithm parameters.
+     * Validates algorithm parameters.
      *
-     * <p>Validates the following parameters:
-     * <ul>
-     *   <li>summary_prune_ratio: Must be in (0, 1]</li>
-     *   <li>n_postings: Must be a positive integer</li>
-     *   <li>cluster_ratio: Must be in (0, 1)</li>
-     *   <li>approximate_threshold: Must be a non-negative integer</li>
-     * </ul>
-     *
-     * @param sparseMethodContext the method context containing parameters to validate
-     * @return ValidationException containing error messages, or null if validation passes
+     * @param sparseMethodContext method context with parameters
+     * @return ValidationException with errors, or null if valid
      */
     @Override
     public ValidationException validateMethod(SparseMethodContext sparseMethodContext) {

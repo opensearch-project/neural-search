@@ -4,7 +4,9 @@
  */
 package org.opensearch.neuralsearch.sparse.mapper;
 
+import org.apache.lucene.document.FieldType;
 import org.junit.Before;
+import org.junit.Test;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.ToXContent;
@@ -33,6 +35,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTIN
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.mapper.SparseTokensField.SPARSE_FIELD;
 
 public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
     private SparseTokensFieldMapper.Builder builder;
@@ -173,6 +176,26 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         assertTrue(exception.getMessage().contains("fields must be json objects"));
     }
 
+    public void testParseCreateField_withoutSeismicInSparseMethodContext() throws IOException {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put(SUMMARY_PRUNE_RATIO_FIELD, 0.5f);
+        parameters.put(N_POSTINGS_FIELD, 10);
+        parameters.put(CLUSTER_RATIO_FIELD, 0.3f);
+        parameters.put(APPROXIMATE_THRESHOLD_FIELD, 100);
+
+        Map<String, Object> methodMap = new HashMap<>();
+        methodMap.put(NAME_FIELD, "non" + SEISMIC);
+        methodMap.put(PARAMETERS_FIELD, parameters);
+        SparseMethodContext nonSeismicSparseMethodContext = SparseMethodContext.parse(methodMap);
+        builder.sparseMethodContext.setValue(nonSeismicSparseMethodContext);
+        SparseTokensFieldMapper mapper = (SparseTokensFieldMapper) builder.build(
+            new ParametrizedFieldMapper.BuilderContext(TestsPrepareUtils.prepareIndexSettings(), TestsPrepareUtils.prepareContentPath())
+        );
+        FieldType fieldType = mapper.getTokenFieldType();
+        assertEquals(1, fieldType.getAttributes().size());
+        assertTrue(Boolean.parseBoolean(fieldType.getAttributes().get(SPARSE_FIELD)));
+    }
+
     public void testSparseTypeParser_withValidInput_returnsBuilder() throws MapperParsingException {
         SparseTokensFieldMapper.SparseTypeParser parser = new SparseTokensFieldMapper.SparseTypeParser();
         Map<String, Object> node = new HashMap<>();
@@ -272,7 +295,7 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         assertEquals(3, builder.getParameters().size());
     }
 
-    public void testParseCreateField_withValidJsonObject_parsesSuccessfully() throws IOException {
+    private void testParseCreateField_withValidJsonObject_parsesSuccessfully(XContentParser.Token valueToken) throws IOException {
         builder.sparseMethodContext.setValue(sparseMethodContext);
         SparseTokensFieldMapper mapper = (SparseTokensFieldMapper) builder.build(
             new ParametrizedFieldMapper.BuilderContext(TestsPrepareUtils.prepareIndexSettings(), TestsPrepareUtils.prepareContentPath())
@@ -287,7 +310,7 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         when(context.doc()).thenReturn(doc);
         when(parser.currentToken()).thenReturn(XContentParser.Token.START_OBJECT);
         when(parser.nextToken()).thenReturn(XContentParser.Token.FIELD_NAME)
-            .thenReturn(XContentParser.Token.VALUE_NUMBER)
+            .thenReturn(valueToken)
             .thenReturn(XContentParser.Token.END_OBJECT);
         when(parser.currentName()).thenReturn("feature1");
         when(parser.floatValue(true)).thenReturn(0.5f);
@@ -297,6 +320,16 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
 
         verify(doc, times(1)).add(any()); // Only SparseTokensField is added to doc
         verify(doc, times(1)).addWithKey(any(), any()); // FeatureField is added with key
+    }
+
+    @Test
+    public void testParseCreateField_withValueNumber_parsesSuccessfully() throws IOException {
+        testParseCreateField_withValidJsonObject_parsesSuccessfully(XContentParser.Token.VALUE_NUMBER);
+    }
+
+    @Test
+    public void testParseCreateField_withValueString_parsesSuccessfully() throws IOException {
+        testParseCreateField_withValidJsonObject_parsesSuccessfully(XContentParser.Token.VALUE_STRING);
     }
 
     public void testParseCreateField_withNullValue_ignoresFeature() throws IOException {

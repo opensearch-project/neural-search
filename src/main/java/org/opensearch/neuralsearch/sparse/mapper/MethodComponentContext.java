@@ -26,20 +26,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.NAME_FIE
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
 
 /**
- * Context for method components in sparse neural search configurations.
- *
- * <p>This class encapsulates the configuration of a method component, including
- * its name and associated parameters. It provides serialization support for
- * streaming and XContent operations, enabling persistence and transmission
- * of method configurations.
- *
- * <p>Method components can contain nested configurations, allowing for
- * hierarchical parameter structures. The class handles deep copying and
- * proper serialization of nested components.
- *
- * @see SparseMethodContext
- * @see ToXContentFragment
- * @see Writeable
+ * Configuration context for sparse ANN search method components.
  */
 @RequiredArgsConstructor
 @Getter
@@ -48,13 +35,10 @@ public class MethodComponentContext implements ToXContentFragment, Writeable {
     private final Map<String, Object> parameters;
 
     /**
-     * Copy constructor for deep cloning of MethodComponentContext.
+     * Deep copy constructor.
      *
-     * <p>Creates a deep copy of the provided context, including nested
-     * MethodComponentContext instances within parameters.
-     *
-     * @param methodComponentContext the context to copy
-     * @throws IllegalArgumentException if methodComponentContext is null
+     * @param methodComponentContext context to copy
+     * @throws IllegalArgumentException if context is null
      */
     public MethodComponentContext(MethodComponentContext methodComponentContext) {
         if (methodComponentContext == null) {
@@ -75,9 +59,9 @@ public class MethodComponentContext implements ToXContentFragment, Writeable {
     }
 
     /**
-     * Constructor from stream.
+     * Creates context from stream input.
      *
-     * @param in StreamInput
+     * @param in stream input
      * @throws IOException on stream failure
      */
     public MethodComponentContext(StreamInput in) throws IOException {
@@ -99,15 +83,11 @@ public class MethodComponentContext implements ToXContentFragment, Writeable {
     }
 
     /**
-     * Parses a map object into a MethodComponentContext instance.
+     * Parses map to MethodComponentContext.
      *
-     * <p>Expects a map containing 'name' and optionally 'parameters' fields.
-     * Parameters can contain nested maps which are recursively parsed into
-     * MethodComponentContext instances.
-     *
-     * @param in the map object to parse
-     * @return parsed MethodComponentContext instance
-     * @throws MapperParsingException if parsing fails or required fields are missing
+     * @param in map to parse
+     * @return parsed context
+     * @throws MapperParsingException if parsing fails
      */
     public static MethodComponentContext parse(Object in) {
         if (!(in instanceof Map<?, ?>)) {
@@ -220,12 +200,9 @@ public class MethodComponentContext implements ToXContentFragment, Writeable {
     }
 
     /**
-     * Gets the parameters of the component.
+     * Gets component parameters.
      *
-     * <p>Returns an empty map if parameters is null for backwards compatibility.
-     * This prevents null pointer exceptions when accessing parameters.
-     *
-     * @return the parameters map, never null
+     * @return parameters map, never null
      */
     public Map<String, Object> getParameters() {
         // Due to backwards compatibility issue, parameters could be null. To prevent any null pointer exceptions,
@@ -238,25 +215,22 @@ public class MethodComponentContext implements ToXContentFragment, Writeable {
     }
 
     /**
-     * Gets a parameter value with a default fallback.
+     * Gets parameter with default fallback.
      *
-     * @param key the parameter key
-     * @param defaultValue the default value if key is not found
-     * @return the parameter value or default value
+     * @param key parameter key
+     * @param defaultValue default if not found
+     * @return parameter value or default
      */
     public Object getParameter(String key, Object defaultValue) {
         return getParameters().getOrDefault(key, defaultValue);
     }
 
     /**
-     * Gets a float parameter value with type conversion.
+     * Gets float parameter with type conversion.
      *
-     * <p>Converts numeric values to float. Returns default value if
-     * the parameter is not found or not a number.
-     *
-     * @param key the parameter key
-     * @param defaultValue the default float value
-     * @return the float parameter value or default value
+     * @param key parameter key
+     * @param defaultValue default float value
+     * @return float parameter or default
      */
     public Float getFloat(String key, Float defaultValue) {
         Object value = getParameter(key, defaultValue);

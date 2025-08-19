@@ -24,32 +24,16 @@ import java.util.PriorityQueue;
 import java.util.stream.Collectors;
 
 /**
- * Utility class for processing document postings in sparse neural search.
- *
- * <p>This class provides static methods for sorting, pruning, and summarizing
- * document postings. It supports operations like selecting top-K documents
- * by weight and generating cluster summaries from sparse vectors.
- *
- * <p>The class is designed to optimize posting lists for clustering algorithms
- * and improve search performance through intelligent document selection and
- * summarization techniques.
- *
- * @see DocWeight
- * @see DocumentCluster
- * @see SparseVector
+ * Utility class for processing document postings.
  */
 public class PostingsProcessor {
 
     /**
-     * Selects the top-K documents from postings based on their weights.
+     * Selects top-K documents by weight.
      *
-     * <p>Uses a priority queue to efficiently select the K documents with
-     * the highest weights. If K is greater than or equal to the total number
-     * of postings, returns all postings.
-     *
-     * @param postings the list of document postings to process
-     * @param K the maximum number of documents to select
-     * @return the top-K documents by weight, or all documents if K >= size
+     * @param postings document postings to process
+     * @param K maximum number of documents to select
+     * @return top-K documents by weight
      */
     public static List<DocWeight> getTopK(List<DocWeight> postings, int K) {
         if (CollectionUtils.isEmpty(postings) || K == 0) {
@@ -69,17 +53,16 @@ public class PostingsProcessor {
     }
 
     /**
-     * Generates a summary sparse vector for a document cluster.
+     * Generates cluster summary sparse vector.
+     * <p>
+     * Construct summary vector using the max value from tokens of each vector in the cluster.
+     * Then prune the summary vector by only keeping tokens with the largest weights which
+     * takes summaryPruneRatio of the total weight.
      *
-     * <p>Creates a cluster summary by aggregating token weights across all
-     * documents in the cluster, taking the maximum weight for each token.
-     * The summary is then pruned based on the specified ratio to keep only
-     * the most significant tokens.
-     *
-     * @param cluster the document cluster to summarize
-     * @param reader the sparse vector reader for accessing document vectors
-     * @param summaryPruneRatio the ratio of total frequency to retain in summary (0-1)
-     * @throws IOException if reading sparse vectors fails
+     * @param cluster document cluster to summarize
+     * @param reader sparse vector reader
+     * @param summaryPruneRatio frequency ratio to retain (0-1)
+     * @throws IOException if reading vectors fails
      */
     public static void summarize(DocumentCluster cluster, SparseVectorReader reader, float summaryPruneRatio) throws IOException {
         Map<Integer, Integer> summary = new HashMap<>();

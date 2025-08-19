@@ -24,27 +24,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.NAME_FIE
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
 
 /**
- * Context for sparse method configurations in neural search.
- *
- * <p>This class encapsulates the configuration of a sparse method, including
- * its name and associated method component context. It serves as the primary
- * configuration holder for sparse encoding operations and query builders.
- *
- * <p>The context provides serialization support for streaming and XContent
- * operations, enabling persistence and transmission of sparse method
- * configurations across the OpenSearch cluster.
- *
- * <p>Key responsibilities:
- * <ul>
- *   <li>Storing sparse method name and parameters</li>
- *   <li>Providing serialization/deserialization capabilities</li>
- *   <li>Supporting XContent conversion for REST API operations</li>
- *   <li>Initializing SparseEncodingQueryBuilder instances</li>
- * </ul>
- *
- * @see MethodComponentContext
- * @see ToXContentFragment
- * @see Writeable
+ * Context for sparse method configuration and parameters.
  */
 @AllArgsConstructor(access = AccessLevel.PACKAGE)
 @Getter
@@ -54,10 +34,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
     private final MethodComponentContext methodComponentContext;
 
     /**
-     * Constructs SparseMethodContext from stream input.
-     *
-     * @param in the stream input to read from
-     * @throws IOException if reading from stream fails
+     * Constructs from stream input.
      */
     public SparseMethodContext(StreamInput in) throws IOException {
         this.name = in.readString();
@@ -65,10 +42,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
     }
 
     /**
-     * Writes the context to stream output for serialization.
-     *
-     * @param out the stream output to write to
-     * @throws IOException if writing to stream fails
+     * Writes to stream output.
      */
     @Override
     public void writeTo(StreamOutput out) throws IOException {
@@ -77,12 +51,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
     }
 
     /**
-     * Converts the context to XContent format.
-     *
-     * @param builder the XContent builder
-     * @param params the parameters for XContent conversion
-     * @return the updated XContent builder
-     * @throws IOException if XContent conversion fails
+     * Converts to XContent format.
      */
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
@@ -91,14 +60,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
     }
 
     /**
-     * Parses a map object into a SparseMethodContext instance.
-     *
-     * <p>Expects a map containing 'name' and optionally 'parameters' fields.
-     * Creates a MethodComponentContext from the parsed data.
-     *
-     * @param in the map object to parse
-     * @return parsed SparseMethodContext instance
-     * @throws MapperParsingException if parsing fails or required fields are missing
+     * Parses map to SparseMethodContext.
      */
     @SuppressWarnings("unchecked")
     public static SparseMethodContext parse(Object in) {
@@ -126,18 +88,13 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
                 }
 
                 // Interpret all map parameters as sub-MethodComponentContexts
-                @SuppressWarnings("unchecked")
-                Map<String, Object> parametersTemp = ((Map<String, Object>) value).entrySet()
-                    .stream()
-                    .collect(Collectors.toMap(Map.Entry::getKey, e -> {
-                        Object v = e.getValue();
-                        if (v instanceof Map) {
-                            return MethodComponentContext.parse(v);
-                        }
-                        return v;
-                    }));
-
-                parameters = parametersTemp;
+                parameters = ((Map<String, Object>) value).entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> {
+                    Object v = e.getValue();
+                    if (v instanceof Map) {
+                        return MethodComponentContext.parse(v);
+                    }
+                    return v;
+                }));
             } else {
                 throw new MapperParsingException("Invalid parameter: " + key);
             }

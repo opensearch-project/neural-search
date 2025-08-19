@@ -29,11 +29,17 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETE
 
 public class MethodComponentContextTests extends AbstractSparseTestBase {
 
-    public void testConstructorWithNullParameter() {
+    public void testConstructorWithNullContext() {
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> {
             new MethodComponentContext((MethodComponentContext) null);
         });
         assertNotNull(exception);
+    }
+
+    public void testConstructorWithNullParameter() {
+        MethodComponentContext contextInput = new MethodComponentContext("test", null);
+        MethodComponentContext context = new MethodComponentContext(contextInput);
+        assertTrue(context.getParameters().isEmpty());
     }
 
     public void testEqualsWithDifferentClass() {

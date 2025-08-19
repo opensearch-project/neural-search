@@ -13,17 +13,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 
 /**
- * Thread pool manager for cluster training operations in sparse neural search.
- *
- * <p>This singleton class manages a dedicated thread pool for executing
- * clustering training tasks asynchronously. It provides thread-safe access
- * to the thread pool and allows dynamic configuration of thread pool size.
- *
- * <p>The class is designed to handle computationally intensive clustering
- * operations without blocking the main search threads, ensuring optimal
- * performance during neural search operations.
- *
- * @see ThreadPool
+ * Singleton thread pool manager for cluster training operations.
  */
 public class ClusterTrainingRunning {
     private static ThreadPool threadpool = null;
@@ -31,18 +21,18 @@ public class ClusterTrainingRunning {
     public static final String THREAD_POOL_NAME = "cluster_training_thread_pool";
 
     /**
-     * Initializes the thread pool for cluster training operations.
+     * Initializes the thread pool.
      *
-     * @param threadPool the OpenSearch thread pool to use for cluster training
+     * @param threadPool the OpenSearch thread pool
      */
     public static void initialize(ThreadPool threadPool) {
         ClusterTrainingRunning.threadpool = threadPool;
     }
 
     /**
-     * Returns the singleton instance of ClusterTrainingRunning.
+     * Returns the singleton instance.
      *
-     * @return the singleton instance, creating it if necessary
+     * @return the singleton instance
      */
     public static synchronized ClusterTrainingRunning getInstance() {
         if (INSTANCE == null) {
@@ -52,16 +42,16 @@ public class ClusterTrainingRunning {
     }
 
     /**
-     * Gets the executor for cluster training tasks.
+     * Gets the executor.
      *
-     * @return the executor for the cluster training thread pool
+     * @return the cluster training executor
      */
     public Executor getExecutor() {
         return ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME);
     }
 
     /**
-     * Executes a runnable task asynchronously on the cluster training thread pool.
+     * Executes a task asynchronously.
      *
      * @param runnable the task to execute
      */
@@ -70,20 +60,20 @@ public class ClusterTrainingRunning {
     }
 
     /**
-     * Submits a callable task for asynchronous execution.
+     * Submits a callable task.
      *
-     * @param <T> the return type of the callable
+     * @param <T> the return type
      * @param callable the task to submit
-     * @return a Future representing the pending result
+     * @return a Future representing the result
      */
     public <T> Future<T> submit(Callable<T> callable) {
         return ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME).submit(callable);
     }
 
     /**
-     * Updates the thread pool size dynamically.
+     * Updates the thread pool size.
      *
-     * @param newThreadQty the new number of threads for the pool
+     * @param newThreadQty the new thread count
      */
     public static void updateThreadPoolSize(Integer newThreadQty) {
         Settings threadPoolSettings = Settings.builder()
