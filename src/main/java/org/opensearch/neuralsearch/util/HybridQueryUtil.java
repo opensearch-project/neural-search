@@ -42,12 +42,12 @@ public class HybridQueryUtil {
         return searchContext.mapperService().hasNested() && new NestedHelper(searchContext.mapperService()).mightMatchNestedDocs(query);
     }
 
-    private static boolean isWrappedHybridQuery(final Query query) {
+    public static boolean isWrappedHybridQuery(final Query query) {
         return query instanceof BooleanQuery
             && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.query() instanceof HybridQuery);
     }
 
-    private static boolean hasAliasFilter(final Query query, final SearchContext searchContext) {
+    private static boolean hasAliasFilter(final SearchContext searchContext) {
         return Objects.nonNull(searchContext.aliasFilter());
     }
 
@@ -62,7 +62,7 @@ public class HybridQueryUtil {
         BooleanQuery boolQuery = (BooleanQuery) query;
 
         return isHybridQueryWrappedInBooleanMustQueryWithFilters(boolQuery.clauses())
-            || ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+            || ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
                 && isWrappedHybridQuery(query)
                 && boolQuery.clauses().isEmpty() == false);
     }
@@ -127,7 +127,7 @@ public class HybridQueryUtil {
      * by the security plugin, and wrapped in another boolean query object
      */
     public static boolean isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(final SearchContext searchContext, final Query query) {
-        return ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+        return ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
             && query instanceof BooleanQuery booleanQuery
             && booleanQuery.clauses().stream().anyMatch(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext)));
     }
@@ -175,4 +175,11 @@ public class HybridQueryUtil {
             .orElseThrow(() -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause"));
     }
 
+    public static void validateHybridQuery(final HybridQuery query) {
+        for (Query innerQuery : query) {
+            if (innerQuery instanceof HybridQuery) {
+                throw new IllegalArgumentException("hybrid query cannot be nested in another hybrid query");
+            }
+        }
+    }
 }
