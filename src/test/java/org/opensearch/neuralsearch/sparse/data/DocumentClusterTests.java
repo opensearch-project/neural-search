@@ -101,6 +101,16 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
         assertEquals(DocWeightIterator.NO_MORE_DOCS, disi.nextDoc());
     }
 
+    public void testGetDisi_unsupportedOperation() {
+        List<DocWeight> docs = Arrays.asList(new DocWeight(5, (byte) 1), new DocWeight(10, (byte) 2));
+
+        DocumentCluster cluster = new DocumentCluster(null, docs, false);
+        DocWeightIterator disi = cluster.getDisi();
+
+        expectThrows(UnsupportedOperationException.class, () -> disi.advance(0));
+        expectThrows(UnsupportedOperationException.class, disi::cost);
+    }
+
     public void testGetDisi_withValidDocs_returnsZeroAdvance() throws Exception {
         List<DocWeight> docs = Arrays.asList(new DocWeight(5, (byte) 1), new DocWeight(10, (byte) 2));
 
