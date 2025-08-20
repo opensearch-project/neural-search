@@ -2,13 +2,15 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.sparse.algorithm;
+package org.opensearch.neuralsearch.sparse.algorithm.seismic;
 
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
 import org.opensearch.common.Randomness;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.algorithm.ClusteringAlgorithm;
+import org.opensearch.neuralsearch.sparse.algorithm.PostingsProcessingUtils;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
@@ -22,7 +24,7 @@ import java.util.List;
  * Random clustering algorithm for SEISMIC.
  */
 @AllArgsConstructor
-public class RandomClustering implements Clustering {
+public class RandomClusteringAlgorithm implements ClusteringAlgorithm {
 
     private final float summaryPruneRatio;
     private final float clusterRatio;
@@ -82,7 +84,7 @@ public class RandomClustering implements Clustering {
         for (int i = 0; i < numCluster; ++i) {
             if (docAssignments.get(i).isEmpty()) continue;
             DocumentCluster cluster = new DocumentCluster(null, docAssignments.get(i), false);
-            PostingsProcessor.summarize(cluster, this.reader, this.summaryPruneRatio);
+            PostingsProcessingUtils.summarize(cluster, this.reader, this.summaryPruneRatio);
             clusters.add(cluster);
         }
         return clusters;

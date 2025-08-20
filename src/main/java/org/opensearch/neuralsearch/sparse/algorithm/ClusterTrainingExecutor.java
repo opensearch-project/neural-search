@@ -15,9 +15,9 @@ import java.util.concurrent.Future;
 /**
  * Singleton thread pool manager for cluster training operations.
  */
-public class ClusterTrainingRunning {
-    private static ThreadPool threadpool = null;
-    private static ClusterTrainingRunning INSTANCE;
+public class ClusterTrainingExecutor {
+    private ThreadPool threadpool = null;
+    private static ClusterTrainingExecutor INSTANCE;
     public static final String THREAD_POOL_NAME = "cluster_training_thread_pool";
 
     /**
@@ -25,8 +25,8 @@ public class ClusterTrainingRunning {
      *
      * @param threadPool the OpenSearch thread pool
      */
-    public static void initialize(ThreadPool threadPool) {
-        ClusterTrainingRunning.threadpool = threadPool;
+    public void initialize(ThreadPool threadPool) {
+        this.threadpool = threadPool;
     }
 
     /**
@@ -34,9 +34,9 @@ public class ClusterTrainingRunning {
      *
      * @return the singleton instance
      */
-    public static synchronized ClusterTrainingRunning getInstance() {
+    public static ClusterTrainingExecutor getInstance() {
         if (INSTANCE == null) {
-            INSTANCE = new ClusterTrainingRunning();
+            INSTANCE = new ClusterTrainingExecutor();
         }
         return INSTANCE;
     }
@@ -47,7 +47,7 @@ public class ClusterTrainingRunning {
      * @return the cluster training executor
      */
     public Executor getExecutor() {
-        return ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME);
+        return threadpool.executor(THREAD_POOL_NAME);
     }
 
     /**
@@ -56,7 +56,7 @@ public class ClusterTrainingRunning {
      * @param runnable the task to execute
      */
     public void run(Runnable runnable) {
-        ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME).execute(runnable);
+        threadpool.executor(THREAD_POOL_NAME).execute(runnable);
     }
 
     /**
@@ -67,7 +67,7 @@ public class ClusterTrainingRunning {
      * @return a Future representing the result
      */
     public <T> Future<T> submit(Callable<T> callable) {
-        return ClusterTrainingRunning.threadpool.executor(THREAD_POOL_NAME).submit(callable);
+        return threadpool.executor(THREAD_POOL_NAME).submit(callable);
     }
 
     /**
@@ -77,8 +77,8 @@ public class ClusterTrainingRunning {
      */
     public static void updateThreadPoolSize(Integer newThreadQty) {
         Settings threadPoolSettings = Settings.builder()
-            .put(String.format(Locale.ROOT, "%s.size", ClusterTrainingRunning.THREAD_POOL_NAME), newThreadQty)
+            .put(String.format(Locale.ROOT, "%s.size", ClusterTrainingExecutor.THREAD_POOL_NAME), newThreadQty)
             .build();
-        threadpool.setThreadPool(threadPoolSettings);
+        INSTANCE.threadpool.setThreadPool(threadPoolSettings);
     }
 }

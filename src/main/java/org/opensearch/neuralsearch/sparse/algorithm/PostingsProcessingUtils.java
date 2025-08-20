@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 /**
  * Utility class for processing document postings.
  */
-public class PostingsProcessor {
+public class PostingsProcessingUtils {
 
     /**
      * Selects top-K documents by weight.
@@ -61,7 +61,7 @@ public class PostingsProcessor {
      *
      * @param cluster document cluster to summarize
      * @param reader sparse vector reader
-     * @param summaryPruneRatio frequency ratio to retain (0-1)
+     * @param summaryPruneRatio summary weight sum ratio to retain (0-1)
      * @throws IOException if reading vectors fails
      */
     public static void summarize(DocumentCluster cluster, SparseVectorReader reader, float summaryPruneRatio) throws IOException {
@@ -88,15 +88,15 @@ public class PostingsProcessor {
             .map(entry -> new SparseVector.Item(entry.getKey(), (byte) entry.getValue().intValue()))
             .sorted((o1, o2) -> ByteQuantizer.compareUnsignedByte(o2.getWeight(), o1.getWeight()))
             .collect(Collectors.toList());
-        // count total freq of items
-        double totalFreq = items.stream().mapToDouble(SparseVector.Item::getIntWeight).sum();
-        int freqThreshold = (int) Math.floor(totalFreq * summaryPruneRatio);
-        int freqSum = 0;
+        // count total weight of items
+        double totalWeight = items.stream().mapToDouble(SparseVector.Item::getIntWeight).sum();
+        int weightThreshold = (int) Math.floor(totalWeight * summaryPruneRatio);
+        int weightSum = 0;
         int idx = 0;
         for (SparseVector.Item item : items) {
             ++idx;
-            freqSum += item.getIntWeight();
-            if (freqSum > freqThreshold) {
+            weightSum += item.getIntWeight();
+            if (weightSum > weightThreshold) {
                 break;
             }
         }

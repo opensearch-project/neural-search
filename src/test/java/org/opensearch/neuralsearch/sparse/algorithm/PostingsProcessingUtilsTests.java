@@ -24,7 +24,7 @@ import java.util.List;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
 
-public class PostingsProcessorTests extends AbstractSparseTestBase {
+public class PostingsProcessingUtilsTests extends AbstractSparseTestBase {
 
     @Mock
     private DocumentCluster cluster;
@@ -46,7 +46,7 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         List<DocWeight> postings = preparePostings(1, 10, 2, 20, 3, 30);
 
         // Call getTopK with K larger than list size
-        List<DocWeight> result = PostingsProcessor.getTopK(postings, 5);
+        List<DocWeight> result = PostingsProcessingUtils.getTopK(postings, 5);
 
         // Verify that the original list is returned
         assertEquals(postings.size(), result.size());
@@ -58,7 +58,7 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         List<DocWeight> postings = preparePostings(1, 10, 2, 50, 3, 30, 4, 40, 5, 20);
         // Call getTopK with K smaller than list size
         int k = 3;
-        List<DocWeight> result = PostingsProcessor.getTopK(postings, k);
+        List<DocWeight> result = PostingsProcessingUtils.getTopK(postings, k);
 
         // Verify that only K elements are returned
         assertEquals(k, result.size());
@@ -82,7 +82,7 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
 
     public void testGetTopKWithEmptyList() {
         // Call getTopK with an empty list
-        List<DocWeight> result = PostingsProcessor.getTopK(Collections.emptyList(), 5);
+        List<DocWeight> result = PostingsProcessingUtils.getTopK(Collections.emptyList(), 5);
 
         // Verify that an empty list is returned
         assertTrue(result.isEmpty());
@@ -104,7 +104,7 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         when(reader.read(2)).thenReturn(vector3);
 
         // Call summarize with alpha = 1.0 (include all tokens)
-        PostingsProcessor.summarize(cluster, reader, 1.0f);
+        PostingsProcessingUtils.summarize(cluster, reader, 1.0f);
 
         // Verify that setSummary was called with a SparseVector containing the expected items
         Mockito.verify(cluster).setSummary(Mockito.argThat(vector -> {
@@ -141,7 +141,7 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         when(reader.read(0)).thenReturn(vector);
 
         // Call summarize with alpha = 0.5 (include tokens that make up 50% of total frequency)
-        PostingsProcessor.summarize(cluster, reader, 0.5f);
+        PostingsProcessingUtils.summarize(cluster, reader, 0.5f);
 
         // Verify that setSummary was called with a SparseVector containing only the high frequency item
         // Total frequency is 50+30+10=90, 50% of that is 45, so only token 1 with freq 50 should be included
@@ -171,7 +171,7 @@ public class PostingsProcessorTests extends AbstractSparseTestBase {
         when(reader.read(0)).thenReturn(null);
 
         // Call summarize
-        PostingsProcessor.summarize(localCluster, reader, 1.0f);
+        PostingsProcessingUtils.summarize(localCluster, reader, 1.0f);
 
         // Verify that setSummary was called with an empty SparseVector
         Mockito.verify(localCluster).setSummary(Mockito.argThat(vector -> {

@@ -187,9 +187,10 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         if (sparseMethodContext.getName().equals(SEISMIC)) {
             Integer nPostings = (Integer) sparseMethodContext.getMethodComponentContext()
                 .getParameter(N_POSTINGS_FIELD, DEFAULT_N_POSTINGS);
-            Float clusterRatio = sparseMethodContext.getMethodComponentContext().getFloat(CLUSTER_RATIO_FIELD, DEFAULT_CLUSTER_RATIO);
+            Float clusterRatio = sparseMethodContext.getMethodComponentContext()
+                .getFloatParameter(CLUSTER_RATIO_FIELD, DEFAULT_CLUSTER_RATIO);
             Float summaryPruneRatio = sparseMethodContext.getMethodComponentContext()
-                .getFloat(SUMMARY_PRUNE_RATIO_FIELD, DEFAULT_SUMMARY_PRUNE_RATIO);
+                .getFloatParameter(SUMMARY_PRUNE_RATIO_FIELD, DEFAULT_SUMMARY_PRUNE_RATIO);
             Integer algoTriggerThreshold = (Integer) sparseMethodContext.getMethodComponentContext()
                 .getParameter(APPROXIMATE_THRESHOLD_FIELD, DEFAULT_APPROXIMATE_THRESHOLD);
             fieldType.putAttribute(N_POSTINGS_FIELD, String.valueOf(nPostings));

@@ -10,16 +10,16 @@ public class DocWeightTests extends AbstractSparseTestBase {
 
     public void testGetDocID_afterConstruction_returnsCorrectValue() {
         int docID = 42;
-        byte freq = 5;
-        DocWeight docWeight = new DocWeight(docID, freq);
+        byte weight = 5;
+        DocWeight docWeight = new DocWeight(docID, weight);
         assertEquals(docID, docWeight.getDocID());
     }
 
     public void testGetWeight_afterConstruction_returnsCorrectValue() {
         int docID = 42;
-        byte freq = 5;
-        DocWeight docWeight = new DocWeight(docID, freq);
-        assertEquals(freq, docWeight.getWeight());
+        byte weight = 5;
+        DocWeight docWeight = new DocWeight(docID, weight);
+        assertEquals(weight, docWeight.getWeight());
     }
 
     public void testGetIntWeight_withPositiveByteValue_returnsCorrectValue() {
@@ -66,7 +66,7 @@ public class DocWeightTests extends AbstractSparseTestBase {
         assertEquals(docWeight1, docWeight2);
     }
 
-    public void testEquals_withDifferentFreq_returnsFalse() {
+    public void testEquals_withDifferentWeight_returnsFalse() {
         DocWeight docWeight1 = new DocWeight(1, (byte) 10);
         DocWeight docWeight2 = new DocWeight(1, (byte) 20);
         assertNotEquals(docWeight1, docWeight2);

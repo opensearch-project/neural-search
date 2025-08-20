@@ -2,12 +2,13 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.sparse.algorithm;
+package org.opensearch.neuralsearch.sparse.algorithm.seismic;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.opensearch.common.ValidationException;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseAlgorithm;
 import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
 import java.util.ArrayList;

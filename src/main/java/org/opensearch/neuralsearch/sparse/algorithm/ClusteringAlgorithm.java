@@ -13,7 +13,7 @@ import java.util.List;
 /**
  * Document clustering algorithm interface.
  */
-public interface Clustering {
+public interface ClusteringAlgorithm {
     /**
      * Clusters documents into a list of document clusters.
      *

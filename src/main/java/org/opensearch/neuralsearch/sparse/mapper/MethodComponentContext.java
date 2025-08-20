@@ -81,13 +81,7 @@ public class MethodComponentContext implements ToXContentFragment, Writeable {
             builder.startObject(PARAMETERS_FIELD);
             parameters.forEach((key, value) -> {
                 try {
-                    if (value instanceof MethodComponentContext) {
-                        builder.startObject(key);
-                        ((MethodComponentContext) value).toXContent(builder, params);
-                        builder.endObject();
-                    } else {
-                        builder.field(key, value);
-                    }
+                    builder.field(key, value);
                 } catch (IOException ioe) {
                     throw new RuntimeException("Unable to generate xcontent for method component");
                 }
@@ -146,7 +140,7 @@ public class MethodComponentContext implements ToXContentFragment, Writeable {
      * @param defaultValue default float value
      * @return float parameter or default
      */
-    public Float getFloat(String key, Float defaultValue) {
+    public Float getFloatParameter(String key, Float defaultValue) {
         Object value = getParameter(key, defaultValue);
         if (value instanceof Number) {
             return ((Number) value).floatValue();

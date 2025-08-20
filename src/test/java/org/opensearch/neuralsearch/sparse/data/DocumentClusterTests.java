@@ -111,38 +111,6 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
         expectThrows(UnsupportedOperationException.class, disi::cost);
     }
 
-    public void testGetDisi_withValidDocs_returnsZeroAdvance() throws Exception {
-        List<DocWeight> docs = Arrays.asList(new DocWeight(5, (byte) 1), new DocWeight(10, (byte) 2));
-
-        DocumentCluster cluster = new DocumentCluster(null, docs, false);
-        DocWeightIterator disi = cluster.getDisi();
-
-        assertEquals(-1, disi.docID());
-        assertEquals(5, disi.nextDoc());
-        assertEquals(0, disi.advance(disi.docID()));
-
-        assertEquals(10, disi.nextDoc());
-        assertEquals(0, disi.advance(disi.docID()));
-
-        assertEquals(DocWeightIterator.NO_MORE_DOCS, disi.nextDoc());
-    }
-
-    public void testGetDisi_withValidDocs_returnsZeroCost() throws Exception {
-        List<DocWeight> docs = Arrays.asList(new DocWeight(5, (byte) 1), new DocWeight(10, (byte) 2));
-
-        DocumentCluster cluster = new DocumentCluster(null, docs, false);
-        DocWeightIterator disi = cluster.getDisi();
-
-        assertEquals(-1, disi.docID());
-        assertEquals(5, disi.nextDoc());
-        assertEquals(0, disi.cost());
-
-        assertEquals(10, disi.nextDoc());
-        assertEquals(0, disi.cost());
-
-        assertEquals(DocWeightIterator.NO_MORE_DOCS, disi.nextDoc());
-    }
-
     public void testRamBytesUsed_withNullSummary_returnsPositiveValue() {
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
 

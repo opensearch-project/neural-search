@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.sparse.algorithm;
+package org.opensearch.neuralsearch.sparse.algorithm.seismic;
 
 import org.junit.Before;
 import org.mockito.Mock;
@@ -24,7 +24,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-public class RandomClusteringTests extends AbstractSparseTestBase {
+public class RandomClusteringAlgorithmTests extends AbstractSparseTestBase {
 
     @Mock
     private SparseVectorReader reader;
@@ -43,7 +43,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
 
     public void testClusterWithClusterRatio0() throws IOException {
         // Create RandomClustering with beta=1 (single cluster)
-        RandomClustering clustering = new RandomClustering(1.0f, 0, reader);
+        RandomClusteringAlgorithm clustering = new RandomClusteringAlgorithm(1.0f, 0, reader);
 
         // Call cluster method
         List<DocumentCluster> clusters = clustering.cluster(docWeights);
@@ -81,7 +81,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         when(reader.read(3)).thenReturn(vector3);
         when(reader.read(4)).thenReturn(vector4);
 
-        RandomClustering clustering = new RandomClustering(1f, 0.5f, reader);
+        RandomClusteringAlgorithm clustering = new RandomClusteringAlgorithm(1f, 0.5f, reader);
 
         // Call cluster method
         List<DocumentCluster> clusters = clustering.cluster(docWeights);
@@ -105,7 +105,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
 
     public void testClusterWithEmptyDocWeights() throws IOException {
         // Create RandomClustering
-        RandomClustering clustering = new RandomClustering(1.0f, 0.1f, reader);
+        RandomClusteringAlgorithm clustering = new RandomClusteringAlgorithm(1.0f, 0.1f, reader);
 
         // Call cluster method with empty list
         List<DocumentCluster> clusters = clustering.cluster(Collections.emptyList());
@@ -117,7 +117,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
 
     public void testClusterWithNullReader() {
         // Create RandomClustering with null reader
-        expectThrows(NullPointerException.class, () -> new RandomClustering(1.0f, 0.5f, null));
+        expectThrows(NullPointerException.class, () -> new RandomClusteringAlgorithm(1.0f, 0.5f, null));
     }
 
     public void testClusterWithNullVectors() throws IOException {
@@ -129,7 +129,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         when(reader.read(4)).thenReturn(createVector(5, 50));
 
         // Create RandomClustering
-        RandomClustering clustering = new RandomClustering(2, 0.5f, reader);
+        RandomClusteringAlgorithm clustering = new RandomClusteringAlgorithm(2, 0.5f, reader);
 
         // Call cluster method
         List<DocumentCluster> clusters = clustering.cluster(docWeights);
@@ -158,17 +158,17 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         }
 
         // Test with different lambda values
-        RandomClustering clustering1 = new RandomClustering(5, 0.5f, reader);
+        RandomClusteringAlgorithm clustering1 = new RandomClusteringAlgorithm(5, 0.5f, reader);
         List<DocumentCluster> clusters1 = clustering1.cluster(docWeights);
 
-        RandomClustering clustering2 = new RandomClustering(10, 0.5f, reader);
+        RandomClusteringAlgorithm clustering2 = new RandomClusteringAlgorithm(10, 0.5f, reader);
         List<DocumentCluster> clusters2 = clustering2.cluster(docWeights);
 
         // Higher lambda should result in fewer clusters
         assertTrue(clusters1.size() >= clusters2.size());
 
         // Test with different alpha values
-        RandomClustering clustering3 = new RandomClustering(5, 0.3f, reader);
+        RandomClusteringAlgorithm clustering3 = new RandomClusteringAlgorithm(5, 0.3f, reader);
         List<DocumentCluster> clusters3 = clustering3.cluster(docWeights);
 
         // Verify that clusters are created with different alpha
@@ -191,7 +191,7 @@ public class RandomClusteringTests extends AbstractSparseTestBase {
         when(reader.read(4)).thenReturn(vector4);
 
         // Create clustering with 3 clusters
-        RandomClustering clustering = new RandomClustering(2, 1.0f, reader);
+        RandomClusteringAlgorithm clustering = new RandomClusteringAlgorithm(2, 1.0f, reader);
         List<DocumentCluster> clusters = clustering.cluster(docWeights);
 
         // Verify that we have clusters

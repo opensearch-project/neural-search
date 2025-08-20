@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.algorithm;
 
 import lombok.Getter;
 import org.opensearch.common.ValidationException;
+import org.opensearch.neuralsearch.sparse.algorithm.seismic.Seismic;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 

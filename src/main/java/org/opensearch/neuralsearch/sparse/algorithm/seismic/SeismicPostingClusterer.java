@@ -2,9 +2,11 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.sparse.algorithm;
+package org.opensearch.neuralsearch.sparse.algorithm.seismic;
 
 import org.apache.commons.collections4.CollectionUtils;
+import org.opensearch.neuralsearch.sparse.algorithm.ClusteringAlgorithm;
+import org.opensearch.neuralsearch.sparse.algorithm.PostingsProcessingUtils;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 
@@ -16,21 +18,21 @@ import java.util.List;
 /**
  * Preprocesses and clusters document postings.
  */
-public class PostingClustering {
+public class SeismicPostingClusterer {
 
     private final static int MINIMAL_DOC_SIZE_TO_CLUSTER = 10;
     private final int nPostings;
-    private final Clustering clustering;
+    private final ClusteringAlgorithm clusteringAlgorithm;
 
     /**
      * Constructs a PostingClustering instance.
      *
      * @param nPostings maximum number of postings to consider
-     * @param clustering clustering algorithm
+     * @param clusteringAlgorithm clustering algorithm
      */
-    public PostingClustering(int nPostings, Clustering clustering) {
+    public SeismicPostingClusterer(int nPostings, ClusteringAlgorithm clusteringAlgorithm) {
         this.nPostings = nPostings;
-        this.clustering = clustering;
+        this.clusteringAlgorithm = clusteringAlgorithm;
     }
 
     /**
@@ -40,11 +42,11 @@ public class PostingClustering {
      * @return top-K postings
      */
     private List<DocWeight> preprocess(List<DocWeight> postings) {
-        return PostingsProcessor.getTopK(postings, nPostings);
+        return PostingsProcessingUtils.getTopK(postings, nPostings);
     }
 
     /**
-     * Clusters document postings using the provided {@link Clustering} algorithm.
+     * Clusters document postings using the provided {@link ClusteringAlgorithm} algorithm.
      *
      * @param postings document postings to cluster
      * @return list of document clusters
@@ -62,6 +64,6 @@ public class PostingClustering {
         if (preprocessed.size() < MINIMAL_DOC_SIZE_TO_CLUSTER) {
             return Collections.singletonList(new DocumentCluster(null, preprocessed, true));
         }
-        return clustering.cluster(preprocessed);
+        return clusteringAlgorithm.cluster(preprocessed);
     }
 }

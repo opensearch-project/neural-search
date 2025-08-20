@@ -66,10 +66,10 @@ public class MethodComponentContextTests extends AbstractSparseTestBase {
         assertFalse(context.equals(null));
     }
 
-    public void testGetFloatWithNonNumberValue() {
+    public void testGetFloatParameterWithNonNumberValue() {
         MethodComponentContext context = new MethodComponentContext(NAME, Map.of("key", "not a number"));
         Float defaultValue = 1.0f;
-        Float result = context.getFloat("key", defaultValue);
+        Float result = context.getFloatParameter("key", defaultValue);
         assertEquals(defaultValue, result);
     }
 
@@ -145,12 +145,12 @@ public class MethodComponentContextTests extends AbstractSparseTestBase {
         assertTrue(context2.equals(context1));
     }
 
-    public void testGetFloatWhenParameterIsNumber() {
+    public void testGetFloatParameterWhenParameterIsNumber() {
         Map<String, Object> parameters = new HashMap<>();
         parameters.put("testKey", 42);
         MethodComponentContext context = new MethodComponentContext(NAME, parameters);
 
-        Float result = context.getFloat("testKey", 0.0f);
+        Float result = context.getFloatParameter("testKey", 0.0f);
 
         assertEquals(42.0f, result, 0.001f);
     }
