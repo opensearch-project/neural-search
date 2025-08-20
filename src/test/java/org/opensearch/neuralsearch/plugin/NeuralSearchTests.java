@@ -9,9 +9,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.Before;
 import org.mockito.Mock;
@@ -35,6 +35,7 @@ import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
+import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
@@ -94,7 +95,10 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         when(environment.settings()).thenReturn(settings);
 
         // Mock ClusterSettings
-        ClusterSettings clusterSettings = new ClusterSettings(settings, Collections.singleton(NeuralSearchSettings.NEURAL_STATS_ENABLED));
+        ClusterSettings clusterSettings = new ClusterSettings(
+            settings,
+            Set.of(NeuralSearchSettings.NEURAL_STATS_ENABLED, NeuralSearchSettings.AGENTIC_SEARCH_ENABLED)
+        );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
 
         Collection<Object> components = plugin.createComponents(
@@ -167,7 +171,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(2, settings.size());
+        assertEquals(5, settings.size());
     }
 
     public void testRequestProcessors() {
@@ -177,6 +181,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertNotNull(processors);
         assertNotNull(processors.get(NeuralQueryEnricherProcessor.TYPE));
         assertNotNull(processors.get(NeuralSparseTwoPhaseProcessor.TYPE));
+        assertNotNull(processors.get(AgenticQueryTranslatorProcessor.TYPE));
     }
 
     public void testResponseProcessors() {

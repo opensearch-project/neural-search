@@ -6,15 +6,26 @@ package org.opensearch.neuralsearch.processor.dto;
 
 import lombok.Builder;
 import lombok.Data;
+import lombok.NonNull;
+import org.opensearch.index.analysis.AnalysisRegistry;
+import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
+import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
+import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
+import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_FIELD_NAME;
+import static org.opensearch.neuralsearch.mapper.dto.ChunkingConfig.ALGORITHM_FIELD;
+import static org.opensearch.neuralsearch.mapper.dto.ChunkingConfig.PARAMETERS_FIELD;
 
 /**
  * SemanticFieldInfo is a data transfer object to help hold semantic field info
@@ -35,6 +46,10 @@ public class SemanticFieldInfo {
      */
     private String semanticFieldFullPathInMapping;
     /**
+     * The full path to the semantic field in the doc
+     */
+    private String semanticFieldFullPathInDoc;
+    /**
      * The full path to the semantic info fields in the doc. The path in the doc will contain the index of the inter
      * nested object.
      */
@@ -53,6 +68,19 @@ public class SemanticFieldInfo {
      * The chunked strings of the original string value of the semantic field
      */
     private List<String> chunks;
+
+    private SparseEncodingConfig sparseEncodingConfig;
+
+    /**
+     * If we should skip the embedding generation for the semantic field with exist reusable embedding. We think the
+     * embedding is reusable if it exists and semantic field value and model are not changed.
+     */
+    private Boolean skipExistingEmbedding;
+
+    /**
+     * The id of the doc of the semantic field
+     */
+    private String docId;
 
     /**
      * @return full path to the chunks field of the semantic field in a doc
@@ -105,5 +133,27 @@ public class SemanticFieldInfo {
      */
     public String getFullPathForModelInfoInDoc() {
         return new StringBuilder().append(semanticInfoFullPathInDoc).append(PATH_SEPARATOR).append(MODEL_FIELD_NAME).toString();
+    }
+
+    public void setChunkingConfig(final ChunkingConfig chunkingConfig, @NonNull final AnalysisRegistry analysisRegistry) {
+        if (chunkingConfig == null) {
+            chunkingEnabled = false;
+            return;
+        }
+        chunkingEnabled = chunkingConfig.isEnabled();
+        if (chunkingConfig.getConfigs() != null && chunkingConfig.getConfigs().isEmpty() == false) {
+            chunkers = new ArrayList<>();
+            for (Map<String, Object> config : chunkingConfig.getConfigs()) {
+                final String algorithm = (String) config.get(ALGORITHM_FIELD);
+                final Object paramObject = config.get(PARAMETERS_FIELD);
+                final Map<String, Object> parameters = paramObject == null
+                    ? new HashMap<>()
+                    : new HashMap<>((Map<String, Object>) paramObject);
+                if (FixedTokenLengthChunker.ALGORITHM_NAME.equals(algorithm)) {
+                    parameters.put(FixedTokenLengthChunker.ANALYSIS_REGISTRY_FIELD, analysisRegistry);
+                }
+                chunkers.add(ChunkerFactory.create(algorithm, parameters));
+            }
+        }
     }
 }

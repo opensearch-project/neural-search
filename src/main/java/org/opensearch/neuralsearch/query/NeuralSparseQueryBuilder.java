@@ -13,8 +13,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
-import java.util.function.Supplier;
 
+import lombok.experimental.Accessors;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -42,7 +42,6 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
@@ -58,7 +57,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import lombok.experimental.Accessors;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
@@ -73,19 +71,10 @@ import org.opensearch.neuralsearch.util.prune.PruneUtils;
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQueryBuilder>
-    implements
-        ModelInferenceQueryBuilder,
-        WithFieldName {
+public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralSparseQueryBuilder> implements WithFieldName {
     public static final String NAME = "neural_sparse";
-    @VisibleForTesting
-    static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
-    @VisibleForTesting
-    static final ParseField QUERY_TOKENS_FIELD = new ParseField("query_tokens");
-    @VisibleForTesting
-    static final ParseField MODEL_ID_FIELD = new ParseField("model_id");
     // We use max_token_score field to help WAND scorer prune query clause in lucene 9.7. But in lucene 9.8 the inner
-    // logics change, this field is not needed any more.
+    // logics change, this field is not needed any more. deprecated since OpenSearch 2.12
     @VisibleForTesting
     @Deprecated
     static final ParseField MAX_TOKEN_SCORE_FIELD = new ParseField("max_token_score").withAllDeprecated();
@@ -98,20 +87,15 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         NeuralSparseQueryBuilder.ML_CLIENT = mlClient;
     }
 
-    private String fieldName;
-    private String queryText;
-    private String modelId;
-    private String analyzer;
+    // deprecated since OpenSearch 2.12
+    @Deprecated
     private Float maxTokenScore;
-    private Supplier<Map<String, Float>> queryTokensSupplier;
-    // A field that for neural_sparse_two_phase_processor, if twoPhaseSharedQueryToken is not null,
-    // it means it's origin NeuralSparseQueryBuilder and should split the low score tokens form itself then put it into
-    // twoPhaseSharedQueryToken.
-    private Map<String, Float> twoPhaseSharedQueryToken;
-    private NeuralSparseQueryTwoPhaseInfo neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo();
+    // A field that for neural_sparse_two_phase_processor. Original query builder will set the lower score tokens to
+    // this field so that the rescore query can use it to save an inference call.
+    protected Map<String, Float> twoPhaseSharedQueryToken;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
-    private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_0_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_1_0;
 
     /**
      * Constructor from stream input
@@ -131,10 +115,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         this.maxTokenScore = in.readOptionalFloat();
         if (in.readBoolean()) {
             Map<String, Float> queryTokens = in.readMap(StreamInput::readString, StreamInput::readFloat);
-            this.queryTokensSupplier = () -> queryTokens;
+            this.queryTokensMapSupplier = () -> queryTokens;
         }
         if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
-            this.analyzer = in.readOptionalString();
+            this.searchAnalyzer = in.readOptionalString();
             this.neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo(in);
         }
         // to be backward compatible with previous version, we need to use writeString/readString API instead of optionalString API
@@ -159,14 +143,14 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             out.writeString(StringUtils.defaultString(this.modelId, StringUtils.EMPTY));
         }
         out.writeOptionalFloat(maxTokenScore);
-        if (!Objects.isNull(this.queryTokensSupplier) && !Objects.isNull(this.queryTokensSupplier.get())) {
+        if (!Objects.isNull(this.queryTokensMapSupplier) && !Objects.isNull(this.queryTokensMapSupplier.get())) {
             out.writeBoolean(true);
-            out.writeMap(this.queryTokensSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
+            out.writeMap(this.queryTokensMapSupplier.get(), StreamOutput::writeString, StreamOutput::writeFloat);
         } else {
             out.writeBoolean(false);
         }
         if (isClusterOnOrAfterMinReqVersionForAnalyzer()) {
-            out.writeOptionalString(this.analyzer);
+            out.writeOptionalString(this.searchAnalyzer);
             this.neuralSparseQueryTwoPhaseInfo.writeTo(out);
         }
     }
@@ -178,7 +162,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
      * @param pruneType the parameter of the NeuralSparseTwoPhaseProcessor, control how to split the queryTokens to two phase.
      * @return A copy NeuralSparseQueryBuilder for twoPhase, it will be added to the rescorer.
      */
-    public NeuralSparseQueryBuilder getCopyNeuralSparseQueryBuilderForTwoPhase(float pruneRatio, PruneType pruneType) {
+    public NeuralSparseQueryBuilder prepareTwoPhaseQuery(float pruneRatio, PruneType pruneType) {
         this.neuralSparseQueryTwoPhaseInfo = new NeuralSparseQueryTwoPhaseInfo(
             NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_ONE,
             pruneRatio,
@@ -188,25 +172,25 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .queryName(this.queryName)
             .queryText(this.queryText)
             .modelId(this.modelId)
-            .analyzer(this.analyzer)
+            .searchAnalyzer(this.searchAnalyzer)
             .maxTokenScore(this.maxTokenScore)
             .neuralSparseQueryTwoPhaseInfo(
                 new NeuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_TWO, pruneRatio, pruneType)
             );
 
         // If raw tokens are provided directly in the query, split them without additional processing
-        if (Objects.nonNull(this.queryTokensSupplier)) {
-            Map<String, Float> tokens = queryTokensSupplier.get();
+        if (Objects.nonNull(this.queryTokensMapSupplier)) {
+            Map<String, Float> tokens = queryTokensMapSupplier.get();
             // Splitting tokens based on a threshold value: tokens greater than the threshold are stored in v1,
             // while those less than or equal to the threshold are stored in v2.
             Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.splitSparseVector(pruneType, pruneRatio, tokens);
-            this.queryTokensSupplier(() -> splitTokens.v1());
-            copy.queryTokensSupplier(() -> splitTokens.v2());
+            this.queryTokensMapSupplier(() -> splitTokens.v1());
+            copy.queryTokensMapSupplier(() -> splitTokens.v2());
         } else {
             // Otherwise delay the split work to when the query tokens are available.
             // Here we leverage the twoPhaseSharedQueryToken to pass the tokens generated by ML model for the phase one
             // query to the phase two query to save one inference call.
-            copy.queryTokensSupplier(() -> this.twoPhaseSharedQueryToken);
+            copy.queryTokensMapSupplier(() -> this.twoPhaseSharedQueryToken);
         }
         return copy;
     }
@@ -221,14 +205,14 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.nonNull(modelId)) {
             xContentBuilder.field(MODEL_ID_FIELD.getPreferredName(), modelId);
         }
-        if (Objects.nonNull(analyzer)) {
-            xContentBuilder.field(ANALYZER_FIELD.getPreferredName(), analyzer);
+        if (Objects.nonNull(searchAnalyzer)) {
+            xContentBuilder.field(ANALYZER_FIELD.getPreferredName(), searchAnalyzer);
         }
         if (Objects.nonNull(maxTokenScore)) {
             xContentBuilder.field(MAX_TOKEN_SCORE_FIELD.getPreferredName(), maxTokenScore);
         }
-        if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
-            xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensSupplier.get());
+        if (Objects.nonNull(queryTokensMapSupplier) && Objects.nonNull(queryTokensMapSupplier.get())) {
+            xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensMapSupplier.get());
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -281,7 +265,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         }
 
         requireValue(sparseEncodingQueryBuilder.fieldName(), "Field name must be provided for " + NAME + " query");
-        if (Objects.isNull(sparseEncodingQueryBuilder.queryTokensSupplier())) {
+        if (Objects.isNull(sparseEncodingQueryBuilder.queryTokensMapSupplier())) {
             requireValue(
                 sparseEncodingQueryBuilder.queryText(),
                 String.format(
@@ -314,7 +298,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.modelId())) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", MODEL_ID_FIELD.getPreferredName()));
         }
-        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.analyzer())) {
+        if (StringUtils.EMPTY.equals(sparseEncodingQueryBuilder.searchAnalyzer())) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "%s field can not be empty", ANALYZER_FIELD.getPreferredName()));
         }
 
@@ -337,7 +321,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 } else if (MODEL_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.modelId(parser.text());
                 } else if (ANALYZER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    sparseEncodingQueryBuilder.analyzer(parser.text());
+                    sparseEncodingQueryBuilder.searchAnalyzer(parser.text());
                 } else if (MAX_TOKEN_SCORE_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     sparseEncodingQueryBuilder.maxTokenScore(parser.floatValue());
                 } else {
@@ -348,7 +332,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                 }
             } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                 Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
-                sparseEncodingQueryBuilder.queryTokensSupplier(() -> queryTokens);
+                sparseEncodingQueryBuilder.queryTokensMapSupplier(() -> queryTokens);
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
@@ -366,7 +350,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         // 1. It's the queryBuilder built for two-phase, doesn't need any rewrite.
         // 2. Inference is finished, and we set the tokens to queryTokensSupplier.
         // 3. Raw tokens are provided through the query directly so we do not need to do inference.
-        if (Objects.nonNull(queryTokensSupplier)) {
+        if (Objects.nonNull(queryTokensMapSupplier)) {
             return this;
         }
 
@@ -383,13 +367,13 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .queryText(queryText)
             .modelId(modelId)
             .maxTokenScore(maxTokenScore)
-            .queryTokensSupplier(queryTokensSetOnce::get)
+            .queryTokensMapSupplier(queryTokensSetOnce::get)
             .twoPhaseSharedQueryToken(twoPhaseSharedQueryToken)
             .neuralSparseQueryTwoPhaseInfo(neuralSparseQueryTwoPhaseInfo);
     }
 
     private boolean shouldUseAnalyzer() {
-        if (modelId != null && analyzer != null) {
+        if (modelId != null && searchAnalyzer != null) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -397,18 +381,18 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
                     MODEL_ID_FIELD.getPreferredName(),
                     modelId,
                     ANALYZER_FIELD.getPreferredName(),
-                    analyzer,
+                    searchAnalyzer,
                     NeuralQueryEnricherProcessor.TYPE
                 )
             );
         }
 
         // If searchAnalyzer is not null then use it.
-        if (analyzer != null) {
+        if (searchAnalyzer != null) {
             return true;
         } else if (modelId == null && isClusterOnOrAfterMinReqVersionForAnalyzer()) {
             // If both are null and all nodes can support the analyzer then we should use the default analyzer
-            analyzer = DEFAULT_ANALYZER;
+            searchAnalyzer = DEFAULT_ANALYZER;
             return true;
         }
 
@@ -425,8 +409,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             TextInferenceRequest.builder().modelId(modelId()).inputTexts(List.of(queryText)).build(),
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
-                if (Objects.nonNull(neuralSparseQueryTwoPhaseInfo)
-                    && NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_ONE.equals(neuralSparseQueryTwoPhaseInfo.getStatus())) {
+                if (isSparseTwoPhaseOne()) {
                     Tuple<Map<String, Float>, Map<String, Float>> splitQueryTokens = PruneUtils.splitSparseVector(
                         neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(),
                         neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(),
@@ -446,15 +429,17 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         // There can be certain cases that we can use the queryTokensSupplier directly:
         // 1. If the raw query tokens are provided through the query.
         // 2. If we use a ML model to generate the query tokens based on the query text.
-        if (Objects.nonNull(queryTokensSupplier) && Objects.nonNull(queryTokensSupplier.get())) {
-            return queryTokensSupplier.get();
+        if (Objects.nonNull(queryTokensMapSupplier) && Objects.nonNull(queryTokensMapSupplier.get())) {
+            return queryTokensMapSupplier.get();
         }
 
         if (shouldUseAnalyzer()) {
             Map<String, Float> queryTokens = new HashMap<>();
-            Analyzer luceneAnalyzer = context.getIndexAnalyzers().getAnalyzers().get(this.analyzer);
+            Analyzer luceneAnalyzer = context.getIndexAnalyzers().getAnalyzers().get(this.searchAnalyzer);
             if (Objects.isNull(luceneAnalyzer)) {
-                throw new IllegalArgumentException(String.format(Locale.ROOT, "Analyzer [%s] not found in shard context. ", this.analyzer));
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "Analyzer [%s] not found in shard context. ", this.searchAnalyzer)
+                );
             }
             try (TokenStream stream = luceneAnalyzer.tokenStream(fieldName, queryText)) {
                 stream.reset();
@@ -532,10 +517,10 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         if (Objects.isNull(obj) || getClass() != obj.getClass()) {
             return false;
         }
-        if (Objects.isNull(queryTokensSupplier) && Objects.nonNull(obj.queryTokensSupplier)) {
+        if (Objects.isNull(queryTokensMapSupplier) && Objects.nonNull(obj.queryTokensMapSupplier)) {
             return false;
         }
-        if (Objects.nonNull(queryTokensSupplier) && Objects.isNull(obj.queryTokensSupplier)) {
+        if (Objects.nonNull(queryTokensMapSupplier) && Objects.isNull(obj.queryTokensMapSupplier)) {
             return false;
         }
 
@@ -543,13 +528,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .append(queryText, obj.queryText)
             .append(modelId, obj.modelId)
             .append(maxTokenScore, obj.maxTokenScore)
-            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType(), obj.neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType())
-            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(), obj.neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio())
-            .append(neuralSparseQueryTwoPhaseInfo.getStatus().getValue(), obj.neuralSparseQueryTwoPhaseInfo.getStatus().getValue())
+            .append(neuralSparseQueryTwoPhaseInfo, obj.neuralSparseQueryTwoPhaseInfo)
             .append(twoPhaseSharedQueryToken, obj.twoPhaseSharedQueryToken)
-            .append(analyzer, obj.analyzer);
-        if (Objects.nonNull(queryTokensSupplier)) {
-            equalsBuilder.append(queryTokensSupplier.get(), obj.queryTokensSupplier.get());
+            .append(searchAnalyzer, obj.searchAnalyzer);
+        if (Objects.nonNull(queryTokensMapSupplier)) {
+            equalsBuilder.append(queryTokensMapSupplier.get(), obj.queryTokensMapSupplier.get());
         }
         return equalsBuilder.isEquals();
     }
@@ -560,13 +543,11 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
             .append(queryText)
             .append(modelId)
             .append(maxTokenScore)
-            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneType())
-            .append(neuralSparseQueryTwoPhaseInfo.getTwoPhasePruneRatio())
-            .append(neuralSparseQueryTwoPhaseInfo.getStatus().getValue())
+            .append(neuralSparseQueryTwoPhaseInfo)
             .append(twoPhaseSharedQueryToken)
-            .append(analyzer);
-        if (Objects.nonNull(queryTokensSupplier)) {
-            builder.append(queryTokensSupplier.get());
+            .append(searchAnalyzer);
+        if (Objects.nonNull(queryTokensMapSupplier)) {
+            builder.append(queryTokensMapSupplier.get());
         }
         return builder.toHashCode();
     }
@@ -584,21 +565,7 @@ public class NeuralSparseQueryBuilder extends AbstractQueryBuilder<NeuralSparseQ
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_ANALYZER);
     }
 
-    private boolean shouldUseModelId() {
-        return StringUtils.isNotEmpty(modelId);
-    }
-
     public static float bytesToFloat(byte[] bytes) {
         return ByteBuffer.wrap(bytes).getFloat();
-    }
-
-    /**
-     * Gets the field name that this query is searching against.
-     *
-     * @return The field name used in the Neural Sparse query
-     */
-    @Override
-    public String fieldName() {
-        return this.fieldName;
     }
 }

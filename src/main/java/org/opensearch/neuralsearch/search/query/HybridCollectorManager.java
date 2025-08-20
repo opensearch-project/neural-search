@@ -42,6 +42,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -247,7 +248,7 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
      * @return results size to collected
      */
     private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
-        HybridQuery hybridQuery = unwrapHybridQuery(searchContext);
+        HybridQuery hybridQuery = extractHybridQuery(searchContext);
         Integer paginationDepth = hybridQuery.getQueryContext().getPaginationDepth();
 
         // Pagination is expected to work only when pagination_depth is provided in the search request.

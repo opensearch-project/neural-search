@@ -19,6 +19,7 @@ import org.apache.lucene.search.Query;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.HybridQuery;
+import org.opensearch.neuralsearch.util.HybridQueryUtil;
 import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
@@ -31,7 +32,10 @@ import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanMustQueryWithFilters;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRules;
 
 /**
  * Custom search implementation to be used at {@link QueryPhase} for Hybrid Query search. For queries other than Hybrid the
@@ -77,12 +81,27 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
     @VisibleForTesting
     protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
+        HybridQuery hybridQuery = HybridQueryUtil.extractHybridQuery(searchContext);
+        if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
+            return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, hybridQuery, List.of());
+        }
+        if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            BooleanQuery queryWithDls = booleanClauses.stream()
+                .filter(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .findFirst()
+                .map(BooleanClause::query)
+                .map(BooleanQuery.class::cast)
+                .orElseThrow(
+                    () -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause with DLS rules")
+                );
+            List<BooleanClause> filterQueries = booleanClauses.stream()
+                .filter(clause -> !isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .toList();
+            return HybridQuery.fromQueryExtendedWithDlsRules(queryWithDls, hybridQuery, filterQueries);
+        }
         if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
-                throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
-            }
-            HybridQuery hybridQuery = (HybridQuery) booleanClauses.get(0).query();
             List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
             HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
             return hybridQueryWithFilter;
@@ -110,8 +129,13 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     private void validateQuery(final SearchContext searchContext, final Query query) {
         if (query instanceof BooleanQuery) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
+
+            // Allow hybrid query in MUST clause with additional FILTER clauses
+            // This format is used when inner hits are passed within the collapse parameter
+            if (isHybridQueryWrappedInBooleanMustQueryWithFilters(booleanClauses) == false) {
+                for (BooleanClause booleanClause : booleanClauses) {
+                    validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
+                }
             }
         } else if (query instanceof DisjunctionMaxQuery) {
             for (Query disjunct : (DisjunctionMaxQuery) query) {

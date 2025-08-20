@@ -27,6 +27,7 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SKIP_EXISTING_EMBEDDING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.MappingConstants.TYPE;
@@ -425,12 +426,19 @@ public class SemanticMappingUtils {
      */
     public static Boolean isChunkingEnabled(@NonNull final Map<String, Object> fieldConfigMap, @NonNull final String semanticFieldPath) {
         if (fieldConfigMap.containsKey(CHUNKING)) {
-            final Object chunkingEnabledObj = fieldConfigMap.get(CHUNKING);
-            if (chunkingEnabledObj instanceof Boolean) {
-                return (Boolean) chunkingEnabledObj;
+            final Object chunkingConfigObj = fieldConfigMap.get(CHUNKING);
+            if (chunkingConfigObj instanceof Boolean) {
+                return (Boolean) chunkingConfigObj;
+            } else if (chunkingConfigObj instanceof List<?>) {
+                return true;
             } else {
                 throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "%s should be a boolean for the semantic field at %s", CHUNKING, semanticFieldPath)
+                    String.format(
+                        Locale.ROOT,
+                        "%s should either be a boolean or a list of maps for the semantic field at %s",
+                        CHUNKING,
+                        semanticFieldPath
+                    )
                 );
             }
         }
@@ -495,5 +503,33 @@ public class SemanticMappingUtils {
         }
 
         return (Map<String, Object>) config;
+    }
+
+    /**
+     * Check if skip_existing_embedding is enabled for the semantic field.
+     * @param fieldConfigMap The config for a semantic field.
+     * @return If skip_existing_embedding is enabled in the semantic filed config.
+     */
+    public static Boolean isSkipExistingEmbeddingEnabled(
+        @NonNull final Map<String, Object> fieldConfigMap,
+        @NonNull final String semanticFieldPath
+    ) {
+        if (fieldConfigMap.containsKey(SKIP_EXISTING_EMBEDDING)) {
+            final Object skipExistingEmbeddingObject = fieldConfigMap.get(SKIP_EXISTING_EMBEDDING);
+            if (skipExistingEmbeddingObject instanceof Boolean) {
+                return (Boolean) skipExistingEmbeddingObject;
+            } else {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "%s should be a boolean for the semantic field at %s",
+                        SKIP_EXISTING_EMBEDDING,
+                        semanticFieldPath
+                    )
+                );
+            }
+        }
+
+        return false;
     }
 }

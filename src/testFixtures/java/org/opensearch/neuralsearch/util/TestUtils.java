@@ -70,6 +70,7 @@ public class TestUtils {
     public static final String DEFAULT_COMBINATION_METHOD = "arithmetic_mean";
     public static final String PARAM_NAME_WEIGHTS = "weights";
     public static final String PARAM_NAME_LOWER_BOUNDS = "lower_bounds";
+    public static final String PARAM_NAME_UPPER_BOUNDS = "upper_bounds";
     public static final String SPARSE_ENCODING_PROCESSOR = "sparse_encoding";
     public static final int MAX_TIME_OUT_INTERVAL = 3000;
     public static final int MAX_RETRY = 5;
@@ -384,6 +385,23 @@ public class TestUtils {
         ArrayList<Map<String, Object>> processors = (ArrayList<Map<String, Object>>) pipeline.get("processors");
         Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(0).get(processor);
         String modelId = (String) textEmbeddingProcessor.get("model_id");
+        assertNotNull(modelId);
+        return modelId;
+    }
+
+    /**
+     * Fetches model ID in given index with given path
+     * @param indexMapping mappings associated with index
+     * @param indexName name of the index
+     * @param path path to model ID
+     */
+    public static String getModelId(Map<String, Object> indexMapping, String indexName, String path) {
+        String[] paths = path.split("\\.");
+        Map<String, Object> curr = (Map<String, Object>) indexMapping.get(indexName);
+        for (String key : paths) {
+            curr = (Map<String, Object>) curr.get(key);
+        }
+        String modelId = (String) curr.get("model_id");
         assertNotNull(modelId);
         return modelId;
     }

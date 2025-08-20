@@ -110,15 +110,19 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     useCluster testClusters."${baseName}"
     dependsOn rootProject.tasks.assemble
     dependsOn "testAgainstOldCluster"
-    if (ext.bwcBundleTest){
-        doFirst {
+
+    doFirst {
+        // This is added to prevent the cluster from getting stuck in yellow state
+        println "Waiting for cluster to stabilize after previous test, including data synchronization on replica shards"
+        Thread.sleep(10000) // 10 seconds delay
+
+        if(ext.bwcBundleTest){
             testClusters."${baseName}".nextNodeToNextVersion()
-        }
-    }else{
-        doFirst {
+        }else{
             testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(project.ext.plugins)
         }
     }
+
     systemProperty 'tests.rest.bwcsuite_cluster', 'mixed_cluster'
     systemProperty 'tests.rest.first_round', 'true'
     systemProperty 'tests.skip_delete_model_index', 'true'
@@ -156,12 +160,15 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
 task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOneThirdUpgradedCluster"
     useCluster testClusters."${baseName}"
-    if (ext.bwcBundleTest){
-        doFirst {
+
+    doFirst {
+        // This is added to prevent the cluster from getting stuck in yellow state
+        println "Waiting for cluster to stabilize after previous test, including data synchronization on replica shards"
+        Thread.sleep(10000) // 10 seconds delay
+
+        if(ext.bwcBundleTest){
             testClusters."${baseName}".nextNodeToNextVersion()
-        }
-    }else{
-        doFirst {
+        }else{
             testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(project.ext.plugins)
         }
     }
@@ -202,15 +209,19 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
 task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstTwoThirdsUpgradedCluster"
     useCluster testClusters."${baseName}"
-    if (ext.bwcBundleTest){
-        doFirst {
+
+    doFirst {
+        // This is added to prevent the cluster from getting stuck in yellow state
+        println "Waiting for cluster to stabilize after previous test, including data synchronization on replica shards"
+        Thread.sleep(10000) // 10 seconds delay
+
+        if(ext.bwcBundleTest){
             testClusters."${baseName}".nextNodeToNextVersion()
-        }
-    }else{
-        doFirst {
+        }else{
             testClusters."${baseName}".upgradeNodeAndPluginToNextVersion(project.ext.plugins)
         }
     }
+
     mustRunAfter "testAgainstOneThirdUpgradedCluster"
     systemProperty 'tests.rest.bwcsuite_cluster', 'upgraded_cluster'
     systemProperty 'tests.skip_delete_model_index', 'true'

@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
@@ -23,6 +24,7 @@ import org.apache.hc.core5.http.io.entity.StringEntity;
 import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.After;
 import org.junit.Before;
+import org.opensearch.Version;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.client.Request;
 import org.opensearch.client.RequestOptions;
@@ -45,6 +47,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.ml.common.model.MLModelState;
@@ -58,6 +61,7 @@ import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.FieldSortBuilder;
 import org.opensearch.search.sort.ScoreSortBuilder;
 import org.opensearch.search.sort.SortBuilder;
@@ -80,6 +84,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -98,11 +103,13 @@ import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_
 import static org.opensearch.neuralsearch.util.TestUtils.OPENDISTRO_SECURITY;
 import static org.opensearch.neuralsearch.util.TestUtils.OPENSEARCH_SYSTEM_INDEX_PREFIX;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_LOWER_BOUNDS;
+import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_UPPER_BOUNDS;
 import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.SEARCH_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.SECURITY_AUDITLOG_PREFIX;
 
 @ThreadLeakScope(ThreadLeakScope.Scope.NONE)
+@Log4j2
 public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected static final Locale LOCALE = Locale.ROOT;
@@ -130,6 +137,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final Set<RestStatus> SUCCESS_STATUSES = Set.of(RestStatus.CREATED, RestStatus.OK);
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
     protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
+    protected static final Version DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION = Version.V_2_16_0;
 
     private final Set<String> IMMUTABLE_INDEX_PREFIXES = Set.of(
         SECURITY_AUDITLOG_PREFIX,
@@ -141,13 +149,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected ThreadPool threadPool;
     protected ClusterService clusterService;
+    private static final Set<String> DEPLOYED_MODEL_IDS = ConcurrentHashMap.newKeySet();
+    private static final int MAX_ATTEMPTS = 30;
+    private static final int WAIT_TIME_IN_SECONDS = 2;
+    private static final long TIMEOUT = 10000;
+    protected String numOfNodes;
 
     @Before
     public void setupSettings() {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-
+        numOfNodes = System.getProperty("cluster.number_of_nodes", "1");
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
@@ -187,7 +200,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         updateClusterSettings("plugins.ml_commons.native_memory_threshold", 100);
         updateClusterSettings("plugins.ml_commons.jvm_heap_memory_threshold", 95);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
-
+        // disable disk circuit breaker, it doesn't validate response as the setting is only supported since 2.16
+        tryUpdateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
     }
 
     @SneakyThrows
@@ -206,8 +220,30 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             toHttpEntity(builder.toString()),
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
         );
-
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
+    @SneakyThrows
+    protected Response tryUpdateClusterSettings(final String settingKey, final Object value) {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("persistent")
+            .field(settingKey, value)
+            .endObject()
+            .endObject();
+        try {
+            return makeRequest(
+                client(),
+                "PUT",
+                "_cluster/settings",
+                null,
+                toHttpEntity(builder.toString()),
+                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, ""))
+            );
+        } catch (Exception e) {
+            log.error("Failed to update cluster settings, swallow exception");
+        }
+        return null;
     }
 
     protected String registerModelGroupAndUploadModel(final String requestBody) throws Exception {
@@ -265,6 +301,31 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelId;
     }
 
+    static private synchronized void loadAndWaitForModelToBeReady(BaseNeuralSearchIT baseNeuralSearchIT, String modelId) throws Exception {
+        if (DEPLOYED_MODEL_IDS.contains(modelId)) {
+            return;
+        }
+        // To avoid race condition with auto deploy after node replacement
+        Thread.sleep(TIMEOUT);
+        baseNeuralSearchIT.doLoadAndWaitForModelToBeReady(modelId);
+        DEPLOYED_MODEL_IDS.add(modelId);
+    }
+
+    private void doLoadAndWaitForModelToBeReady(String modelId) throws Exception {
+        MLModelState state = getModelState(modelId);
+        logger.info("Model state: " + state);
+        if (MLModelState.LOADED.equals(state) || MLModelState.DEPLOYED.equals(state)) {
+            logger.info("Model is already deployed. Skip loading.");
+            return;
+        }
+        loadModel(modelId);
+        waitForModelToBeReady(modelId);
+    }
+
+    protected void loadAndWaitForModelToBeReady(String modelId) throws Exception {
+        loadAndWaitForModelToBeReady(this, modelId);
+    }
+
     protected void loadModel(final String modelId) throws Exception {
         Response uploadResponse = makeRequest(
             client(),
@@ -293,6 +354,23 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             String.format(Locale.ROOT, "failed to load the model, last task finished with status %s", taskQueryResult.get("state")),
             isComplete
         );
+    }
+
+    protected void waitForModelToBeReady(String modelId) throws Exception {
+        for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+            if (isModelReadyForInference(modelId)) {
+                logger.info("Model {} is ready for inference after {} attempts", modelId, attempt + 1);
+                return;
+            }
+            logger.info("Waiting for model {} to be ready. Attempt {}/{}", modelId, attempt + 1, MAX_ATTEMPTS);
+            Thread.sleep(WAIT_TIME_IN_SECONDS * 1000);
+        }
+        throw new RuntimeException("Model " + modelId + " failed to be ready for inference after " + MAX_ATTEMPTS + " attempts");
+    }
+
+    protected boolean isModelReadyForInference(@NonNull final String modelId) throws IOException, ParseException {
+        MLModelState state = getModelState(modelId);
+        return MLModelState.LOADED.equals(state) || MLModelState.DEPLOYED.equals(state);
     }
 
     /**
@@ -758,7 +836,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param highlightOptions global highlight options
      * @param preTags pre tag for highlight
      * @param postTags post tag for highlight
-     * @param collapseField field to collapse results on
+     * @param collapseContext context containing collapse details
      * @return Search results represented as a map
      */
     @SneakyThrows
@@ -778,7 +856,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, Object> highlightOptions,
         List<String> preTags,
         List<String> postTags,
-        String collapseField
+        CollapseContext collapseContext
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -794,8 +872,18 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
 
         // Add collapse if specified
-        if (collapseField != null) {
-            builder.startObject("collapse").field("field", collapseField).endObject();
+        if (collapseContext != null) {
+            builder.startObject("collapse").field("field", collapseContext.getFieldName());
+            List<InnerHitBuilder> innerHitBuilders = collapseContext.getInnerHit();
+            if (innerHitBuilders != null) {
+                builder.startArray("inner_hits");
+                for (int innerHitIndex = 0; innerHitIndex < innerHitBuilders.size(); innerHitIndex++) {
+                    InnerHitBuilder innerHitBuilder = innerHitBuilders.get(innerHitIndex);
+                    innerHitBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+                }
+                builder.endArray();
+            }
+            builder.endObject();
         }
 
         if (Objects.nonNull(aggs)) {
@@ -870,6 +958,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         builder.endObject();
 
         Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
+        request.addParameter("allow_partial_search_results", "false");
         request.addParameter("size", Integer.toString(resultSize));
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
@@ -1572,10 +1661,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final List<String> dateFields,
         final int numberOfShards
     ) {
+        int numberOfReplica = numOfNodes.equals("1") ? 0 : 1;
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
             .field("number_of_shards", numberOfShards)
+            .field("number_of_replicas", numberOfReplica)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -1644,10 +1735,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final int numberOfShards,
         final String semanticFieldSearchAnalyzer
     ) {
+        int numberOfReplica = numOfNodes.equals("1") ? 0 : 1;
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
             .field("number_of_shards", numberOfShards)
+            .field("number_of_replicas", numberOfReplica)
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -1862,6 +1955,29 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 }
                 stringBuilderForContentBody.append("]");
             }
+            if (normalizationParams.containsKey(PARAM_NAME_UPPER_BOUNDS)) {
+                if (normalizationParams.containsKey(PARAM_NAME_LOWER_BOUNDS)) {
+                    stringBuilderForContentBody.append(",");
+                }
+                stringBuilderForContentBody.append("\"upper_bounds\": [");
+                List<Map> upperBounds = (List) normalizationParams.get(PARAM_NAME_UPPER_BOUNDS);
+                for (int i = 0; i < upperBounds.size(); i++) {
+                    Map<String, String> upperBound = upperBounds.get(i);
+                    stringBuilderForContentBody.append("{ ")
+                        .append("\"mode\"")
+                        .append(": \"")
+                        .append(upperBound.get("mode"))
+                        .append("\",")
+                        .append("\"max_score\"")
+                        .append(": ")
+                        .append(upperBound.get("max_score"))
+                        .append(" }");
+                    if (i < upperBounds.size() - 1) {
+                        stringBuilderForContentBody.append(", ");
+                    }
+                }
+                stringBuilderForContentBody.append("]");
+            }
             stringBuilderForContentBody.append(" }");
         }
         stringBuilderForContentBody.append("},").append("\"combination\": {").append("\"technique\": \"%s\"");
@@ -1939,19 +2055,30 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelGroupId;
     }
 
-    // Method that waits till the health of nodes in the cluster goes green
     protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
         waitForGreen.addParameter("wait_for_nodes", numOfNodes);
         waitForGreen.addParameter("wait_for_status", "green");
+        waitForGreen.addParameter("wait_for_active_shards", "all");
         waitForGreen.addParameter("cluster_manager_timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
         waitForGreen.addParameter("timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
         client().performRequest(waitForGreen);
     }
 
     // Method that waits till the health of nodes in the cluster goes green with default timeout value of 60
-    protected void waitForClusterHealthGreen(final String numOfNodes) throws IOException {
-        waitForClusterHealthGreen(numOfNodes, 60);
+    protected void waitForClusterHealthGreen(final String numOfNodes) throws Exception {
+        try {
+            waitForClusterHealthGreen(numOfNodes, 60);
+        } catch (ResponseException e) {
+            // Perform additional API calls to log the cause of the yellow cluster state
+            Request explain = new Request("GET", "/_cluster/allocation/explain");
+            logger.info(EntityUtils.toString(client().performRequest(explain).getEntity()));
+            Request shards = new Request("GET", "/_cat/shards?v");
+            logger.info(EntityUtils.toString(client().performRequest(shards).getEntity()));
+            Request health = new Request("GET", "/_cat/health?v");
+            logger.info(EntityUtils.toString(client().performRequest(health).getEntity()));
+            throw e;
+        }
     }
 
     /**
@@ -2296,6 +2423,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 deleteModel(m);
             }
         });
+        DEPLOYED_MODEL_IDS.clear();
     }
 
     @SneakyThrows

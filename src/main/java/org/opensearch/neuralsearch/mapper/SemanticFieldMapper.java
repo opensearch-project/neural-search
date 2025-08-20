@@ -21,7 +21,10 @@ import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.mapper.TokenCountFieldMapper;
 import org.opensearch.index.mapper.WildcardFieldMapper;
 import org.opensearch.neuralsearch.constants.MappingConstants;
+import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
 import org.opensearch.neuralsearch.mapper.dto.SemanticParameters;
+import org.opensearch.neuralsearch.processor.chunker.ChunkerValidatorFactory;
+import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -36,9 +39,11 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAU
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SKIP_EXISTING_EMBEDDING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_FIELD_SEARCH_ANALYZER;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SPARSE_ENCODING_CONFIG;
 
 /**
  * FieldMapper for the semantic field. It will hold a delegate field mapper to delegate the data parsing and query work
@@ -133,12 +138,19 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
         );
 
         @Getter
-        protected final Parameter<Boolean> chunkingEnabled = Parameter.boolParam(
+        protected final Parameter<ChunkingConfig> chunkingConfig = new Parameter<>(
             CHUNKING,
             false,
-            m -> ((SemanticFieldMapper) m).semanticParameters.getChunkingEnabled(),
-            false
-        );
+            () -> null,
+            (name, ctx, value) -> new ChunkingConfig(name, value, new ChunkerValidatorFactory()),
+            m -> ((SemanticFieldMapper) m).semanticParameters.getChunkingConfig()
+        ).setSerializer((builder, name, value) -> {
+            if (value == null) {
+                builder.nullField(name);
+            } else {
+                value.toXContent(builder, name);
+            }
+        }, (value) -> value == null ? null : value.toString());;
 
         protected final Parameter<String> semanticFieldSearchAnalyzer = Parameter.stringParam(
             SEMANTIC_FIELD_SEARCH_ANALYZER,
@@ -171,6 +183,28 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
             }
         }, (v) -> v == null ? null : v.toString());
 
+        protected final Parameter<SparseEncodingConfig> sparseEncodingConfig = new Parameter<>(
+            SPARSE_ENCODING_CONFIG,
+            false,
+            () -> null,
+            (name, ctx, value) -> new SparseEncodingConfig(name, value),
+            m -> ((SemanticFieldMapper) m).semanticParameters.getSparseEncodingConfig()
+        ).setSerializer((builder, name, value) -> {
+            if (value == null) {
+                builder.nullField(name);
+            } else {
+                value.toXContent(builder, name);
+            }
+        }, (value) -> value == null ? null : value.toString());
+
+        @Getter
+        protected final Parameter<Boolean> skipExistingEmbedding = Parameter.boolParam(
+            SKIP_EXISTING_EMBEDDING,
+            true,
+            m -> ((SemanticFieldMapper) m).semanticParameters.getSkipExistingEmbedding(),
+            false
+        );
+
         @Setter
         protected ParametrizedFieldMapper.Builder delegateBuilder;
 
@@ -185,9 +219,11 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 searchModelId,
                 rawFieldType,
                 semanticInfoFieldName,
-                chunkingEnabled,
+                chunkingConfig,
                 semanticFieldSearchAnalyzer,
-                denseEmbeddingConfig
+                denseEmbeddingConfig,
+                sparseEncodingConfig,
+                skipExistingEmbedding
             );
         }
 
@@ -214,9 +250,11 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 .searchModelId(searchModelId.getValue())
                 .rawFieldType(rawFieldType.getValue())
                 .semanticInfoFieldName(semanticInfoFieldName.getValue())
-                .chunkingEnabled(chunkingEnabled.getValue())
+                .chunkingConfig(chunkingConfig.getValue())
                 .semanticFieldSearchAnalyzer(semanticFieldSearchAnalyzer.getValue())
                 .denseEmbeddingConfig(denseEmbeddingConfig.getValue())
+                .sparseEncodingConfig(sparseEncodingConfig.getValue())
+                .skipExistingEmbedding(skipExistingEmbedding.getValue())
                 .build();
         }
     }

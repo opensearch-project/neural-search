@@ -32,6 +32,9 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.transport.client.OpenSearchClient;
 
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+
 /**
  * This processor is used for user input data text sparse encoding processing, model_id can be used to indicate which model user use,
  * and field_map can be used to indicate which fields needs text embedding and the corresponding keys for the sparse encoding results.

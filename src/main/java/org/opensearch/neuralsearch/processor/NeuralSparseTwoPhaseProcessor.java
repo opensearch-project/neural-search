@@ -12,7 +12,8 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
-import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.query.AbstractNeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -96,8 +97,11 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         }
         QueryBuilder queryBuilder = request.source().query();
         // Collect the nested NeuralSparseQueryBuilder in the whole query.
-        Multimap<NeuralSparseQueryBuilder, Float> queryBuilderMap;
-        queryBuilderMap = collectNeuralSparseQueryBuilder(queryBuilder, 1.0f);
+        Multimap<AbstractNeuralQueryBuilder<?>, Float> queryBuilderMap = collectNeuralQueryBuilderWithSparseEmbedding(
+            queryBuilder,
+            1.0f,
+            request
+        );
         if (queryBuilderMap.isEmpty()) {
             return request;
         }
@@ -116,12 +120,12 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
     }
 
     private QueryBuilder getNestedQueryBuilderFromNeuralSparseQueryBuilderMap(
-        final Multimap<NeuralSparseQueryBuilder, Float> queryBuilderFloatMap
+        final Multimap<AbstractNeuralQueryBuilder<?>, Float> queryBuilderFloatMap
     ) {
         BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
-        queryBuilderFloatMap.asMap().forEach((neuralSparseQueryBuilder, boosts) -> {
+        queryBuilderFloatMap.asMap().forEach((neuralQueryBuilderWithSparseEmbedding, boosts) -> {
             float reduceBoost = boosts.stream().reduce(0.0f, Float::sum);
-            boolQueryBuilder.should(neuralSparseQueryBuilder.boost(reduceBoost));
+            boolQueryBuilder.should(neuralQueryBuilderWithSparseEmbedding.boost(reduceBoost));
         });
         return boolQueryBuilder;
     }
@@ -136,19 +140,33 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             .reduce(1.0f, (a, b) -> a * b);
     }
 
-    private Multimap<NeuralSparseQueryBuilder, Float> collectNeuralSparseQueryBuilder(final QueryBuilder queryBuilder, float baseBoost) {
-        Multimap<NeuralSparseQueryBuilder, Float> result = ArrayListMultimap.create();
+    private Multimap<AbstractNeuralQueryBuilder<?>, Float> collectNeuralQueryBuilderWithSparseEmbedding(
+        final QueryBuilder queryBuilder,
+        float baseBoost,
+        final SearchRequest request
+    ) {
+        Multimap<AbstractNeuralQueryBuilder<?>, Float> result = ArrayListMultimap.create();
 
         if (queryBuilder instanceof BoolQueryBuilder) {
             BoolQueryBuilder boolQueryBuilder = (BoolQueryBuilder) queryBuilder;
             float updatedBoost = baseBoost * boolQueryBuilder.boost();
             for (QueryBuilder subQuery : boolQueryBuilder.should()) {
-                Multimap<NeuralSparseQueryBuilder, Float> subResult = collectNeuralSparseQueryBuilder(subQuery, updatedBoost);
+                Multimap<AbstractNeuralQueryBuilder<?>, Float> subResult = collectNeuralQueryBuilderWithSparseEmbedding(
+                    subQuery,
+                    updatedBoost,
+                    request
+                );
                 result.putAll(subResult);
             }
-        } else if (queryBuilder instanceof NeuralSparseQueryBuilder) {
-            NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) queryBuilder;
-            float updatedBoost = baseBoost * neuralSparseQueryBuilder.boost();
+        } else if (queryBuilder instanceof AbstractNeuralQueryBuilder<?> abstractNeuralQueryBuilder) {
+            // If this is a neuralQueryBuilder then we need to check if the target is sparse embedding.
+            // If the target is not the sparse embedding we do nothing.
+            if (abstractNeuralQueryBuilder instanceof NeuralQueryBuilder neuralQueryBuilder
+                && neuralQueryBuilder.isTargetSparseEmbedding(request) == false) {
+                return result;
+            }
+
+            float updatedBoost = baseBoost * abstractNeuralQueryBuilder.boost();
             /*
              * We obtain a copied modifiedQueryBuilder from the valid origin NeuralSparseQueryBuilder. After this,
              * when the original NeuralSparseQueryBuilder starts to rewrite, it will only retain the tokens that
@@ -162,10 +180,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
              *     - Docs besides TopDocs: Score = HighScoreToken's score
              *     - Final TopDocs: Score = HighScoreToken's score + LowScoreToken's score
              */
-            NeuralSparseQueryBuilder modifiedQueryBuilder = neuralSparseQueryBuilder.getCopyNeuralSparseQueryBuilderForTwoPhase(
-                pruneRatio,
-                pruneType
-            );
+            AbstractNeuralQueryBuilder<?> modifiedQueryBuilder = abstractNeuralQueryBuilder.prepareTwoPhaseQuery(pruneRatio, pruneType);
             result.put(modifiedQueryBuilder, updatedBoost);
         }
         // We only support BoostQuery, BooleanQuery and NeuralSparseQuery now. For other compound query type which are not support now, will

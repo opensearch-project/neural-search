@@ -4,8 +4,11 @@
  */
 package org.opensearch.neuralsearch.plugin;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
 
 import java.util.Arrays;
 import java.util.Collection;
@@ -21,6 +24,11 @@ import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistr
 import com.google.common.collect.ImmutableList;
 import org.opensearch.action.ActionRequest;
 import org.opensearch.neuralsearch.search.collector.HybridQueryCollectorContextSpecFactory;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
+import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
@@ -50,6 +58,7 @@ import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
+import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
@@ -71,10 +80,6 @@ import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFacto
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
@@ -155,6 +160,7 @@ public class NeuralSearch extends Plugin
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         settingsAccessor = new NeuralSearchSettingsAccessor(clusterService, environment.settings());
+        AgenticSearchQueryBuilder.initialize(settingsAccessor);
         pipelineServiceUtil = new PipelineServiceUtil(clusterService);
         infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
         EventStatsManager.instance().initialize(settingsAccessor);
@@ -168,7 +174,8 @@ public class NeuralSearch extends Plugin
             new QuerySpec<>(NeuralQueryBuilder.NAME, NeuralQueryBuilder::new, NeuralQueryBuilder::fromXContent),
             new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent),
-            new QuerySpec<>(NeuralKNNQueryBuilder.NAME, NeuralKNNQueryBuilder::new, NeuralKNNQueryBuilder::fromXContent)
+            new QuerySpec<>(NeuralKNNQueryBuilder.NAME, NeuralKNNQueryBuilder::new, NeuralKNNQueryBuilder::fromXContent),
+            new QuerySpec<>(AgenticSearchQueryBuilder.NAME, AgenticSearchQueryBuilder::new, AgenticSearchQueryBuilder::fromXContent)
         );
     }
 
@@ -245,7 +252,13 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(RERANKER_MAX_DOC_FIELDS, NEURAL_STATS_ENABLED);
+        return List.of(
+            RERANKER_MAX_DOC_FIELDS,
+            NEURAL_STATS_ENABLED,
+            SEMANTIC_INGEST_BATCH_SIZE,
+            HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
+            AGENTIC_SEARCH_ENABLED
+        );
     }
 
     @Override
@@ -256,7 +269,9 @@ public class NeuralSearch extends Plugin
             NeuralQueryEnricherProcessor.TYPE,
             new NeuralQueryEnricherProcessor.Factory(),
             NeuralSparseTwoPhaseProcessor.TYPE,
-            new NeuralSparseTwoPhaseProcessor.Factory()
+            new NeuralSparseTwoPhaseProcessor.Factory(),
+            AgenticQueryTranslatorProcessor.TYPE,
+            new AgenticQueryTranslatorProcessor.Factory(clientAccessor, xContentRegistry, settingsAccessor)
         );
     }
 
@@ -309,7 +324,8 @@ public class NeuralSearch extends Plugin
                 clientAccessor,
                 parameters.env,
                 parameters.ingestService.getClusterService(),
-                parameters.analysisRegistry
+                parameters.analysisRegistry,
+                parameters.client
             )
         );
     }

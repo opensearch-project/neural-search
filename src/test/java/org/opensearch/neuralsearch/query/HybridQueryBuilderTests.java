@@ -552,7 +552,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(BOOST, neuralQueryBuilder.boost(), 0f);
         assertEquals(
             new TermQueryBuilder(TEXT_FIELD_NAME, FILTER_TERM_QUERY_TEXT),
-            ((NeuralQueryBuilder) queryTwoSubQueries.queries().get(0)).filter()
+            ((NeuralQueryBuilder) queryTwoSubQueries.queries().get(0)).queryfilter()
         );
         // verify term query
         assertEquals(
@@ -1025,7 +1025,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         neuralSparseQueryBuilder.fieldName(fieldName)
             .queryText(queryText)
             .modelId(modelId)
-            .queryTokensSupplier(() -> Map.of("token1", 1.0f, "token2", 0.5f));
+            .queryTokensMapSupplier(() -> Map.of("token1", 1.0f, "token2", 0.5f));
         HybridQueryBuilder builder = new HybridQueryBuilder().add(neuralSparseQueryBuilder);
         builder.paginationDepth(10);
 
@@ -1057,12 +1057,12 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         NeuralSparseQueryBuilder neuralSparseQueryBuilder1 = new NeuralSparseQueryBuilder().fieldName("test_field")
             .queryText("test")
             .modelId("test_model")
-            .queryTokensSupplier(() -> Map.of("token1", 1.0f));
+            .queryTokensMapSupplier(() -> Map.of("token1", 1.0f));
 
         NeuralSparseQueryBuilder neuralSparseQueryBuilder2 = new NeuralSparseQueryBuilder().fieldName("test_field")
             .queryText("test")
             .modelId("test_model")
-            .queryTokensSupplier(() -> Map.of("token1", 1.0f));
+            .queryTokensMapSupplier(() -> Map.of("token1", 1.0f));
 
         // Create builders
         HybridQueryBuilder builder1 = new HybridQueryBuilder().add(neuralQueryBuilder1).add(neuralSparseQueryBuilder1);
@@ -1092,6 +1092,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testFilter() {
+        setUpClusterService();
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(
             NeuralQueryBuilder.builder().fieldName("test").queryText("test").build()
         ).add(new NeuralSparseQueryBuilder());
@@ -1104,7 +1105,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(updatedHybridQueryBuilder.queryName(), hybridQueryBuilder.queryName());
         assertEquals(updatedHybridQueryBuilder.paginationDepth(), hybridQueryBuilder.paginationDepth());
         NeuralQueryBuilder updatedNeuralQueryBuilder = (NeuralQueryBuilder) updatedHybridQueryBuilder.queries().get(0);
-        assertEquals(new MatchAllQueryBuilder(), updatedNeuralQueryBuilder.filter());
+        assertEquals(new MatchAllQueryBuilder(), updatedNeuralQueryBuilder.queryfilter());
         BoolQueryBuilder updatedNeuralSparseQueryBuilder = (BoolQueryBuilder) updatedHybridQueryBuilder.queries().get(1);
         assertEquals(new NeuralSparseQueryBuilder(), updatedNeuralSparseQueryBuilder.must().get(0));
         assertEquals(new MatchAllQueryBuilder(), updatedNeuralSparseQueryBuilder.filter().get(0));

@@ -4,17 +4,24 @@
  */
 package org.opensearch.neuralsearch.processor.semantic;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
+import org.opensearch.action.get.MultiGetAction;
+import org.opensearch.action.get.MultiGetItemResponse;
+import org.opensearch.action.get.MultiGetRequest;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.Nullable;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
+import org.opensearch.index.analysis.AnalysisRegistry;
 import org.opensearch.ingest.AbstractBatchingSystemProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ml.common.MLModel;
+import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
+import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
@@ -25,6 +32,7 @@ import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
+import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,6 +42,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,23 +50,26 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_TEXT_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_ID_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_NAME_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_TYPE_FIELD_NAME;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
-import static org.opensearch.neuralsearch.processor.chunker.Chunker.DEFAULT_MAX_CHUNK_LIMIT;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkList;
 import static org.opensearch.neuralsearch.processor.util.ChunkUtils.chunkString;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getMaxTokenCount;
+import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getValueFromSourceByFullPath;
 import static org.opensearch.neuralsearch.util.ProcessorDocumentUtils.unflattenIngestDoc;
 import static org.opensearch.neuralsearch.util.SemanticMLModelUtils.getModelType;
 import static org.opensearch.neuralsearch.util.SemanticMLModelUtils.isDenseModel;
-import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getModelId;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.getSemanticInfoFieldFullPath;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isChunkingEnabled;
+import static org.opensearch.neuralsearch.util.SemanticMappingUtils.isSkipExistingEmbeddingEnabled;
 
 /**
  * Processor to ingest the semantic fields. It will do text chunking and embedding generation for the semantic field.
@@ -77,10 +89,13 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     protected final MLCommonsClientAccessor mlCommonsClientAccessor;
     private final Environment environment;
     private final ClusterService clusterService;
+    private final AnalysisRegistry analysisRegistry;
 
     private final Chunker defaultTextChunker;
 
     private final static float DEFAULT_PRUNE_RATIO = 0.1f;
+
+    private final OpenSearchClient openSearchClient;
 
     public SemanticFieldProcessor(
         @Nullable final String tag,
@@ -90,7 +105,9 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         @NonNull final MLCommonsClientAccessor mlClientAccessor,
         @NonNull final Environment environment,
         @NonNull final ClusterService clusterService,
-        @NonNull final Chunker defaultTextChunker
+        @NonNull final Chunker defaultTextChunker,
+        @NonNull final AnalysisRegistry analysisRegistry,
+        @NonNull final OpenSearchClient openSearchClient
     ) {
         super(tag, description, batchSize);
         this.pathToFieldConfig = pathToFieldConfig;
@@ -98,6 +115,8 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         this.environment = environment;
         this.clusterService = clusterService;
         this.defaultTextChunker = defaultTextChunker;
+        this.openSearchClient = openSearchClient;
+        this.analysisRegistry = analysisRegistry;
     }
 
     /**
@@ -174,14 +193,119 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         @NonNull final List<SemanticFieldInfo> semanticFieldInfoList,
         @NonNull final BiConsumer<IngestDocument, Exception> handler
     ) {
-        setModelInfo(ingestDocument, semanticFieldInfoList);
-
         boolean isChunked = chunk(ingestDocument, semanticFieldInfoList);
         if (isChunked) {
             EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
         }
 
+        final Set<String> docIdsToCheckReuse = getDocIdsToCheckReuse(List.of(semanticFieldInfoList));
+        final Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
+        if (shouldCheckExistDoc(docIdsToCheckReuse, index)) {
+            getExistingDocs(docIdsToCheckReuse, (String) index, (existingDocs, exception) -> {
+                if (exception != null) {
+                    handler.accept(null, wrapGetExistDocException(exception));
+                    return;
+                }
+                final List<SemanticFieldInfo> semanticFieldInfoToGenerateEmbedding = applyReusableEmbeddingsAndFilterUnprocessedFields(
+                    ingestDocument,
+                    semanticFieldInfoList,
+                    existingDocs
+                );
+                if (semanticFieldInfoToGenerateEmbedding.isEmpty()) {
+                    handler.accept(ingestDocument, null);
+                } else {
+                    setModelInfo(ingestDocument, semanticFieldInfoToGenerateEmbedding);
+                    generateAndSetEmbedding(ingestDocument, semanticFieldInfoToGenerateEmbedding, handler);
+                }
+            });
+            return;
+        }
+
+        setModelInfo(ingestDocument, semanticFieldInfoList);
         generateAndSetEmbedding(ingestDocument, semanticFieldInfoList, handler);
+    }
+
+    private Exception wrapGetExistDocException(@NonNull final Exception exception) {
+        return new RuntimeException(
+            String.format(
+                Locale.ROOT,
+                "Failed to get existing docs to check embedding reusability for the semantic field. Error: %s",
+                exception.getMessage()
+            ),
+            exception
+        );
+    }
+
+    private List<SemanticFieldInfo> applyReusableEmbeddingsAndFilterUnprocessedFields(
+        @NonNull IngestDocument ingestDocument,
+        @NonNull List<SemanticFieldInfo> semanticFieldInfoList,
+        @NonNull final Map<String, Map<String, Object>> existingDocs
+    ) {
+        return semanticFieldInfoList.stream().filter(info -> {
+            // If skip_exist_embedding is not enabled or no doc ID, we need to generate embedding
+            if (info.getSkipExistingEmbedding() == false || info.getDocId() == null) {
+                return true;
+            }
+
+            // If no existing doc then no reuse
+            final Map<String, Object> existingDoc = existingDocs.get(info.getDocId());
+            if (existingDoc == null) {
+                return true;
+            }
+
+            // If original value is changed then no reuse
+            final Object existingValue = getValueFromSourceByFullPath(existingDoc, info.getSemanticFieldFullPathInDoc());
+            if (Objects.equals(info.getValue(), existingValue) == false) {
+                return true;
+            }
+
+            // If the model id is changed then no reuse
+            final Object modelInfo = getValueFromSourceByFullPath(existingDoc, info.getFullPathForModelInfoInDoc());
+            if (!(modelInfo instanceof Map<?, ?> modelMap)
+                || Objects.equals(modelMap.get(MODEL_ID_FIELD_NAME), info.getModelId()) == false) {
+                return true;
+            }
+
+            // If the chunked texts are changed then no reuse
+            if (info.getChunkingEnabled()) {
+                final Object chunksObj = getValueFromSourceByFullPath(existingDoc, info.getFullPathForChunksInDoc());
+                if (!(chunksObj instanceof List<?> chunks)) {
+                    return true;
+                }
+
+                final List<Object> existingChunkedTexts = new ArrayList<>();
+                for (final Object chunk : chunks) {
+                    if (chunk instanceof Map<?, ?> chunkMap) {
+                        existingChunkedTexts.add(chunkMap.get(CHUNKS_TEXT_FIELD_NAME));
+                    }
+                }
+
+                if (Objects.equals(existingChunkedTexts, info.getChunks()) == false) {
+                    return true;
+                }
+            }
+
+            // All checks passed — reuse existing embedding and skip generation
+            final Object semanticInfo = getValueFromSourceByFullPath(existingDoc, info.getSemanticInfoFullPathInDoc());
+            ingestDocument.setFieldValue(info.getSemanticInfoFullPathInDoc(), semanticInfo);
+            return false;
+        }).toList();
+    }
+
+    private boolean shouldCheckExistDoc(@NonNull final Set<String> docIdsToCheckReuse, final Object index) {
+        return docIdsToCheckReuse.isEmpty() == false && index instanceof String;
+    }
+
+    private Set<String> getDocIdsToCheckReuse(@NonNull final Collection<List<SemanticFieldInfo>> semanticFieldInfoList) {
+        final Set<String> docIdsToCheckReuse = new HashSet<>();
+        for (List<SemanticFieldInfo> semanticFieldInfos : semanticFieldInfoList) {
+            for (SemanticFieldInfo semanticFieldInfo : semanticFieldInfos) {
+                if (semanticFieldInfo.getSkipExistingEmbedding() && Objects.nonNull(semanticFieldInfo.getDocId())) {
+                    docIdsToCheckReuse.add(semanticFieldInfo.getDocId());
+                }
+            }
+        }
+        return docIdsToCheckReuse;
     }
 
     private void setModelInfo(@NonNull final IngestDocument ingestDocument, @NonNull final List<SemanticFieldInfo> semanticFieldInfoList) {
@@ -224,7 +348,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
 
         generateEmbedding(modelIdToRawDataMap, modelIdValueToEmbeddingMap -> {
             try {
-                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap, DEFAULT_PRUNE_RATIO);
+                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap);
             } catch (Exception e) {
                 handler.accept(null, e);
             }
@@ -251,8 +375,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     private void setInference(
         @NonNull final IngestDocument ingestDocument,
         @NonNull final List<SemanticFieldInfo> semanticFieldInfoList,
-        @NonNull final Map<Pair<String, String>, Pair<Object, Exception>> modelIdValueToEmbeddingMap,
-        @NonNull final Float pruneRatio
+        @NonNull final Map<Pair<String, String>, Pair<Object, Exception>> modelIdValueToEmbeddingMap
     ) throws Exception {
         for (final SemanticFieldInfo semanticFieldInfo : semanticFieldInfoList) {
             final String modelId = semanticFieldInfo.getModelId();
@@ -265,10 +388,17 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
                     throw exception;
                 }
                 Object embedding = modelIdValueToEmbeddingMap.get(Pair.of(modelId, chunk)).getLeft();
-                // TODO: In future we should allow user to configure how we should prune the sparse embedding
-                // for each semantic field. Then we can pull the config from the semantic config and use it here.
                 if (!isDenseModel) {
-                    embedding = PruneUtils.pruneSparseVector(PruneType.MAX_RATIO, pruneRatio, (Map<String, Float>) embedding);
+                    final SparseEncodingConfig sparseEncodingConfig = semanticFieldInfo.getSparseEncodingConfig();
+                    final PruneType pruneType = (sparseEncodingConfig != null && sparseEncodingConfig.getPruneType() != null)
+                        ? sparseEncodingConfig.getPruneType()
+                        : PruneType.MAX_RATIO;
+                    if (PruneType.NONE.equals(pruneType) == false) {
+                        final Float pruneRatio = (sparseEncodingConfig != null && sparseEncodingConfig.getPruneRatio() != null)
+                            ? sparseEncodingConfig.getPruneRatio()
+                            : DEFAULT_PRUNE_RATIO;
+                        embedding = PruneUtils.pruneSparseVector(pruneType, pruneRatio, (Map<String, Float>) embedding);
+                    }
                 }
                 final String embeddingFullPath = semanticFieldInfo.getFullPathForEmbeddingInDoc(i);
                 ingestDocument.setFieldValue(embeddingFullPath, embedding);
@@ -279,7 +409,15 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     private List<SemanticFieldInfo> getSemanticFieldInfo(IngestDocument ingestDocument) {
         final List<SemanticFieldInfo> semanticFieldInfos = new ArrayList<>();
         final Object doc = ingestDocument.getSourceAndMetadata();
-        pathToFieldConfig.forEach((path, config) -> collectSemanticFieldInfo(doc, path.split("\\."), config, 0, "", semanticFieldInfos));
+        String docId = null;
+        if (doc instanceof Map<?, ?> docMap) {
+            docId = (String) docMap.get(ID_FIELD);
+        }
+        for (Map.Entry<String, Map<String, Object>> entry : pathToFieldConfig.entrySet()) {
+            final String path = entry.getKey();
+            final Map<String, Object> config = entry.getValue();
+            collectSemanticFieldInfo(doc, path.split("\\."), config, 0, "", semanticFieldInfos, docId);
+        }
         return semanticFieldInfos;
     }
 
@@ -322,8 +460,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             final boolean isFirstChunker = chunks == null;
             runtimeParameters.put(FixedTokenLengthChunker.MAX_TOKEN_COUNT_FIELD, maxTokenCount);
             runtimeParameters.put(CHUNK_STRING_COUNT_FIELD, isFirstChunker ? 1 : chunks.size());
-            // TODO: Should allow user to configure it for each chunker - https://github.com/opensearch-project/neural-search/issues/1340
-            runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+            runtimeParameters.put(MAX_CHUNK_LIMIT_FIELD, chunker.getMaxChunkLimit());
 
             final List<String> chunkedText = new ArrayList<>();
             if (isFirstChunker) {
@@ -344,7 +481,8 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         @NonNull final Map<String, Object> fieldConfig,
         final int depth,
         @NonNull final String currentPath,
-        @NonNull final List<SemanticFieldInfo> semanticFieldInfoList
+        @NonNull final List<SemanticFieldInfo> semanticFieldInfoList,
+        @Nullable final String docId
     ) {
         if (depth > pathParts.length || node == null) {
             return;
@@ -357,12 +495,12 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         if (depth < pathParts.length && node instanceof Map<?, ?> mapNode) {
             final Object nextNode = mapNode.get(key);
             final String newPath = currentPath.isEmpty() ? key : currentPath + PATH_SEPARATOR + key;
-            collectSemanticFieldInfo(nextNode, pathParts, fieldConfig, depth + 1, newPath, semanticFieldInfoList);
+            collectSemanticFieldInfo(nextNode, pathParts, fieldConfig, depth + 1, newPath, semanticFieldInfoList, docId);
         } else if (depth < pathParts.length && node instanceof List<?> listNode) {
             for (int i = 0; i < listNode.size(); i++) {
                 final Object listItem = listNode.get(i);
                 final String indexedPath = currentPath + PATH_SEPARATOR + i;
-                collectSemanticFieldInfo(listItem, pathParts, fieldConfig, depth, indexedPath, semanticFieldInfoList);
+                collectSemanticFieldInfo(listItem, pathParts, fieldConfig, depth, indexedPath, semanticFieldInfoList, docId);
             }
         } else if (depth == pathParts.length) {
             // the current node is the value of the semantic field, and it should be a string value
@@ -381,12 +519,17 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             final SemanticFieldInfo semanticFieldInfo = SemanticFieldInfo.builder()
                 .value(node.toString())
                 .modelId(getModelId(fieldConfig, pathToSemanticField))
-                .semanticFieldFullPathInMapping(currentPath)
+                .semanticFieldFullPathInMapping(String.join(PATH_SEPARATOR, pathParts))
+                .semanticFieldFullPathInDoc(currentPath)
                 // Here we should use the currentPath because it has the inter index if there is any inter nested object
                 // By using this path we can handle the nested object properly when we use it to set the data for the semantic field
                 .semanticInfoFullPathInDoc(getSemanticInfoFieldFullPath(fieldConfig, currentPath, pathToSemanticField))
                 .chunkingEnabled(isChunkingEnabled(fieldConfig, pathToSemanticField))
+                .sparseEncodingConfig(new SparseEncodingConfig(fieldConfig))
+                .skipExistingEmbedding(isSkipExistingEmbeddingEnabled(fieldConfig, pathToSemanticField))
+                .docId(docId)
                 .build();
+            semanticFieldInfo.setChunkingConfig(new ChunkingConfig(fieldConfig), analysisRegistry);
 
             semanticFieldInfoList.add(semanticFieldInfo);
         }
@@ -461,29 +604,17 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         @NonNull final Consumer<List<IngestDocumentWrapper>> handler
     ) {
         boolean isChunked = false;
-        for (Map.Entry<IngestDocumentWrapper, List<SemanticFieldInfo>> entry : docToSemanticFieldInfoMap.entrySet()) {
-            final IngestDocumentWrapper ingestDocumentWrapper = entry.getKey();
-            final IngestDocument ingestDocument = entry.getKey().getIngestDocument();
-            final List<SemanticFieldInfo> semanticFieldInfoList = entry.getValue();
-            try {
-                setModelInfo(ingestDocument, semanticFieldInfoList);
 
-                if (chunk(ingestDocument, semanticFieldInfoList)) {
+        for (Map.Entry<IngestDocumentWrapper, List<SemanticFieldInfo>> entry : docToSemanticFieldInfoMap.entrySet()) {
+            try {
+                final IngestDocument ingestDoc = entry.getKey().getIngestDocument();
+                final List<SemanticFieldInfo> fields = entry.getValue();
+
+                if (chunk(ingestDoc, fields)) {
                     isChunked = true;
                 }
             } catch (Exception e) {
-                log.error(
-                    String.format(
-                        Locale.ROOT,
-                        "Failed to set model info and chunk the semantic fields for the ingest document %s. Root cause: %s",
-                        ingestDocument.toString(),
-                        e.getMessage()
-                    ),
-                    e
-                );
-                if (ingestDocumentWrapper.getException() == null) {
-                    ingestDocumentWrapper.update(ingestDocument, e);
-                }
+                logAndUpdate(entry.getKey(), "chunk", e);
             }
         }
 
@@ -491,7 +622,87 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
         }
 
+        final Set<String> docIdsToCheckReuse = getDocIdsToCheckReuse(docToSemanticFieldInfoMap.values());
+        // All docs should be in the same index so simply get the index from the first doc.
+        final Object index = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
+
+        if (shouldCheckExistDoc(docIdsToCheckReuse, index)) {
+            getExistingDocs(docIdsToCheckReuse, (String) index, (existingDocs, exception) -> {
+                if (exception != null) {
+                    addExceptionToImpactedDocs(docToSemanticFieldInfoMap.keySet(), wrapGetExistDocException(exception));
+                    handler.accept(ingestDocumentWrappers);
+                    return;
+                }
+
+                Map<IngestDocumentWrapper, List<SemanticFieldInfo>> docToFieldsNeedingEmbedding = new HashMap<>();
+                docToSemanticFieldInfoMap.forEach((docWrapper, infos) -> {
+                    List<SemanticFieldInfo> fieldsNeedingEmbedding = applyReusableEmbeddingsAndFilterUnprocessedFields(
+                        docWrapper.getIngestDocument(),
+                        infos,
+                        existingDocs
+                    );
+                    if (fieldsNeedingEmbedding.isEmpty() == false) {
+                        docToFieldsNeedingEmbedding.put(docWrapper, fieldsNeedingEmbedding);
+                    }
+                });
+
+                if (docToFieldsNeedingEmbedding.isEmpty()) {
+                    handler.accept(ingestDocumentWrappers);
+                } else {
+                    batchSetModelInfo(docToFieldsNeedingEmbedding);
+                    batchGenerateAndSetEmbedding(ingestDocumentWrappers, docToFieldsNeedingEmbedding, handler);
+                }
+            });
+            return;
+        }
+        batchSetModelInfo(docToSemanticFieldInfoMap);
         batchGenerateAndSetEmbedding(ingestDocumentWrappers, docToSemanticFieldInfoMap, handler);
+    }
+
+    private void batchSetModelInfo(Map<IngestDocumentWrapper, List<SemanticFieldInfo>> docToFieldsNeedingEmbedding) {
+        docToFieldsNeedingEmbedding.forEach((docWrapper, infos) -> {
+            try {
+                setModelInfo(docWrapper.getIngestDocument(), infos);
+            } catch (Exception e) {
+                logAndUpdate(docWrapper, "set model info", e);
+            }
+        });
+    }
+
+    private void logAndUpdate(@NonNull final IngestDocumentWrapper wrapper, @NonNull final String operation, @NonNull final Exception e) {
+        final IngestDocument doc = wrapper.getIngestDocument();
+        log.error(
+            String.format(Locale.ROOT, "Failed to %s ingest document %s. Root cause: %s", operation, doc.toString(), e.getMessage()),
+            e
+        );
+        if (wrapper.getException() == null) {
+            wrapper.update(doc, e);
+        }
+    }
+
+    private void getExistingDocs(
+        @NonNull final Set<String> docIds,
+        @NonNull final String index,
+        @NonNull final BiConsumer<Map<String, Map<String, Object>>, Exception> handler
+    ) {
+        MultiGetRequest multiGetRequest = new MultiGetRequest();
+        for (String docId : docIds) {
+            multiGetRequest.add(index, docId);
+        }
+        openSearchClient.execute(MultiGetAction.INSTANCE, multiGetRequest, ActionListener.wrap(response -> {
+            MultiGetItemResponse[] items = response.getResponses();
+            if (items == null || items.length == 0) {
+                handler.accept(Collections.emptyMap(), null);
+                return;
+            }
+            Map<String, Map<String, Object>> existingDocs = new HashMap<>();
+            for (MultiGetItemResponse item : items) {
+                if (item.getResponse() != null && item.getResponse().isExists()) {
+                    existingDocs.put(item.getId(), item.getResponse().getSourceAsMap());
+                }
+            }
+            handler.accept(existingDocs, null);
+        }, e -> handler.accept(null, e)));
     }
 
     @SuppressWarnings("unchecked")
@@ -565,14 +776,14 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             final IngestDocument ingestDocument = ingestDocumentWrapper.getIngestDocument();
             final List<SemanticFieldInfo> semanticFieldInfoList = entry.getValue();
             try {
-                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap, DEFAULT_PRUNE_RATIO);
+                setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap);
             } catch (Exception e) {
                 ingestDocumentWrapper.update(ingestDocument, e);
             }
         }
     }
 
-    private void addExceptionToImpactedDocs(@NonNull final Set<IngestDocumentWrapper> impactedDocs, @NonNull final Exception e) {
+    private void addExceptionToImpactedDocs(@NonNull final Collection<IngestDocumentWrapper> impactedDocs, @NonNull final Exception e) {
 
         for (final IngestDocumentWrapper ingestDocumentWrapper : impactedDocs) {
             // Do not override the previous exception. We do not filter out the doc with exception at the
@@ -592,5 +803,10 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     @Override
     public String getType() {
         return PROCESSOR_TYPE;
+    }
+
+    @VisibleForTesting
+    public int getBatchSize() {
+        return batchSize;
     }
 }

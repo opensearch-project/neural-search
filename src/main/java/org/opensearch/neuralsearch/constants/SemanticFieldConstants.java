@@ -53,4 +53,17 @@ public class SemanticFieldConstants {
      * knn_vector field.
      */
     public static final String DENSE_EMBEDDING_CONFIG = "dense_embedding_config";
+
+    /**
+     * Name of the field for sparse encoding config. The config will be used to control how to do sparse encoding.
+     * {@link org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig}
+     */
+    public static final String SPARSE_ENCODING_CONFIG = "sparse_encoding_config";
+
+    /**
+     * Name of the field to configure if we should skip the embedding generation for the semantic field with existing
+     * reusable embedding. We think the embedding is reusable if it exists and the semantic field value and the
+     * model is not changed.
+     */
+    public static final String SKIP_EXISTING_EMBEDDING = "skip_existing_embedding";
 }

@@ -54,6 +54,7 @@ import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.TextImageEmbeddingProcessorFactory;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 import com.google.common.collect.ImmutableList;
@@ -89,6 +90,7 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
 
     @Before
     public void setup() {
+        TestUtils.initializeEventStatsManager();
         MockitoAnnotations.openMocks(this);
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
         when(env.settings()).thenReturn(settings);

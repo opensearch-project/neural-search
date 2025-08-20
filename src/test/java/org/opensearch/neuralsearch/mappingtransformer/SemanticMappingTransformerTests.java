@@ -288,7 +288,7 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         // Then: Assert that the exception message is as expected
         final Exception capturedException = exceptionCaptor.getValue();
         final String expectedErrorMessage =
-            "Failed to transform the mapping for the semantic field at semantic_field due to Cannot build the semantic info config because the embedding field type knn_vector cannot build with semantic field search analyzer standard";
+            "Failed to transform the mapping for the semantic field at semantic_field due to Cannot build the semantic info config because the dense(text embedding) model cannot support semantic_field_search_analyzer";
         assertEquals(expectedErrorMessage, capturedException.getMessage());
     }
 

@@ -235,7 +235,7 @@ public class NeuralQueryValidationUtil {
             fieldsOnlySupportedByDenseModel.add(EXPAND_NESTED_FIELD.getPreferredName());
         }
 
-        if (queryBuilder.filter() != null) {
+        if (queryBuilder.queryfilter() != null) {
             fieldsOnlySupportedByDenseModel.add(FILTER_FIELD.getPreferredName());
         }
 

@@ -4,19 +4,22 @@
  */
 package org.opensearch.neuralsearch.e2e;
 
-import org.apache.hc.core5.http.ParseException;
 import org.junit.Before;
 import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortBuilders;
 
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 import lombok.SneakyThrows;
+
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 
 public class HybridCollapseIT extends BaseNeuralSearchIT {
 
@@ -25,6 +28,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_2 = "category";
     private static final String TEST_FLOAT_FIELD = "price";
     private static final String SEARCH_PIPELINE = "test-pipeline";
+    private static final int DOCS_PER_GROUP_PER_SUBQUERY = 5;
 
     @Before
     public void setUp() throws Exception {
@@ -37,6 +41,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     public void testCollapse_whenE2E_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_1, null, null);
 
         Map<String, Object> searchResponse = search(
             COLLAPSE_TEST_INDEX,
@@ -54,16 +60,18 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            TEST_TEXT_FIELD_1  // collapse field
+            collapseContext
         );
 
         String collapseDuplicate = "Chocolate Cake";
         assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
     }
 
-    public void testCollapse_whenE2E_andSortEnabled_thenSuccessful() throws IOException, ParseException {
+    public void testCollapse_whenE2E_andSortEnabled_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_1, null, null);
 
         Map<String, Object> searchResponse = search(
             COLLAPSE_TEST_INDEX,
@@ -81,7 +89,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            TEST_TEXT_FIELD_1  // collapse field
+            collapseContext
         );
 
         String collapseDuplicate = "Chocolate Cake";
@@ -90,10 +98,47 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         assertTrue(responseString.indexOf("Vanilla") < responseString.indexOf("Chocolate"));
     }
 
+    public void testCollapse_whenE2EWithInnerHits_thenSuccessful() {
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
+
+        InnerHitBuilder cheapestItemsBuilder = new InnerHitBuilder("cheapest_items");
+        cheapestItemsBuilder.setSize(2);
+        cheapestItemsBuilder.setSorts(List.of(SortBuilders.fieldSort(TEST_FLOAT_FIELD)));
+
+        List<InnerHitBuilder> innerHitBuilders = new ArrayList<>();
+        innerHitBuilders.add(cheapestItemsBuilder);
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_1, null, innerHitBuilders);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext
+        );
+        String responseString = searchResponse.toString();
+        assertTrue(responseString.contains("cheapest_items"));
+    }
+
     @SneakyThrows
     private void createTestIndex() {
         String indexConfiguration = XContentFactory.jsonBuilder()
             .startObject()
+            .startObject("settings")
+            .field(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), DOCS_PER_GROUP_PER_SUBQUERY)
+            .endObject()
             .startObject("mappings")
             .startObject("properties")
             .startObject(TEST_TEXT_FIELD_1)

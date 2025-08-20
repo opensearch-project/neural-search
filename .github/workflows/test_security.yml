@@ -20,9 +20,9 @@ jobs:
   integ-test-with-security-linux:
     strategy:
       matrix:
-        java: [21, 23]
+        java: [21, 24]
 
-    name: Run Integration Tests on Linux
+    name: Run Security Enabled Integration Tests on Linux
     runs-on: ubuntu-latest
     needs: Get-CI-Image-Tag
     container:

@@ -4,14 +4,19 @@
  */
 package org.opensearch.neuralsearch.processor.chunker;
 
+import lombok.Getter;
+
+import java.util.Locale;
 import java.util.Map;
 import java.util.List;
+
+import static org.opensearch.neuralsearch.processor.chunker.ChunkerParameterParser.parseIntegerWithDefault;
 
 /**
  * The interface for all chunking algorithms.
  * All algorithms need to parse parameters and chunk the content.
  */
-public abstract class Chunker {
+public abstract class Chunker implements Validator, Parser {
 
     /** Field name for specifying the maximum chunk limit in the configuration. */
     public static String MAX_CHUNK_LIMIT_FIELD = "max_chunk_limit";
@@ -25,13 +30,21 @@ public abstract class Chunker {
     /** Special value (-1) indicating that chunk limiting is disabled. */
     public static int DISABLED_MAX_CHUNK_LIMIT = -1;
 
+    @Getter
+    private int maxChunkLimit;
+
     /**
-     * Parse the parameters for chunking algorithm.
+     * Parse the common parameters for the chunking algorithm.
      * Throw IllegalArgumentException when parameters are invalid.
      *
      * @param parameters a map containing non-runtime parameters for chunking algorithms
      */
-    abstract void parseParameters(Map<String, Object> parameters);
+    @Override
+    public void parse(Map<String, Object> parameters) throws IllegalArgumentException {
+        final int maxChunkLimit = parseIntegerWithDefault(parameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+        validateMaxChunkLimit(maxChunkLimit);
+        this.maxChunkLimit = maxChunkLimit;
+    }
 
     /**
      * Chunk the input string according to parameters and return chunked passages
@@ -56,4 +69,29 @@ public abstract class Chunker {
     }
 
     public abstract String getAlgorithmName();
+
+    /**
+     * Validate the common parameters for a chunker
+     * Throw IllegalArgumentException when parameters are invalid.
+     *
+     * @param parameters parameters for a chunker
+     */
+    @Override
+    public void validate(Map<String, Object> parameters) throws IllegalArgumentException {
+        final int maxChunkLimit = parseIntegerWithDefault(parameters, MAX_CHUNK_LIMIT_FIELD, DEFAULT_MAX_CHUNK_LIMIT);
+        validateMaxChunkLimit(maxChunkLimit);
+    }
+
+    void validateMaxChunkLimit(int maxChunkLimit) throws IllegalArgumentException {
+        if (maxChunkLimit <= 0 && maxChunkLimit != DISABLED_MAX_CHUNK_LIMIT) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Parameter [%s] must be positive or %s to disable this parameter",
+                    MAX_CHUNK_LIMIT_FIELD,
+                    DISABLED_MAX_CHUNK_LIMIT
+                )
+            );
+        }
+    }
 }
