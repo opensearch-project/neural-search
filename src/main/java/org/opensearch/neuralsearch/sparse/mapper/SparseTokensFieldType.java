@@ -24,22 +24,16 @@ import java.util.function.Supplier;
 @Getter
 public class SparseTokensFieldType extends MappedFieldType {
     private final SparseMethodContext sparseMethodContext;
-    protected boolean stored;
-    protected boolean hasDocValues;
 
     /**
      * Creates a new SparseTokensFieldType.
      *
      * @param name field name
      * @param sparseMethodContext context for sparse encoding method
-     * @param stored whether field values are stored
-     * @param hasDocValues whether field has doc values
      */
-    public SparseTokensFieldType(String name, SparseMethodContext sparseMethodContext, boolean stored, boolean hasDocValues) {
-        super(name, false, stored, hasDocValues, TextSearchInfo.NONE, Map.of());
+    public SparseTokensFieldType(String name, SparseMethodContext sparseMethodContext) {
+        super(name, false, false, false, TextSearchInfo.NONE, Map.of());
         this.sparseMethodContext = sparseMethodContext;
-        this.stored = stored;
-        this.hasDocValues = hasDocValues;
     }
 
     @Override

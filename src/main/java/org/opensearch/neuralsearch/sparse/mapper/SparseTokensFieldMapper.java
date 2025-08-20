@@ -48,8 +48,6 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
     private static final String METHOD = "method";
     @NonNull
     private final SparseMethodContext sparseMethodContext;
-    protected boolean stored;
-    protected boolean hasDocValues;
     private FieldType tokenFieldType;
 
     private SparseTokensFieldMapper(
@@ -57,14 +55,10 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         MappedFieldType mappedFieldType,
         MultiFields multiFields,
         CopyTo copyTo,
-        SparseMethodContext sparseMethodContext,
-        boolean stored,
-        boolean hasDocValues
+        SparseMethodContext sparseMethodContext
     ) {
         super(simpleName, mappedFieldType, multiFields, copyTo);
         this.sparseMethodContext = sparseMethodContext;
-        this.stored = stored;
-        this.hasDocValues = hasDocValues;
         this.fieldType = new FieldType(Defaults.FIELD_TYPE);
         this.fieldType.setDocValuesType(DocValuesType.BINARY);
         setFieldTypeAttributes(this.fieldType, sparseMethodContext);
@@ -80,8 +74,6 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
     }
 
     public static class Builder extends ParametrizedFieldMapper.Builder {
-        protected final Parameter<Boolean> stored = Parameter.storeParam(m -> ft(m).stored, false);
-        protected final Parameter<Boolean> hasDocValues = Parameter.docValuesParam(m -> ft(m).hasDocValues, true);
         protected final Parameter<SparseMethodContext> sparseMethodContext = new Parameter<>(
             METHOD,
             false,
@@ -101,24 +93,17 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
 
         @Override
         protected List<Parameter<?>> getParameters() {
-            return List.of(stored, hasDocValues, sparseMethodContext);
+            return List.of(sparseMethodContext);
         }
 
         @Override
         public ParametrizedFieldMapper build(BuilderContext context) {
             return new SparseTokensFieldMapper(
                 name,
-                new SparseTokensFieldType(
-                    buildFullName(context),
-                    sparseMethodContext.getValue(),
-                    stored.getValue(),
-                    hasDocValues.getValue()
-                ),
+                new SparseTokensFieldType(buildFullName(context), sparseMethodContext.getValue()),
                 multiFieldsBuilder.build(this, context),
                 copyTo.build(),
-                sparseMethodContext.getValue(),
-                stored.getValue(),
-                hasDocValues.getValue()
+                sparseMethodContext.getValue()
             );
         }
     }

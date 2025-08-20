@@ -38,7 +38,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
      */
     public SparseMethodContext(StreamInput in) throws IOException {
         this.name = in.readString();
-        this.methodComponentContext = new MethodComponentContext(in);
+        this.methodComponentContext = new MethodComponentContext(in, name);
     }
 
     /**
@@ -91,7 +91,7 @@ public class SparseMethodContext implements ToXContentFragment, Writeable {
                 parameters = ((Map<String, Object>) value).entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, e -> {
                     Object v = e.getValue();
                     if (v instanceof Map) {
-                        return MethodComponentContext.parse(v);
+                        throw new IllegalArgumentException("Value should not be map");
                     }
                     return v;
                 }));

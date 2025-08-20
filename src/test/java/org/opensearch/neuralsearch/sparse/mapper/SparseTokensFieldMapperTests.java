@@ -78,28 +78,6 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         assertEquals(sparseMethodContext, mapper.getSparseMethodContext());
     }
 
-    public void testBuilder_withStoredTrue_setsStoredCorrectly() {
-        builder.sparseMethodContext.setValue(sparseMethodContext);
-        builder.stored.setValue(true);
-
-        SparseTokensFieldMapper mapper = (SparseTokensFieldMapper) builder.build(
-            new ParametrizedFieldMapper.BuilderContext(TestsPrepareUtils.prepareIndexSettings(), TestsPrepareUtils.prepareContentPath())
-        );
-
-        assertTrue(mapper.isStored());
-    }
-
-    public void testBuilder_withDocValuesFalse_setsDocValuesCorrectly() {
-        builder.sparseMethodContext.setValue(sparseMethodContext);
-        builder.hasDocValues.setValue(false);
-
-        SparseTokensFieldMapper mapper = (SparseTokensFieldMapper) builder.build(
-            new ParametrizedFieldMapper.BuilderContext(TestsPrepareUtils.prepareIndexSettings(), TestsPrepareUtils.prepareContentPath())
-        );
-
-        assertFalse(mapper.isHasDocValues());
-    }
-
     public void testContentType_returnsCorrectValue() {
         assertEquals("sparse_tokens", SparseTokensFieldMapper.CONTENT_TYPE);
     }
@@ -129,8 +107,6 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         assertEquals(mapper.simpleName(), cloned.simpleName());
         assertEquals(mapper.contentType(), cloned.contentType());
         assertEquals(mapper.getSparseMethodContext(), cloned.getSparseMethodContext());
-        assertEquals(mapper.isStored(), cloned.isStored());
-        assertEquals(mapper.isHasDocValues(), cloned.isHasDocValues());
         assertEquals(mapper.fieldType().getClass(), cloned.fieldType().getClass());
     }
 
@@ -143,7 +119,6 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         SparseTokensFieldType fieldType = mapper.fieldType();
 
         assertNotNull(fieldType);
-        assertTrue(fieldType instanceof SparseTokensFieldType);
     }
 
     public void testParseCreateField_withExternalValueSet_throwsException() throws IOException {
@@ -291,7 +266,7 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
     }
 
     public void testBuilder_getParameters_returnsCorrectParameters() {
-        assertEquals(3, builder.getParameters().size());
+        assertEquals(1, builder.getParameters().size());
     }
 
     private void testParseCreateField_withValidJsonObject_parsesSuccessfully(XContentParser.Token valueToken) throws IOException {

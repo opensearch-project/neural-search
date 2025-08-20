@@ -114,35 +114,6 @@ public class SparseMethodContextTests extends AbstractSparseTestBase {
         assertEquals(new HashMap<>(), result.getMethodComponentContext().getParameters());
     }
 
-    public void testParseWithNestedMethodComponentContext() {
-        Map<String, Object> input = new HashMap<>();
-        input.put(NAME_FIELD, "test_method");
-
-        Map<String, Object> parameters = new HashMap<>();
-        Map<String, Object> nestedMap = new HashMap<>();
-        nestedMap.put(NAME_FIELD, "nested_method");
-        nestedMap.put(PARAMETERS_FIELD, new HashMap<>());
-        parameters.put("nested_param", nestedMap);
-        input.put(PARAMETERS_FIELD, parameters);
-
-        SparseMethodContext result = SparseMethodContext.parse(input);
-
-        assertNotNull(result);
-        assertEquals("test_method", result.getName());
-        assertNotNull(result.getMethodComponentContext());
-        assertEquals("test_method", result.getMethodComponentContext().getName());
-
-        Map<String, Object> resultParameters = result.getMethodComponentContext().getParameters();
-        assertNotNull(resultParameters);
-        assertEquals(1, resultParameters.size());
-        assertTrue(resultParameters.get("nested_param") instanceof MethodComponentContext);
-
-        MethodComponentContext nestedContext = (MethodComponentContext) resultParameters.get("nested_param");
-        assertEquals("nested_method", nestedContext.getName());
-        assertNotNull(nestedContext.getParameters());
-        assertTrue(nestedContext.getParameters().isEmpty());
-    }
-
     public void testToXContentSerializesCorrectly() throws IOException {
         String name = "test_method";
         Map<String, Object> parameters = new HashMap<>();
@@ -201,5 +172,19 @@ public class SparseMethodContextTests extends AbstractSparseTestBase {
         assertEquals("stringValue", resultParams.get("stringParam"));
         assertEquals(42, resultParams.get("intParam"));
         assertEquals(true, resultParams.get("boolParam"));
+    }
+
+    public void testParseThrowExceptionWithNestedMap() {
+        Map<String, Object> input = new HashMap<>();
+        input.put(NAME_FIELD, "testMethod");
+
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("stringParam", "stringValue");
+        parameters.put("intParam", 42);
+        parameters.put("boolParam", true);
+        parameters.put("mapParam", Map.of("nested", 1));
+        input.put(PARAMETERS_FIELD, parameters);
+
+        expectThrows(IllegalArgumentException.class, () -> SparseMethodContext.parse(input));
     }
 }
