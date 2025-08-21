@@ -116,12 +116,12 @@ public class DocumentCluster implements Accountable {
 
             @Override
             public int advance(int target) {
-                return 0;
+                throw new UnsupportedOperationException("advance in this iterator is not supported!");
             }
 
             @Override
             public long cost() {
-                return 0;
+                throw new UnsupportedOperationException("cost in this iterator is not supported!");
             }
         };
     }
