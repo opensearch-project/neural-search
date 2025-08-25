@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.sparse.cache;
 
 import lombok.Value;
-import lombok.extern.log4j.Log4j2;
 
 /**
  * LRU cache implementation for sparse vector caches.
