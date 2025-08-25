@@ -14,13 +14,26 @@ import org.opensearch.neuralsearch.sparse.accessor.ClusteredPostingWriter;
 import java.io.IOException;
 import java.util.Set;
 
+/**
+ * A cache-gated clustered posting reader that implements a two-tier read strategy for sparse term postings.
+ * Cache misses are automatically populated from the underlying storage.
+ */
 public class CacheGatedPostingsReader implements ClusteredPostingReader {
+
     private final String fieldName;
     private final ClusteredPostingReader cacheReader;
     private final ClusteredPostingWriter cacheWriter;
-    // SparseTermsLuceneReader to read sparse terms from disk
     private final SparseTermsLuceneReader luceneReader;
 
+    /**
+     * Constructs a new cache-gated clustered posting reader.
+     *
+     * @param fieldName the field name for which to read postings
+     * @param cacheReader the reader for accessing cached postings
+     * @param cacheWriter the writer for populating the cache
+     * @param luceneReader the reader for accessing postings from Lucene storage
+     * @throws NullPointerException if any parameter is null
+     */
     public CacheGatedPostingsReader(
         @NonNull String fieldName,
         @NonNull ClusteredPostingReader cacheReader,
@@ -33,6 +46,18 @@ public class CacheGatedPostingsReader implements ClusteredPostingReader {
         this.luceneReader = luceneReader;
     }
 
+    /**
+     * Reads a clustered posting given the specified term.
+     *
+     * Read Strategy:
+     * 1. First attempts to read from the cache
+     * 2. On cache miss, reads from Lucene storage
+     * 3. Automatically populates the cache with the retrieved posting
+     *
+     * @param term the term for which to retrieve the clustered posting
+     * @return the clustered posting associated with the term, or null if the posting does not exist
+     * @throws IOException if an I/O error occurs while reading
+     */
     @Override
     public PostingClusters read(BytesRef term) throws IOException {
         PostingClusters clusters = cacheReader.read(term);

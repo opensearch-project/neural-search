@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
-import lombok.extern.log4j.Log4j2;
-
 /**
  * This class is responsible for writing sparse postings to the index
  */
