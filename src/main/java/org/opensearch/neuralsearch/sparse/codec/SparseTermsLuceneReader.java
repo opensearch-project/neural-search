@@ -95,7 +95,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
         } catch (Exception e) {
             log.error("Read sparse terms error", e);
         } finally {
-            if (success) {} else {
+            if (!success) {
                 IOUtils.closeWhileHandlingException(termsIn, postingIn);
             }
         }
