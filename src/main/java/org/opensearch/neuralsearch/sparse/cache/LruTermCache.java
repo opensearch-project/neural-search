@@ -5,13 +5,11 @@
 package org.opensearch.neuralsearch.sparse.cache;
 
 import lombok.Value;
-import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.util.BytesRef;
 
 /**
  * LRU cache implementation for posting list caches.
  */
-@Log4j2
 public class LruTermCache extends AbstractLruCache<LruTermCache.TermKey> {
     private static final LruTermCache INSTANCE = new LruTermCache();
 

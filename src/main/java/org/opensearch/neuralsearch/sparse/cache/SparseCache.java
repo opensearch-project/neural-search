@@ -11,6 +11,11 @@ import org.apache.lucene.util.RamUsageEstimator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Abstract base class for sparse data caching implementations.
+ * Provides common functionality for caching forward index and clustered postings.
+ * @param <T> The type of Accountable objects stored in the cache
+ */
 public abstract class SparseCache<T extends Accountable> implements Accountable {
 
     protected final Map<CacheKey, T> cacheMap = new ConcurrentHashMap<>();

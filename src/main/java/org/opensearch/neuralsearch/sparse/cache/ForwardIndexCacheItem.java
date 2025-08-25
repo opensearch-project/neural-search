@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.Consumer;
 
 /**
- * This class is used to store/read sparse vector in cache
+ * This class stores sparse vector in cache and provides read/write operations.
  */
 @Log4j2
 public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accountable {
