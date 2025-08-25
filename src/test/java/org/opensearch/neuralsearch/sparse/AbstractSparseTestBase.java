@@ -13,6 +13,8 @@ import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
+import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
+import org.opensearch.core.common.breaker.CircuitBreaker;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -24,11 +26,14 @@ import static org.mockito.Mockito.when;
 
 public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
 
+    protected CircuitBreaker mockedCircuitBreaker = mock(CircuitBreaker.class);
+
     @Before
     @Override
     @SneakyThrows
     public void setUp() {
         super.setUp();
+        CircuitBreakerManager.setCircuitBreaker(mockedCircuitBreaker);
     }
 
     protected DocWeightIterator constructDocWeightIterator(Integer... docs) {
