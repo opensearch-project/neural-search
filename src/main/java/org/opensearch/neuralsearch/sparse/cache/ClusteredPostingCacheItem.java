@@ -11,7 +11,6 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.accessor.ClusteredPosting;
 import org.opensearch.neuralsearch.sparse.accessor.ClusteredPostingReader;
-import org.opensearch.neuralsearch.sparse.accessor.ClusteredPostingWriter;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 
@@ -43,7 +42,7 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
      * @param circuitBreakerHandler A consumer to handle circuit breaker triggering differently
      * @return the ClusteredPostingWriter instance
      */
-    public ClusteredPostingWriter getWriter(Consumer<Long> circuitBreakerHandler) {
+    public CacheableClusteredPostingWriter getWriter(Consumer<Long> circuitBreakerHandler) {
         return new CacheClusteredPostingWriter(circuitBreakerHandler);
     }
 
@@ -63,7 +62,8 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
             PostingClusters clusters = clusteredPostings.get(term);
             if (clusters != null) {
                 // Record access to update LRU status
-                LruTermCache.getInstance().updateAccess(cacheKey, term);
+                LruTermCache.TermKey termKey = new LruTermCache.TermKey(cacheKey, term.clone());
+                LruTermCache.getInstance().updateAccess(termKey);
             }
             return clusters;
         }
@@ -125,7 +125,8 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
             // Update the clusters with putIfAbsent for thread safety
             PostingClusters existingClusters = clusteredPostings.putIfAbsent(clonedTerm, postingClusters);
             // Record access to update LRU status
-            LruTermCache.getInstance().updateAccess(cacheKey, clonedTerm);
+            LruTermCache.TermKey termKey = new LruTermCache.TermKey(cacheKey, clonedTerm);
+            LruTermCache.getInstance().updateAccess(termKey);
 
             // Only update memory usage if we actually inserted a new entry
             if (existingClusters == null) {

@@ -54,64 +54,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
     }
 
     /**
-     * Test that updateAccess correctly updates the access order
-     */
-    public void test_updateAccess_updatesAccessOrder() {
-        // Add terms to the cache
-        lruTermCache.updateAccess(cacheKey1, term1);
-        lruTermCache.updateAccess(cacheKey1, term2);
-
-        // Verify the least recently used item is the first one added
-        LruTermCache.TermKey leastRecentlyUsed = lruTermCache.getLeastRecentlyUsedItem();
-        assertNotNull(leastRecentlyUsed);
-        assertEquals(cacheKey1, leastRecentlyUsed.getCacheKey());
-        assertEquals(term1, leastRecentlyUsed.getTerm());
-
-        // Access the first term again
-        lruTermCache.updateAccess(cacheKey1, term1);
-
-        // Now the second term should be the least recently used
-        leastRecentlyUsed = lruTermCache.getLeastRecentlyUsedItem();
-        assertNotNull(leastRecentlyUsed);
-        assertEquals(cacheKey1, leastRecentlyUsed.getCacheKey());
-        assertEquals(term2, leastRecentlyUsed.getTerm());
-    }
-
-    /**
-     * Test that updateAccess handles null cache key gracefully
-     */
-    public void test_updateAccess_withNullCacheKey() {
-        // Try to update with null cache key
-        lruTermCache.updateAccess(null, term1);
-
-        // Add a term to the cache
-        lruTermCache.updateAccess(cacheKey1, term1);
-
-        // Verify that the least recently used term is the non-null one
-        LruTermCache.TermKey leastRecentlyUsed = lruTermCache.getLeastRecentlyUsedItem();
-        assertNotNull(leastRecentlyUsed);
-        assertEquals(cacheKey1, leastRecentlyUsed.getCacheKey());
-        assertEquals(term1, leastRecentlyUsed.getTerm());
-    }
-
-    /**
-     * Test that updateAccess handles null term gracefully
-     */
-    public void test_updateAccess_withNullTerm() {
-        // Try to update with null term
-        lruTermCache.updateAccess(cacheKey1, null);
-
-        // Add a term to the cache
-        lruTermCache.updateAccess(cacheKey1, term1);
-
-        // Verify that the least recently used term is the non-null one
-        LruTermCache.TermKey leastRecentlyUsed = lruTermCache.getLeastRecentlyUsedItem();
-        assertNotNull(leastRecentlyUsed);
-        assertEquals(cacheKey1, leastRecentlyUsed.getCacheKey());
-        assertEquals(term1, leastRecentlyUsed.getTerm());
-    }
-
-    /**
      * Test that doEviction correctly evicts a term
      */
     @SneakyThrows
@@ -165,9 +107,13 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         ClusteredPostingCache.getInstance().get(cacheKey2).getWriter().insert(term3, posting3.getClusters());
 
         // Update access order
-        lruTermCache.updateAccess(cacheKey1, term1);
-        lruTermCache.updateAccess(cacheKey1, term2);
-        lruTermCache.updateAccess(cacheKey2, term3);
+        LruTermCache.TermKey termKey1 = new LruTermCache.TermKey(cacheKey1, term1);
+        LruTermCache.TermKey termKey2 = new LruTermCache.TermKey(cacheKey1, term2);
+        LruTermCache.TermKey termKey3 = new LruTermCache.TermKey(cacheKey2, term3);
+
+        lruTermCache.updateAccess(termKey1);
+        lruTermCache.updateAccess(termKey2);
+        lruTermCache.updateAccess(termKey3);
 
         // Evict 2 terms
         long posting1Size = posting1.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(term1) + term1.bytes.length;
@@ -192,9 +138,13 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
      */
     public void test_removeIndex_removesAllTermsForIndex() {
         // Add terms to the cache for different indices
-        lruTermCache.updateAccess(cacheKey1, term1);
-        lruTermCache.updateAccess(cacheKey1, term2);
-        lruTermCache.updateAccess(cacheKey2, term3);
+        LruTermCache.TermKey termKey1 = new LruTermCache.TermKey(cacheKey1, term1);
+        LruTermCache.TermKey termKey2 = new LruTermCache.TermKey(cacheKey1, term2);
+        LruTermCache.TermKey termKey3 = new LruTermCache.TermKey(cacheKey2, term3);
+
+        lruTermCache.updateAccess(termKey1);
+        lruTermCache.updateAccess(termKey2);
+        lruTermCache.updateAccess(termKey3);
 
         // Remove all terms for cacheKey1
         lruTermCache.removeIndex(cacheKey1);

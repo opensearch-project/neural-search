@@ -4,8 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.cache;
 
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
+import lombok.Value;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.util.BytesRef;
 
@@ -24,20 +23,6 @@ public class LruTermCache extends AbstractLruCache<LruTermCache.TermKey> {
         return INSTANCE;
     }
 
-    /**
-     * Updates access to a term for a specific cache key.
-     *
-     * @param cacheKey The index cache key
-     * @param term The term being accessed
-     */
-    public void updateAccess(CacheKey cacheKey, BytesRef term) {
-        if (cacheKey == null || term == null) {
-            return;
-        }
-
-        super.updateAccess(new TermKey(cacheKey, term.clone()));
-    }
-
     @Override
     protected long doEviction(TermKey termKey) {
         CacheKey cacheKey = termKey.getCacheKey();
@@ -53,15 +38,9 @@ public class LruTermCache extends AbstractLruCache<LruTermCache.TermKey> {
     /**
      * Key class that combines a cache key and term for tracking LRU access.
      */
-    @Getter
-    @EqualsAndHashCode
+    @Value
     public static class TermKey implements LruCacheKey {
-        private final CacheKey cacheKey;
-        private final BytesRef term;
-
-        public TermKey(CacheKey cacheKey, BytesRef term) {
-            this.cacheKey = cacheKey;
-            this.term = term;
-        }
+        CacheKey cacheKey;
+        BytesRef term;
     }
 }
