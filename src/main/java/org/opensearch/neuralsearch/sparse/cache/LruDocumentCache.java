@@ -4,8 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.cache;
 
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
+import lombok.Value;
 import lombok.extern.log4j.Log4j2;
 
 /**
@@ -23,20 +22,6 @@ public class LruDocumentCache extends AbstractLruCache<LruDocumentCache.Document
         return INSTANCE;
     }
 
-    /**
-     * Updates access to a term for a specific cache key.
-     *
-     * @param cacheKey The index cache key
-     * @param docId The document id being updated
-     */
-    public void updateAccess(CacheKey cacheKey, int docId) {
-        if (cacheKey == null) {
-            return;
-        }
-
-        super.updateAccess(new DocumentKey(cacheKey, docId));
-    }
-
     @Override
     protected long doEviction(DocumentKey documentKey) {
         CacheKey cacheKey = documentKey.getCacheKey();
@@ -52,15 +37,9 @@ public class LruDocumentCache extends AbstractLruCache<LruDocumentCache.Document
     /**
      * Key class that combines a cache key and a document id for tracking LRU access.
      */
-    @Getter
-    @EqualsAndHashCode
+    @Value
     public static class DocumentKey implements LruCacheKey {
-        private final CacheKey cacheKey;
-        private final int docId;
-
-        public DocumentKey(CacheKey cacheKey, int docId) {
-            this.cacheKey = cacheKey;
-            this.docId = docId;
-        }
+        CacheKey cacheKey;
+        int docId;
     }
 }

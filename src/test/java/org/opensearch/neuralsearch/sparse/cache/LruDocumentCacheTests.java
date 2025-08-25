@@ -39,49 +39,6 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
     }
 
     /**
-     * Test that updateAccess correctly updates the access order
-     */
-    public void test_updateAccess_updatesAccessOrder() {
-        // Add documents to the cache
-        lruDocumentCache.updateAccess(cacheKey1, 1);
-        lruDocumentCache.updateAccess(cacheKey1, 2);
-
-        // Verify the least recently used item is the first one added
-        LruDocumentCache.DocumentKey leastRecentlyUsed = lruDocumentCache.getLeastRecentlyUsedItem();
-        assertNotNull(leastRecentlyUsed);
-        assertEquals(cacheKey1, leastRecentlyUsed.getCacheKey());
-        assertEquals(1, leastRecentlyUsed.getDocId());
-
-        // Access the first document again
-        lruDocumentCache.updateAccess(cacheKey1, 1);
-
-        // Now the second document should be the least recently used
-        leastRecentlyUsed = lruDocumentCache.getLeastRecentlyUsedItem();
-        assertNotNull(leastRecentlyUsed);
-        assertEquals(cacheKey1, leastRecentlyUsed.getCacheKey());
-        assertEquals(2, leastRecentlyUsed.getDocId());
-    }
-
-    /**
-     * Test that updateAccess handles null cache key gracefully
-     */
-    public void test_updateAccess_withNullCacheKey() {
-        LruDocumentCache cache = LruDocumentCache.getInstance();
-
-        // Try to update with null cache key
-        cache.updateAccess(null, 2);
-
-        // Add a document to the cache
-        cache.updateAccess(cacheKey1, 1);
-
-        // Verify that the least recently used document is the non-null one
-        LruDocumentCache.DocumentKey leastRecentlyUsed = cache.getLeastRecentlyUsedItem();
-        assertNotNull(leastRecentlyUsed);
-        assertEquals(cacheKey1, leastRecentlyUsed.getCacheKey());
-        assertEquals(1, leastRecentlyUsed.getDocId());
-    }
-
-    /**
      * Test that doEviction correctly evicts a document
      */
     @SneakyThrows
@@ -152,9 +109,13 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
      */
     public void test_removeIndex_removesAllDocumentsForIndex() {
         // Add documents to the cache for different indices
-        lruDocumentCache.updateAccess(cacheKey1, 1);
-        lruDocumentCache.updateAccess(cacheKey1, 2);
-        lruDocumentCache.updateAccess(cacheKey2, 1);
+        LruDocumentCache.DocumentKey documentKey1 = new LruDocumentCache.DocumentKey(cacheKey1, 1);
+        LruDocumentCache.DocumentKey documentKey2 = new LruDocumentCache.DocumentKey(cacheKey1, 2);
+        LruDocumentCache.DocumentKey documentKey3 = new LruDocumentCache.DocumentKey(cacheKey2, 1);
+
+        lruDocumentCache.updateAccess(documentKey1);
+        lruDocumentCache.updateAccess(documentKey2);
+        lruDocumentCache.updateAccess(documentKey3);
 
         // Remove all documents for mockCacheKey1
         lruDocumentCache.removeIndex(cacheKey1);

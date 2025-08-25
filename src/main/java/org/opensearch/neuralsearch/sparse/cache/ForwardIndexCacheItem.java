@@ -10,7 +10,6 @@ import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
-import org.opensearch.neuralsearch.sparse.accessor.SparseVectorWriter;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
@@ -38,7 +37,7 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
      * @param circuitBreakerHandler A consumer to handle circuit breaker triggering differently
      * @return the SparseVectorWriter instance
      */
-    public SparseVectorWriter getWriter(Consumer<Long> circuitBreakerHandler) {
+    public CacheableSparseVectorWriter getWriter(Consumer<Long> circuitBreakerHandler) {
         return new CacheSparseVectorWriter(circuitBreakerHandler);
     }
 
@@ -68,7 +67,8 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
             SparseVector vector = sparseVectors.get(docId);
             if (vector != null) {
                 // Record access to update LRU status
-                LruDocumentCache.getInstance().updateAccess(cacheKey, docId);
+                LruDocumentCache.DocumentKey documentKey = new LruDocumentCache.DocumentKey(cacheKey, docId);
+                LruDocumentCache.getInstance().updateAccess(documentKey);
             }
             return vector;
         }
@@ -112,7 +112,8 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
             }
 
             // Record access to update LRU status
-            LruDocumentCache.getInstance().updateAccess(cacheKey, docId);
+            LruDocumentCache.DocumentKey documentKey = new LruDocumentCache.DocumentKey(cacheKey, docId);
+            LruDocumentCache.getInstance().updateAccess(documentKey);
 
             // Only update memory usage if we actually inserted a new document
             if (sparseVectors.compareAndSet(docId, null, vector)) {
