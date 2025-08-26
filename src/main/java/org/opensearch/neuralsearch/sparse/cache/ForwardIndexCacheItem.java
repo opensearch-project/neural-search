@@ -61,7 +61,7 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
     private class CacheSparseVectorReader implements SparseVectorReader {
         @Override
         public SparseVector read(int docId) throws IOException {
-            if (docId >= sparseVectors.length()) {
+            if (docId < 0 || docId >= sparseVectors.length()) {
                 return null;
             }
             SparseVector vector = sparseVectors.get(docId);
@@ -129,7 +129,7 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
          */
         @Override
         public long erase(int docId) {
-            if (docId >= sparseVectors.length()) {
+            if (docId < 0 || docId >= sparseVectors.length()) {
                 return 0;
             }
 

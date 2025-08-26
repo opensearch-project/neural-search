@@ -24,7 +24,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Map to track access with LRU ordering
-     * We use Map instead of set because only linked hash map supports tracking the access order ot tiems
+     * We use Map instead of set because only linked hash map supports tracking the access order of items
      */
     protected final Map<Key, Boolean> accessRecencyMap;
 

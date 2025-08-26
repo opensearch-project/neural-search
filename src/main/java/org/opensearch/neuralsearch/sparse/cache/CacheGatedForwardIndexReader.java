@@ -19,12 +19,12 @@ public class CacheGatedForwardIndexReader implements SparseVectorReader {
     /**
      * A no-op implementation of SparseVectorReader that always returns null.
      */
-    private static final SparseVectorReader emptySparseVectorReader = docId -> null;
+    private static final SparseVectorReader NOOP_READER = docId -> null;
 
     /**
      * A no-op implementation of SparseVectorWriter that ignores all write operations.
      */
-    private static final SparseVectorWriter emptySparseVectorWriter = (docId, vector) -> {};
+    private static final SparseVectorWriter NOOP_WRITER = (docId, vector) -> {};
 
     private final SparseVectorReader cacheReader;
     private final SparseVectorWriter cacheWriter;
@@ -38,9 +38,9 @@ public class CacheGatedForwardIndexReader implements SparseVectorReader {
      * @param luceneReader the reader for accessing sparse vectors from Lucene storage
      */
     public CacheGatedForwardIndexReader(SparseVectorReader cacheReader, SparseVectorWriter cacheWriter, SparseVectorReader luceneReader) {
-        this.cacheReader = cacheReader == null ? emptySparseVectorReader : cacheReader;
-        this.cacheWriter = cacheWriter == null ? emptySparseVectorWriter : cacheWriter;
-        this.luceneReader = luceneReader == null ? emptySparseVectorReader : luceneReader;
+        this.cacheReader = cacheReader == null ? NOOP_READER : cacheReader;
+        this.cacheWriter = cacheWriter == null ? NOOP_WRITER : cacheWriter;
+        this.luceneReader = luceneReader == null ? NOOP_READER : luceneReader;
     }
 
     /**
@@ -55,13 +55,16 @@ public class CacheGatedForwardIndexReader implements SparseVectorReader {
      * @return the sparse vector associated with the document ID, or null if the vector does not exist
      * @throws IOException if an I/O error occurs while reading
      */
+    @Override
     public SparseVector read(int docId) throws IOException {
         SparseVector vector = cacheReader.read(docId);
         if (vector != null) {
             return vector;
         }
-
-        vector = luceneReader.read(docId);
+        // synchronize luceneReader for thread safety
+        synchronized (luceneReader) {
+            vector = luceneReader.read(docId);
+        }
         if (vector != null) {
             cacheWriter.insert(docId, vector);
         }
