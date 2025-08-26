@@ -93,7 +93,7 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
 
         @Override
         public void insert(int docId, SparseVector vector) {
-            if (vector == null || docId >= sparseVectors.length()) {
+            if (vector == null || docId < 0 || docId >= sparseVectors.length()) {
                 return;
             }
 
