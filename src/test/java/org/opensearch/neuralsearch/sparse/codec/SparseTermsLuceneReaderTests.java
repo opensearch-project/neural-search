@@ -57,7 +57,6 @@ public class SparseTermsLuceneReaderTests extends AbstractSparseTestBase {
     private IndexInput mockPostingInput;
 
     private SegmentReadState segmentReadState;
-
     private MockedStatic<CodecUtil> codecUtilMock;
 
     @Before
@@ -82,9 +81,7 @@ public class SparseTermsLuceneReaderTests extends AbstractSparseTestBase {
     @After
     @Override
     public void tearDown() throws Exception {
-        if (codecUtilMock != null) {
-            codecUtilMock.close();
-        }
+        codecUtilMock.close();
         super.tearDown();
     }
 

@@ -20,6 +20,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -107,6 +108,24 @@ public class CacheGatedPostingsReaderTests extends AbstractSparseTestBase {
      * This scenario verifies that the method correctly handles the case where the
      * requested posting clusters do not exist in either storage.
      */
+    public void test_read_whenClustersNotInCacheFirstTime() throws IOException {
+        when(cacheReader.read(any(BytesRef.class))).thenReturn(null).thenReturn(testPostingClusters);
+        when(luceneReader.read(anyString(), any(BytesRef.class))).thenReturn(null);
+
+        CacheGatedPostingsReader reader = new CacheGatedPostingsReader(testFieldName, cacheReader, cacheWriter, luceneReader);
+        PostingClusters result = reader.read(testTerm);
+
+        assertNotNull(result);
+        verify(cacheReader, times(2)).read(testTerm);
+        verify(luceneReader, never()).read(anyString(), any(BytesRef.class));
+        verify(cacheWriter).insert(eq(testTerm), eq(testPostingClusters.getClusters()));
+    }
+
+    /**
+     * Tests the read method when both cache and Lucene storage return null.
+     * This scenario verifies that the method correctly handles the case where the
+     * requested posting clusters do not exist in either storage.
+     */
     public void test_read_whenClustersNotInCacheAndLucene() throws IOException {
         when(cacheReader.read(any(BytesRef.class))).thenReturn(null);
         when(luceneReader.read(anyString(), any(BytesRef.class))).thenReturn(null);
@@ -115,7 +134,7 @@ public class CacheGatedPostingsReaderTests extends AbstractSparseTestBase {
         PostingClusters result = reader.read(testTerm);
 
         assertNull(result);
-        verify(cacheReader).read(testTerm);
+        verify(cacheReader, times(2)).read(testTerm);
         verify(luceneReader).read(testFieldName, testTerm);
         verify(cacheWriter, never()).insert(any(BytesRef.class), any());
     }
@@ -136,7 +155,7 @@ public class CacheGatedPostingsReaderTests extends AbstractSparseTestBase {
         PostingClusters result = reader.read(testTerm);
 
         assertEquals(testPostingClusters, result);
-        verify(cacheReader).read(testTerm);
+        verify(cacheReader, times(2)).read(testTerm);
         verify(luceneReader).read(testFieldName, testTerm);
         verify(cacheWriter).insert(eq(testTerm), eq(testPostingClusters.getClusters()));
     }
@@ -193,7 +212,7 @@ public class CacheGatedPostingsReaderTests extends AbstractSparseTestBase {
         PostingClusters result = reader.read(emptyTerm);
 
         assertEquals(testPostingClusters, result);
-        verify(cacheReader).read(emptyTerm);
+        verify(cacheReader, times(2)).read(emptyTerm);
         verify(luceneReader).read(testFieldName, emptyTerm);
         verify(cacheWriter).insert(eq(emptyTerm), eq(testPostingClusters.getClusters()));
     }
@@ -241,7 +260,7 @@ public class CacheGatedPostingsReaderTests extends AbstractSparseTestBase {
         PostingClusters result = reader.read(specialTerm);
 
         assertEquals(testPostingClusters, result);
-        verify(cacheReader).read(specialTerm);
+        verify(cacheReader, times(2)).read(specialTerm);
         verify(luceneReader).read(testFieldName, specialTerm);
         verify(cacheWriter).insert(eq(specialTerm), eq(testPostingClusters.getClusters()));
     }
@@ -261,7 +280,7 @@ public class CacheGatedPostingsReaderTests extends AbstractSparseTestBase {
         });
 
         assertEquals("Test IO Exception", exception.getMessage());
-        verify(cacheReader).read(testTerm);
+        verify(cacheReader, times(2)).read(testTerm);
         verify(luceneReader).read(testFieldName, testTerm);
         verify(cacheWriter, never()).insert(any(BytesRef.class), any());
     }
