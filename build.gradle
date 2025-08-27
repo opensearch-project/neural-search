@@ -291,6 +291,9 @@ dependencies {
     testImplementation fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
     testImplementation "org.opensearch.plugin:parent-join-client:${opensearch_version}"
     testImplementation 'org.assertj:assertj-core:3.24.2'
+    testImplementation group: 'net.bytebuddy', name: 'byte-buddy', version: "${versions.bytebuddy}"
+    testImplementation group: 'org.objenesis', name: 'objenesis', version: '3.3'
+    testImplementation group: 'net.bytebuddy', name: 'byte-buddy-agent', version: "${versions.bytebuddy}"
 }
 
 // In order to add the jar to the classpath, we need to unzip the
@@ -320,10 +323,7 @@ def _numNodes = findProperty('numNodes') as Integer ?: 1
 test {
     include '**/*Tests.class'
     systemProperty 'tests.security.manager', 'false'
-    filter {
-        // TODO: include sparse tests
-        excludeTestsMatching "org.opensearch.neuralsearch.sparse.codec.SparseTermsLuceneReaderTests.*"
-    }
+    systemProperty "jdk.attach.allowAttachSelf", true
 }
 
 // Setting up Integration Tests
