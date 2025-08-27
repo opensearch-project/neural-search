@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 - [Semantic Field] Support the sparse two phase processor for the semantic field.
+- Add semantic highlighting response processor with batch inference support ([#1520](https://github.com/opensearch-project/neural-search/pull/1520))
 
 ### Bug Fixes
 
