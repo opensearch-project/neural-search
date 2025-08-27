@@ -46,7 +46,7 @@ import lombok.SneakyThrows;
 public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
 
     private static final String TERM_QUERY_TEXT = "keyword";
-    private static final String RANGE_FIELD = "date _range";
+    private static final String RANGE_FIELD = "date_range";
     private static final String FROM_TEXT = "123";
     private static final String TO_TEXT = "456";
 
