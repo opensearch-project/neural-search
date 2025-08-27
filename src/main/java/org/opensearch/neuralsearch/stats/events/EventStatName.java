@@ -85,6 +85,13 @@ public enum EventStatName implements StatName {
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Tracks executions of the agentic query translator processor */
+    AGENTIC_QUERY_TRANSLATOR_PROCESSOR_EXECUTIONS(
+        "agentic_query_translator_executions",
+        "processors.search",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_2_0
+    ),
     /** Tracks L2 normalization technique executions */
     NORM_TECHNIQUE_L2_EXECUTIONS(
         "norm_l2_executions",
