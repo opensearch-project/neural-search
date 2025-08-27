@@ -110,6 +110,7 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
             // BytesRef.bytes is never null
             long ramBytesUsed = postingClusters.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(clonedTerm) + clonedTerm.bytes.length;
 
+            // TODO: avoid excessive log produced by circuit breaker
             if (!CircuitBreakerManager.addMemoryUsage(ramBytesUsed, CIRCUIT_BREAKER_LABEL)) {
                 if (circuitBreakerTriggerHandler != null) {
                     circuitBreakerTriggerHandler.accept(ramBytesUsed);
@@ -131,6 +132,8 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
             // Only update memory usage if we actually inserted a new entry
             if (existingClusters == null) {
                 usedRamBytes.addAndGet(ramBytesUsed);
+            } else {
+                CircuitBreakerManager.releaseBytes(ramBytesUsed);
             }
         }
 

@@ -26,10 +26,6 @@ public class ForwardIndexCache extends SparseCache<ForwardIndexCacheItem> {
 
     @NonNull
     public ForwardIndexCacheItem getOrCreate(@NonNull CacheKey key, int docCount) {
-        return cacheMap.computeIfAbsent(key, k -> {
-            ForwardIndexCacheItem forwardIndexCacheItem = new ForwardIndexCacheItem(key, docCount);
-            CircuitBreakerManager.addWithoutBreaking(RamUsageEstimator.shallowSizeOf(key));
-            return forwardIndexCacheItem;
-        });
+        return super.getOrCreate(key, k -> new ForwardIndexCacheItem(k, docCount));
     }
 }

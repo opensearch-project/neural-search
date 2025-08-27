@@ -99,6 +99,7 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
 
             long ramBytesUsed = vector.ramBytesUsed();
 
+            // TODO: avoid excessive log produced by circuit breaker
             if (!CircuitBreakerManager.addMemoryUsage(ramBytesUsed, CIRCUIT_BREAKER_LABEL)) {
                 if (circuitBreakerTriggerHandler != null) {
                     circuitBreakerTriggerHandler.accept(ramBytesUsed);
@@ -118,6 +119,8 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
             // Only update memory usage if we actually inserted a new document
             if (sparseVectors.compareAndSet(docId, null, vector)) {
                 usedRamBytes.addAndGet(ramBytesUsed);
+            } else {
+                CircuitBreakerManager.releaseBytes(ramBytesUsed);
             }
         }
 

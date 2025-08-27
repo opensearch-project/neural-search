@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.cache;
 
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorWriter;
+import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
@@ -61,9 +62,14 @@ public class CacheGatedForwardIndexReader implements SparseVectorReader {
         if (vector != null) {
             return vector;
         }
-        // synchronize luceneReader for thread safety
+        // synchronize luceneReader for thread safety, use double-check lock for better performance
         synchronized (luceneReader) {
-            vector = luceneReader.read(docId);
+            SparseVector cached = cacheReader.read(docId);
+            if (cached != null) {
+                vector = cached;
+            } else {
+                vector = luceneReader.read(docId);
+            }
         }
         if (vector != null) {
             cacheWriter.insert(docId, vector);

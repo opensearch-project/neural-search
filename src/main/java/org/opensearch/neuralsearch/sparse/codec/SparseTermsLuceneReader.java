@@ -177,6 +177,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
 
     @Override
     public void checkIntegrity() throws IOException {
-
+        CodecUtil.checksumEntireFile(termsIn);
+        CodecUtil.checksumEntireFile(postingIn);
     }
 }

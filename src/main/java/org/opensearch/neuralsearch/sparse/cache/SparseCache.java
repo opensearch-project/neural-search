@@ -10,6 +10,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * Abstract base class for sparse data caching implementations.
@@ -28,15 +29,31 @@ public abstract class SparseCache<T extends Accountable> implements Accountable 
      *
      * @param key The CacheKey that identifies the index to be removed
      */
-    public synchronized void removeIndex(@NonNull CacheKey key) {
-        T value = cacheMap.remove(key);
-        if (value == null) {
-            return;
-        }
-        long ramBytesUsed = value.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(key);
-        CircuitBreakerManager.releaseBytes(ramBytesUsed);
-        LruTermCache.getInstance().removeIndex(key);
-        LruDocumentCache.getInstance().removeIndex(key);
+    public void removeIndex(@NonNull CacheKey key) {
+        cacheMap.computeIfPresent(key, (k, value) -> {
+            long ramBytesUsed = value.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(k);
+            CircuitBreakerManager.releaseBytes(ramBytesUsed);
+            LruTermCache.getInstance().removeIndex(k);
+            LruDocumentCache.getInstance().removeIndex(k);
+            return null;
+        });
+    }
+
+    /**
+     * Retrieves an existing cached value for the given key or creates a new one if not present.
+     * The method is thread-safe and handles memory accounting with the CircuitBreakerManager.
+     *
+     * @param key The cache key to look up or create an entry for
+     * @param creator A function that creates a new value when the key is not found
+     * @return The existing or newly created value associated with the key
+     */
+    @NonNull
+    protected T getOrCreate(@NonNull CacheKey key, @NonNull Function<CacheKey, T> creator) {
+        return cacheMap.computeIfAbsent(key, k -> {
+            T value = creator.apply(k);
+            CircuitBreakerManager.addWithoutBreaking(RamUsageEstimator.shallowSizeOf(k));
+            return value;
+        });
     }
 
     /**
