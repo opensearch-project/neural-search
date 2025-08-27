@@ -103,6 +103,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testSubQueries_whenMultipleEqualSubQueries_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
