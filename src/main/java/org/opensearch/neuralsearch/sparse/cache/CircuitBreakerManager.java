@@ -42,7 +42,7 @@ public class CircuitBreakerManager {
             log.debug(
                 String.format(
                     Locale.ROOT,
-                    "Cannot insert cluster into cache due to circuit breaker exception: %s",
+                    "Cannot insert data into cache due to circuit breaker exception: %s",
                     circuitBreakingException.getMessage()
                 )
             );
