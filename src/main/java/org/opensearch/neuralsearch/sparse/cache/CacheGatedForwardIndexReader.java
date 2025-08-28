@@ -63,7 +63,7 @@ public class CacheGatedForwardIndexReader implements SparseVectorReader {
         }
 
         vector = luceneReader.read(docId);
-        
+
         if (vector != null) {
             cacheWriter.insert(docId, vector);
         }

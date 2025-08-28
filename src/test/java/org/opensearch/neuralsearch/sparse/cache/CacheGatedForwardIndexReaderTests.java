@@ -12,7 +12,6 @@ import org.opensearch.neuralsearch.sparse.accessor.SparseVectorWriter;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.any;
@@ -68,24 +67,6 @@ public class CacheGatedForwardIndexReaderTests extends AbstractSparseTestBase {
     }
 
     /**
-     * Tests the read method when first cache read cache return null.
-     * This scenario verifies the double check lock for lucene reader
-     */
-    public void test_read_whenVectorNotInCacheFirstTime() throws IOException {
-        when(cacheReader.read(anyInt())).thenReturn(null).thenReturn(testSparseVector);
-        when(luceneReader.read(anyInt())).thenReturn(null);
-
-        CacheGatedForwardIndexReader reader = new CacheGatedForwardIndexReader(cacheReader, cacheWriter, luceneReader);
-
-        SparseVector result = reader.read(testDocId);
-
-        assertNotNull(result);
-        verify(cacheReader, times(2)).read(testDocId);
-        verify(luceneReader, never()).read(anyInt());
-        verify(cacheWriter, times(1)).insert(anyInt(), any(SparseVector.class));
-    }
-
-    /**
      * Tests the read method when both cache and Lucene storage return null.
      * This scenario verifies that the method correctly handles the case where the
      * requested vector does not exist in either storage.
@@ -99,7 +80,7 @@ public class CacheGatedForwardIndexReaderTests extends AbstractSparseTestBase {
         SparseVector result = reader.read(testDocId);
 
         assertNull(result);
-        verify(cacheReader, times(2)).read(testDocId);
+        verify(cacheReader).read(testDocId);
         verify(luceneReader).read(testDocId);
         verify(cacheWriter, never()).insert(anyInt(), any(SparseVector.class));
     }
