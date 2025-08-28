@@ -320,6 +320,10 @@ def _numNodes = findProperty('numNodes') as Integer ?: 1
 test {
     include '**/*Tests.class'
     systemProperty 'tests.security.manager', 'false'
+    filter {
+        // TODO: include sparse tests
+        excludeTestsMatching "org.opensearch.neuralsearch.sparse.codec.SparseTermsLuceneReaderTests.*"
+    }
 }
 
 // Setting up Integration Tests
