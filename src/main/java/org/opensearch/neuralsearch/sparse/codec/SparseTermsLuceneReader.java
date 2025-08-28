@@ -112,7 +112,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
         return fieldToTerms.keySet().iterator();
     }
 
-    private List<DocumentCluster> readClusters(long offset) throws IOException {
+    private synchronized List<DocumentCluster> readClusters(long offset) throws IOException {
         postingIn.seek(offset);
         long clusterSize = postingIn.readVLong();
         List<DocumentCluster> clusters = new ArrayList<>((int) clusterSize);
@@ -159,7 +159,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
         }
         long offset = termsMapping.get(term);
         List<DocumentCluster> clusters = readClusters(offset);
-        if (clusters == null || clusters.isEmpty()) {
+        if (clusters.isEmpty()) {
             return null;
         }
         return new PostingClusters(clusters);

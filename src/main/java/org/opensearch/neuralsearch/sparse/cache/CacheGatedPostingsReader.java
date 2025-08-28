@@ -64,15 +64,9 @@ public class CacheGatedPostingsReader implements ClusteredPostingReader {
         if (clusters != null) {
             return clusters;
         }
-        // synchronize luceneReader for thread safety, use double-check lock for better performance
-        synchronized (luceneReader) {
-            PostingClusters cached = cacheReader.read(term);
-            if (cached != null) {
-                clusters = cached;
-            } else {
-                clusters = luceneReader.read(fieldName, term);
-            }
-        }
+
+        clusters = luceneReader.read(fieldName, term);
+        
         if (clusters != null) {
             cacheWriter.insert(term, clusters.getClusters());
         }

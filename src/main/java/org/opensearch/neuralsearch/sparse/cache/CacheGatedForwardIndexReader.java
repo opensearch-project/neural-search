@@ -61,15 +61,9 @@ public class CacheGatedForwardIndexReader implements SparseVectorReader {
         if (vector != null) {
             return vector;
         }
-        // synchronize luceneReader for thread safety, use double-check lock for better performance
-        synchronized (luceneReader) {
-            SparseVector cached = cacheReader.read(docId);
-            if (cached != null) {
-                vector = cached;
-            } else {
-                vector = luceneReader.read(docId);
-            }
-        }
+
+        vector = luceneReader.read(docId);
+        
         if (vector != null) {
             cacheWriter.insert(docId, vector);
         }
