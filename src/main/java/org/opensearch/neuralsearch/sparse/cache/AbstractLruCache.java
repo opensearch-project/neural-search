@@ -62,7 +62,6 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Evicts least recently used items from cache until the specified amount of RAM has been freed.
-     * For thread safety, please use synchronized when calling this method
      *
      * @param ramBytesToRelease Number of bytes to evict
      */
@@ -73,18 +72,21 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
         long ramBytesReleased = 0;
 
-        // Continue evicting until we've freed enough memory or the cache is empty
-        while (ramBytesReleased < ramBytesToRelease) {
-            // Get the least recently used item
-            Key leastRecentlyUsedKey = getLeastRecentlyUsedItem();
+        // Synchronizing the access recency map for thread safety
+        synchronized (accessRecencyMap) {
+            // Continue evicting until we've freed enough memory or the cache is empty
+            while (ramBytesReleased < ramBytesToRelease) {
+                // Get the least recently used item
+                Key leastRecentlyUsedKey = getLeastRecentlyUsedItem();
 
-            if (leastRecentlyUsedKey == null) {
-                // Cache is empty, nothing more to evict
-                break;
+                if (leastRecentlyUsedKey == null) {
+                    // Cache is empty, nothing more to evict
+                    break;
+                }
+
+                // Evict the item and track bytes freed
+                ramBytesReleased += evictItem(leastRecentlyUsedKey);
             }
-
-            // Evict the item and track bytes freed
-            ramBytesReleased += evictItem(leastRecentlyUsedKey);
         }
 
         log.debug("Freed {} bytes of memory", ramBytesReleased);

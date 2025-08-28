@@ -87,11 +87,7 @@ public class ClusteredPostingCacheItem implements ClusteredPosting, Accountable 
 
         // Default handler: perform cache eviction when memory limit is reached
         private CacheClusteredPostingWriter() {
-            this.circuitBreakerTriggerHandler = (ramBytesUsed) -> {
-                synchronized (LruTermCache.getInstance()) {
-                    LruTermCache.getInstance().evict(ramBytesUsed);
-                }
-            };
+            this.circuitBreakerTriggerHandler = (ramBytesUsed) -> { LruTermCache.getInstance().evict(ramBytesUsed); };
         }
 
         private CacheClusteredPostingWriter(Consumer<Long> circuitBreakerTriggerHandler) {

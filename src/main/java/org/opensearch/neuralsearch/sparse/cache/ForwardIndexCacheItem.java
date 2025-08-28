@@ -80,11 +80,7 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
 
         // Default handler: perform cache eviction when memory limit is reached
         private CacheSparseVectorWriter() {
-            this.circuitBreakerTriggerHandler = (ramBytesUsed) -> {
-                synchronized (LruDocumentCache.getInstance()) {
-                    LruDocumentCache.getInstance().evict(ramBytesUsed);
-                }
-            };
+            this.circuitBreakerTriggerHandler = (ramBytesUsed) -> { LruDocumentCache.getInstance().evict(ramBytesUsed); };
         }
 
         private CacheSparseVectorWriter(Consumer<Long> circuitBreakerTriggerHandler) {
