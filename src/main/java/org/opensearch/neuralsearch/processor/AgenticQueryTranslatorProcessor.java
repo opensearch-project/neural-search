@@ -16,6 +16,8 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.AbstractProcessor;
@@ -59,6 +61,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         PipelineProcessingContext requestContext,
         ActionListener<SearchRequest> requestListener
     ) {
+        EventStatsManager.increment(EventStatName.AGENTIC_QUERY_TRANSLATOR_PROCESSOR_EXECUTIONS);
         SearchSourceBuilder sourceBuilder = request.source();
         if (sourceBuilder == null || sourceBuilder.query() == null) {
             requestListener.onResponse(request);
