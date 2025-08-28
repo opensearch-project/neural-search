@@ -20,13 +20,16 @@ import java.io.IOException;
 
 import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_TOP_HITS;
 
+/**
+ * Class that will inject QueryCollectorContextSpec for hybrid query directly in the QueryPhase
+ */
 @Log4j2
 public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpec {
-    private HybridCollectorManager collectorManager;
-    private HybridSearchCollector collector;
-    private SearchContext searchContext;
+    private final HybridCollectorManager collectorManager;
+    private final HybridSearchCollector collector;
+    private final SearchContext searchContext;
 
-    public HybridQueryCollectorContextSpec(final SearchContext searchContext) throws IOException {
+    public HybridQueryCollectorContextSpec(final SearchContext searchContext) {
         this.searchContext = searchContext;
         this.collectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(searchContext);
         this.collector = (HybridSearchCollector) collectorManager.newCollector();
@@ -43,15 +46,15 @@ public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpe
     }
 
     @Override
-    public CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) throws IOException {
+    public CollectorManager<?, ReduceableSearchResult> createManager(CollectorManager<?, ReduceableSearchResult> in) {
         return collectorManager;
     }
 
     @Override
     public void postProcess(QuerySearchResult result) throws IOException {
         HybridSearchCollectorResultUtil hybridSearchCollectorResultUtil = new HybridSearchCollectorResultUtil(
-                new HybridCollectorResultsUtilParams.Builder().searchContext(searchContext).build(),
-                collector
+            new HybridCollectorResultsUtilParams.Builder().searchContext(searchContext).build(),
+            collector
         );
         TopDocsAndMaxScore topDocsAndMaxScore = hybridSearchCollectorResultUtil.getTopDocsAndAndMaxScore();
         hybridSearchCollectorResultUtil.reduceCollectorResults(result, topDocsAndMaxScore);

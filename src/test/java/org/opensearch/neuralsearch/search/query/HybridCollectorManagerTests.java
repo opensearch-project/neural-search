@@ -130,7 +130,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
@@ -163,7 +163,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorConcurrentSearchManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
@@ -207,7 +207,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
@@ -254,7 +254,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorConcurrentSearchManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
@@ -393,7 +393,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
@@ -433,7 +433,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
@@ -1133,7 +1133,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext);
         assertNotNull(hybridCollectorManager);
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);

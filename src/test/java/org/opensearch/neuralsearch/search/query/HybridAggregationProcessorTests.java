@@ -114,7 +114,7 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         CollectorManager<? extends Collector, ReduceableSearchResult> hybridCollectorManager = classCollectorManagerMap.get(
             HybridCollectorManager.class
         );
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorNonConcurrentManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         // setup query result for post processing
         int shardId = 0;
@@ -176,7 +176,7 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         CollectorManager<? extends Collector, ReduceableSearchResult> hybridCollectorManager = classCollectorManagerMap.get(
             HybridCollectorManager.class
         );
-        assertTrue(hybridCollectorManager instanceof HybridCollectorManager.HybridCollectorConcurrentSearchManager);
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
 
         // setup query result for post processing
         int shardId = 0;
