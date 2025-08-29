@@ -2,8 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.search.query;
+package org.opensearch.neuralsearch.search.query.util;
 
+import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
@@ -16,6 +17,7 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
+import org.opensearch.neuralsearch.search.query.HybridCollectorResultsUtilParams;
 import org.opensearch.neuralsearch.search.query.exception.HybridSearchRescoreQueryException;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
@@ -35,19 +37,45 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createSortFieldsForDelimiterResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 
+/**
+ * Single class responsible for all collector results operations.
+ * This class takes input as a collector and arguments needed to process the results.
+ */
 @Log4j2
+@AllArgsConstructor
 public class HybridSearchCollectorResultUtil {
     private final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO;
     private final HybridSearchCollector hybridSearchCollector;
 
-    public HybridSearchCollectorResultUtil(
-        final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO,
-        final HybridSearchCollector hybridSearchCollector
-    ) {
-        this.hybridSearchCollectorResultsDTO = hybridSearchCollectorResultsDTO;
-        this.hybridSearchCollector = hybridSearchCollector;
+    /**
+     * This method merges topDocs from multiple segments of a shard.
+     * @param result
+     * @param topDocsAndMaxScore
+     */
+    public void reduceCollectorResults(final QuerySearchResult result, final TopDocsAndMaxScore topDocsAndMaxScore) {
+        // this is case of first collector, query result object doesn't have any top docs set, so we can
+        // just set new top docs without merge
+        // this call is effectively checking if QuerySearchResult.topDoc is null. using it in such way because
+        // getter throws exception in case topDocs is null
+        if (result.hasConsumedTopDocs()) {
+            result.topDocs(topDocsAndMaxScore, hybridSearchCollectorResultsDTO.getDocValueFormats());
+            return;
+        }
+        // in this case top docs are already present in result, and we need to merge next result object with what we have.
+        // if collector doesn't have any hits we can just skip it and save some cycles by not doing merge
+        if (topDocsAndMaxScore.topDocs.totalHits.value() == 0) {
+            return;
+        }
+        // we need to do actual merge because query result and current collector both have some score hits
+        TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
+        TopDocsAndMaxScore mergeTopDocsAndMaxScores = hybridSearchCollectorResultsDTO.getTopDocsMerger()
+            .merge(originalTotalDocsAndHits, topDocsAndMaxScore);
+        result.topDocs(mergeTopDocsAndMaxScores, hybridSearchCollectorResultsDTO.getDocValueFormats());
     }
 
+    /**
+     * Get topDocs and max score
+     */
     public TopDocsAndMaxScore getTopDocsAndAndMaxScore() throws IOException {
         List topDocs = hybridSearchCollector.topDocs();
         if (hybridSearchCollectorResultsDTO.isSortEnabled() || hybridSearchCollectorResultsDTO.isCollapseEnabled()) {
@@ -315,26 +343,5 @@ public class HybridSearchCollectorResultUtil {
             }
         }
         return result;
-    }
-
-    public void reduceCollectorResults(final QuerySearchResult result, final TopDocsAndMaxScore topDocsAndMaxScore) {
-        // this is case of first collector, query result object doesn't have any top docs set, so we can
-        // just set new top docs without merge
-        // this call is effectively checking if QuerySearchResult.topDoc is null. using it in such way because
-        // getter throws exception in case topDocs is null
-        if (result.hasConsumedTopDocs()) {
-            result.topDocs(topDocsAndMaxScore, hybridSearchCollectorResultsDTO.getDocValueFormats());
-            return;
-        }
-        // in this case top docs are already present in result, and we need to merge next result object with what we have.
-        // if collector doesn't have any hits we can just skip it and save some cycles by not doing merge
-        if (topDocsAndMaxScore.topDocs.totalHits.value() == 0) {
-            return;
-        }
-        // we need to do actual merge because query result and current collector both have some score hits
-        TopDocsAndMaxScore originalTotalDocsAndHits = result.topDocs();
-        TopDocsAndMaxScore mergeTopDocsAndMaxScores = hybridSearchCollectorResultsDTO.getTopDocsMerger()
-            .merge(originalTotalDocsAndHits, topDocsAndMaxScore);
-        result.topDocs(mergeTopDocsAndMaxScores, hybridSearchCollectorResultsDTO.getDocValueFormats());
     }
 }

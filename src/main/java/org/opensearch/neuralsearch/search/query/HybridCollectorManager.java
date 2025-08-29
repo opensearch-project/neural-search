@@ -24,6 +24,7 @@ import org.opensearch.neuralsearch.search.collector.HybridCollectorFactoryDTO;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
+import org.opensearch.neuralsearch.search.query.util.HybridSearchCollectorResultUtil;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.MultiCollectorWrapper;
 import org.opensearch.search.query.QuerySearchResult;
@@ -90,7 +91,6 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             numDocs,
             new HitsThresholdChecker(Math.max(numDocs, trackTotalHitsUpTo)),
             searchContext.sort(),
-            // filteringWeight,
             searchContext.searchAfter(),
             searchContext
         );

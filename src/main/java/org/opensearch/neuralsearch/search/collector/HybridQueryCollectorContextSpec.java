@@ -11,7 +11,7 @@ import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.query.HybridCollectorManager;
 import org.opensearch.neuralsearch.search.query.HybridCollectorResultsUtilParams;
-import org.opensearch.neuralsearch.search.query.HybridSearchCollectorResultUtil;
+import org.opensearch.neuralsearch.search.query.util.HybridSearchCollectorResultUtil;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QueryCollectorContextSpec;
 import org.opensearch.search.query.QuerySearchResult;
