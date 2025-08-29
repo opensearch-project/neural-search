@@ -31,10 +31,10 @@ public abstract class SparseCache<T extends Accountable> implements Accountable 
      */
     public void removeIndex(@NonNull CacheKey key) {
         cacheMap.computeIfPresent(key, (k, value) -> {
-            long ramBytesUsed = value.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(k);
-            CircuitBreakerManager.releaseBytes(ramBytesUsed);
-            LruTermCache.getInstance().removeIndex(k);
-            LruDocumentCache.getInstance().removeIndex(k);
+            long ramBytesUsed = value.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(key);
+            MemoryUsageManager.getInstance().getMemoryUsageTracker().safeRecord(-ramBytesUsed, CircuitBreakerManager::addWithoutBreaking);
+            LruTermCache.getInstance().removeIndex(key);
+            LruDocumentCache.getInstance().removeIndex(key);
             return null;
         });
     }

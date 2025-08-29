@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import java.util.List;
 
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 public class ForwardIndexCacheTests extends AbstractSparseTestBase {
@@ -39,9 +40,9 @@ public class ForwardIndexCacheTests extends AbstractSparseTestBase {
 
         forwardIndexCache = ForwardIndexCache.getInstance();
         emptyForwardIndexCacheSize = forwardIndexCache.ramBytesUsed();
-
+        RamBytesRecorder mockGlobalRecorder = mock(RamBytesRecorder.class);
         CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
-        emptyForwardIndexCacheItemSize = new ForwardIndexCacheItem(cacheKey, TEST_DOC_COUNT).ramBytesUsed();
+        emptyForwardIndexCacheItemSize = new ForwardIndexCacheItem(cacheKey, TEST_DOC_COUNT, mockGlobalRecorder).ramBytesUsed();
     }
 
     /**
