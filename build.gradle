@@ -292,7 +292,7 @@ dependencies {
     testImplementation "org.opensearch.plugin:parent-join-client:${opensearch_version}"
     testImplementation 'org.assertj:assertj-core:3.24.2'
     testImplementation group: 'net.bytebuddy', name: 'byte-buddy', version: "${versions.bytebuddy}"
-    testImplementation group: 'org.objenesis', name: 'objenesis', version: '3.3'
+    testImplementation group: 'org.objenesis', name: 'objenesis', version: "${versions.objenesis}"
     testImplementation group: 'net.bytebuddy', name: 'byte-buddy-agent', version: "${versions.bytebuddy}"
 }
 
