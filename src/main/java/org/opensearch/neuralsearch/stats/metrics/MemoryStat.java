@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.stats.metrics;
 
 import org.opensearch.core.common.unit.ByteSizeValue;
-import org.opensearch.index.compositeindex.datacube.MetricStat;
 import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 
