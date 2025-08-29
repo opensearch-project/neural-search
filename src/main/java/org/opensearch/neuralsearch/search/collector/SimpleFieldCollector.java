@@ -13,7 +13,7 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 /*
   SimpleFieldCollector collects the sorted results at the shard level for every individual query.
-  It collects the list of TopFieldDocs.
+  It collects the list of TopFieldDoc.
  */
 public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
 
