@@ -7,10 +7,7 @@ package org.opensearch.neuralsearch.search.query;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.stream.Collectors;
 
-import com.google.common.annotations.VisibleForTesting;
-import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
@@ -19,39 +16,39 @@ import org.apache.lucene.search.Query;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.HybridQuery;
-import org.opensearch.neuralsearch.util.HybridQueryUtil;
 import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.query.ConcurrentQueryPhaseSearcher;
 import org.opensearch.search.query.QueryCollectorContext;
 import org.opensearch.search.query.QueryPhase;
-import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.validateHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanMustQueryWithFilters;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanQuery;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryExtendedWithDlsRules;
 
 /**
  * Custom search implementation to be used at {@link QueryPhase} for Hybrid Query search. For queries other than Hybrid the
  * upstream standard implementation of searcher is called.
  */
 @Log4j2
+@NoArgsConstructor
 public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
 
-    private final QueryPhaseSearcher defaultQueryPhaseSearcherWithEmptyCollectorContext;
-    private final QueryPhaseSearcher concurrentQueryPhaseSearcherWithEmptyCollectorContext;
-
-    public HybridQueryPhaseSearcher() {
-        this.defaultQueryPhaseSearcherWithEmptyCollectorContext = new DefaultQueryPhaseSearcherWithEmptyQueryCollectorContext();
-        this.concurrentQueryPhaseSearcherWithEmptyCollectorContext = new ConcurrentQueryPhaseSearcherWithEmptyQueryCollectorContext();
-    }
-
+    /**
+     * This method is called from the QueryPhase. Depending on the query we delegate the call to the hybrid query.
+     * @param searchContext      search context
+     * @param searcher           context index searcher
+     * @param query              query
+     * @param collectors         list of collectors
+     * @param hasFilterCollector boolean flag for filterCollector
+     * @param hasTimeout         "true" if timeout was set, "false" otherwise
+     * @return
+     * @throws IOException
+     */
     public boolean searchWith(
         final SearchContext searchContext,
         final ContextIndexSearcher searcher,
@@ -60,53 +57,14 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         final boolean hasFilterCollector,
         final boolean hasTimeout
     ) throws IOException {
-        if (!isHybridQuery(query, searchContext)) {
+        Query phaseQuery = query;
+        if (isHybridQuery(query, searchContext) == false) {
             validateQuery(searchContext, query);
-            return super.searchWith(searchContext, searcher, query, collectors, hasFilterCollector, hasTimeout);
         } else {
-            Query hybridQuery = extractHybridQuery(searchContext, query);
-            validateHybridQuery((HybridQuery) hybridQuery);
-            QueryPhaseSearcher queryPhaseSearcher = getQueryPhaseSearcher(searchContext);
-            queryPhaseSearcher.searchWith(searchContext, searcher, hybridQuery, collectors, hasFilterCollector, hasTimeout);
-            // we decide on rescore later in collector manager
-            return false;
+            phaseQuery = extractHybridQuery(searchContext, query);
+            validateHybridQuery((HybridQuery) phaseQuery);
         }
-    }
-
-    private QueryPhaseSearcher getQueryPhaseSearcher(final SearchContext searchContext) {
-        return searchContext.shouldUseConcurrentSearch()
-            ? concurrentQueryPhaseSearcherWithEmptyCollectorContext
-            : defaultQueryPhaseSearcherWithEmptyCollectorContext;
-    }
-
-    @VisibleForTesting
-    protected Query extractHybridQuery(final SearchContext searchContext, final Query query) {
-        HybridQuery hybridQuery = HybridQueryUtil.extractHybridQuery(searchContext);
-        if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
-            return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, hybridQuery, List.of());
-        }
-        if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
-            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            BooleanQuery queryWithDls = booleanClauses.stream()
-                .filter(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
-                .findFirst()
-                .map(BooleanClause::query)
-                .map(BooleanQuery.class::cast)
-                .orElseThrow(
-                    () -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause with DLS rules")
-                );
-            List<BooleanClause> filterQueries = booleanClauses.stream()
-                .filter(clause -> !isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
-                .toList();
-            return HybridQuery.fromQueryExtendedWithDlsRules(queryWithDls, hybridQuery, filterQueries);
-        }
-        if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
-            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
-            HybridQuery hybridQueryWithFilter = new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
-            return hybridQueryWithFilter;
-        }
-        return query;
+        return super.searchWith(searchContext, searcher, phaseQuery, collectors, hasFilterCollector, hasTimeout);
     }
 
     /**
@@ -180,14 +138,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         }
     }
 
-    private void validateHybridQuery(final HybridQuery query) {
-        for (Query innerQuery : query) {
-            if (innerQuery instanceof HybridQuery) {
-                throw new IllegalArgumentException("hybrid query cannot be nested in another hybrid query");
-            }
-        }
-    }
-
     private int getMaxDepthLimit(final SearchContext searchContext) {
         Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
         return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
@@ -197,61 +147,5 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     public AggregationProcessor aggregationProcessor(SearchContext searchContext) {
         AggregationProcessor coreAggProcessor = super.aggregationProcessor(searchContext);
         return new HybridAggregationProcessor(coreAggProcessor);
-    }
-
-    /**
-     * Class that inherits ConcurrentQueryPhaseSearcher implementation but calls its search with only
-     * empty query collector context
-     */
-    @NoArgsConstructor(access = AccessLevel.PRIVATE)
-    final class ConcurrentQueryPhaseSearcherWithEmptyQueryCollectorContext extends ConcurrentQueryPhaseSearcher {
-
-        @Override
-        protected boolean searchWithCollector(
-            SearchContext searchContext,
-            ContextIndexSearcher searcher,
-            Query query,
-            LinkedList<QueryCollectorContext> collectors,
-            boolean hasFilterCollector,
-            boolean hasTimeout
-        ) throws IOException {
-            return searchWithCollector(
-                searchContext,
-                searcher,
-                query,
-                collectors,
-                QueryCollectorContext.EMPTY_CONTEXT,
-                hasFilterCollector,
-                hasTimeout
-            );
-        }
-    }
-
-    /**
-     * Class that inherits DefaultQueryPhaseSearcher implementation but calls its search with only
-     * empty query collector context
-     */
-    @NoArgsConstructor(access = AccessLevel.PACKAGE)
-    final class DefaultQueryPhaseSearcherWithEmptyQueryCollectorContext extends QueryPhase.DefaultQueryPhaseSearcher {
-
-        @Override
-        protected boolean searchWithCollector(
-            SearchContext searchContext,
-            ContextIndexSearcher searcher,
-            Query query,
-            LinkedList<QueryCollectorContext> collectors,
-            boolean hasFilterCollector,
-            boolean hasTimeout
-        ) throws IOException {
-            return searchWithCollector(
-                searchContext,
-                searcher,
-                query,
-                collectors,
-                QueryCollectorContext.EMPTY_CONTEXT,
-                hasFilterCollector,
-                hasTimeout
-            );
-        }
     }
 }

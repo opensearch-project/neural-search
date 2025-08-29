@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.search.query;
 
 import com.google.common.annotations.VisibleForTesting;
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
@@ -21,8 +20,8 @@ import org.opensearch.search.sort.SortAndFormats;
 /**
  * Utility class for merging TopDocs and MaxScore across multiple search queries
  */
-@RequiredArgsConstructor(access = AccessLevel.PACKAGE)
-class TopDocsMerger {
+@RequiredArgsConstructor
+public class TopDocsMerger {
     private HybridQueryScoreDocsMerger docsMerger;
     private SortAndFormats sortAndFormats;
     @VisibleForTesting

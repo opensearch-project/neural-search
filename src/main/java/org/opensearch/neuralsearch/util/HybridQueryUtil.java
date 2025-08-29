@@ -4,8 +4,10 @@
  */
 package org.opensearch.neuralsearch.util;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
@@ -17,14 +19,15 @@ import org.opensearch.search.internal.SearchContext;
 
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
  * Utility class for anything related to hybrid query
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
+@Log4j2
 public class HybridQueryUtil {
-
     /**
      * This method validates whether the query object is an instance of hybrid query
      */
@@ -38,19 +41,6 @@ public class HybridQueryUtil {
                 && isHybridQueryExtendedWithDlsRules(searchContext.parsedQuery().query(), searchContext));
     }
 
-    private static boolean hasNestedFieldOrNestedDocs(final Query query, final SearchContext searchContext) {
-        return searchContext.mapperService().hasNested() && new NestedHelper(searchContext.mapperService()).mightMatchNestedDocs(query);
-    }
-
-    private static boolean isWrappedHybridQuery(final Query query) {
-        return query instanceof BooleanQuery
-            && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.query() instanceof HybridQuery);
-    }
-
-    private static boolean hasAliasFilter(final Query query, final SearchContext searchContext) {
-        return Objects.nonNull(searchContext.aliasFilter());
-    }
-
     /**
      * This method checks whether hybrid query is wrapped under boolean query object
      */
@@ -62,7 +52,7 @@ public class HybridQueryUtil {
         BooleanQuery boolQuery = (BooleanQuery) query;
 
         return isHybridQueryWrappedInBooleanMustQueryWithFilters(boolQuery.clauses())
-            || ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+            || ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
                 && isWrappedHybridQuery(query)
                 && boolQuery.clauses().isEmpty() == false);
     }
@@ -75,8 +65,8 @@ public class HybridQueryUtil {
      */
     public static boolean isHybridQueryWrappedInBooleanMustQueryWithFilters(List<BooleanClause> booleanClauses) {
         boolean isFirstClauseMustHybrid = !booleanClauses.isEmpty()
-            && booleanClauses.get(0).occur() == BooleanClause.Occur.MUST
-            && booleanClauses.get(0).query() instanceof HybridQuery;
+            && booleanClauses.getFirst().occur() == BooleanClause.Occur.MUST
+            && booleanClauses.getFirst().query() instanceof HybridQuery;
 
         boolean areRemainingClausesFilters = booleanClauses.size() <= 1
             || booleanClauses.stream()
@@ -127,15 +117,44 @@ public class HybridQueryUtil {
      * by the security plugin, and wrapped in another boolean query object
      */
     public static boolean isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(final SearchContext searchContext, final Query query) {
-        return ((hasAliasFilter(query, searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+        return ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
             && query instanceof BooleanQuery booleanQuery
             && booleanQuery.clauses().stream().anyMatch(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext)));
+    }
+
+    @VisibleForTesting
+    public static Query extractHybridQuery(final SearchContext searchContext, final Query query) {
+        HybridQuery hybridQuery = extractHybridQuery(searchContext);
+        if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
+            return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, hybridQuery, List.of());
+        }
+        if (isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, query)) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            BooleanQuery queryWithDls = booleanClauses.stream()
+                .filter(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .findFirst()
+                .map(BooleanClause::query)
+                .map(BooleanQuery.class::cast)
+                .orElseThrow(
+                    () -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause with DLS rules")
+                );
+            List<BooleanClause> filterQueries = booleanClauses.stream()
+                .filter(clause -> !isHybridQueryExtendedWithDlsRules(clause.query(), searchContext))
+                .toList();
+            return HybridQuery.fromQueryExtendedWithDlsRules(queryWithDls, hybridQuery, filterQueries);
+        }
+        if (isHybridQueryWrappedInBooleanQuery(searchContext, query)) {
+            List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
+            List<BooleanClause> filterQueries = booleanClauses.stream().skip(1).collect(Collectors.toList());
+            return new HybridQuery(hybridQuery.getSubQueries(), hybridQuery.getQueryContext(), filterQueries);
+        }
+        return query;
     }
 
     /**
      * Unwraps a HybridQuery from a direct query, a nested BooleanQuery, a query extended with DLS rules, or a nested query extended with DLS rules.
      */
-    public static HybridQuery extractHybridQuery(final SearchContext searchContext) {
+    private static HybridQuery extractHybridQuery(final SearchContext searchContext) {
         HybridQuery hybridQuery;
         Query query = searchContext.query();
         if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
@@ -155,10 +174,10 @@ public class HybridQueryUtil {
         } else if (isHybridQueryWrappedInBooleanQuery(searchContext, searchContext.query())) {
             // In case of nested fields and alias filter, hybrid query is wrapped under bool query and lies in the first clause.
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-            if (!(booleanClauses.get(0).query() instanceof HybridQuery)) {
+            if (!(booleanClauses.getFirst().query() instanceof HybridQuery)) {
                 throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
             }
-            hybridQuery = (HybridQuery) booleanClauses.get(0).query();
+            hybridQuery = (HybridQuery) booleanClauses.getFirst().query();
         } else {
             hybridQuery = (HybridQuery) query;
         }
@@ -175,4 +194,24 @@ public class HybridQueryUtil {
             .orElseThrow(() -> new IllegalArgumentException("Given boolean query does not contain a HybridQuery clause"));
     }
 
+    public static void validateHybridQuery(final HybridQuery query) {
+        for (Query innerQuery : query.getSubQueries()) {
+            if (innerQuery instanceof HybridQuery) {
+                throw new IllegalArgumentException("hybrid query cannot be nested in another hybrid query");
+            }
+        }
+    }
+
+    private static boolean hasNestedFieldOrNestedDocs(final Query query, final SearchContext searchContext) {
+        return searchContext.mapperService().hasNested() && new NestedHelper(searchContext.mapperService()).mightMatchNestedDocs(query);
+    }
+
+    private static boolean isWrappedHybridQuery(final Query query) {
+        return query instanceof BooleanQuery
+            && ((BooleanQuery) query).clauses().stream().anyMatch(clauseQuery -> clauseQuery.query() instanceof HybridQuery);
+    }
+
+    private static boolean hasAliasFilter(final SearchContext searchContext) {
+        return Objects.nonNull(searchContext.aliasFilter());
+    }
 }
