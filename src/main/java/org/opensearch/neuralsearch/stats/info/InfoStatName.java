@@ -93,7 +93,14 @@ public enum InfoStatName implements StatName {
     /** Counts rerank by field processors */
     RERANK_BY_FIELD_PROCESSORS("rerank_by_field_processors", "processors.search", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
     /** Counts ML reranking processors */
-    RERANK_ML_PROCESSORS("rerank_ml_processors", "processors.search", InfoStatType.INFO_COUNTER, Version.V_3_1_0),;
+    RERANK_ML_PROCESSORS("rerank_ml_processors", "processors.search", InfoStatType.INFO_COUNTER, Version.V_3_1_0),
+    /** Counts agentic query translator processors */
+    AGENTIC_QUERY_TRANSLATOR_PROCESSORS(
+        "agentic_query_translator_processors",
+        "processors.search",
+        InfoStatType.INFO_COUNTER,
+        Version.V_3_2_0
+    ),;
 
     private final String nameString;
     private final String path;
