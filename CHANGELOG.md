@@ -6,12 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
-- [Hybrid Query] Introduce QueryCollectContextSpec in Hybrid Query to improve search performance
 
 ### Enhancements
 
 - [Semantic Field] Support the sparse two phase processor for the semantic field.
 - [Stats] Add stats for agentic query and agentic query translator processor.
+- [Performance Improvement] Introduce QueryCollectContextSpec in Hybrid Query to improve search performance.
 
 ### Bug Fixes
 
