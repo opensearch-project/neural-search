@@ -27,6 +27,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import static org.mockito.Mockito.when;
 
@@ -60,6 +61,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        TestUtils.initializeEventStatsManager();
         mockMLClient = mock(MLCommonsClientAccessor.class);
         mockXContentRegistry = mock(NamedXContentRegistry.class);
         mockContext = mock(PipelineProcessingContext.class);
