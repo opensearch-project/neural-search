@@ -296,6 +296,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // prepare data to rewrite on shard level
         final QueryShardContext queryShardContext = mock(QueryShardContext.class);
         final KNNVectorFieldType knnVectorFieldType = mock(KNNVectorFieldType.class);
+        when(queryShardContext.convertToShardContext()).thenReturn(queryShardContext);
         when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(knnVectorFieldType);
         when(knnVectorFieldType.typeName()).thenReturn(KNNVectorFieldMapper.CONTENT_TYPE);
 
@@ -678,6 +679,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         final QueryShardContext queryShardContext = mock(QueryShardContext.class);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType = mock(SemanticFieldMapper.SemanticFieldType.class);
         final KNNVectorFieldType knnVectorFieldType = mock(KNNVectorFieldType.class);
+        when(queryShardContext.convertToShardContext()).thenReturn(queryShardContext);
         when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType);
         final String semanticInfoFieldPath = semanticInfoFieldName == null ? FIELD_NAME + "_semantic_info" : semanticInfoFieldName;
         String embeddingFullPath;
@@ -842,6 +844,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         final QueryShardContext queryShardContext = mock(QueryShardContext.class);
         final Index index = mock(Index.class);
         when(queryShardContext.index()).thenReturn(index);
+        when(queryShardContext.convertToShardContext()).thenReturn(queryShardContext);
         when(index.getName()).thenReturn(LOCAL_INDEX_NAME);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType = mock(SemanticFieldMapper.SemanticFieldType.class);
         final RankFeaturesFieldMapper.RankFeaturesFieldType rankFeaturesFieldType = new RankFeaturesFieldMapper.RankFeaturesFieldType(
@@ -870,6 +873,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         final QueryShardContext queryShardContext2 = mock(QueryShardContext.class);
         final Index index2 = mock(Index.class);
         when(queryShardContext2.index()).thenReturn(index2);
+        when(queryShardContext2.convertToShardContext()).thenReturn(queryShardContext2);
         when(index2.getName()).thenReturn(LOCAL_INDEX_NAME_2);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType2 = mock(SemanticFieldMapper.SemanticFieldType.class);
         when(queryShardContext2.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType2);
@@ -974,6 +978,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         final QueryShardContext queryShardContext = mock(QueryShardContext.class);
         final Index index = mock(Index.class);
         when(queryShardContext.index()).thenReturn(index);
+        when(queryShardContext.convertToShardContext()).thenReturn(queryShardContext);
         when(index.getName()).thenReturn(LOCAL_INDEX_NAME);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType = mock(SemanticFieldMapper.SemanticFieldType.class);
         final RankFeaturesFieldMapper.RankFeaturesFieldType rankFeaturesFieldType = new RankFeaturesFieldMapper.RankFeaturesFieldType(
@@ -1006,6 +1011,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         final QueryShardContext queryShardContext2 = mock(QueryShardContext.class);
         final Index index2 = mock(Index.class);
         when(queryShardContext2.index()).thenReturn(index2);
+        when(queryShardContext2.convertToShardContext()).thenReturn(queryShardContext2);
         when(index2.getName()).thenReturn(LOCAL_INDEX_NAME_2);
         final SemanticFieldMapper.SemanticFieldType semanticFieldType2 = mock(SemanticFieldMapper.SemanticFieldType.class);
         when(queryShardContext2.fieldMapper(FIELD_NAME)).thenReturn(semanticFieldType2);

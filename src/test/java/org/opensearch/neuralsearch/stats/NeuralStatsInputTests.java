@@ -81,12 +81,11 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
     public void test_streamInput() throws IOException {
         StreamInput mockInput = mock(StreamInput.class);
 
-        // Have to return the readByte since readBoolean can't be mocked
-        when(mockInput.readByte()).thenReturn((byte) 1)   // true for includeMetadata
-            .thenReturn((byte) 1)  // true for flatten
-            .thenReturn((byte) 0)  // false for includeIndividualNodes
-            .thenReturn((byte) 0)  // false for includeAllNodes
-            .thenReturn((byte) 0);  // false for includeInfo
+        when(mockInput.readBoolean()).thenReturn(true)   // true for includeMetadata
+            .thenReturn(true)  // true for flatten
+            .thenReturn(false)  // false for includeIndividualNodes
+            .thenReturn(false)  // false for includeAllNodes
+            .thenReturn(false);  // false for includeInfo
 
         when(mockInput.readOptionalStringList()).thenReturn(Arrays.asList(NODE_ID_1, NODE_ID_2));
         when(mockInput.readOptionalEnumSet(EventStatName.class)).thenReturn(EnumSet.of(EVENT_STAT));
@@ -103,7 +102,7 @@ public class NeuralStatsInputTests extends OpenSearchTestCase {
         assertFalse(input.isIncludeAllNodes());
         assertFalse(input.isIncludeInfo());
 
-        verify(mockInput, times(5)).readByte();
+        verify(mockInput, times(5)).readBoolean();
         verify(mockInput, times(1)).readOptionalStringList();
         verify(mockInput, times(2)).readOptionalEnumSet(any());
     }

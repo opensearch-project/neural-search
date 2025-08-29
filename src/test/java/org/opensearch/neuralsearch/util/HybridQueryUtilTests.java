@@ -42,7 +42,7 @@ import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrap
 public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
 
     private static final String TERM_QUERY_TEXT = "keyword";
-    private static final String RANGE_FIELD = "date _range";
+    private static final String RANGE_FIELD = "date_range";
     private static final String FROM_TEXT = "123";
     private static final String TO_TEXT = "456";
     private static final String TEXT_FIELD_NAME = "field";
@@ -52,6 +52,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
 
         HybridQuery query = new HybridQuery(
@@ -82,6 +83,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
@@ -105,6 +107,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         MapperService mapperService = createMapperService();
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
 
         Query booleanQuery = QueryBuilders.boolQuery()
             .should(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT))
@@ -132,6 +135,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
         IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
         when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
 
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
@@ -159,6 +163,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testIsHybridQueryWrappedInBooleanMustQueryWithFilters_whenSingleHybridMustClause_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new TermQueryBuilder("field", "text"));
         BooleanClause hybridMustClause = new BooleanClause(hybridQueryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST);
         List<BooleanClause> clauses = Arrays.asList(hybridMustClause);
@@ -169,6 +174,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testIsHybridQueryWrappedInBooleanMustQueryWithFilters_whenHybridMustWithValidFilters_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new TermQueryBuilder("field", "text"));
 
         BooleanClause hybridMustClause = new BooleanClause(hybridQueryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST);
@@ -183,6 +189,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testIsHybridQueryWrappedInBooleanMustQueryWithFilters_whenFirstClauseNotMust_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new TermQueryBuilder("field", "text"));
 
         BooleanClause hybridShouldClause = new BooleanClause(hybridQueryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.SHOULD);
@@ -206,6 +213,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testIsHybridQueryWrappedInBooleanMustQueryWithFilters_NonFilterSecondClause_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new TermQueryBuilder("field", "text"));
 
         BooleanClause hybridMustClause = new BooleanClause(hybridQueryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST);
@@ -219,6 +227,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testIsHybridQueryWrappedInBooleanQuery_whenHybridMustClauseAndFilterClauses_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new TermQueryBuilder("field", "text"));
 
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();

@@ -46,7 +46,7 @@ import lombok.SneakyThrows;
 public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
 
     private static final String TERM_QUERY_TEXT = "keyword";
-    private static final String RANGE_FIELD = "date _range";
+    private static final String RANGE_FIELD = "date_range";
     private static final String FROM_TEXT = "123";
     private static final String TO_TEXT = "456";
 
@@ -103,6 +103,7 @@ public class HybridQueryWeightTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testSubQueries_whenMultipleEqualSubQueries_thenSuccessful() {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
