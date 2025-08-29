@@ -18,6 +18,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
+import org.opensearch.core.common.breaker.CircuitBreaker;
+import org.opensearch.core.common.unit.ByteSizeValue;
+import org.opensearch.index.mapper.Mapper;
+import org.opensearch.indices.breaker.BreakerSettings;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighterEngine;
@@ -30,14 +34,16 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
+import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
-import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.plugins.MapperPlugin;
+import org.opensearch.plugins.CircuitBreakerPlugin;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
@@ -107,6 +113,10 @@ import org.opensearch.watcher.ResourceWatcherService;
 
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_NAME;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD;
+
 /**
  * Neural Search plugin class
  */
@@ -118,7 +128,8 @@ public class NeuralSearch extends Plugin
         SearchPlugin,
         IngestPlugin,
         ExtensiblePlugin,
-        SearchPipelinePlugin {
+        SearchPipelinePlugin,
+        CircuitBreakerPlugin {
     private MLCommonsClientAccessor clientAccessor;
     private NamedXContentRegistry xContentRegistry;
     private NormalizationProcessorWorkflow normalizationProcessorWorkflow;
@@ -258,7 +269,9 @@ public class NeuralSearch extends Plugin
             NEURAL_STATS_ENABLED,
             SEMANTIC_INGEST_BATCH_SIZE,
             HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
-            AGENTIC_SEARCH_ENABLED
+            AGENTIC_SEARCH_ENABLED,
+            NEURAL_CIRCUIT_BREAKER_LIMIT,
+            NEURAL_CIRCUIT_BREAKER_OVERHEAD
         );
     }
 
@@ -329,5 +342,22 @@ public class NeuralSearch extends Plugin
                 parameters.client
             )
         );
+    }
+
+    @Override
+    public BreakerSettings getCircuitBreaker(Settings settings) {
+        return new BreakerSettings(
+            NEURAL_CIRCUIT_BREAKER_NAME,
+            NEURAL_CIRCUIT_BREAKER_LIMIT.get(settings).getBytes(),
+            NEURAL_CIRCUIT_BREAKER_OVERHEAD.get(settings),
+            CircuitBreaker.Type.MEMORY,
+            CircuitBreaker.Durability.PERMANENT
+        );
+    }
+
+    @Override
+    public void setCircuitBreaker(CircuitBreaker circuitBreaker) {
+        CircuitBreakerManager.setCircuitBreaker(circuitBreaker);
+        MemoryUsageManager.getInstance().setLimit(new ByteSizeValue(circuitBreaker.getLimit()));
     }
 }
