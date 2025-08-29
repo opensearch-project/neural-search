@@ -11,6 +11,7 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SortField;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
@@ -35,8 +36,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
-
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 
 /**
  * Collector manager based on HybridTopScoreDocCollector that allows users to parallelize counting the number of hits.
@@ -64,13 +63,13 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
      * @param searchContext
      * @return
      */
-    public static CollectorManager createHybridCollectorManager(final SearchContext searchContext) {
+    public static CollectorManager createHybridCollectorManager(final SearchContext searchContext, final Query query) {
         if (searchContext.scrollContext() != null) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Scroll operation is not supported in hybrid query"));
         }
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
-        int numDocs = Math.min(getSubqueryResultsRetrievalSize(searchContext), totalNumDocs);
+        int numDocs = Math.min(getSubqueryResultsRetrievalSize(searchContext, query), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         if (searchContext.sort() != null) {
             validateSortCriteria(searchContext, searchContext.trackScores());
@@ -221,8 +220,9 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
      * @param searchContext search context that contains pagination depth
      * @return results size to collected
      */
-    private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext) {
-        HybridQuery hybridQuery = extractHybridQuery(searchContext);
+    private static int getSubqueryResultsRetrievalSize(final SearchContext searchContext, final Query query) {
+        assert query instanceof HybridQuery;
+        HybridQuery hybridQuery = (HybridQuery) query;
         Integer paginationDepth = hybridQuery.getQueryContext().getPaginationDepth();
 
         // Pagination is expected to work only when pagination_depth is provided in the search request.

@@ -25,9 +25,9 @@ import org.opensearch.search.query.QueryPhaseSearcherWrapper;
 
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.validateHybridQuery;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanMustQueryWithFilters;
 
 /**
@@ -146,13 +146,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     @Override
     public AggregationProcessor aggregationProcessor(SearchContext searchContext) {
         AggregationProcessor coreAggProcessor = super.aggregationProcessor(searchContext);
-        // In case of single shard only we initialize HybridAggregationProcessor.
-        // We need HybridAggregationProcessor to update size in SearchContext with scoreDocs length during the postProcess.
-        if (isHybridQuery(searchContext.query(), searchContext) && searchContext.numberOfShards() == 1) {
-            return new HybridAggregationProcessor(coreAggProcessor);
-        }
-        // In case of Hybrid query with multiple shards and all other queries we need to delegate the call to
-        // either defaultAggregationProcessor or ConcurrentAggregationProcessor.
-        return coreAggProcessor;
+        return new HybridAggregationProcessor(coreAggProcessor);
     }
 }

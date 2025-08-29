@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.search.collector;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
+import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.search.query.HybridCollectorManager;
 import org.opensearch.neuralsearch.search.query.HybridCollectorResultsUtilParams;
@@ -29,9 +30,9 @@ public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpe
     private final HybridSearchCollector collector;
     private final SearchContext searchContext;
 
-    public HybridQueryCollectorContextSpec(final SearchContext searchContext) {
+    public HybridQueryCollectorContextSpec(final SearchContext searchContext, final Query query) {
         this.searchContext = searchContext;
-        this.collectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(searchContext);
+        this.collectorManager = (HybridCollectorManager) HybridCollectorManager.createHybridCollectorManager(searchContext, query);
         this.collector = (HybridSearchCollector) collectorManager.newCollector();
     }
 

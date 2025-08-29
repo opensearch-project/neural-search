@@ -12,6 +12,7 @@ import org.opensearch.search.query.QueryCollectorContextSpec;
 import org.opensearch.search.query.QueryCollectorContextSpecFactory;
 
 import java.util.Optional;
+
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 
 /**
@@ -27,7 +28,7 @@ public class HybridQueryCollectorContextSpecFactory implements QueryCollectorCon
         QueryCollectorArguments queryCollectorArguments
     ) {
         if (isHybridQuery(query, searchContext)) {
-            return Optional.of(new HybridQueryCollectorContextSpec(searchContext));
+            return Optional.of(new HybridQueryCollectorContextSpec(searchContext, query));
         }
         return Optional.empty();
     }
