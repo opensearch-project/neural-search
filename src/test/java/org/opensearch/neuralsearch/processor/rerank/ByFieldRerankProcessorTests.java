@@ -31,6 +31,7 @@ import java.util.AbstractMap;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.IntStream;
 
@@ -827,7 +828,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             int docId = sampleIndexMLScorePairs.get(i).getKey();
             String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
 
-            String sourceMap = templateString.formatted(i, mlScore);
+            String sourceMap = String.format(Locale.ROOT, templateString, i, mlScore);
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
@@ -868,7 +869,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             int docId = sampleIndexMLScorePairs.get(i).getKey();
             String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
 
-            String sourceMap = templateString.formatted(i, mlScore);
+            String sourceMap = String.format(Locale.ROOT, templateString, i, mlScore);
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));
@@ -907,7 +908,7 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
             int docId = sampleIndexMLScorePairs.get(i).getKey();
             String mlScore = sampleIndexMLScorePairs.get(i).getValue() + "";
 
-            String sourceMap = templateString.formatted(i, mlScore);
+            String sourceMap = String.format(Locale.ROOT, templateString, i, mlScore);
 
             hits[i] = new SearchHit(docId, docId + "", Collections.emptyMap(), Collections.emptyMap());
             hits[i].sourceRef(new BytesArray(sourceMap));

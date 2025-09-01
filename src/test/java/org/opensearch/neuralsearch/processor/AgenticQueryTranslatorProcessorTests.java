@@ -13,6 +13,7 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -27,6 +28,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import static org.mockito.Mockito.when;
 
@@ -60,11 +62,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        TestUtils.initializeEventStatsManager();
         mockMLClient = mock(MLCommonsClientAccessor.class);
         mockXContentRegistry = mock(NamedXContentRegistry.class);
         mockContext = mock(PipelineProcessingContext.class);
         mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
         when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(mockSettingsAccessor);
 
         // Use factory to create processor since constructor is private
         AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(

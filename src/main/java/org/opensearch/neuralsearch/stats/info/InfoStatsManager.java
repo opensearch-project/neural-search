@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.stats.info;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
+import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
 import com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
@@ -189,6 +190,7 @@ public class InfoStatsManager {
                         switch (processorType) {
                             case NeuralQueryEnricherProcessor.TYPE -> increment(stats, InfoStatName.NEURAL_QUERY_ENRICHER_PROCESSORS);
                             case NeuralSparseTwoPhaseProcessor.TYPE -> increment(stats, InfoStatName.NEURAL_SPARSE_TWO_PHASE_PROCESSORS);
+                            case AgenticQueryTranslatorProcessor.TYPE -> increment(stats, InfoStatName.AGENTIC_QUERY_TRANSLATOR_PROCESSORS);
                         }
                     }
                 }
