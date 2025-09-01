@@ -19,7 +19,6 @@ import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -35,11 +34,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
-import static org.opensearch.neuralsearch.sparse.mapper.SparseTokensField.SPARSE_FIELD;
 
 public class SparsePostingsReaderTests extends AbstractSparseTestBase {
 
@@ -176,13 +170,4 @@ public class SparsePostingsReaderTests extends AbstractSparseTestBase {
         verify(mockExecutor, never()).execute(any(Runnable.class));
     }
 
-    Map<String, String> prepareAttributes(boolean sparse, int threshold, float ratio, int posting, float summary) {
-        Map<String, String> attributes = new HashMap<>();
-        attributes.put(SPARSE_FIELD, String.valueOf(sparse));
-        attributes.put(APPROXIMATE_THRESHOLD_FIELD, String.valueOf(threshold));
-        attributes.put(CLUSTER_RATIO_FIELD, String.valueOf(ratio));
-        attributes.put(N_POSTINGS_FIELD, String.valueOf(posting));
-        attributes.put(SUMMARY_PRUNE_RATIO_FIELD, String.valueOf(summary));
-        return attributes;
-    }
 }

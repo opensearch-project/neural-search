@@ -13,6 +13,7 @@ import org.apache.lucene.codecs.NormsProducer;
 import org.apache.lucene.codecs.lucene101.Lucene101PostingsFormat;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.SegmentReadState;
@@ -48,16 +49,12 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
 
 public class ClusteredPostingTermsWriterTests extends AbstractSparseTestBase {
 
     private static final int VERSION = 1;
     private static final String CODEC_NAME = "test_codec";
 
-    private FieldInfo mockFieldInfo;
     private SegmentWriteState mockWriteState;
     private ClusteredPostingTermsWriter clusteredPostingTermsWriter;
 
@@ -79,6 +76,18 @@ public class ClusteredPostingTermsWriterTests extends AbstractSparseTestBase {
     @Mock
     private IndexOutput mockIndexOutput;
 
+    @Mock
+    private SegmentInfo mockSegmentInfo;
+
+    @Mock
+    private IndexOptions mockIndexOptions;
+
+    @Mock
+    private FieldInfo mockFieldInfo;
+
+    @Mock
+    private CodecUtilWrapper mockCodecUtilWrapper;
+
     @Before
     @SneakyThrows
     public void setUp() {
@@ -86,26 +95,23 @@ public class ClusteredPostingTermsWriterTests extends AbstractSparseTestBase {
         MockitoAnnotations.openMocks(this);
 
         // configure mocks
-        clusteredPostingTermsWriter = new ClusteredPostingTermsWriter(CODEC_NAME, VERSION);
-        SegmentInfo mockSegmentInfo = spy(TestsPrepareUtils.prepareSegmentInfo());
+        clusteredPostingTermsWriter = new ClusteredPostingTermsWriter(CODEC_NAME, VERSION, mockCodecUtilWrapper);
         mockWriteState = TestsPrepareUtils.prepareSegmentWriteState(mockSegmentInfo);
-        mockFieldInfo = TestsPrepareUtils.prepareKeyFieldInfo();
-        mockFieldInfo.attributes().put(CLUSTER_RATIO_FIELD, String.valueOf(0.1f));
-        mockFieldInfo.attributes().put(N_POSTINGS_FIELD, String.valueOf(-1));
-        mockFieldInfo.attributes().put(SUMMARY_PRUNE_RATIO_FIELD, String.valueOf(0.4f));
+        when(mockFieldInfo.attributes()).thenReturn(prepareAttributes(true, 10, 0.1f, -1, 0.4f));
 
         when(mockSegmentInfo.getCodec()).thenReturn(mockCodec);
         when(mockCodec.docValuesFormat()).thenReturn(mockDocValuesFormat);
         when(mockDocValuesFormat.fieldsProducer(any(SegmentReadState.class))).thenReturn(mockDocValuesProducer);
         when(mockDocValuesProducer.getBinary(any(FieldInfo.class))).thenReturn(mockBinaryDocValues);
         when(mockDirectory.createOutput(any(String.class), any())).thenReturn(mockIndexOutput);
+        when(mockFieldInfo.getIndexOptions()).thenReturn(mockIndexOptions);
     }
 
     /**
      * Tests the constructor with codec name and version.
      */
     public void test_constructor() {
-        ClusteredPostingTermsWriter writer = new ClusteredPostingTermsWriter(CODEC_NAME, VERSION);
+        ClusteredPostingTermsWriter writer = new ClusteredPostingTermsWriter(CODEC_NAME, VERSION, mockCodecUtilWrapper);
         assertNotNull("ClusteredPostingTermsWriter should be created", writer);
     }
 
@@ -178,15 +184,14 @@ public class ClusteredPostingTermsWriterTests extends AbstractSparseTestBase {
      */
     @SneakyThrows
     public void test_setFieldAndMaxDoc_withoutMerge_andNPostingValue() {
-        clusteredPostingTermsWriter = spy(this.clusteredPostingTermsWriter);
         clusteredPostingTermsWriter.init(mockIndexOutput, mockWriteState);
-        mockFieldInfo.attributes().put(N_POSTINGS_FIELD, String.valueOf(160));
+        when(mockFieldInfo.attributes()).thenReturn(prepareAttributes(true, 10, 1.0f, 160, 1.0f));
 
         // Mock the superclass setField method
         clusteredPostingTermsWriter.setFieldAndMaxDoc(mockFieldInfo, 100, false);
 
         // Verify setField was called
-        verify(clusteredPostingTermsWriter).setField(mockFieldInfo);
+        verify(mockFieldInfo).getIndexOptions();
 
         // Verify that setPostingClustering gets called
         verify(mockDocValuesFormat, times(1)).fieldsProducer(any(SegmentReadState.class));
@@ -324,8 +329,14 @@ public class ClusteredPostingTermsWriterTests extends AbstractSparseTestBase {
      */
     @SneakyThrows
     public void test_init() {
-        clusteredPostingTermsWriter = spy(clusteredPostingTermsWriter);
         clusteredPostingTermsWriter.init(mockIndexOutput, mockWriteState);
+        verify(mockCodecUtilWrapper).writeIndexHeader(
+            eq(mockIndexOutput),
+            eq(CODEC_NAME),
+            eq(VERSION),
+            any(),
+            eq(mockWriteState.segmentSuffix)
+        );
     }
 
     /**
@@ -358,6 +369,7 @@ public class ClusteredPostingTermsWriterTests extends AbstractSparseTestBase {
         clusteredPostingTermsWriter.close();
 
         verify(mockDocValuesProducer, times(1)).close();
+        verify(mockCodecUtilWrapper).writeFooter(any());
     }
 
     /**

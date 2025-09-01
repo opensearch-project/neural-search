@@ -64,7 +64,7 @@ public class SparsePostingsConsumer extends FieldsConsumer {
             state,
             mergeHelper,
             VERSION_CURRENT,
-            new ClusteredPostingTermsWriter(CODEC_NAME, VERSION_CURRENT),
+            new ClusteredPostingTermsWriter(CODEC_NAME, VERSION_CURRENT, new CodecUtilWrapper()),
             new SparseTermsLuceneWriter(CODEC_NAME, VERSION_CURRENT, new CodecUtilWrapper())
         );
     }

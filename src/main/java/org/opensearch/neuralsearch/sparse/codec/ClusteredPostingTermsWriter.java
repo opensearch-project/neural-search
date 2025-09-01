@@ -4,9 +4,9 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.codecs.BlockTermState;
-import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.codecs.NormsProducer;
@@ -57,6 +57,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.
  * It handles the logic to write data to both cache and lucene index.
  */
 @Log4j2
+@RequiredArgsConstructor
 public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private FixedBitSet docsSeen;
     private IndexOutput postingOut;
@@ -64,16 +65,11 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private BytesRef currentTerm;
     private SeismicPostingClusterer seismicPostingClusterer;
     private CacheKey key;
-    private final int version;
     private final String codec_name;
+    private final int version;
     private SegmentWriteState state;
     private DocValuesProducer docValuesProducer;
-
-    public ClusteredPostingTermsWriter(String codec_name, int version) {
-        super();
-        this.version = version;
-        this.codec_name = codec_name;
-    }
+    private final CodecUtilWrapper codecUtilWrapper;
 
     public BlockTermState write(BytesRef text, TermsEnum termsEnum, NormsProducer norms) throws IOException {
         this.currentTerm = text;
@@ -205,7 +201,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         this.postingOut = termsOut;
         this.state = state;
         this.docsSeen = new FixedBitSet(state.segmentInfo.maxDoc());
-        CodecUtil.writeIndexHeader(postingOut, this.codec_name, version, state.segmentInfo.getId(), state.segmentSuffix);
+        this.codecUtilWrapper.writeIndexHeader(postingOut, this.codec_name, version, state.segmentInfo.getId(), state.segmentSuffix);
     }
 
     @Override
@@ -215,7 +211,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
 
     @Override
     public void close() throws IOException {
-        CodecUtil.writeFooter(this.postingOut);
+        this.codecUtilWrapper.writeFooter(this.postingOut);
         if (this.docValuesProducer != null) {
             this.docValuesProducer.close();
             this.docValuesProducer = null;
