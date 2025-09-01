@@ -17,6 +17,14 @@ import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.core.common.breaker.CircuitBreaker;
+import org.apache.lucene.index.LeafReader;
+import org.apache.lucene.index.PostingsEnum;
+import org.apache.lucene.index.Terms;
+import org.apache.lucene.index.TermsEnum;
+import org.apache.lucene.util.BytesRef;
+import org.opensearch.neuralsearch.sparse.codec.SparsePostingsEnum;
+import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
+import org.opensearch.neuralsearch.sparse.query.SparseQueryContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -26,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
@@ -101,6 +110,40 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
         return new SparseVector(items);
     }
 
+    protected void preparePostings(LeafReader leafReader, String fieldName, Terms terms, TermsEnum termsEnum,
+        SparsePostingsEnum postingsEnum, Map<String, Boolean> seekExact)
+        throws IOException {
+        when(leafReader.terms(eq(fieldName))).thenReturn(terms);
+        when(terms.iterator()).thenReturn(termsEnum);
+
+        // Setup termsEnum to return true for first token and false for second token
+        for (Map.Entry<String, Boolean> entry : seekExact.entrySet()) {
+            when(termsEnum.seekExact(eq(new BytesRef(entry.getKey())))).thenReturn(entry.getValue());
+        }
+
+        // Setup postingsEnum
+        when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum);
+    }
+
+    protected void prepareCluster(SparsePostingsEnum postingsEnum) {
+        // Setup cluster iterator for postingsEnum
+        DocumentCluster cluster = mock(DocumentCluster.class);
+        DocWeightIterator docWeightIterator = constructDocWeightIterator(1, 2, 3);
+        when(cluster.getDisi()).thenReturn(docWeightIterator);
+        when(cluster.isShouldNotSkip()).thenReturn(true);
+
+        SparseVector summaryVector = createVector(1, 2, 2, 3);
+        when(cluster.getSummary()).thenReturn(summaryVector);
+
+        IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
+        when(clusterIterator.next()).thenReturn(cluster).thenReturn(null);
+        when(postingsEnum.clusterIterator()).thenReturn(clusterIterator);
+    }
+
+    protected SparseQueryContext constructSparseQueryContext(int k, float hf, List<String> tokens) {
+        return SparseQueryContext.builder().k(k).heapFactor(hf).tokens(tokens).build();
+    }
+
     protected DocumentCluster prepareCluster(int summaryDP, boolean shouldNotSkip, byte[] queryDenseVector) {
         // Mock document cluster
         DocumentCluster cluster = mock(DocumentCluster.class);
@@ -145,7 +188,7 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
         docWeights1.add(new DocWeight(0, (byte) 1));
 
         List<DocWeight> docWeights2 = new ArrayList<>();
-        docWeights1.add(new DocWeight(1, (byte) 2));
+        docWeights2.add(new DocWeight(1, (byte) 2));
 
         clusters.add(new DocumentCluster(documentSummary1, docWeights1, false));
         clusters.add(new DocumentCluster(documentSummary2, docWeights2, false));
