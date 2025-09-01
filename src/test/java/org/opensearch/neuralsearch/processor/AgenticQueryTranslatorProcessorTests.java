@@ -13,6 +13,7 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -67,6 +68,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         mockContext = mock(PipelineProcessingContext.class);
         mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
         when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(mockSettingsAccessor);
 
         // Use factory to create processor since constructor is private
         AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(

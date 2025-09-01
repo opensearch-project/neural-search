@@ -7,7 +7,11 @@ package org.opensearch.neuralsearch.processor;
 import lombok.Getter;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
@@ -26,7 +30,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -37,7 +41,14 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
     private MLCommonsClientAccessor clientAccessor;
     private Environment environment;
 
-    private ClusterService clusterService = mock(ClusterService.class, RETURNS_DEEP_STUBS);
+    @Mock
+    private ClusterService clusterService;
+    @Mock
+    private ClusterState clusterState;
+    @Mock
+    private Metadata metadata;
+    @Mock
+    private IndexMetadata indexMetadata;
 
     private static final String TAG = "tag";
     private static final String TYPE = "type";
@@ -50,6 +61,10 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.index(anyString())).thenReturn(indexMetadata);
+        when(indexMetadata.getSettings()).thenReturn(null);
         clientAccessor = mock(MLCommonsClientAccessor.class);
         environment = mock(Environment.class);
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();

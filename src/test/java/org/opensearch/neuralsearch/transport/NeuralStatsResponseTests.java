@@ -67,8 +67,7 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
                 .thenReturn((Map) aggregatedNodeStats)
                 .thenReturn((Map) nodeIdToNodeEventStats);
 
-        // Booleans as bytes
-        when(mockStreamInput.readByte()).thenReturn((byte) 1).thenReturn((byte) 0);
+        when(mockStreamInput.readBoolean()).thenReturn(true).thenReturn(false);
 
         NeuralStatsResponse response = new NeuralStatsResponse(mockStreamInput);
 
