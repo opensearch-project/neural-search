@@ -7,8 +7,10 @@ package org.opensearch.neuralsearch.sparse.common;
 import lombok.AllArgsConstructor;
 import lombok.NonNull;
 import org.apache.lucene.codecs.DocValuesProducer;
+import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.MergeState;
+import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.util.Bits;
 
 /**
@@ -38,5 +40,13 @@ public class MergeStateFacade {
 
     public Bits[] getLiveDocs() {
         return mergeState.liveDocs;
+    }
+
+    public FieldsProducer[] getFieldsProducers() {
+        return mergeState.fieldsProducers;
+    }
+
+    public SegmentInfo getSegmentInfo() {
+        return mergeState.segmentInfo;
     }
 }
