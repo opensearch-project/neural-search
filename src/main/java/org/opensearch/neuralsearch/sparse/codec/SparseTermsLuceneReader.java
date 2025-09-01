@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.sparse.codec;
 
 import lombok.extern.log4j.Log4j2;
-import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.SegmentReadState;
@@ -35,8 +34,10 @@ public class SparseTermsLuceneReader extends FieldsProducer {
     private final Map<String, Map<BytesRef, Long>> fieldToTerms = new HashMap<>();
     private IndexInput termsIn;
     private IndexInput postingIn;
+    private final CodecUtilWrapper codecUtilWrapper;
 
-    public SparseTermsLuceneReader(SegmentReadState state) {
+    public SparseTermsLuceneReader(SegmentReadState state, CodecUtilWrapper codecUtilWrapper) {
+        this.codecUtilWrapper = codecUtilWrapper;
         final String termsFileName = IndexFileNames.segmentFileName(
             state.segmentInfo.name,
             state.segmentSuffix,
@@ -50,7 +51,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
         boolean success = false;
         try {
             termsIn = state.directory.openInput(termsFileName, state.context);
-            CodecUtil.checkIndexHeader(
+            this.codecUtilWrapper.checkIndexHeader(
                 termsIn,
                 SparsePostingsConsumer.CODEC_NAME,
                 SparsePostingsConsumer.VERSION_START,
@@ -58,11 +59,11 @@ public class SparseTermsLuceneReader extends FieldsProducer {
                 state.segmentInfo.getId(),
                 state.segmentSuffix
             );
-            CodecUtil.retrieveChecksum(termsIn);
+            this.codecUtilWrapper.retrieveChecksum(termsIn);
             seekDir(termsIn);
 
             postingIn = state.directory.openInput(postingFileName, state.context);
-            CodecUtil.checkIndexHeader(
+            this.codecUtilWrapper.checkIndexHeader(
                 postingIn,
                 SparsePostingsConsumer.CODEC_NAME,
                 SparsePostingsConsumer.VERSION_START,
@@ -70,7 +71,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
                 state.segmentInfo.getId(),
                 state.segmentSuffix
             );
-            CodecUtil.retrieveChecksum(postingIn);
+            this.codecUtilWrapper.retrieveChecksum(postingIn);
 
             int numberOfFields = termsIn.readVInt();
             for (int i = 0; i < numberOfFields; i++) {
@@ -102,7 +103,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
     }
 
     private void seekDir(IndexInput input) throws IOException {
-        input.seek(input.length() - CodecUtil.footerLength() - 8);
+        input.seek(input.length() - this.codecUtilWrapper.footerLength() - 8);
         long dirOffset = input.readLong();
         input.seek(dirOffset);
     }
@@ -177,7 +178,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
 
     @Override
     public void checkIntegrity() throws IOException {
-        CodecUtil.checksumEntireFile(termsIn);
-        CodecUtil.checksumEntireFile(postingIn);
+        this.codecUtilWrapper.checksumEntireFile(termsIn);
+        this.codecUtilWrapper.checksumEntireFile(postingIn);
     }
 }

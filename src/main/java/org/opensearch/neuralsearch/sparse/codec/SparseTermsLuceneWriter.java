@@ -4,8 +4,8 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
+import lombok.RequiredArgsConstructor;
 import org.apache.lucene.codecs.BlockTermState;
-import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.BytesRef;
@@ -17,21 +17,12 @@ import java.io.IOException;
  * Writer for sparse terms in Lucene index format.
  * Handles writing field metadata, terms, and block term states to index output.
  */
+@RequiredArgsConstructor
 public class SparseTermsLuceneWriter {
     private IndexOutput termsOut;
-    private final int version;
     private final String codec_name;
-
-    /**
-     * Creates a new sparse terms writer.
-     *
-     * @param codec_name the codec name
-     * @param version the codec version
-     */
-    public SparseTermsLuceneWriter(String codec_name, int version) {
-        this.codec_name = codec_name;
-        this.version = version;
-    }
+    private final int version;
+    private final CodecUtilWrapper codecUtilWrapper;
 
     /**
      * Initializes the writer with output stream and writes index header.
@@ -42,7 +33,7 @@ public class SparseTermsLuceneWriter {
      */
     public void init(IndexOutput termsOut, SegmentWriteState state) throws IOException {
         this.termsOut = termsOut;
-        CodecUtil.writeIndexHeader(termsOut, codec_name, version, state.segmentInfo.getId(), state.segmentSuffix);
+        codecUtilWrapper.writeIndexHeader(termsOut, codec_name, version, state.segmentInfo.getId(), state.segmentSuffix);
     }
 
     /**
@@ -53,7 +44,7 @@ public class SparseTermsLuceneWriter {
      */
     public void close(long startFp) throws IOException {
         this.termsOut.writeLong(startFp);
-        CodecUtil.writeFooter(this.termsOut);
+        codecUtilWrapper.writeFooter(this.termsOut);
     }
 
     /**

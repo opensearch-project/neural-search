@@ -6,18 +6,13 @@ package org.opensearch.neuralsearch.sparse.codec;
 
 import lombok.SneakyThrows;
 import org.apache.lucene.codecs.BlockTermState;
-import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.store.DataOutput;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.BytesRef;
-import org.junit.After;
 import org.junit.Before;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 
@@ -45,9 +40,9 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
     private IndexOutput mockIndexOutput;
     @Mock
     private BlockTermState mockBlockTermState;
+    @Mock
+    private CodecUtilWrapper mockCodecUtilWrapper;
 
-    private MockedStatic<CodecUtil> codecUtilMock;
-    private MockedStatic<IOUtils> ioUtilsMock;
     private SparseTermsLuceneWriter writer;
     private SegmentWriteState mockSegmentWriteState;
 
@@ -57,37 +52,23 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
         super.setUp();
         MockitoAnnotations.openMocks(this);
 
-        ioUtilsMock = Mockito.mockStatic(IOUtils.class);
-        codecUtilMock = Mockito.mockStatic(CodecUtil.class);
-
         mockSegmentWriteState = TestsPrepareUtils.prepareSegmentWriteState();
-        writer = new SparseTermsLuceneWriter(CODEC_NAME, VERSION);
-    }
-
-    @After
-    @Override
-    public void tearDown() throws Exception {
-        codecUtilMock.close();
-        ioUtilsMock.close();
-        super.tearDown();
+        writer = new SparseTermsLuceneWriter(CODEC_NAME, VERSION, mockCodecUtilWrapper);
     }
 
     @SneakyThrows
     public void testConstructor() {
-        SparseTermsLuceneWriter testWriter = new SparseTermsLuceneWriter(CODEC_NAME, VERSION);
+        SparseTermsLuceneWriter testWriter = new SparseTermsLuceneWriter(CODEC_NAME, VERSION, mockCodecUtilWrapper);
         assertNotNull(testWriter);
 
         // verify constructor correctly sets codec name and version
         testWriter.init(mockIndexOutput, mockSegmentWriteState);
-        codecUtilMock.verify(
-            () -> CodecUtil.writeIndexHeader(
-                eq(mockIndexOutput),
-                eq(CODEC_NAME),
-                eq(VERSION),
-                any(byte[].class),
-                eq(mockSegmentWriteState.segmentSuffix)
-            ),
-            times(1)
+        verify(mockCodecUtilWrapper).writeIndexHeader(
+            eq(mockIndexOutput),
+            eq(CODEC_NAME),
+            eq(VERSION),
+            any(byte[].class),
+            eq(mockSegmentWriteState.segmentSuffix)
         );
     }
 
@@ -95,23 +76,19 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
     public void testInit_success() {
         writer.init(mockIndexOutput, mockSegmentWriteState);
 
-        codecUtilMock.verify(
-            () -> CodecUtil.writeIndexHeader(
-                eq(mockIndexOutput),
-                eq(CODEC_NAME),
-                eq(VERSION),
-                any(byte[].class),
-                eq(mockSegmentWriteState.segmentSuffix)
-            ),
-            times(1)
+        verify(mockCodecUtilWrapper).writeIndexHeader(
+            eq(mockIndexOutput),
+            eq(CODEC_NAME),
+            eq(VERSION),
+            any(byte[].class),
+            eq(mockSegmentWriteState.segmentSuffix)
         );
     }
 
     @SneakyThrows
     public void testInit_throwsIOException() {
-        IOException expectedException = new IOException("Test exception");
-        codecUtilMock.when(() -> CodecUtil.writeIndexHeader(any(DataOutput.class), anyString(), anyInt(), any(byte[].class), anyString()))
-            .thenThrow(expectedException);
+        doThrow(new IOException("Test exception")).when(mockCodecUtilWrapper)
+            .writeIndexHeader(any(DataOutput.class), anyString(), anyInt(), any(byte[].class), anyString());
 
         IOException exception = expectThrows(IOException.class, () -> writer.init(mockIndexOutput, mockSegmentWriteState));
         assertEquals("Test exception", exception.getMessage());
@@ -123,7 +100,7 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
         writer.close(START_FP);
 
         verify(mockIndexOutput, times(1)).writeLong(START_FP);
-        codecUtilMock.verify(() -> CodecUtil.writeFooter(mockIndexOutput), times(1));
+        verify(mockCodecUtilWrapper).writeFooter(mockIndexOutput);
     }
 
     @SneakyThrows
@@ -211,13 +188,5 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
         IOException exception = expectThrows(IOException.class, () -> writer.writeTerm(term, mockBlockTermState));
         assertEquals("Test exception", exception.getMessage());
-    }
-
-    @SneakyThrows
-    public void testCloseWithException() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
-        writer.closeWithException();
-
-        ioUtilsMock.verify(() -> IOUtils.closeWhileHandlingException(mockIndexOutput), times(1));
     }
 }

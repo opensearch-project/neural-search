@@ -77,7 +77,7 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         final String postingFileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, POSTING_EXTENSION);
 
         clusteredPostingTermsWriter = new ClusteredPostingTermsWriter(CODEC_NAME, version);
-        sparseTermsLuceneWriter = new SparseTermsLuceneWriter(CODEC_NAME, version);
+        sparseTermsLuceneWriter = new SparseTermsLuceneWriter(CODEC_NAME, version, new CodecUtilWrapper());
 
         boolean success = false;
         IndexOutput termsOut = null;

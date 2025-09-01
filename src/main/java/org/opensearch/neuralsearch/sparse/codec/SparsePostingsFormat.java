@@ -30,6 +30,10 @@ public class SparsePostingsFormat extends PostingsFormat {
 
     @Override
     public FieldsProducer fieldsProducer(SegmentReadState state) throws IOException {
-        return new SparsePostingsProducer(this.delegate.fieldsProducer(state), state, () -> new SparseTermsLuceneReader(state));
+        return new SparsePostingsProducer(
+            this.delegate.fieldsProducer(state),
+            state,
+            () -> new SparseTermsLuceneReader(state, new CodecUtilWrapper())
+        );
     }
 }
