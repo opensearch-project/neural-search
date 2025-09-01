@@ -54,6 +54,14 @@ public class SparseBinaryDocValuesTests extends AbstractSparseTestBase {
         assertEquals(SparseBinaryDocValues.NO_MORE_DOCS, sparseBinaryDocValues.docID());
     }
 
+    public void testNextDoc_WithNullDocIDMerger() throws IOException {
+        sparseBinaryDocValues = new SparseBinaryDocValues(null);
+        int result = sparseBinaryDocValues.nextDoc();
+
+        assertEquals(SparseBinaryDocValues.NO_MORE_DOCS, result);
+        assertEquals(SparseBinaryDocValues.NO_MORE_DOCS, sparseBinaryDocValues.docID());
+    }
+
     public void testAdvance() {
         expectThrows(UnsupportedOperationException.class, () -> sparseBinaryDocValues.advance(5));
     }

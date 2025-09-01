@@ -90,11 +90,7 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
         }
         if (isMerge) {
             if (valuesProducer instanceof SparseDocValuesReader reader) {
-                mergeHelper.clearCacheData(
-                    new MergeStateFacade(reader.getMergeState()),
-                    field,
-                    ForwardIndexCache.getInstance()::removeIndex
-                );
+                mergeHelper.clearCacheData(reader.getMergeStateFacade(), field, ForwardIndexCache.getInstance()::removeIndex);
             }
         }
     }
@@ -124,11 +120,12 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
         this.delegate.merge(mergeState);
         try {
             assert mergeState != null;
-            assert mergeState.mergeFieldInfos != null;
-            for (FieldInfo fieldInfo : mergeState.mergeFieldInfos) {
+            MergeStateFacade mergeStateFacade = mergeHelper.convertToMergeStateFacade(mergeState);
+            assert mergeStateFacade.getMergeFieldInfos() != null;
+            for (FieldInfo fieldInfo : mergeStateFacade.getMergeFieldInfos()) {
                 DocValuesType type = fieldInfo.getDocValuesType();
                 if (type == DocValuesType.BINARY && SparseTokensField.isSparseField(fieldInfo)) {
-                    addBinary(fieldInfo, new SparseDocValuesReader(mergeState), true);
+                    addBinary(fieldInfo, new SparseDocValuesReader(mergeStateFacade), true);
                 }
             }
         } catch (Exception e) {

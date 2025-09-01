@@ -59,25 +59,33 @@ public class SparsePostingsConsumer extends FieldsConsumer {
 
     public SparsePostingsConsumer(@NonNull FieldsConsumer delegate, @NonNull SegmentWriteState state, @NonNull MergeHelper mergeHelper)
         throws IOException {
-        this(delegate, state, mergeHelper, VERSION_CURRENT);
+        this(
+            delegate,
+            state,
+            mergeHelper,
+            VERSION_CURRENT,
+            new ClusteredPostingTermsWriter(CODEC_NAME, VERSION_CURRENT),
+            new SparseTermsLuceneWriter(CODEC_NAME, VERSION_CURRENT, new CodecUtilWrapper())
+        );
     }
 
     public SparsePostingsConsumer(
         @NonNull FieldsConsumer delegate,
         @NonNull SegmentWriteState state,
         @NonNull MergeHelper mergeHelper,
-        int version
+        int version,
+        ClusteredPostingTermsWriter termsWriter,
+        SparseTermsLuceneWriter luceneWriter
     ) throws IOException {
         super();
         this.delegate = delegate;
         this.state = state;
         this.mergeHelper = mergeHelper;
+        clusteredPostingTermsWriter = termsWriter;
+        sparseTermsLuceneWriter = luceneWriter;
 
         final String termsFileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, TERMS_EXTENSION);
         final String postingFileName = IndexFileNames.segmentFileName(state.segmentInfo.name, state.segmentSuffix, POSTING_EXTENSION);
-
-        clusteredPostingTermsWriter = new ClusteredPostingTermsWriter(CODEC_NAME, version);
-        sparseTermsLuceneWriter = new SparseTermsLuceneWriter(CODEC_NAME, version, new CodecUtilWrapper());
 
         boolean success = false;
         IndexOutput termsOut = null;
@@ -178,7 +186,7 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         super.merge(mergeState, norms);
         // merge sparse fields
         try {
-            MergeStateFacade mergeStateFacade = new MergeStateFacade(mergeState);
+            MergeStateFacade mergeStateFacade = mergeHelper.convertToMergeStateFacade(mergeState);
             SparsePostingsReader sparsePostingsReader = new SparsePostingsReader(mergeStateFacade, new MergeHelper());
             sparsePostingsReader.merge(this.sparseTermsLuceneWriter, this.clusteredPostingTermsWriter);
             mergeHelper.clearCacheData(mergeStateFacade, null, ClusteredPostingCache.getInstance()::removeIndex);

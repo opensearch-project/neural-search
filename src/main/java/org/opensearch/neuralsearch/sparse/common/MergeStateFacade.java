@@ -49,4 +49,12 @@ public class MergeStateFacade {
     public SegmentInfo getSegmentInfo() {
         return mergeState.segmentInfo;
     }
+
+    public FieldInfos[] getFieldInfos() {
+        return mergeState.fieldInfos;
+    }
+
+    public boolean needIndexSort() {
+        return mergeState.needsIndexSort;
+    }
 }

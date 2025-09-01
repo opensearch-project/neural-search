@@ -38,6 +38,10 @@ public class SparseBinaryDocValues extends BinaryDocValues {
 
     @Override
     public int nextDoc() throws IOException {
+        if (docIDMerger == null) {
+            docID = NO_MORE_DOCS;
+            return docID;
+        }
         current = docIDMerger.next();
         if (current == null) {
             docID = NO_MORE_DOCS;

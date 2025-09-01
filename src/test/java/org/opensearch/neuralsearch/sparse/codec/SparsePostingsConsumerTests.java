@@ -17,7 +17,6 @@ import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.BytesRef;
-import org.junit.After;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -26,8 +25,10 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
+import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -39,7 +40,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.mockConstruction;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -71,9 +71,16 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
 
     @Mock
     private MergeHelper mockedMergeHelper;
-    MockedConstruction<SparseTermsLuceneWriter> mockedSparseTermsWriter;
-    MockedConstruction<ClusteredPostingTermsWriter> mockedClusteredWriter;
 
+    @Mock
+    private MergeStateFacade mockMergeStateFacade;
+
+    @Mock
+    private SparseTermsLuceneWriter mockSparseTermsWriter;
+    @Mock
+    private ClusteredPostingTermsWriter mockClusteredWriter;
+
+    private MergeState mergeState;
     private FieldInfos mockFieldInfos;
     private SegmentWriteState mockWriteState;
     private SparsePostingsConsumer sparsePostingsConsumer;
@@ -86,25 +93,23 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
         MockitoAnnotations.openMocks(this);
 
         // configure mocks
+        mergeState = TestsPrepareUtils.prepareMergeState(false);
         when(mockDirectory.createOutput(anyString(), any())).thenReturn(mockTermsOutput, mockPostingOutput);
         mockFieldInfos = mock(FieldInfos.class);
         mockWriteState = TestsPrepareUtils.prepareSegmentWriteState(mockDirectory, mockFieldInfos);
-        mockedClusteredWriter = mockConstruction(ClusteredPostingTermsWriter.class);
-        mockedSparseTermsWriter = mockConstruction(SparseTermsLuceneWriter.class);
-        sparsePostingsConsumer = new SparsePostingsConsumer(mockDelegate, mockWriteState, mockedMergeHelper);
-    }
-
-    @After
-    @Override
-    @SneakyThrows
-    public void tearDown() {
-        if (mockedClusteredWriter != null) {
-            mockedClusteredWriter.close();
-        }
-        if (mockedSparseTermsWriter != null) {
-            mockedSparseTermsWriter.close();
-        }
-        super.tearDown();
+        sparsePostingsConsumer = new SparsePostingsConsumer(
+            mockDelegate,
+            mockWriteState,
+            mockedMergeHelper,
+            SparsePostingsConsumer.VERSION_CURRENT,
+            mockClusteredWriter,
+            mockSparseTermsWriter
+        );
+        when(mockedMergeHelper.convertToMergeStateFacade(any())).thenReturn(mockMergeStateFacade);
+        when(mockMergeStateFacade.getMergeFieldInfos()).thenReturn(mockFieldInfos);
+        List<FieldInfo> fieldInfos = new ArrayList<>();
+        when(mockFieldInfos.iterator()).thenReturn(fieldInfos.iterator());
+        when(mockMergeStateFacade.getMaxDocs()).thenReturn(new int[] { 5, 5 });
     }
 
     public void test_constructor_throwsNPE_whenParametersAreNull() {
@@ -128,7 +133,14 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
      */
     public void test_constructor_withSpecificVersion() throws IOException {
         int version = 1;
-        SparsePostingsConsumer consumer = new SparsePostingsConsumer(mockDelegate, mockWriteState, mockedMergeHelper, version);
+        SparsePostingsConsumer consumer = new SparsePostingsConsumer(
+            mockDelegate,
+            mockWriteState,
+            mockedMergeHelper,
+            version,
+            mockClusteredWriter,
+            mockSparseTermsWriter
+        );
         assertNotNull("Consumer should be created", consumer);
     }
 
@@ -149,10 +161,6 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
      * Test write method with no sparse fields
      */
     public void test_write_withNonSparseFields() throws IOException {
-        // Get the constructed mock instances
-        List<SparseTermsLuceneWriter> sparseTermsWriters = mockedSparseTermsWriter.constructed();
-        SparseTermsLuceneWriter sparseTermsWriter = sparseTermsWriters.get(0);
-
         // Setup field info with non-sparse fields
         List<String> fieldNames = List.of("non_sparse_field1", "non_sparse_field2");
         when(mockFields.iterator()).thenReturn(fieldNames.iterator());
@@ -167,7 +175,7 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
 
         // Verify delegate was called and sparse writer was not used
         verify(mockDelegate).write(fieldsCaptor.capture(), eq(mockNormsProducer));
-        verify(sparseTermsWriter, never()).writeFieldCount(any(Integer.class));
+        verify(mockSparseTermsWriter, never()).writeFieldCount(any(Integer.class));
 
         // Verify the masked fields have the correct iterator
         Fields capturedFields = fieldsCaptor.getValue();
@@ -184,10 +192,6 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
      */
     @SneakyThrows
     public void test_write_withSparseFields_andTerms() {
-        // Get the constructed mock instances
-        List<SparseTermsLuceneWriter> sparseTermsWriters = mockedSparseTermsWriter.constructed();
-        SparseTermsLuceneWriter sparseTermsWriter = sparseTermsWriters.get(0);
-
         // Setup field info with sparse fields
         FieldInfo mockFieldInfo = mock(FieldInfo.class);
         when(mockFieldInfo.getName()).thenReturn(SPARSE_FIELD);
@@ -215,8 +219,8 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
         // Call write
         sparsePostingsConsumer.write(mockFields, mockNormsProducer);
 
-        verify(sparseTermsWriter, times(1)).writeFieldCount(1);
-        verify(sparseTermsWriter, times(1)).writeTermsSize(2);
+        verify(mockSparseTermsWriter, times(1)).writeFieldCount(1);
+        verify(mockSparseTermsWriter, times(1)).writeTermsSize(2);
     }
 
     /**
@@ -224,10 +228,6 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
      */
     @SneakyThrows
     public void test_write_withSparseFields_andEmptyTerms() {
-        // Get the constructed mock instances
-        List<SparseTermsLuceneWriter> sparseTermsWriters = mockedSparseTermsWriter.constructed();
-        SparseTermsLuceneWriter sparseTermsWriter = sparseTermsWriters.get(0);
-
         // Setup field info with sparse fields
         FieldInfo mockFieldInfo = mock(FieldInfo.class);
         when(mockFieldInfo.getName()).thenReturn(SPARSE_FIELD);
@@ -247,20 +247,8 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
         // Call write
         sparsePostingsConsumer.write(mockFields, mockNormsProducer);
 
-        verify(sparseTermsWriter, times(1)).writeFieldCount(1);
-        verify(sparseTermsWriter, times(1)).writeTermsSize(0);
-    }
-
-    /**
-     * Test merge method
-     */
-    @SneakyThrows
-    public void test_merge() {
-        MergeState mockMergeState = TestsPrepareUtils.prepareMergeState(true);
-
-        sparsePostingsConsumer.merge(mockMergeState, mockNormsProducer);
-
-        verify(mockedMergeHelper, times(1)).clearCacheData(any(), any(), any());
+        verify(mockSparseTermsWriter, times(1)).writeFieldCount(1);
+        verify(mockSparseTermsWriter, times(1)).writeTermsSize(0);
     }
 
     /**
@@ -269,15 +257,20 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
     @SneakyThrows
     public void test_merge_withExceptions() {
         // mock exception thrown from SparsePostingsReader merge
-        MergeState mockMergeState = TestsPrepareUtils.prepareMergeState(true);
         MockedConstruction<SparsePostingsReader> mockedReader = Mockito.mockConstruction(SparsePostingsReader.class, (mock, context) -> {
             doThrow(new IOException("Test exception")).when(mock).merge(any(), any());
         });
 
-        sparsePostingsConsumer.merge(mockMergeState, mockNormsProducer);
+        sparsePostingsConsumer.merge(mergeState, mockNormsProducer);
 
         verify(mockedMergeHelper, never()).clearCacheData(any(), any(), any());
         mockedReader.close();
+    }
+
+    @SneakyThrows
+    public void test_merge_happyCase() {
+        sparsePostingsConsumer.merge(mergeState, mockNormsProducer);
+        verify(mockedMergeHelper).clearCacheData(any(), any(), any());
     }
 
     /**
@@ -285,19 +278,13 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
      */
     @SneakyThrows
     public void test_close() {
-        // Get the constructed mock instances
-        List<ClusteredPostingTermsWriter> clusteredWriters = mockedClusteredWriter.constructed();
-        List<SparseTermsLuceneWriter> sparseTermsWriters = mockedSparseTermsWriter.constructed();
-        SparseTermsLuceneWriter sparseTermsWriter = sparseTermsWriters.get(0);
-        ClusteredPostingTermsWriter clusteredWriter = clusteredWriters.get(0);
-
         // Call the close method
         sparsePostingsConsumer.close();
 
         // Verify delegate, writers and outputs call the close method
         verify(mockDelegate).close();
-        verify(sparseTermsWriter).close(anyLong());
-        verify(clusteredWriter).close(anyLong());
+        verify(mockSparseTermsWriter).close(anyLong());
+        verify(mockClusteredWriter).close(anyLong());
         verify(mockTermsOutput).close();
         verify(mockPostingOutput).close();
     }
@@ -307,10 +294,7 @@ public class SparsePostingsConsumerTests extends AbstractSparseTestBase {
      */
     @SneakyThrows
     public void test_close_withExceptions() {
-        // Mock exception thrown from sparseTermsLuceneWriter close
-        List<SparseTermsLuceneWriter> sparseTermsWriters = mockedSparseTermsWriter.constructed();
-        SparseTermsLuceneWriter sparseTermsWriter = sparseTermsWriters.get(0);
-        doThrow(new IOException("Test exception")).when(sparseTermsWriter).close(anyLong());
+        doThrow(new IOException("Test exception")).when(mockSparseTermsWriter).close(anyLong());
 
         // Verify exception message
         IOException exception = expectThrows(IOException.class, () -> { sparsePostingsConsumer.close(); });

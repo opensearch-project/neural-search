@@ -11,6 +11,7 @@ import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.MergeState;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
@@ -173,5 +174,14 @@ public class MergeHelper {
             }
         }
         return allTerms;
+    }
+
+    /**
+     * A helper function to create merge state facade which enables better testability.
+     * @param mergeState {@link MergeState}
+     * @return {@link MergeStateFacade}
+     */
+    public MergeStateFacade convertToMergeStateFacade(MergeState mergeState) {
+        return new MergeStateFacade(mergeState);
     }
 }

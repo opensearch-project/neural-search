@@ -11,10 +11,10 @@ import org.apache.lucene.index.DocIDMerger;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.EmptyDocValuesProducer;
 import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.MergeState;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.Bits;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
+import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -25,38 +25,43 @@ import java.util.List;
  */
 public class SparseDocValuesReader extends EmptyDocValuesProducer {
     @Getter
-    private final MergeState mergeState;
+    private final MergeStateFacade mergeStateFacade;
 
-    public SparseDocValuesReader(MergeState state) {
-        this.mergeState = state;
+    public SparseDocValuesReader(MergeStateFacade mergeStateFacade) {
+        this.mergeStateFacade = mergeStateFacade;
     }
 
     @Override
     public BinaryDocValues getBinary(FieldInfo field) throws IOException {
         long totalLiveDocs = 0;
-        List<BinaryDocValuesSub> subs = new ArrayList<>(this.mergeState.docValuesProducers.length);
-        for (int i = 0; i < this.mergeState.docValuesProducers.length; i++) {
+        int size = this.mergeStateFacade.getDocValuesProducers().length;
+        List<BinaryDocValuesSub> subs = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            DocValuesProducer docValuesProducer = mergeStateFacade.getDocValuesProducers()[i];
+            if (docValuesProducer == null) {
+                continue;
+            }
             BinaryDocValues values = null;
-            DocValuesProducer docValuesProducer = mergeState.docValuesProducers[i];
-            if (docValuesProducer != null) {
-                FieldInfo readerFieldInfo = mergeState.fieldInfos[i].fieldInfo(field.getName());
-                if (readerFieldInfo != null && readerFieldInfo.getDocValuesType() == DocValuesType.BINARY) {
-                    values = docValuesProducer.getBinary(readerFieldInfo);
+            FieldInfo readerFieldInfo = mergeStateFacade.getFieldInfos()[i].fieldInfo(field.getName());
+            if (readerFieldInfo != null && readerFieldInfo.getDocValuesType() == DocValuesType.BINARY) {
+                values = docValuesProducer.getBinary(readerFieldInfo);
+            }
+            if (values != null) {
+                CacheKey key = null;
+                if (values instanceof SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough) {
+                    key = new CacheKey(sparseBinaryDocValuesPassThrough.getSegmentInfo(), field);
                 }
-                if (values != null) {
-                    CacheKey key = null;
-                    if (values instanceof SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough) {
-                        key = new CacheKey(sparseBinaryDocValuesPassThrough.getSegmentInfo(), field);
-                    }
-                    totalLiveDocs = totalLiveDocs + getLiveDocsCount(values, this.mergeState.liveDocs[i]);
-                    // docValues will be consumed when liveDocs are not null, hence resetting the docsValues
-                    // pointer.
-                    values = this.mergeState.liveDocs[i] != null ? docValuesProducer.getBinary(readerFieldInfo) : values;
-                    subs.add(new BinaryDocValuesSub(mergeState.docMaps[i], values, key));
-                }
+                totalLiveDocs = totalLiveDocs + getLiveDocsCount(values, mergeStateFacade.getLiveDocs()[i]);
+                // docValues will be consumed when liveDocs are not null, hence resetting the docsValues
+                // pointer.
+                values = mergeStateFacade.getLiveDocs()[i] != null ? docValuesProducer.getBinary(readerFieldInfo) : values;
+                subs.add(new BinaryDocValuesSub(mergeStateFacade.getDocMaps()[i], values, key));
             }
         }
-        return new SparseBinaryDocValues(DocIDMerger.of(subs, mergeState.needsIndexSort)).setTotalLiveDocs(totalLiveDocs);
+        if (subs.isEmpty()) {
+            return new SparseBinaryDocValues(null);
+        }
+        return new SparseBinaryDocValues(DocIDMerger.of(subs, mergeStateFacade.needIndexSort())).setTotalLiveDocs(totalLiveDocs);
     }
 
     private long getLiveDocsCount(final BinaryDocValues binaryDocValues, final Bits liveDocsBits) throws IOException {
