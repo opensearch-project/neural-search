@@ -9,6 +9,7 @@ import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DirectoryReader;
@@ -43,8 +44,15 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.StringHelper;
 import org.apache.lucene.util.Version;
+import org.apache.lucene.index.LeafReader;
+import org.apache.lucene.index.FilterLeafReader;
+import org.apache.lucene.index.FilterDirectoryReader;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.ContentPath;
+
+import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
+import org.opensearch.neuralsearch.sparse.common.SparseConstants;
+import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -511,6 +519,84 @@ public class TestsPrepareUtils {
             return new BytesRef(baos.toByteArray());
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public static DirectoryReader prepareIndexReaderWithSparseField(int docNumbers) throws IOException {
+        Directory directory = new ByteBuffersDirectory();
+        IndexWriterConfig config = new IndexWriterConfig(new MockAnalyzer(random()));
+        IndexWriter writer = new IndexWriter(directory, config);
+
+        // Create custom field type for sparse field
+        FieldType sparseFieldType = new FieldType();
+        sparseFieldType.setStored(false);
+        sparseFieldType.setTokenized(false);
+        sparseFieldType.setIndexOptions(IndexOptions.DOCS);
+        sparseFieldType.setDocValuesType(DocValuesType.BINARY);
+
+        // Add required attributes for sparse field
+        sparseFieldType.putAttribute(SparseTokensField.SPARSE_FIELD, "true");
+        sparseFieldType.putAttribute(SparseConstants.APPROXIMATE_THRESHOLD_FIELD, "10");
+        sparseFieldType.freeze();
+
+        // Create documents with sparse field
+        for (int i = 0; i < docNumbers; i++) {
+            Document doc = new Document();
+            BytesRef sparseValue = TestsPrepareUtils.prepareValidSparseVectorBytes();
+            Field sparseField = new Field("sparse_field", sparseValue, sparseFieldType);
+            doc.add(sparseField);
+            writer.addDocument(doc);
+        }
+
+        writer.close();
+        DirectoryReader baseReader = DirectoryReader.open(directory);
+        return new TestDirectoryReaderWrapper(baseReader);
+    }
+
+    /**
+     * Wrapper to ensure sparse field BinaryDocValues are wrapped with SparseBinaryDocValuesPassThrough.
+     * This mimics the behavior of the neural-search codec in production.
+     */
+    private static class TestDirectoryReaderWrapper extends FilterDirectoryReader {
+
+        public TestDirectoryReaderWrapper(DirectoryReader in) throws IOException {
+            super(in, new SubReaderWrapper() {
+                @Override
+                public LeafReader wrap(LeafReader reader) {
+                    return new FilterLeafReader(reader) {
+                        @Override
+                        public BinaryDocValues getBinaryDocValues(String field) throws IOException {
+                            BinaryDocValues original = super.getBinaryDocValues(field);
+                            if (original != null && field.equals("sparse_field")) {
+                                // Wrap with SparseBinaryDocValuesPassThrough for sparse fields
+                                SegmentInfo segmentInfo = prepareSegmentInfo();
+                                return new SparseBinaryDocValuesPassThrough(original, segmentInfo);
+                            }
+                            return original;
+                        }
+
+                        @Override
+                        public CacheHelper getCoreCacheHelper() {
+                            return in.getCoreCacheHelper();
+                        }
+
+                        @Override
+                        public CacheHelper getReaderCacheHelper() {
+                            return in.getReaderCacheHelper();
+                        }
+                    };
+                }
+            });
+        }
+
+        @Override
+        protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
+            return new TestDirectoryReaderWrapper(in);
+        }
+
+        @Override
+        public CacheHelper getReaderCacheHelper() {
+            return in.getReaderCacheHelper();
         }
     }
 }
