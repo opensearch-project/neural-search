@@ -863,7 +863,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         ScorerSupplier mockScorerSupplier = mock(ScorerSupplier.class);
         when(mockScorerSupplier.get(anyLong())).thenReturn(rescoreScorer);
         when(mockScorerSupplier.cost()).thenReturn(1L);
-        when(rescoreWeight.scorerSupplier(any(LeafReaderContext.class))).thenReturn(mockScorerSupplier);
+        when(rescoreWeight.scorer(any(LeafReaderContext.class))).thenReturn(rescoreScorer);
 
         when(rescoreScorer.docID()).thenReturn(1);
         DocIdSetIterator iterator = mock(DocIdSetIterator.class);
