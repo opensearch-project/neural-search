@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
 import lombok.Setter;
+import org.apache.commons.lang.builder.EqualsBuilder;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
@@ -15,6 +16,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -81,5 +83,24 @@ public class NeuralSparseQueryTwoPhaseInfo implements Writeable {
             }
             return status;
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true; // same reference
+        if (o == null || getClass() != o.getClass()) return false; // null or different class
+
+        NeuralSparseQueryTwoPhaseInfo info = (NeuralSparseQueryTwoPhaseInfo) o;
+
+        EqualsBuilder equalsBuilder = new EqualsBuilder();
+        equalsBuilder.append(twoPhasePruneType, info.getTwoPhasePruneType());
+        equalsBuilder.append(twoPhasePruneRatio, info.getTwoPhasePruneRatio());
+        equalsBuilder.append(status.getValue(), info.getStatus().getValue());
+        return equalsBuilder.isEquals();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(twoPhasePruneType, twoPhasePruneRatio, status.getValue());
     }
 }

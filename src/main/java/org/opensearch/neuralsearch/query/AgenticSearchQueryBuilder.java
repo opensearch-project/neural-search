@@ -26,6 +26,8 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
 import java.util.Objects;
 import java.util.List;
@@ -113,6 +115,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
      */
 
     public static AgenticSearchQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        EventStatsManager.increment(EventStatName.AGENTIC_QUERY_REQUESTS);
         AgenticSearchQueryBuilder agenticSearchQueryBuilder = new AgenticSearchQueryBuilder();
 
         String currentFieldName = null;

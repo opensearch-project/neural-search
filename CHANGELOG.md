@@ -9,9 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Enhancements
 
+- [Semantic Field] Support the sparse two phase processor for the semantic field.
+- [Stats] Add stats for agentic query and agentic query translator processor.
+
 ### Bug Fixes
 
 ### Infrastructure
+
+- [Unit Test] Enable mocking of final classes and static functions ([#1528](https://github.com/opensearch-project/neural-search/pull/1528)).
 
 ### Documentation
 
