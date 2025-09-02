@@ -7,7 +7,7 @@ allprojects {
             target '**/*.java'
 
             removeUnusedImports()
-            eclipse().withP2Mirrors(Map.of("https://download.eclipse.org/", "https://mirror.umd.edu/eclipse/")).configFile rootProject.file('formatter/formatterConfig.xml')
+            eclipse().withP2Mirrors(Map.of("https://download.eclipse.org/eclipse/updates/4.29/", "https://ftp.osuosl.org/pub/eclipse/eclipse/updates/4.29/")).configFile rootProject.file('formatter/formatterConfig.xml')
             trimTrailingWhitespace()
             endWithNewline();
 
