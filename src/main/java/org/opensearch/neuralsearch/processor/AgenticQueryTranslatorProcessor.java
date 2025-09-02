@@ -36,6 +36,7 @@ import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 public class AgenticQueryTranslatorProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
     public static final String TYPE = "agentic_query_translator";
+    private static final int MAX_AGENT_RESPONSE_SIZE = 10_000;
     private final MLCommonsClientAccessor mlClient;
     private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
@@ -74,8 +75,18 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             return;
         }
 
+        AgenticSearchQueryBuilder agenticQuery = (AgenticSearchQueryBuilder) query;
+
+        // Agentic search request initiated
+        log.info("Agentic search request initiated - Agent ID: [{}], Query: [{}]", agentId, agenticQuery.getQueryText());
+
         // Validate that agentic query is used alone without other search features
         if (hasOtherSearchFeatures(sourceBuilder)) {
+            log.warn(
+                "Agentic search blocked - Invalid usage with other search features - Agent ID: [{}], Query: [{}]",
+                agentId,
+                agenticQuery.getQueryText()
+            );
             requestListener.onFailure(
                 new IllegalArgumentException(
                     "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc."
@@ -84,7 +95,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             return;
         }
 
-        AgenticSearchQueryBuilder agenticQuery = (AgenticSearchQueryBuilder) query;
         executeAgentAsync(agenticQuery, request, requestListener);
     }
 
@@ -124,7 +134,28 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             try {
                 log.info("Generated Query: [{}]", agentResponse);
 
-                // TODO: Add query validations
+                // Validate response size to prevent memory exhaustion
+                if (agentResponse == null) {
+                    log.error(
+                        "Agentic search failed - Null response from agent - Agent ID: [{}], Query: [{}]",
+                        agentId,
+                        agenticQuery.getQueryText()
+                    );
+                    throw new IllegalArgumentException("Agent response is null.");
+                }
+
+                if (agentResponse.length() > MAX_AGENT_RESPONSE_SIZE) {
+                    log.error(
+                        "Agentic search blocked - Response size exceeded limit - Agent ID: [{}], Size: [{}], Query: [{}]",
+                        agentId,
+                        agentResponse.length(),
+                        agenticQuery.getQueryText()
+                    );
+                    throw new IllegalArgumentException(
+                        "Agent response is too large. Maximum allowed size is " + MAX_AGENT_RESPONSE_SIZE + " characters."
+                    );
+                }
+
                 // Parse the agent response to get the new search source
                 BytesReference bytes = new BytesArray(agentResponse);
                 try (XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry, null, bytes.streamInput())) {
@@ -132,13 +163,24 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     request.source(newSourceBuilder);
                 }
 
+                log.info("Agentic search completed successfully - Agent ID: [{}], Query: [{}]", agentId, agenticQuery.getQueryText());
                 requestListener.onResponse(request);
             } catch (IOException e) {
-                log.error("Failed to parse agent response", e);
+                log.error(
+                    "Agentic search failed - Parse error - Agent ID: [{}], Query: [{}], Error: [{}]",
+                    agentId,
+                    agenticQuery.getQueryText(),
+                    e.getMessage()
+                );
                 requestListener.onFailure(e);
             }
         }, e -> {
-            log.error("Failed to execute agent", e);
+            log.error(
+                "Agentic search failed - Agent execution error - Agent ID: [{}], Query: [{}], Error: [{}]",
+                agentId,
+                agenticQuery.getQueryText(),
+                e.getMessage()
+            );
             requestListener.onFailure(new RuntimeException("Failed to execute agentic search", e));
         }));
     }

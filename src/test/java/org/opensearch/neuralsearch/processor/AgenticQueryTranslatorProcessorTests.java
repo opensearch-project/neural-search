@@ -70,6 +70,15 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
         EventStatsManager.instance().initialize(mockSettingsAccessor);
 
+        // Mock cluster service
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockMetadata.index(any(String.class))).thenReturn(null); // Return null to trigger the catch block
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
         // Use factory to create processor since constructor is private
         AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
             mockMLClient,
@@ -360,5 +369,56 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         verify(listener).onResponse(request);
 
         assertNotNull(request.source());
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_oversizedResponse() throws IOException {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Create a response larger than MAX_AGENT_RESPONSE_SIZE characters
+        String oversizedResponse = "x".repeat(10_001);
+
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(2);
+            agentListener.onResponse(oversizedResponse);
+            return null;
+        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        RuntimeException exception = exceptionCaptor.getValue();
+        assertEquals("Failed to execute agentic search", exception.getMessage());
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+        assertTrue(exception.getCause().getMessage().contains("Agent response is too large"));
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_nullResponse() throws IOException {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(2);
+            agentListener.onResponse(null);
+            return null;
+        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        RuntimeException exception = exceptionCaptor.getValue();
+        assertEquals("Failed to execute agentic search", exception.getMessage());
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+        assertTrue(exception.getCause().getMessage().contains("Agent response is null"));
     }
 }

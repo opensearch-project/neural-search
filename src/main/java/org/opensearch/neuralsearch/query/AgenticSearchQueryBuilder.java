@@ -150,6 +150,9 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             throw new ParsingException(parser.getTokenLocation(), "[" + QUERY_TEXT_FIELD.getPreferredName() + "] is required");
         }
 
+        // Sanitize query text to prevent prompt injection
+        agenticSearchQueryBuilder.queryText = sanitizeQueryText(agenticSearchQueryBuilder.queryText);
+
         return agenticSearchQueryBuilder;
     }
 
@@ -189,5 +192,29 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     @Override
     public String fieldName() {
         return NAME;
+    }
+
+    /**
+     * Sanitizes query text to prevent prompt injection attacks
+     */
+    private static String sanitizeQueryText(String queryText) {
+        if (queryText == null) {
+            return null;
+        }
+
+        // Remove potential prompt injection patterns
+        String sanitized = queryText
+            // Remove system/instruction keywords that could manipulate LLM behavior
+            .replaceAll("(?i)\\b(system|instruction|prompt|ignore|forget|override)\\s*:", "")
+            // Remove potential command injection patterns
+            .replaceAll("(?i)\\b(execute|run|eval|script)\\s*[:\\(]", "")
+            .trim();
+
+        // Validate length to prevent extremely long inputs
+        if (sanitized.length() > 1000) {
+            throw new IllegalArgumentException("Query text too long. Maximum allowed length is 1000 characters");
+        }
+
+        return sanitized;
     }
 }
