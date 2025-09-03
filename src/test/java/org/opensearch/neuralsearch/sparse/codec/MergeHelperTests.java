@@ -304,4 +304,10 @@ public class MergeHelperTests extends AbstractSparseTestBase {
         MergeState mergeState = mock(MergeState.class);
         assertNotNull(mergeHelper.convertToMergeStateFacade(mergeState));
     }
+
+    public void test_newSparseDocValuesReader() {
+        SparseDocValuesReader reader = mergeHelper.newSparseDocValuesReader(mergeStateFacade);
+        assertNotNull(reader);
+        assertSame(reader.getMergeStateFacade(), mergeStateFacade);
+    }
 }

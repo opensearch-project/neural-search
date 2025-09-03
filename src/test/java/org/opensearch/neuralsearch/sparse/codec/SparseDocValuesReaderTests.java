@@ -49,6 +49,8 @@ public class SparseDocValuesReaderTests extends OpenSearchTestCase {
     private SegmentInfo mockSegmentInfo;
     @Mock
     private MergeState.DocMap mockDocMap;
+    @Mock
+    private Bits bits;
 
     @Override
     public void setUp() throws Exception {
@@ -61,7 +63,6 @@ public class SparseDocValuesReaderTests extends OpenSearchTestCase {
         when(fieldInfo.getDocValuesType()).thenReturn(DocValuesType.BINARY);
         when(mockDocValuesProducer.getBinary(any())).thenReturn(mockBinaryDocValues, mockBinaryDocValues2);
         when(mockBinaryDocValues.getSegmentInfo()).thenReturn(mockSegmentInfo);
-        Bits bits = mock(Bits.class);
         when(bits.get(anyInt())).thenReturn(true);
         when(mockMergeStateFacade.getLiveDocs()).thenReturn(new Bits[] { bits });
         when(mockBinaryDocValues.nextDoc()).thenReturn(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, NO_MORE_DOCS);

@@ -184,4 +184,13 @@ public class MergeHelper {
     public MergeStateFacade convertToMergeStateFacade(MergeState mergeState) {
         return new MergeStateFacade(mergeState);
     }
+
+    /**
+     * Create a new SparseDocValuesReader instance
+     * @param mergeStateFacade {@link MergeStateFacade}
+     * @return {@link SparseDocValuesReader}
+     */
+    public SparseDocValuesReader newSparseDocValuesReader(MergeStateFacade mergeStateFacade) {
+        return new SparseDocValuesReader(mergeStateFacade);
+    }
 }

@@ -126,7 +126,7 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
             for (FieldInfo fieldInfo : mergeFieldInfos) {
                 DocValuesType type = fieldInfo.getDocValuesType();
                 if (type == DocValuesType.BINARY && SparseTokensField.isSparseField(fieldInfo)) {
-                    addSparseVectorBinary(fieldInfo, new SparseDocValuesReader(mergeStateFacade), true);
+                    addSparseVectorBinary(fieldInfo, mergeHelper.newSparseDocValuesReader(mergeStateFacade), true);
                 }
             }
         } catch (Exception e) {
