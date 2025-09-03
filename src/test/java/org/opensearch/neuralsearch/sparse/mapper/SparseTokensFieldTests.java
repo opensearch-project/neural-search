@@ -44,4 +44,12 @@ public class SparseTokensFieldTests extends AbstractSparseTestBase {
         assertFalse("Should return false for null field", SparseTokensField.isSparseField(null));
     }
 
+    public void testIsSparseFieldWithFalseResult() {
+        FieldInfo mockField = TestsPrepareUtils.prepareKeyFieldInfo();
+        mockField.putAttribute(SPARSE_FIELD, "false");
+
+        boolean result = SparseTokensField.isSparseField(mockField);
+
+        assertFalse("Should return false for field with false attribute", result);
+    }
 }

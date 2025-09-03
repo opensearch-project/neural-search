@@ -52,7 +52,7 @@ public class SparseBinaryDocValuesPassThrough extends BinaryDocValues implements
     }
 
     @Override
-    public SparseVector read(int docId) throws IOException {
+    public synchronized SparseVector read(int docId) throws IOException {
         if (!advanceExact(docId)) {
             return null;
         }

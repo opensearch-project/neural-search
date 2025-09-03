@@ -76,9 +76,7 @@ public class ValueEncoderTests extends AbstractSparseTestBase {
             int encoded = ValueEncoder.encodeFeatureValue(original);
             float decoded = ValueEncoder.decodeFeatureValue(encoded);
 
-            // Due to precision loss in encoding, we check that the relationship is maintained
-            assertTrue("Encoded value should be non-negative", encoded >= 0);
-            assertTrue("Decoded value should be non-negative", decoded >= 0.0f);
+            assertEquals(original, decoded, DELTA_FOR_ASSERTION);
         }
     }
 

@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.sparse.data;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
@@ -18,7 +17,6 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -46,17 +44,13 @@ public class SparseVector implements Accountable {
         return tokens == null ? 0 : tokens.length;
     }
 
-    public SparseVector(Map<String, Float> pairs) {
+    public SparseVector(Map<Integer, Float> pairs) {
         this(
             pairs.entrySet()
                 .stream()
-                .map(t -> new Item(convertStringToInteger(t.getKey()), ByteQuantizer.quantizeFloatToByte(t.getValue())))
+                .map(t -> new Item(t.getKey(), ByteQuantizer.quantizeFloatToByte(t.getValue())))
                 .collect(Collectors.toList())
         );
-    }
-
-    private static Integer convertStringToInteger(String value) {
-        return NumberUtils.createInteger(value);
     }
 
     public SparseVector(List<Item> items) {
@@ -96,8 +90,8 @@ public class SparseVector implements Accountable {
         return token % MODULUS_FOR_SHORT;
     }
 
-    private static Map<String, Float> readToMap(BytesRef bytesRef) throws IOException {
-        Map<String, Float> map = new HashMap<>();
+    private static Map<Integer, Float> readToMap(BytesRef bytesRef) throws IOException {
+        Map<Integer, Float> map = new HashMap<>();
         try (
             ByteArrayInputStream bais = new ByteArrayInputStream(
                 ArrayUtil.copyOfSubArray(bytesRef.bytes, bytesRef.offset, bytesRef.length)
@@ -105,10 +99,7 @@ public class SparseVector implements Accountable {
             DataInputStream dis = new DataInputStream(bais)
         ) {
             while (bais.available() > 0) {
-                int stringLength = dis.readInt();
-                byte[] stringBytes = new byte[stringLength];
-                dis.readFully(stringBytes);
-                String key = new String(stringBytes, StandardCharsets.UTF_8);
+                int key = dis.readInt();
                 float value = dis.readFloat();
                 map.put(key, value);
             }
