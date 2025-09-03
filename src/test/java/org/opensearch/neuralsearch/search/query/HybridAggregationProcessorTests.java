@@ -11,6 +11,7 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchShardTarget;
@@ -80,6 +81,8 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         querySearchResult.setSearchShardTarget(searchShardTarget);
         querySearchResult.setShardIndex(shardId);
         when(searchContext.queryResult()).thenReturn(querySearchResult);
+        HybridQuery hybridQuery = mock(HybridQuery.class);
+        when(searchContext.query()).thenReturn(hybridQuery);
 
         hybridAggregationProcessor.postProcess(searchContext);
 
