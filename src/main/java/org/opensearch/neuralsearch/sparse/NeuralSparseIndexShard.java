@@ -28,6 +28,7 @@ import org.opensearch.index.engine.Engine;
 import org.opensearch.index.engine.EngineException;
 import org.opensearch.index.shard.IllegalIndexShardStateException;
 import org.opensearch.index.shard.IndexShard;
+import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
@@ -47,6 +48,8 @@ import java.util.Set;
 import java.io.IOException;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+
+import static org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader.NOOP_READER;
 
 /**
  * NeuralSparseIndexShard wraps IndexShard and adds methods to perform neural-sparse related operations against the shard
@@ -121,7 +124,7 @@ public class NeuralSparseIndexShard {
     private void warmUpAllForwardIndices(List<CacheOperationContext> contexts) throws IOException, CircuitBreakingException {
         for (CacheOperationContext context : contexts) {
             BinaryDocValues binaryDocValues = context.binaryDocValues;
-            CacheGatedForwardIndexReader forwardIndexReader = context.forwardIndexReader;
+            SparseVectorReader forwardIndexReader = context.forwardIndexReader;
             if (forwardIndexReader == null) {
                 continue;
             }
@@ -159,9 +162,9 @@ public class NeuralSparseIndexShard {
         }
     }
 
-    private CacheGatedForwardIndexReader getCacheGatedForwardIndexReader(BinaryDocValues binaryDocValues, CacheKey key, int docCount) {
+    private SparseVectorReader getCacheGatedForwardIndexReader(BinaryDocValues binaryDocValues, CacheKey key, int docCount) {
         if (!(binaryDocValues instanceof SparseBinaryDocValuesPassThrough)) {
-            return new CacheGatedForwardIndexReader(null, null, null);
+            return NOOP_READER;
         }
         SparseBinaryDocValuesPassThrough sparseBinaryDocValues = (SparseBinaryDocValuesPassThrough) binaryDocValues;
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(key, docCount);
@@ -229,7 +232,7 @@ public class NeuralSparseIndexShard {
                 }
 
                 final BinaryDocValues binaryDocValues = leafReader.getBinaryDocValues(fieldInfo.name);
-                CacheGatedForwardIndexReader forwardIndexReader;
+                SparseVectorReader forwardIndexReader;
                 if (binaryDocValues == null) {
                     log.error("[Neural Sparse] No binary doc values found for field: {}", fieldInfo.name);
                     forwardIndexReader = null;
@@ -251,13 +254,13 @@ public class NeuralSparseIndexShard {
      */
     private static class CacheOperationContext {
         final BinaryDocValues binaryDocValues;
-        final CacheGatedForwardIndexReader forwardIndexReader;
+        final SparseVectorReader forwardIndexReader;
         final CacheGatedPostingsReader postingsReader;
         final CacheKey cacheKey;
 
         CacheOperationContext(
             BinaryDocValues binaryDocValues,
-            CacheGatedForwardIndexReader forwardIndexReader,
+            SparseVectorReader forwardIndexReader,
             CacheGatedPostingsReader postingsReader,
             CacheKey key
         ) {
