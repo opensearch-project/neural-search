@@ -34,7 +34,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         setupValidSparseIndices();
 
         // Execute - should not throw exception
-        RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION);
+        RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION);
     }
 
     public void testValidateSparseIndicesWithInvalidSparseIndices() {
@@ -46,7 +46,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         List<String> invalidIndices = exception.getInvalidIndices();
@@ -66,7 +66,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         List<String> invalidIndices = exception.getInvalidIndices();
@@ -80,7 +80,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         Index[] indices = {};
 
         // Execute - should not throw exception
-        RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION);
+        RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION);
     }
 
     public void testValidateSparseIndicesWithNullClusterService() {
@@ -90,7 +90,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, null, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, null, API_OPERATION)
         );
 
         assertEquals(1, exception.getInvalidIndices().size());
@@ -105,7 +105,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         assertEquals(1, exception.getInvalidIndices().size());
@@ -121,7 +121,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         assertEquals(1, exception.getInvalidIndices().size());
@@ -138,7 +138,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         assertEquals(1, exception.getInvalidIndices().size());
@@ -156,7 +156,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         assertEquals(1, exception.getInvalidIndices().size());
@@ -174,7 +174,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         assertEquals(1, exception.getInvalidIndices().size());
@@ -192,7 +192,7 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         // Execute & Verify
         NeuralSparseInvalidIndicesException exception = expectThrows(
             NeuralSparseInvalidIndicesException.class,
-            () -> RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, API_OPERATION)
+            () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
         assertEquals(1, exception.getInvalidIndices().size());

@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.rest;
 
 import org.apache.commons.lang.StringUtils;
+import org.opensearch.core.common.Strings;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupRequest;
@@ -21,7 +22,6 @@ import java.util.List;
 import java.util.Locale;
 
 import static org.opensearch.action.support.IndicesOptions.strictExpandOpen;
-import static org.opensearch.neuralsearch.sparse.SparseSettings.SPARSE_INDEX;
 
 /**
  * RestHandler for SEISMIC index warmup API.
@@ -68,9 +68,9 @@ public class RestNeuralSparseWarmupHandler extends BaseRestHandler {
 
     // Create a warm up cache request by processing the rest request and validating the indices
     private NeuralSparseWarmupRequest createNeuralSparseWarmupRequest(RestRequest request) {
-        String[] indexNames = StringUtils.split(request.param("index"), ",");
+        String[] indexNames = Strings.splitStringByCommaToArray(request.param("index"));
         Index[] indices = indexNameExpressionResolver.concreteIndices(clusterService.state(), strictExpandOpen(), indexNames);
-        RestUtils.validateSparseIndices(indices, clusterService, SPARSE_INDEX, NAME);
+        RestUtils.validateSparseIndices(indices, clusterService, NAME);
 
         return new NeuralSparseWarmupRequest(indexNames);
     }

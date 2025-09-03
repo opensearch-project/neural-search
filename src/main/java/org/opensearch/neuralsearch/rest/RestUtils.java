@@ -16,6 +16,8 @@ import java.util.Locale;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static org.opensearch.neuralsearch.sparse.SparseSettings.SPARSE_INDEX;
+
 /**
  * A Utils class for REST API operations
  */
@@ -23,17 +25,16 @@ public class RestUtils {
     /**
      * @param indices An array of indices related to the request
      * @param clusterService ClusterService of OpenSearch Cluster
-     * @param sparseIndex sparseIndex name of setting
      * @param apiOperation Determine whether the request is to warm up or clear cache
      */
-    public static void validateSparseIndices(Index[] indices, ClusterService clusterService, String sparseIndex, String apiOperation) {
+    public static void validateSparseIndices(Index[] indices, ClusterService clusterService, String apiOperation) {
         List<String> invalidIndexNames = Arrays.stream(indices).filter(index -> {
             String sparseIndexSetting = Optional.ofNullable(clusterService)
                 .map(ClusterService::state)
                 .map(ClusterState::metadata)
                 .map(metadata -> metadata.getIndexSafe(index))
                 .map(IndexMetadata::getSettings)
-                .map(settings -> settings.get(sparseIndex))
+                .map(settings -> settings.get(SPARSE_INDEX))
                 .orElse(null);
 
             return !"true".equals(sparseIndexSetting);

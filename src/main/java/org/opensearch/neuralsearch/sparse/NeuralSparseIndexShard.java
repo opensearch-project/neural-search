@@ -226,10 +226,10 @@ public class NeuralSparseIndexShard {
             final SegmentInfo segmentInfo = segmentReader.getSegmentInfo().info;
 
             for (FieldInfo fieldInfo : sparseFieldInfos) {
-                final CacheKey key = new CacheKey(segmentInfo, fieldInfo);
                 if (!PredicateUtils.shouldRunSeisPredicate.test(segmentInfo, fieldInfo)) {
                     continue;
                 }
+                final CacheKey key = new CacheKey(segmentInfo, fieldInfo);
 
                 final BinaryDocValues binaryDocValues = leafReader.getBinaryDocValues(fieldInfo.name);
                 SparseVectorReader forwardIndexReader;
