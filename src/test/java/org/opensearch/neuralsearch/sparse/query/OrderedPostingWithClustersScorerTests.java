@@ -213,23 +213,23 @@ public class OrderedPostingWithClustersScorerTests extends AbstractSparseTestBas
         when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum1).thenReturn(postingsEnum2);
 
         // Mock clusters in term1
-        DocumentCluster cluster1_1 = prepareCluster(10, false, queryDenseVector);
-        DocumentCluster cluster1_2 = prepareCluster(0, true, queryDenseVector);
-        DocumentCluster cluster1_3 = prepareCluster(0, false, queryDenseVector);
-        DocumentCluster cluster2_1 = prepareCluster(3, false, queryDenseVector);
+        DocumentCluster term1Cluster1 = prepareCluster(10, false, queryDenseVector);
+        DocumentCluster term1Cluster2 = prepareCluster(0, true, queryDenseVector);
+        DocumentCluster term1Cluster3 = prepareCluster(0, false, queryDenseVector);
+        DocumentCluster term2Cluster1 = prepareCluster(3, false, queryDenseVector);
 
         // Mock cluster iterator
         IteratorWrapper<DocumentCluster> clusterIterator1 = mock(IteratorWrapper.class);
         IteratorWrapper<DocumentCluster> clusterIterator2 = mock(IteratorWrapper.class);
         when(postingsEnum1.clusterIterator()).thenReturn(clusterIterator1);
         when(postingsEnum2.clusterIterator()).thenReturn(clusterIterator2);
-        when(clusterIterator1.next()).thenReturn(cluster1_1).thenReturn(cluster1_2).thenReturn(cluster1_3).thenReturn(null);
-        when(clusterIterator2.next()).thenReturn(cluster2_1).thenReturn(null);
+        when(clusterIterator1.next()).thenReturn(term1Cluster1).thenReturn(term1Cluster2).thenReturn(term1Cluster3).thenReturn(null);
+        when(clusterIterator2.next()).thenReturn(term2Cluster1).thenReturn(null);
         when(leafReader.maxDoc()).thenReturn(15);
-        prepareClusterAndItsDocs(vectorReader, queryDenseVector, cluster1_1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6); // first cluster will be examined
-        prepareClusterAndItsDocs(vectorReader, queryDenseVector,cluster1_2, 7, 0, 8, 1, 9, 2, 10, 5, 11, 2); // second cluster should not be skipped
-        prepareClusterAndItsDocs(vectorReader, queryDenseVector,cluster1_3, 12, 100); // third cluster will be skipped
-        prepareClusterAndItsDocs(vectorReader, queryDenseVector,cluster2_1, 13, 10); // fourth cluster will be examined
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector, term1Cluster1, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6); // first cluster will be examined
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector,term1Cluster2, 7, 0, 8, 1, 9, 2, 10, 5, 11, 2); // second cluster should not be skipped
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector,term1Cluster3, 12, 100); // third cluster will be skipped
+        prepareClusterAndItsDocs(vectorReader, queryDenseVector,term2Cluster1, 13, 10); // fourth cluster will be examined
 
         // Create scorer
         OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
@@ -485,5 +485,19 @@ public class OrderedPostingWithClustersScorerTests extends AbstractSparseTestBas
             doc = iterator.nextDoc();
         }
         assertEquals(expectedDocIds, actualDocIds);
+    }
+
+    public void test_getMaxScore() throws IOException {
+        OrderedPostingWithClustersScorer scorer = new OrderedPostingWithClustersScorer(
+            FIELD_NAME,
+            sparseQueryContext,
+            queryVector,
+            leafReader,
+            null,
+            vectorReader,
+            simScorer,
+            null
+        );
+        assertEquals(0, scorer.getMaxScore(0), DELTA_FOR_ASSERTION);
     }
 }

@@ -134,14 +134,14 @@ public abstract class SeismicBaseScorer extends Scorer {
     protected static class HeapWrapper {
         private final PriorityQueue<Pair<Integer, Integer>> heap = makeHeap();
         private float heapThreshold = Integer.MIN_VALUE;
-        private final int K;
+        private final int k;
 
-        HeapWrapper(int K) {
-            this.K = K;
+        HeapWrapper(int k) {
+            this.k = k;
         }
 
         public boolean isFull() {
-            return heap.size() == this.K;
+            return heap.size() == this.k;
         }
 
         /**
@@ -150,16 +150,12 @@ public abstract class SeismicBaseScorer extends Scorer {
         public void add(Pair<Integer, Integer> pair) {
             if (pair.getRight() > heapThreshold) {
                 heap.add(pair);
-                if (heap.size() > K) {
+                if (heap.size() > k) {
                     heap.poll();
                     assert heap.peek() != null;
                     heapThreshold = heap.peek().getRight();
                 }
             }
-        }
-
-        public List<Pair<Integer, Integer>> toList() {
-            return new ArrayList<>(heap);
         }
 
         /**

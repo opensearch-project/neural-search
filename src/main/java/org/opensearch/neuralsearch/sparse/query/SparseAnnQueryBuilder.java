@@ -14,7 +14,6 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.lucene.search.Query;
-import org.opensearch.Version;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -41,9 +40,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
- * or SPARSE_TOKENIZE model to produce a Map with String keys and Float values for input text. Then it will be transformed
- * to Lucene FeatureQuery wrapped by Lucene BooleanQuery.
+ * SparseAnnQueryBuilder is responsible for handling "neural_sparse" query types when it works SEISMIC index.
+ * It wraps a NeuralSparseQueryBuilder so that it can determine when to fall back to plain neural sparse query.
  */
 @Getter
 @Setter
@@ -71,7 +69,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     @Setter(lombok.AccessLevel.NONE)
     private Map<String, Float> queryTokens;
 
-    private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final int DEFAULT_TOP_K = 10;
     private static final float DEFAULT_HEAP_FACTOR = 1.0f;
 
@@ -105,11 +102,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         this.k = in.readOptionalInt();
         this.heapFactor = in.readOptionalFloat();
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
-    }
-
-    public SparseAnnQueryBuilder queryTokens(Map<String, Float> queryTokens) {
-        this.queryTokens = preprocessQueryTokens(queryTokens);
-        return this;
     }
 
     public void setQueryTokens(Map<String, Float> queryTokens) {
@@ -153,6 +145,13 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             }
         }
         return builder.build();
+    }
+
+    public static class SparseAnnQueryBuilderBuilder {
+        public SparseAnnQueryBuilderBuilder queryTokens(Map<String, Float> queryTokens) {
+            this.queryTokens = preprocessQueryTokens(queryTokens);
+            return this;
+        }
     }
 
     @Override
@@ -216,25 +215,17 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         if (filter != null) {
             filterQuery = filter.toQuery(context);
         }
-
-        try {
-            Map<Integer, Float> integerTokens = new HashMap<>();
-            for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-                int token = Integer.parseInt(entry.getKey());
-                if (token < 0) {
-                    throw new IllegalArgumentException("Query tokens should be non-negative integer!");
-                }
-                integerTokens.put(token, entry.getValue());
-            }
-            return new SparseVectorQuery.SparseVectorQueryBuilder().fieldName(fieldName)
-                .queryContext(sparseQueryContext)
-                .queryVector(new SparseVector(integerTokens))
-                .originalQuery(fallbackQuery)
-                .filter(filterQuery)
-                .build();
-        } catch (NumberFormatException ex) {
-            throw new IllegalArgumentException("Query tokens should be valid integer");
+        Map<Integer, Float> integerTokens = new HashMap<>();
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
+            int token = Integer.parseInt(entry.getKey());
+            integerTokens.put(token, entry.getValue());
         }
+        return new SparseVectorQuery.SparseVectorQueryBuilder().fieldName(fieldName)
+            .queryContext(sparseQueryContext)
+            .queryVector(new SparseVector(integerTokens))
+            .originalQuery(fallbackQuery)
+            .filter(filterQuery)
+            .build();
     }
 
     public static void validateFieldType(MappedFieldType fieldType) {
@@ -253,13 +244,14 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         }
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(queryCut, obj.queryCut)
             .append(heapFactor, obj.heapFactor)
-            .append(k, obj.k);
+            .append(k, obj.k)
+            .append(filter, obj.filter);
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        HashCodeBuilder builder = new HashCodeBuilder().append(queryCut).append(heapFactor).append(k);
+        HashCodeBuilder builder = new HashCodeBuilder().append(queryCut).append(heapFactor).append(k).append(filter);
         return builder.toHashCode();
     }
 
@@ -268,18 +260,25 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         return NAME;
     }
 
-    private Map<String, Float> preprocessQueryTokens(Map<String, Float> tokens) {
+    private static Map<String, Float> preprocessQueryTokens(Map<String, Float> tokens) {
         if (MapUtils.isEmpty(tokens)) return Collections.emptyMap();
         Map<Integer, Float> intTokens = new HashMap<>();
-        for (Map.Entry<String, Float> entry : tokens.entrySet()) {
-            int token = Integer.parseInt(entry.getKey());
-            float value = entry.getValue();
-            int tokenHash = SparseVector.prepareTokenForShortType(token);
-            if (intTokens.containsKey(tokenHash)) {
-                intTokens.put(tokenHash, Math.max(intTokens.get(tokenHash), value));
-            } else {
-                intTokens.put(tokenHash, value);
+        try {
+            for (Map.Entry<String, Float> entry : tokens.entrySet()) {
+                int token = Integer.parseInt(entry.getKey());
+                if (token < 0) {
+                    throw new IllegalArgumentException("Query tokens should be non-negative integer!");
+                }
+                float value = entry.getValue();
+                int tokenHash = SparseVector.prepareTokenForShortType(token);
+                if (intTokens.containsKey(tokenHash)) {
+                    intTokens.put(tokenHash, Math.max(intTokens.get(tokenHash), value));
+                } else {
+                    intTokens.put(tokenHash, value);
+                }
             }
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException("Query tokens should be valid integer");
         }
         return intTokens.entrySet().stream().collect(Collectors.toMap(e -> String.valueOf(e.getKey()), Map.Entry::getValue));
     }

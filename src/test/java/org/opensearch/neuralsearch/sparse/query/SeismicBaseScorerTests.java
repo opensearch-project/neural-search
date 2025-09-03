@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.sparse.query;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.index.LeafReader;
+import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Terms;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -25,9 +26,13 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -100,11 +105,25 @@ public class SeismicBaseScorerTests extends AbstractSparseTestBase {
         );
     }
 
-    public void testInitialize() throws IOException {
+    public void testInitialize_happyCase() throws IOException {
         // Verify that initialize was called and processed the tokens correctly
         assertEquals(1, testScorer.subScorers.size());
         verify(terms, times(2)).iterator();
         verify(termsEnum).postings(isNull(), eq(8));
+        verify(sparseQueryContext).getTokens();
+    }
+
+    public void testInitialize_nullTerms() throws IOException {
+        when(leafReader.terms(anyString())).thenReturn(null);
+        assertEquals(0, testScorer.subScorers.size());
+        verify(sparseQueryContext, never()).getTokens();
+    }
+
+    public void testInitialize_unexpectedType() throws IOException {
+        PostingsEnum postingsEnum1 = mock(PostingsEnum.class);
+        when(termsEnum.postings(any())).thenReturn(postingsEnum1);
+        testScorer.initialize(leafReader);
+
     }
 
     public void testSearchUpfront() throws IOException {

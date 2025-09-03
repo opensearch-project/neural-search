@@ -32,7 +32,6 @@ public class ExactMatchScorer extends Scorer {
         @NonNull SparseVectorReader reader,
         @NonNull Similarity.SimScorer simScorer
     ) {
-
         this.candidate = candidate;
         this.queryDenseVector = queryVector.toDenseVector();
         this.reader = reader;

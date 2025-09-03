@@ -14,6 +14,7 @@ import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -23,21 +24,32 @@ import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
-    private static SparseAnnQueryBuilder queryBuilder;
-    private static Map<String, Float> queryTokens;
+    private SparseAnnQueryBuilder queryBuilder;
+    private Map<String, Float> queryTokens;
+    private static final String MATCH_TERM_FIELD = "field";
+    private static final String MATCH_TERM = "text";
+    private static final int CUT = 2;
+    private static final int K = 10;
+    private static final float HEAP_FACTOR = 1.5f;
+    private QueryBuilder filter;
+    private QueryBuilder unequalFilter;
 
     @Before
     @Override
     public void setUp() {
         super.setUp();
         MockitoAnnotations.openMocks(this);
+        filter = new BoolQueryBuilder().filter(new TermQueryBuilder(MATCH_TERM_FIELD, MATCH_TERM));
+        unequalFilter = new BoolQueryBuilder().filter(new TermQueryBuilder("other term", MATCH_TERM));
 
         queryTokens = new HashMap<>();
         queryTokens.put("1", 0.8f);
@@ -46,10 +58,11 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
 
         queryBuilder = SparseAnnQueryBuilder.builder()
             .fieldName("test_field")
-            .queryCut(2)
-            .k(10)
-            .heapFactor(1.5f)
+            .queryCut(CUT)
+            .k(K)
+            .heapFactor(HEAP_FACTOR)
             .queryTokens(queryTokens)
+            .filter(filter)
             .build();
     }
 
@@ -98,6 +111,87 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertTrue(result.contains("\"cut\":2"));
         assertTrue(result.contains("\"k\":10"));
         assertTrue(result.contains("\"heap_factor\":1.5"));
+        assertTrue(result.contains("\"filter\":{"));
+    }
+
+    public void testDoXContent_withNullCut() throws IOException {
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .k(10)
+            .heapFactor(1.5f)
+            .queryTokens(queryTokens)
+            .filter(filter)
+            .build();
+        queryBuilder.doXContent(builder, null);
+        builder.endObject();
+
+        String result = builder.toString();
+        assertFalse(result.contains("\"cut\":"));
+        assertTrue(result.contains("\"k\":10"));
+        assertTrue(result.contains("\"heap_factor\":1.5"));
+        assertTrue(result.contains("\"filter\":{"));
+    }
+
+    public void testDoXContent_withNullK() throws IOException {
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .queryCut(2)
+            .heapFactor(1.5f)
+            .queryTokens(queryTokens)
+            .filter(filter)
+            .build();
+        queryBuilder.doXContent(builder, null);
+        builder.endObject();
+
+        String result = builder.toString();
+        assertTrue(result.contains("\"cut\":2"));
+        assertFalse(result.contains("\"k\":"));
+        assertTrue(result.contains("\"heap_factor\":1.5"));
+        assertTrue(result.contains("\"filter\":{"));
+    }
+
+    public void testDoXContent_withNullHeapFactor() throws IOException {
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .queryCut(2)
+            .k(10)
+            .queryTokens(queryTokens)
+            .filter(filter)
+            .build();
+        queryBuilder.doXContent(builder, null);
+        builder.endObject();
+
+        String result = builder.toString();
+        assertTrue(result.contains("\"cut\":2"));
+        assertTrue(result.contains("\"k\":10"));
+        assertFalse(result.contains("\"heap_factor\":"));
+        assertTrue(result.contains("\"filter\":{"));
+    }
+
+    public void testDoXContent_withNullFilter() throws IOException {
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .queryCut(2)
+            .k(10)
+            .heapFactor(1.5f)
+            .queryTokens(queryTokens)
+            .build();
+        queryBuilder.doXContent(builder, null);
+        builder.endObject();
+
+        String result = builder.toString();
+        assertTrue(result.contains("\"cut\":2"));
+        assertTrue(result.contains("\"k\":10"));
+        assertTrue(result.contains("\"heap_factor\":"));
+        assertFalse(result.contains("\"filter\":"));
     }
 
     public void testValidateFieldType_withValidFieldType_passes() {
@@ -118,26 +212,133 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
     }
 
     public void testEquals_withSameValues_returnsTrue() {
-        SparseAnnQueryBuilder other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.5f).build();
+        QueryBuilder filter = new BoolQueryBuilder().filter(new TermQueryBuilder(MATCH_TERM_FIELD, MATCH_TERM));
+        SparseAnnQueryBuilder other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.5f).filter(filter).build();
 
         assertTrue(queryBuilder.doEquals(other));
     }
 
-    public void testHashCode_withSameValues_returnsSameHashCode() {
-        SparseAnnQueryBuilder other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.5f).build();
+    public void testEquals_returnFalse() {
+        SparseAnnQueryBuilder other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.5f).filter(unequalFilter).build();
+        assertFalse(queryBuilder.doEquals(other));
+        other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.0f).filter(filter).build();
+        assertFalse(queryBuilder.doEquals(other));
+        other = SparseAnnQueryBuilder.builder().queryCut(2).k(1).heapFactor(1.5f).filter(filter).build();
+        assertFalse(queryBuilder.doEquals(other));
+        other = SparseAnnQueryBuilder.builder().queryCut(1).k(10).heapFactor(1.5f).filter(filter).build();
+        assertFalse(queryBuilder.doEquals(other));
+    }
 
+    public void testHashCode_withSameValues_returnsSameHashCode() {
+        SparseAnnQueryBuilder other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.5f).filter(filter).build();
         assertEquals(queryBuilder.doHashCode(), other.doHashCode());
     }
 
+    public void testHashCode_withSameValues_returnsDifferentHashCode() {
+        SparseAnnQueryBuilder other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.5f).filter(unequalFilter).build();
+        assertNotEquals(queryBuilder.doHashCode(), other.doHashCode());
+        other = SparseAnnQueryBuilder.builder().queryCut(2).k(10).heapFactor(1.0f).filter(filter).build();
+        assertNotEquals(queryBuilder.doHashCode(), other.doHashCode());
+        other = SparseAnnQueryBuilder.builder().queryCut(2).k(1).heapFactor(1.5f).filter(filter).build();
+        assertNotEquals(queryBuilder.doHashCode(), other.doHashCode());
+        other = SparseAnnQueryBuilder.builder().queryCut(1).k(10).heapFactor(1.5f).filter(filter).build();
+        assertNotEquals(queryBuilder.doHashCode(), other.doHashCode());
+    }
+
     public void testDoToQuery_withValidContext_returnsQuery() throws IOException {
+        QueryBuilder mockFilter = mock(QueryBuilder.class);
+        Query filterQuery = mock(Query.class);
+        when(mockFilter.toQuery(any())).thenReturn(filterQuery);
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .queryCut(CUT)
+            .k(K)
+            .heapFactor(HEAP_FACTOR)
+            .queryTokens(queryTokens)
+            .filter(mockFilter)
+            .build();
         QueryShardContext context = mock(QueryShardContext.class);
         MappedFieldType fieldType = mock(MappedFieldType.class);
         when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
         when(context.fieldMapper("test_field")).thenReturn(fieldType);
+        MappedFieldType fieldType2 = mock(MappedFieldType.class);
+        when(context.fieldMapper("field")).thenReturn(fieldType2);
+        Query termQuery = mock(Query.class);
+        when(fieldType2.termQuery(any(), any())).thenReturn(termQuery);
 
         queryBuilder.fallbackQuery(mock(Query.class));
 
-        assertNotNull(queryBuilder.doToQuery(context));
+        SparseVectorQuery query = (SparseVectorQuery) queryBuilder.doToQuery(context);
+        queryTokens.remove("3"); // "3" has the smallest value
+        assertEquals(queryTokens.keySet(), new HashSet<>(query.getQueryContext().getTokens()));
+        assertEquals(filterQuery, query.getFilter());
+        assertEquals(HEAP_FACTOR, query.getQueryContext().getHeapFactor(), DELTA_FOR_ASSERTION);
+        assertEquals(K, query.getQueryContext().getK());
+    }
+
+    public void testDoToQuery_withValidContext_filterNull() throws IOException {
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .queryCut(CUT)
+            .k(K)
+            .heapFactor(HEAP_FACTOR)
+            .queryTokens(queryTokens)
+            .filter(null)
+            .build();
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(context.fieldMapper("test_field")).thenReturn(fieldType);
+        MappedFieldType fieldType2 = mock(MappedFieldType.class);
+        when(context.fieldMapper("field")).thenReturn(fieldType2);
+        Query termQuery = mock(Query.class);
+        when(fieldType2.termQuery(any(), any())).thenReturn(termQuery);
+
+        queryBuilder.fallbackQuery(mock(Query.class));
+
+        SparseVectorQuery query = (SparseVectorQuery) queryBuilder.doToQuery(context);
+        queryTokens.remove("3"); // "3" has the smallest value
+        assertEquals(queryTokens.keySet(), new HashSet<>(query.getQueryContext().getTokens()));
+        assertNull(query.getFilter());
+        assertEquals(HEAP_FACTOR, query.getQueryContext().getHeapFactor(), DELTA_FOR_ASSERTION);
+        assertEquals(K, query.getQueryContext().getK());
+    }
+
+    public void testDoToQuery_withValidContext_cutIsNull() throws IOException {
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .k(10)
+            .heapFactor(1.5f)
+            .queryTokens(queryTokens)
+            .filter(filter)
+            .build();
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(context.fieldMapper("test_field")).thenReturn(fieldType);
+        MappedFieldType fieldType2 = mock(MappedFieldType.class);
+        when(context.fieldMapper("field")).thenReturn(fieldType2);
+        Query termQuery = mock(Query.class);
+        when(fieldType2.termQuery(any(), any())).thenReturn(termQuery);
+
+        queryBuilder.fallbackQuery(mock(Query.class));
+
+        SparseVectorQuery query = (SparseVectorQuery) queryBuilder.doToQuery(context);
+        assertEquals(queryTokens.keySet(), new HashSet<>(query.getQueryContext().getTokens()));
+    }
+
+    public void testDoToQuery_invalidFieldType() throws IOException {
+        queryBuilder = SparseAnnQueryBuilder.builder()
+            .fieldName("test_field")
+            .queryCut(CUT)
+            .k(K)
+            .heapFactor(HEAP_FACTOR)
+            .queryTokens(queryTokens)
+            .filter(filter)
+            .build();
+        QueryShardContext context = mock(QueryShardContext.class);
+        when(context.fieldMapper("test_field")).thenReturn(null);
+        expectThrows(IllegalArgumentException.class, () -> queryBuilder.doToQuery(context));
     }
 
     private XContentParser createParser(String json) throws IOException {
@@ -253,5 +454,12 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
 
         SparseAnnQueryBuilder builder3 = new SparseAnnQueryBuilder("name", 3, 10, 1.0f, null, null, queryTokens);
         assertEquals(expectedQueryTokens, builder3.queryTokens());
+    }
+
+    public void testQueryTokens_SetterThrowExceptionForInvalidToken() {
+        Map<String, Float> tokens1 = Map.of("hello", 1.0f, "65537", 2.0f, "2", 100f, "65538", 1.0f);
+        expectThrows(IllegalArgumentException.class, () -> SparseAnnQueryBuilder.builder().queryTokens(tokens1).build());
+        Map<String, Float> tokens2 = Map.of("-1", 1.0f, "65537", 2.0f, "2", 100f, "65538", 1.0f);
+        expectThrows(IllegalArgumentException.class, () -> SparseAnnQueryBuilder.builder().queryTokens(tokens2).build());
     }
 }

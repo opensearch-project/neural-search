@@ -37,8 +37,8 @@ import java.util.Objects;
 import java.util.concurrent.Callable;
 
 /**
- * A new query type for "sparse_ann" query. It vends a customized weight and scorer so that it can utilize
- * posting clustering algorithms.
+ * A new query type for "SEISMIC" query. It vends a customized weight and scorer so that it can work on
+ * SEISMIC's clustering posting data structure.
  */
 @Getter
 @Builder
