@@ -10,6 +10,8 @@ import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
 
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
+
 /**
  * Defines logic for pre- and post-phases of hybrid query aggregation processor.
  */
@@ -27,11 +29,13 @@ public class HybridAggregationProcessor implements AggregationProcessor {
 
     @Override
     public void postProcess(SearchContext context) {
-        // In case of Hybrid Query single shard, the normalization process would run after the fetch phase execution.
-        // The fetch phase will run right after the Query Phase and therefore need the right number size of docIds to be loaded.
-        // As we add delimiter in the topdocs to segregate multiple query results,
-        // therefore the right number of size will be calculated by scoreDocs length present in the topDocs.
-        updateQueryResult(context.queryResult(), context);
+        if (isHybridQuery(context.query(), context)) {
+            // In case of Hybrid Query single shard, the normalization process would run after the fetch phase execution.
+            // The fetch phase will run right after the Query Phase and therefore need the right number size of docIds to be loaded.
+            // As we add delimiter in the topdocs to segregate multiple query results,
+            // therefore the right number of size will be calculated by scoreDocs length present in the topDocs.
+            updateQueryResult(context.queryResult(), context);
+        }
         delegateAggsProcessor.postProcess(context);
     }
 
