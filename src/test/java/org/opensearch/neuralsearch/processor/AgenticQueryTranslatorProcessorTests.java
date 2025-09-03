@@ -160,7 +160,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         processor.processRequestAsync(request, mockContext, listener);
 
         verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
-        verify(listener).onFailure(any(RuntimeException.class));
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error"));
     }
 
     public void testProcessRequestAsync_withAgenticQuery_parseFailure() {
@@ -182,7 +184,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         processor.processRequestAsync(request, mockContext, listener);
 
         verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
-        verify(listener).onFailure(any(IOException.class));
+        ArgumentCaptor<IOException> exceptionCaptor = ArgumentCaptor.forClass(IOException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Parse error"));
     }
 
     public void testProcessRequest_throwsException() {
@@ -264,10 +268,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        assertEquals(
-            "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc.",
-            exceptionCaptor.getValue().getMessage()
-        );
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search blocked - Invalid usage with other search features"));
         verifyNoInteractions(mockMLClient);
     }
 
@@ -284,10 +285,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        assertEquals(
-            "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc.",
-            exceptionCaptor.getValue().getMessage()
-        );
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search blocked - Invalid usage with other search features"));
         verifyNoInteractions(mockMLClient);
     }
 
@@ -393,9 +391,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         RuntimeException exception = exceptionCaptor.getValue();
-        assertEquals("Failed to execute agentic search", exception.getMessage());
+        assertTrue(exception.getMessage().contains("Agentic search blocked - Response size exceeded limit"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
-        assertTrue(exception.getCause().getMessage().contains("Agent response is too large"));
     }
 
     public void testProcessRequestAsync_withAgenticQuery_nullResponse() throws IOException {
@@ -417,8 +414,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         RuntimeException exception = exceptionCaptor.getValue();
-        assertEquals("Failed to execute agentic search", exception.getMessage());
+        assertTrue(exception.getMessage().contains("Agentic search failed - Null response from agent"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
-        assertTrue(exception.getCause().getMessage().contains("Agent response is null"));
     }
 }
