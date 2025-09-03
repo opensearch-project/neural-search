@@ -46,15 +46,8 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.StringHelper;
 import org.apache.lucene.util.Version;
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.FilterLeafReader;
-import org.apache.lucene.index.FilterDirectoryReader;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.ContentPath;
-import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
-import org.opensearch.neuralsearch.sparse.common.SparseConstants;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
-
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;

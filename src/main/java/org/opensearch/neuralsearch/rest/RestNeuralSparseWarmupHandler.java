@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.rest;
 
-import org.apache.commons.lang.StringUtils;
 import org.opensearch.core.common.Strings;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;

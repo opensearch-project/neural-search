@@ -32,6 +32,7 @@ import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
+import org.opensearch.neuralsearch.sparse.codec.CodecUtilWrapper;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.cache.CacheGatedForwardIndexReader;
@@ -177,7 +178,10 @@ public class NeuralSparseIndexShard {
 
     private CacheGatedPostingsReader getCacheGatedPostingReader(FieldInfo fieldInfo, CacheKey key, SegmentInfo segmentInfo)
         throws IOException {
-        final SparseTermsLuceneReader luceneReader = new SparseTermsLuceneReader(createSegmentReadState(segmentInfo));
+        final SparseTermsLuceneReader luceneReader = new SparseTermsLuceneReader(
+            createSegmentReadState(segmentInfo),
+            new CodecUtilWrapper()
+        );
         return new CacheGatedPostingsReader(
             fieldInfo.name,
             ClusteredPostingCache.getInstance().getOrCreate(key).getReader(),
