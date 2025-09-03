@@ -4,9 +4,10 @@
  */
 package org.opensearch.neuralsearch.rest;
 
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.neuralsearch.sparse.common.exception.NeuralSparseInvalidIndicesException;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.index.Index;
 
@@ -41,14 +42,14 @@ public class RestUtils {
         }).map(Index::getName).collect(Collectors.toList());
 
         if (!invalidIndexNames.isEmpty()) {
-            throw new NeuralSparseInvalidIndicesException(
-                invalidIndexNames,
+            throw new OpenSearchStatusException(
                 String.format(
                     Locale.ROOT,
                     "Request rejected. Indices [%s] don't support %s operation.",
                     String.join(", ", invalidIndexNames),
                     apiOperation
-                )
+                ),
+                RestStatus.BAD_REQUEST
             );
         }
     }

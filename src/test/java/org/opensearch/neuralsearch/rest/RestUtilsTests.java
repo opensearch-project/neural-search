@@ -6,11 +6,9 @@ package org.opensearch.neuralsearch.rest;
 
 import org.junit.Before;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.index.Index;
-import org.opensearch.neuralsearch.sparse.common.exception.NeuralSparseInvalidIndicesException;
-
-import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -44,15 +42,12 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         setupInvalidSparseIndices();
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        List<String> invalidIndices = exception.getInvalidIndices();
-        assertEquals(2, invalidIndices.size());
-        assertTrue(invalidIndices.contains("invalid-index-1"));
-        assertTrue(invalidIndices.contains("invalid-index-2"));
+        assertTrue(exception.getMessage().contains("[invalid-index-1, invalid-index-2]"));
         assertTrue(exception.getMessage().contains("test_operation"));
         assertTrue(exception.getMessage().contains("Request rejected"));
     }
@@ -64,15 +59,13 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         setupMixedSparseIndices();
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        List<String> invalidIndices = exception.getInvalidIndices();
-        assertEquals(1, invalidIndices.size());
-        assertTrue(invalidIndices.contains("invalid-index"));
-        assertFalse(invalidIndices.contains("valid-index"));
+        assertTrue(exception.getMessage().contains("[invalid-index]"));
+        assertFalse(exception.getMessage().contains("[valid-index]"));
     }
 
     public void testValidateSparseIndicesWithEmptyIndicesArray() {
@@ -88,13 +81,12 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         Index[] indices = { new Index("test-index", "uuid1") };
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, null, API_OPERATION)
         );
 
-        assertEquals(1, exception.getInvalidIndices().size());
-        assertTrue(exception.getInvalidIndices().contains("test-index"));
+        assertTrue(exception.getMessage().contains("[test-index]"));
     }
 
     public void testValidateSparseIndicesWithNullClusterState() {
@@ -103,13 +95,12 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         when(clusterService.state()).thenReturn(null);
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        assertEquals(1, exception.getInvalidIndices().size());
-        assertTrue(exception.getInvalidIndices().contains("test-index"));
+        assertTrue(exception.getMessage().contains("[test-index]"));
     }
 
     public void testValidateSparseIndicesWithNullMetadata() {
@@ -119,13 +110,12 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         when(clusterState.metadata()).thenReturn(null);
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        assertEquals(1, exception.getInvalidIndices().size());
-        assertTrue(exception.getInvalidIndices().contains("test-index"));
+        assertTrue(exception.getMessage().contains("[test-index]"));
     }
 
     public void testValidateSparseIndicesWithNullIndexMetadata() {
@@ -136,13 +126,12 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         when(metadata.getIndexSafe(any(Index.class))).thenReturn(null);
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        assertEquals(1, exception.getInvalidIndices().size());
-        assertTrue(exception.getInvalidIndices().contains("test-index"));
+        assertTrue(exception.getMessage().contains("[test-index]"));
     }
 
     public void testValidateSparseIndicesWithNullSettings() {
@@ -154,13 +143,12 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         when(indexMetadata.getSettings()).thenReturn(null);
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        assertEquals(1, exception.getInvalidIndices().size());
-        assertTrue(exception.getInvalidIndices().contains("test-index"));
+        assertTrue(exception.getMessage().contains("[test-index]"));
     }
 
     public void testValidateSparseIndicesWithFalseSparseIndexSetting() {
@@ -172,13 +160,12 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         when(indexMetadata.getSettings()).thenReturn(Settings.builder().put(SPARSE_INDEX, "false").build());
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        assertEquals(1, exception.getInvalidIndices().size());
-        assertTrue(exception.getInvalidIndices().contains("test-index"));
+        assertTrue(exception.getMessage().contains("[test-index]"));
     }
 
     public void testValidateSparseIndicesWithMissingSparseIndexSetting() {
@@ -190,12 +177,11 @@ public class RestUtilsTests extends RestNeuralSparseTestCase {
         when(indexMetadata.getSettings()).thenReturn(Settings.builder().build()); // No sparse setting
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> RestUtils.validateSparseIndices(indices, clusterService, API_OPERATION)
         );
 
-        assertEquals(1, exception.getInvalidIndices().size());
-        assertTrue(exception.getInvalidIndices().contains("test-index"));
+        assertTrue(exception.getMessage().contains("[test-index]"));
     }
 }

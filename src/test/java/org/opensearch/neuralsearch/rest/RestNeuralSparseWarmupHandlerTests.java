@@ -8,12 +8,12 @@ import lombok.SneakyThrows;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.core.index.Index;
 import org.opensearch.common.CheckedConsumer;
 import org.opensearch.rest.RestChannel;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
-import org.opensearch.neuralsearch.sparse.common.exception.NeuralSparseInvalidIndicesException;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupRequest;
 import org.opensearch.rest.RestRequest;
@@ -115,8 +115,8 @@ public class RestNeuralSparseWarmupHandlerTests extends RestNeuralSparseTestCase
         setupInvalidSparseIndices();
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> handler.prepareRequest(restRequest, nodeClient)
         );
 
@@ -137,8 +137,8 @@ public class RestNeuralSparseWarmupHandlerTests extends RestNeuralSparseTestCase
         setupMixedSparseIndices();
 
         // Execute & Verify
-        NeuralSparseInvalidIndicesException exception = expectThrows(
-            NeuralSparseInvalidIndicesException.class,
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> handler.prepareRequest(restRequest, nodeClient)
         );
 
