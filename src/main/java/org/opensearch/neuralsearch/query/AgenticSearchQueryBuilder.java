@@ -29,6 +29,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
+import java.util.Locale;
 import java.util.Objects;
 import java.util.List;
 import java.util.ArrayList;
@@ -48,6 +49,12 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     public static final String NAME = "agentic";
     public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     public static final ParseField QUERY_FIELDS = new ParseField("query_fields");
+
+    // Regex patterns for sanitizing query text
+    private static final String SYSTEM_INSTRUCTION_PATTERN = "(?i)\\b(system|instruction|prompt)\\s*:";
+    private static final String COMMAND_INJECTION_PATTERN = "(?i)\\b(execute|run|eval|script)\\s*[:\\(]";
+
+    private static final int MAX_QUERY_LENGTH = 1000;
     public String queryText;
     public List<String> queryFields;
 
@@ -205,14 +212,19 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         // Remove potential prompt injection patterns
         String sanitized = queryText
             // Remove system/instruction keywords that could manipulate LLM behavior
-            .replaceAll("(?i)\\b(system|instruction|prompt|ignore|forget|override)\\s*:", "")
+            .replaceAll(SYSTEM_INSTRUCTION_PATTERN, "")
             // Remove potential command injection patterns
-            .replaceAll("(?i)\\b(execute|run|eval|script)\\s*[:\\(]", "")
+            .replaceAll(COMMAND_INJECTION_PATTERN, "")
             .trim();
 
         // Validate length to prevent extremely long inputs
-        if (sanitized.length() > 1000) {
-            throw new IllegalArgumentException("Query text too long. Maximum allowed length is 1000 characters");
+        if (sanitized.length() > MAX_QUERY_LENGTH) {
+            String errorMessage = String.format(
+                Locale.ROOT,
+                "Query text too long. Maximum allowed length is [%s] characters",
+                MAX_QUERY_LENGTH
+            );
+            throw new IllegalArgumentException(errorMessage);
         }
 
         return sanitized;
