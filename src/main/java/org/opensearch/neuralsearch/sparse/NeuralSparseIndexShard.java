@@ -86,7 +86,7 @@ public class NeuralSparseIndexShard {
             // Fist warm up all forward indices
             warmUpAllForwardIndices(cacheOperationContexts);
 
-            // Then warm up all inverted indices
+            // Then warm up all clustered postings
             warmUpAllClusteredPostings(cacheOperationContexts);
         } catch (IllegalIndexShardStateException | EngineException e) {
             log.error("[Neural Sparse] Failed to acquire searcher", e);

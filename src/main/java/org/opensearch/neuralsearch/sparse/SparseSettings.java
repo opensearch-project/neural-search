@@ -8,6 +8,7 @@ import org.opensearch.common.settings.Setting;
 
 import static org.opensearch.common.settings.Setting.Property.Final;
 import static org.opensearch.common.settings.Setting.Property.IndexScope;
+import static org.opensearch.common.settings.Setting.Property.UnmodifiableOnRestore;
 
 /**
  * It holds index settings of a sparse vector index.
@@ -27,5 +28,11 @@ public class SparseSettings {
     /**
      * This setting identifies sparse index.
      */
-    public static final Setting<Boolean> IS_SPARSE_INDEX_SETTING = Setting.boolSetting(SPARSE_INDEX, false, IndexScope, Final);
+    public static final Setting<Boolean> IS_SPARSE_INDEX_SETTING = Setting.boolSetting(
+        SPARSE_INDEX,
+        false,
+        IndexScope,
+        Final,
+        UnmodifiableOnRestore
+    );
 }
