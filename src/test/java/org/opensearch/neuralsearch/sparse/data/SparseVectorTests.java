@@ -13,7 +13,6 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -56,10 +55,10 @@ public class SparseVectorTests extends AbstractSparseTestBase {
 
     public void testConstructorWithMap() {
         // Create map
-        Map<String, Float> map = new HashMap<>();
-        map.put("3", 0.1f);
-        map.put("1", 0.2f);
-        map.put("2", 0.3f);
+        Map<Integer, Float> map = new HashMap<>();
+        map.put(3, 0.1f);
+        map.put(1, 0.2f);
+        map.put(2, 0.3f);
 
         // Create sparse vector
         SparseVector vector = new SparseVector(map);
@@ -84,10 +83,10 @@ public class SparseVectorTests extends AbstractSparseTestBase {
 
     public void testConstructorWithBytesRef() throws IOException {
         // Create map and serialize to BytesRef
-        Map<String, Float> map = new HashMap<>();
-        map.put("3", 0.1f);
-        map.put("1", 0.2f);
-        map.put("2", 0.3f);
+        Map<Integer, Float> map = new HashMap<>();
+        map.put(3, 0.1f);
+        map.put(1, 0.2f);
+        map.put(2, 0.3f);
 
         BytesRef bytesRef = serializeMap(map);
 
@@ -307,14 +306,12 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertNotEquals(vector1, vector3);
     }
 
-    private BytesRef serializeMap(Map<String, Float> map) throws IOException {
+    private BytesRef serializeMap(Map<Integer, Float> map) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);
 
-        for (Map.Entry<String, Float> entry : map.entrySet()) {
-            byte[] keyBytes = entry.getKey().getBytes(StandardCharsets.UTF_8);
-            dos.writeInt(keyBytes.length);
-            dos.write(keyBytes);
+        for (Map.Entry<Integer, Float> entry : map.entrySet()) {
+            dos.writeInt(entry.getKey());
             dos.writeFloat(entry.getValue());
         }
 

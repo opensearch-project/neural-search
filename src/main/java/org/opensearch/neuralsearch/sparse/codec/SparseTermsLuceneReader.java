@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.sparse.codec;
 
 import lombok.extern.log4j.Log4j2;
-import org.apache.lucene.codecs.CodecUtil;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.index.IndexFileNames;
 import org.apache.lucene.index.SegmentReadState;
@@ -13,9 +12,9 @@ import org.apache.lucene.index.Terms;
 import org.apache.lucene.store.IndexInput;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.util.io.IOUtils;
+import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
-import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
@@ -35,8 +34,10 @@ public class SparseTermsLuceneReader extends FieldsProducer {
     private final Map<String, Map<BytesRef, Long>> fieldToTerms = new HashMap<>();
     private IndexInput termsIn;
     private IndexInput postingIn;
+    private final CodecUtilWrapper codecUtilWrapper;
 
-    public SparseTermsLuceneReader(SegmentReadState state) {
+    public SparseTermsLuceneReader(SegmentReadState state, CodecUtilWrapper codecUtilWrapper) {
+        this.codecUtilWrapper = codecUtilWrapper;
         final String termsFileName = IndexFileNames.segmentFileName(
             state.segmentInfo.name,
             state.segmentSuffix,
@@ -50,7 +51,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
         boolean success = false;
         try {
             termsIn = state.directory.openInput(termsFileName, state.context);
-            CodecUtil.checkIndexHeader(
+            this.codecUtilWrapper.checkIndexHeader(
                 termsIn,
                 SparsePostingsConsumer.CODEC_NAME,
                 SparsePostingsConsumer.VERSION_START,
@@ -58,11 +59,11 @@ public class SparseTermsLuceneReader extends FieldsProducer {
                 state.segmentInfo.getId(),
                 state.segmentSuffix
             );
-            CodecUtil.retrieveChecksum(termsIn);
+            this.codecUtilWrapper.retrieveChecksum(termsIn);
             seekDir(termsIn);
 
             postingIn = state.directory.openInput(postingFileName, state.context);
-            CodecUtil.checkIndexHeader(
+            this.codecUtilWrapper.checkIndexHeader(
                 postingIn,
                 SparsePostingsConsumer.CODEC_NAME,
                 SparsePostingsConsumer.VERSION_START,
@@ -70,7 +71,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
                 state.segmentInfo.getId(),
                 state.segmentSuffix
             );
-            CodecUtil.retrieveChecksum(postingIn);
+            this.codecUtilWrapper.retrieveChecksum(postingIn);
 
             int numberOfFields = termsIn.readVInt();
             for (int i = 0; i < numberOfFields; i++) {
@@ -89,7 +90,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
                     long fileOffset = termsIn.readVLong();
                     terms.put(term, fileOffset);
                 }
-                fieldToTerms.put(state.fieldInfos.fieldInfo(fieldId).name, terms);
+                fieldToTerms.put(state.fieldInfos.fieldInfo(fieldId).getName(), terms);
             }
             success = true;
         } catch (Exception e) {
@@ -102,7 +103,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
     }
 
     private void seekDir(IndexInput input) throws IOException {
-        input.seek(input.length() - CodecUtil.footerLength() - 8);
+        input.seek(input.length() - this.codecUtilWrapper.footerLength() - 8);
         long dirOffset = input.readLong();
         input.seek(dirOffset);
     }
@@ -110,30 +111,6 @@ public class SparseTermsLuceneReader extends FieldsProducer {
     @Override
     public Iterator<String> iterator() {
         return fieldToTerms.keySet().iterator();
-    }
-
-    private synchronized List<DocumentCluster> readClusters(long offset) throws IOException {
-        postingIn.seek(offset);
-        long clusterSize = postingIn.readVLong();
-        List<DocumentCluster> clusters = new ArrayList<>((int) clusterSize);
-        for (int j = 0; j < clusterSize; j++) {
-            long docSize = postingIn.readVLong();
-            List<DocWeight> docs = new ArrayList<>((int) docSize);
-            for (int k = 0; k < docSize; ++k) {
-                docs.add(new DocWeight(postingIn.readVInt(), postingIn.readByte()));
-            }
-            boolean shouldNotSkip = postingIn.readByte() == 1;
-            // summary
-            long summaryVectorSize = postingIn.readVLong();
-            List<SparseVector.Item> items = new ArrayList<>((int) summaryVectorSize);
-            for (int k = 0; k < summaryVectorSize; ++k) {
-                items.add(new SparseVector.Item(postingIn.readVInt(), postingIn.readByte()));
-            }
-            SparseVector summary = items.isEmpty() ? null : new SparseVector(items);
-            DocumentCluster cluster = new DocumentCluster(summary, docs, shouldNotSkip);
-            clusters.add(cluster);
-        }
-        return clusters;
     }
 
     @Override
@@ -177,7 +154,31 @@ public class SparseTermsLuceneReader extends FieldsProducer {
 
     @Override
     public void checkIntegrity() throws IOException {
-        CodecUtil.checksumEntireFile(termsIn);
-        CodecUtil.checksumEntireFile(postingIn);
+        this.codecUtilWrapper.checksumEntireFile(termsIn);
+        this.codecUtilWrapper.checksumEntireFile(postingIn);
+    }
+
+    private synchronized List<DocumentCluster> readClusters(long offset) throws IOException {
+        postingIn.seek(offset);
+        long clusterSize = postingIn.readVLong();
+        List<DocumentCluster> clusters = new ArrayList<>((int) clusterSize);
+        for (int j = 0; j < clusterSize; j++) {
+            long docSize = postingIn.readVLong();
+            List<DocWeight> docs = new ArrayList<>((int) docSize);
+            for (int k = 0; k < docSize; ++k) {
+                docs.add(new DocWeight(postingIn.readVInt(), postingIn.readByte()));
+            }
+            boolean shouldNotSkip = postingIn.readByte() == 1;
+            // summary
+            long summaryVectorSize = postingIn.readVLong();
+            List<SparseVector.Item> items = new ArrayList<>((int) summaryVectorSize);
+            for (int k = 0; k < summaryVectorSize; ++k) {
+                items.add(new SparseVector.Item(postingIn.readVInt(), postingIn.readByte()));
+            }
+            SparseVector summary = items.isEmpty() ? null : new SparseVector(items);
+            DocumentCluster cluster = new DocumentCluster(summary, docs, shouldNotSkip);
+            clusters.add(cluster);
+        }
+        return clusters;
     }
 }

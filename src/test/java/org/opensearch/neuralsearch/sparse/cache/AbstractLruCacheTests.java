@@ -4,10 +4,11 @@
  */
 package org.opensearch.neuralsearch.sparse.cache;
 
+import org.apache.lucene.index.SegmentInfo;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
-import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -252,7 +253,7 @@ public class AbstractLruCacheTests extends AbstractSparseTestBase {
     /**
      * A concrete implementation of LruCacheKey for testing
      */
-    private static class TestLruCacheKey implements LruCacheKey {
+    private class TestLruCacheKey implements LruCacheKey {
 
         private String name;
         private CacheKey cacheKey;
@@ -264,7 +265,7 @@ public class AbstractLruCacheTests extends AbstractSparseTestBase {
         @Override
         public CacheKey getCacheKey() {
             if (cacheKey == null) {
-                cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
+                cacheKey = prepareUniqueCacheKey(mock(SegmentInfo.class));
             }
             return cacheKey;
         }

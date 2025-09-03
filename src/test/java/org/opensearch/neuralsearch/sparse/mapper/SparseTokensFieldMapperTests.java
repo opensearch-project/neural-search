@@ -286,7 +286,7 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         when(parser.nextToken()).thenReturn(XContentParser.Token.FIELD_NAME)
             .thenReturn(valueToken)
             .thenReturn(XContentParser.Token.END_OBJECT);
-        when(parser.currentName()).thenReturn("feature1");
+        when(parser.currentName()).thenReturn("1");
         when(parser.floatValue(true)).thenReturn(0.5f);
         when(doc.getByKey(any())).thenReturn(null);
 
