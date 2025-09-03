@@ -77,9 +77,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
         AgenticSearchQueryBuilder agenticQuery = (AgenticSearchQueryBuilder) query;
 
-        // Agentic search request initiated
-        log.info("Agentic search request initiated - Agent ID: [{}], Query: [{}]", agentId, agenticQuery.getQueryText());
-
         // Validate that agentic query is used alone without other search features
         if (hasOtherSearchFeatures(sourceBuilder)) {
             log.warn(
@@ -163,7 +160,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     request.source(newSourceBuilder);
                 }
 
-                log.info("Agentic search completed successfully - Agent ID: [{}], Query: [{}]", agentId, agenticQuery.getQueryText());
                 requestListener.onResponse(request);
             } catch (IOException e) {
                 log.error(
