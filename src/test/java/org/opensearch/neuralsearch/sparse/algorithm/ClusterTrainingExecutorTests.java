@@ -83,7 +83,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
     }
 
     public void testThreadPoolName_hasCorrectValue() {
-        assertEquals("cluster_training_thread_pool", SparseConstants.THREAD_POOL_NAME);
+        assertEquals("seismic_thread_pool", SparseConstants.THREAD_POOL_NAME);
     }
 
     public void testMultipleRuns_callsExecutorMultipleTimes() {

@@ -83,7 +83,7 @@ public class NeuralSparseIndexShard {
             warmUpAllForwardIndices(cacheOperationContexts);
 
             // Then warm up all inverted indices
-            warmUpAllInvertedIndices(cacheOperationContexts);
+            warmUpAllClusteredPostings(cacheOperationContexts);
         } catch (IllegalIndexShardStateException | EngineException e) {
             log.error("[Neural Sparse] Failed to acquire searcher", e);
             throw e;
@@ -116,7 +116,7 @@ public class NeuralSparseIndexShard {
     }
 
     /**
-     * Warm up all forward index
+     * Warm up all forward indices
      */
     private void warmUpAllForwardIndices(List<CacheOperationContext> contexts) throws IOException, CircuitBreakingException {
         for (CacheOperationContext context : contexts) {
@@ -135,9 +135,9 @@ public class NeuralSparseIndexShard {
     }
 
     /**
-     * Warm up all inverted index
+     * Warm up all clustered postings
      */
-    private void warmUpAllInvertedIndices(List<CacheOperationContext> contexts) throws IOException, CircuitBreakingException {
+    private void warmUpAllClusteredPostings(List<CacheOperationContext> contexts) throws IOException, CircuitBreakingException {
         for (CacheOperationContext context : contexts) {
             CacheGatedPostingsReader postingsReader = context.postingsReader;
 
@@ -160,7 +160,9 @@ public class NeuralSparseIndexShard {
     }
 
     private CacheGatedForwardIndexReader getCacheGatedForwardIndexReader(BinaryDocValues binaryDocValues, CacheKey key, int docCount) {
-        assert (binaryDocValues instanceof SparseBinaryDocValuesPassThrough);
+        if (!(binaryDocValues instanceof SparseBinaryDocValuesPassThrough)) {
+            return new CacheGatedForwardIndexReader(null, null, null);
+        }
         SparseBinaryDocValuesPassThrough sparseBinaryDocValues = (SparseBinaryDocValuesPassThrough) binaryDocValues;
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(key, docCount);
         return new CacheGatedForwardIndexReader(
