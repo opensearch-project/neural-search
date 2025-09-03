@@ -92,17 +92,11 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
     }
 
     public void testGetWithNullMergeStateThenThrowException() {
-        // Test behavior with null merge state - should throw NullPointerException within constructor
-        NullPointerException nullPointerException = assertThrows(
-            NullPointerException.class,
-            () -> new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, null, null, null)
-        );
-        assertNotNull(nullPointerException);
+        assertThrows(NullPointerException.class, () -> new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, null, null, null));
     }
 
     @SneakyThrows
     public void testGetWithNonNullMergeState() {
-
         // Create BatchClusteringTask
         BatchClusteringTask task = new BatchClusteringTask(terms, key, 0.5f, 0.3f, 10, mergeStateFacade, fieldInfo, mergeHelper);
 
@@ -124,9 +118,6 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
             PostingClusters clusters = pair.getRight();
             assertNotNull("PostingClusters should not be null", clusters);
             assertNotNull("Clusters list should not be null", clusters.getClusters());
-
-            // Additional cluster validation
-            assertTrue("Should have non-negative cluster count", clusters.getClusters().size() >= 0);
         }
     }
 
@@ -177,8 +168,7 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         // Modify original terms
         originalTerms.get(0).bytes[0] = (byte) 'M';
 
-        // The task should still have the original values due to deep copy
-        // We can't easily test the get() method output, but we can verify the task was created properly
-        assertNotNull("Task should be created and maintain its own copy of terms", task);
+        assertNotSame(originalTerms, task.getTerms());
+        assertEquals("original1", task.getTerms().get(0).utf8ToString());
     }
 }

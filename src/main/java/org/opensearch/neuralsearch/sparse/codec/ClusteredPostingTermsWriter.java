@@ -24,12 +24,14 @@ import org.apache.lucene.store.IndexOutput;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
 import org.opensearch.common.util.io.IOUtils;
+import org.opensearch.neuralsearch.sparse.accessor.ClusteredPostingWriter;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.algorithm.seismic.ClusteringTask;
 import org.opensearch.neuralsearch.sparse.algorithm.seismic.RandomClusteringAlgorithm;
 import org.opensearch.neuralsearch.sparse.algorithm.seismic.SeismicPostingClusterer;
 import org.opensearch.neuralsearch.sparse.cache.CacheGatedForwardIndexReader;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
+import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.common.ValueEncoder;
@@ -43,7 +45,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
@@ -65,7 +66,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private BytesRef currentTerm;
     private SeismicPostingClusterer seismicPostingClusterer;
     private CacheKey key;
-    private final String codec_name;
+    private final String codecName;
     private final int version;
     private SegmentWriteState state;
     private DocValuesProducer docValuesProducer;
@@ -120,7 +121,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
                 luceneReader = new SparseBinaryDocValuesPassThrough(binaryDocValues, this.state.segmentInfo);
             }
         } catch (Exception e) {
-            log.error(String.format(Locale.ROOT, "Failed to retrieve lucene reader due to exception: [%s]", e.getMessage()));
+            log.error("Failed to retrieve lucene reader");
         }
 
         float clusterRatio = Float.parseFloat(fieldInfo.attributes().get(CLUSTER_RATIO_FIELD));
@@ -172,7 +173,8 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
 
     @Override
     public void finishTerm(BlockTermState state) throws IOException {
-        PostingClusters postingClusters = new ClusteringTask(this.currentTerm, docWeights, key, this.seismicPostingClusterer).get();
+        ClusteredPostingWriter writer = ClusteredPostingCache.getInstance().getOrCreate(key).getWriter();
+        PostingClusters postingClusters = new ClusteringTask(this.currentTerm, docWeights, writer, this.seismicPostingClusterer).get();
         writePostingClusters(postingClusters, state);
         this.docWeights.clear();
         this.currentTerm = null;
@@ -201,7 +203,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         this.postingOut = termsOut;
         this.state = state;
         this.docsSeen = new FixedBitSet(state.segmentInfo.maxDoc());
-        this.codecUtilWrapper.writeIndexHeader(postingOut, this.codec_name, version, state.segmentInfo.getId(), state.segmentSuffix);
+        this.codecUtilWrapper.writeIndexHeader(postingOut, this.codecName, version, state.segmentInfo.getId(), state.segmentSuffix);
     }
 
     @Override

@@ -113,30 +113,6 @@ public class SparseTermsLuceneReader extends FieldsProducer {
         return fieldToTerms.keySet().iterator();
     }
 
-    private synchronized List<DocumentCluster> readClusters(long offset) throws IOException {
-        postingIn.seek(offset);
-        long clusterSize = postingIn.readVLong();
-        List<DocumentCluster> clusters = new ArrayList<>((int) clusterSize);
-        for (int j = 0; j < clusterSize; j++) {
-            long docSize = postingIn.readVLong();
-            List<DocWeight> docs = new ArrayList<>((int) docSize);
-            for (int k = 0; k < docSize; ++k) {
-                docs.add(new DocWeight(postingIn.readVInt(), postingIn.readByte()));
-            }
-            boolean shouldNotSkip = postingIn.readByte() == 1;
-            // summary
-            long summaryVectorSize = postingIn.readVLong();
-            List<SparseVector.Item> items = new ArrayList<>((int) summaryVectorSize);
-            for (int k = 0; k < summaryVectorSize; ++k) {
-                items.add(new SparseVector.Item(postingIn.readVInt(), postingIn.readByte()));
-            }
-            SparseVector summary = items.isEmpty() ? null : new SparseVector(items);
-            DocumentCluster cluster = new DocumentCluster(summary, docs, shouldNotSkip);
-            clusters.add(cluster);
-        }
-        return clusters;
-    }
-
     @Override
     public Terms terms(String field) throws IOException {
         throw new UnsupportedOperationException();
@@ -180,5 +156,29 @@ public class SparseTermsLuceneReader extends FieldsProducer {
     public void checkIntegrity() throws IOException {
         this.codecUtilWrapper.checksumEntireFile(termsIn);
         this.codecUtilWrapper.checksumEntireFile(postingIn);
+    }
+
+    private synchronized List<DocumentCluster> readClusters(long offset) throws IOException {
+        postingIn.seek(offset);
+        long clusterSize = postingIn.readVLong();
+        List<DocumentCluster> clusters = new ArrayList<>((int) clusterSize);
+        for (int j = 0; j < clusterSize; j++) {
+            long docSize = postingIn.readVLong();
+            List<DocWeight> docs = new ArrayList<>((int) docSize);
+            for (int k = 0; k < docSize; ++k) {
+                docs.add(new DocWeight(postingIn.readVInt(), postingIn.readByte()));
+            }
+            boolean shouldNotSkip = postingIn.readByte() == 1;
+            // summary
+            long summaryVectorSize = postingIn.readVLong();
+            List<SparseVector.Item> items = new ArrayList<>((int) summaryVectorSize);
+            for (int k = 0; k < summaryVectorSize; ++k) {
+                items.add(new SparseVector.Item(postingIn.readVInt(), postingIn.readByte()));
+            }
+            SparseVector summary = items.isEmpty() ? null : new SparseVector(items);
+            DocumentCluster cluster = new DocumentCluster(summary, docs, shouldNotSkip);
+            clusters.add(cluster);
+        }
+        return clusters;
     }
 }

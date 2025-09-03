@@ -140,8 +140,9 @@ public class SparsePostingsConsumer extends FieldsConsumer {
                 if (term == null) {
                     break;
                 }
-                BlockTermState state = this.clusteredPostingTermsWriter.write(term, termsEnum, norms);
-                termsList.add(term.clone());
+                BytesRef clonedTerm = term.clone();
+                BlockTermState state = this.clusteredPostingTermsWriter.write(clonedTerm, termsEnum, norms);
+                termsList.add(clonedTerm);
                 states.add(state);
             }
             this.sparseTermsLuceneWriter.writeTermsSize(termsList.size());
@@ -187,7 +188,7 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         // merge sparse fields
         try {
             MergeStateFacade mergeStateFacade = mergeHelper.convertToMergeStateFacade(mergeState);
-            SparsePostingsReader sparsePostingsReader = new SparsePostingsReader(mergeStateFacade, new MergeHelper());
+            SparsePostingsReader sparsePostingsReader = new SparsePostingsReader(mergeStateFacade, mergeHelper);
             sparsePostingsReader.merge(this.sparseTermsLuceneWriter, this.clusteredPostingTermsWriter);
             mergeHelper.clearCacheData(mergeStateFacade, null, ClusteredPostingCache.getInstance()::removeIndex);
         } catch (Exception e) {

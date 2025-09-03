@@ -18,7 +18,7 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import java.io.IOException;
 
 /**
- * PostingsEnum for sparse vector
+ * An enumerator for seismic's posting list with clusters, it traverses clusters and docs.
  */
 public class SparsePostingsEnum extends PostingsEnum {
     @Getter

@@ -33,6 +33,7 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -188,6 +189,13 @@ public class SparseDocValuesConsumerTests extends AbstractSparseTestBase {
         sparseDocValuesConsumer.close();
 
         verify(delegate, times(1)).close();
+    }
+
+    @SneakyThrows
+    public void testMerge_mergeFieldInfosIsNull() {
+        when(mockMergeStateFacade.getMergeFieldInfos()).thenReturn(null);
+        sparseDocValuesConsumer.merge(mergeState);
+        verify(segmentInfo, never()).maxDoc();
     }
 
     @SneakyThrows

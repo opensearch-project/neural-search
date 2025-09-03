@@ -17,6 +17,7 @@ import java.io.IOException;
  * Implementations of this interface are responsible for efficiently persisting
  * sparse vector data, which may involve writing to disk, memory, or other storage media.
  */
+@FunctionalInterface
 public interface SparseVectorWriter {
     /**
      * A no-op implementation of SparseVectorWriter that ignores all write operations.

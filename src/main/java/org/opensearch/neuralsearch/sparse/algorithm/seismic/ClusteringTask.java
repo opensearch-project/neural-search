@@ -7,8 +7,6 @@ package org.opensearch.neuralsearch.sparse.algorithm.seismic;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.accessor.ClusteredPostingWriter;
-import org.opensearch.neuralsearch.sparse.cache.CacheKey;
-import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
@@ -23,12 +21,17 @@ public class ClusteringTask implements Supplier<PostingClusters> {
     private final BytesRef term;
     private final List<DocWeight> docs;
     private final SeismicPostingClusterer seismicPostingClusterer;
-    private final CacheKey key;
+    private final ClusteredPostingWriter writer;
 
-    public ClusteringTask(BytesRef term, Collection<DocWeight> docs, CacheKey key, SeismicPostingClusterer seismicPostingClusterer) {
+    public ClusteringTask(
+        BytesRef term,
+        Collection<DocWeight> docs,
+        ClusteredPostingWriter writer,
+        SeismicPostingClusterer seismicPostingClusterer
+    ) {
         this.docs = docs.stream().toList();
         this.term = BytesRef.deepCopyOf(term);
-        this.key = key;
+        this.writer = writer;
         this.seismicPostingClusterer = seismicPostingClusterer;
     }
 
@@ -41,7 +44,6 @@ public class ClusteringTask implements Supplier<PostingClusters> {
             log.error("cluster failed", e);
             throw new RuntimeException(e);
         }
-        ClusteredPostingWriter writer = ClusteredPostingCache.getInstance().getOrCreate(key).getWriter();
         writer.insert(term, clusters);
         return new PostingClusters(clusters);
     }

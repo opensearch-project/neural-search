@@ -11,6 +11,7 @@ import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.MergeState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -57,10 +58,10 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
         if (!SparseTokensField.isSparseField(field)) {
             return;
         }
-        addBinary(field, valuesProducer, false);
+        addSparseVectorBinary(field, valuesProducer, false);
     }
 
-    private void addBinary(FieldInfo field, DocValuesProducer valuesProducer, boolean isMerge) throws IOException {
+    private void addSparseVectorBinary(FieldInfo field, DocValuesProducer valuesProducer, boolean isMerge) throws IOException {
         if (!PredicateUtils.shouldRunSeisPredicate.test(this.state.segmentInfo, field)) {
             return;
         }
@@ -68,9 +69,6 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
         CacheKey key = new CacheKey(this.state.segmentInfo, field);
         int docCount = this.state.segmentInfo.maxDoc();
         SparseVectorWriter writer = ForwardIndexCache.getInstance().getOrCreate(key, docCount).getWriter();
-        if (writer == null) {
-            throw new IllegalStateException("Forward index writer is null");
-        }
         int docId = binaryDocValues.nextDoc();
         while (docId != DocIdSetIterator.NO_MORE_DOCS) {
             boolean written = false;
@@ -121,11 +119,14 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
         try {
             assert mergeState != null;
             MergeStateFacade mergeStateFacade = mergeHelper.convertToMergeStateFacade(mergeState);
-            assert mergeStateFacade.getMergeFieldInfos() != null;
-            for (FieldInfo fieldInfo : mergeStateFacade.getMergeFieldInfos()) {
+            FieldInfos mergeFieldInfos = mergeStateFacade.getMergeFieldInfos();
+            if (mergeFieldInfos == null) {
+                return;
+            }
+            for (FieldInfo fieldInfo : mergeFieldInfos) {
                 DocValuesType type = fieldInfo.getDocValuesType();
                 if (type == DocValuesType.BINARY && SparseTokensField.isSparseField(fieldInfo)) {
-                    addBinary(fieldInfo, new SparseDocValuesReader(mergeStateFacade), true);
+                    addSparseVectorBinary(fieldInfo, new SparseDocValuesReader(mergeStateFacade), true);
                 }
             }
         } catch (Exception e) {

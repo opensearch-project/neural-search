@@ -20,7 +20,7 @@ import java.io.IOException;
 @RequiredArgsConstructor
 public class SparseTermsLuceneWriter {
     private IndexOutput termsOut;
-    private final String codec_name;
+    private final String codecName;
     private final int version;
     private final CodecUtilWrapper codecUtilWrapper;
 
@@ -33,7 +33,7 @@ public class SparseTermsLuceneWriter {
      */
     public void init(IndexOutput termsOut, SegmentWriteState state) throws IOException {
         this.termsOut = termsOut;
-        codecUtilWrapper.writeIndexHeader(termsOut, codec_name, version, state.segmentInfo.getId(), state.segmentSuffix);
+        codecUtilWrapper.writeIndexHeader(termsOut, codecName, version, state.segmentInfo.getId(), state.segmentSuffix);
     }
 
     /**
