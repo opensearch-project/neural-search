@@ -55,7 +55,7 @@ public class BatchClusteringTaskTests extends AbstractSparseTestBase {
         MockitoAnnotations.openMocks(this);
         terms = Arrays.asList(new BytesRef("term1"), new BytesRef("term2"));
         when(fieldInfo.getName()).thenReturn("test_field");
-        key = new CacheKey(segmentInfo, fieldInfo);
+        key = prepareUniqueCacheKey(segmentInfo);
         when(mergeStateFacade.getMaxDocs()).thenReturn(new int[] { 5, 6 });
         when(mergeHelper.getMergedPostingForATerm(any(), any(), any(), any(), any())).thenReturn(
             preparePostings(1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10)

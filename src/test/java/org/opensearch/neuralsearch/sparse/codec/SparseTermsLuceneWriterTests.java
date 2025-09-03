@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -46,6 +47,7 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
     private SparseTermsLuceneWriter writer;
     private SegmentWriteState mockSegmentWriteState;
 
+    @SneakyThrows
     @Before
     @Override
     public void setUp() {
@@ -54,10 +56,12 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
         mockSegmentWriteState = TestsPrepareUtils.prepareSegmentWriteState();
         writer = new SparseTermsLuceneWriter(CODEC_NAME, VERSION, mockCodecUtilWrapper);
+        writer.init(mockIndexOutput, mockSegmentWriteState);
     }
 
     @SneakyThrows
     public void testConstructor() {
+        mockCodecUtilWrapper = mock(CodecUtilWrapper.class);
         SparseTermsLuceneWriter testWriter = new SparseTermsLuceneWriter(CODEC_NAME, VERSION, mockCodecUtilWrapper);
         assertNotNull(testWriter);
 
@@ -74,8 +78,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testInit_success() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
-
         verify(mockCodecUtilWrapper).writeIndexHeader(
             eq(mockIndexOutput),
             eq(CODEC_NAME),
@@ -96,7 +98,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testClose_success() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         writer.close(START_FP);
 
         verify(mockIndexOutput, times(1)).writeLong(START_FP);
@@ -105,7 +106,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testClose_throwsIOException() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         IOException expectedException = new IOException("Test exception");
         doThrow(expectedException).when(mockIndexOutput).writeLong(anyLong());
 
@@ -115,7 +115,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testWriteFieldCount_success() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         writer.writeFieldCount(FIELD_COUNT);
 
         verify(mockIndexOutput, times(1)).writeVInt(FIELD_COUNT);
@@ -123,7 +122,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testWriteFieldCount_throwsIOException() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         IOException expectedException = new IOException("Test exception");
         doThrow(expectedException).when(mockIndexOutput).writeVInt(anyInt());
 
@@ -133,7 +131,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testWriteFieldNumber_success() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         writer.writeFieldNumber(FIELD_NUMBER);
 
         verify(mockIndexOutput, times(1)).writeVInt(FIELD_NUMBER);
@@ -141,7 +138,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testWriteFieldNumber_throwsIOException() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         IOException expectedException = new IOException("Test exception");
         doThrow(expectedException).when(mockIndexOutput).writeVInt(anyInt());
 
@@ -151,7 +147,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testWriteTermsSize_success() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         writer.writeTermsSize(TERMS_SIZE);
 
         verify(mockIndexOutput, times(1)).writeVLong(TERMS_SIZE);
@@ -159,7 +154,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testWriteTermsSize_throwsIOException() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         IOException expectedException = new IOException("Test exception");
         doThrow(expectedException).when(mockIndexOutput).writeVLong(anyLong());
 
@@ -169,7 +163,6 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testWriteTerm_success() {
-        writer.init(mockIndexOutput, mockSegmentWriteState);
         BytesRef term = new BytesRef("test_term");
 
         writer.writeTerm(term, mockBlockTermState);
@@ -188,5 +181,11 @@ public class SparseTermsLuceneWriterTests extends AbstractSparseTestBase {
 
         IOException exception = expectThrows(IOException.class, () -> writer.writeTerm(term, mockBlockTermState));
         assertEquals("Test exception", exception.getMessage());
+    }
+
+    @SneakyThrows
+    public void testCloseWithException() {
+        writer.closeWithException();
+        verify(mockIndexOutput).close();
     }
 }

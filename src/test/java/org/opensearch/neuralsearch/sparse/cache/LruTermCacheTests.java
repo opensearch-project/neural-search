@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.cache;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.junit.Before;
@@ -14,6 +15,8 @@ import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 
 import java.util.List;
+
+import static org.mockito.Mockito.mock;
 
 public class LruTermCacheTests extends AbstractSparseTestBase {
 
@@ -29,8 +32,8 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         super.setUp();
 
         // Prepare cache keys
-        cacheKey1 = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), "test_field_1");
-        cacheKey2 = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), "test_field_2");
+        cacheKey1 = prepareUniqueCacheKey(mock(SegmentInfo.class));
+        cacheKey2 = prepareUniqueCacheKey(mock(SegmentInfo.class));
 
         // Prepare terms
         term1 = new BytesRef("term1");

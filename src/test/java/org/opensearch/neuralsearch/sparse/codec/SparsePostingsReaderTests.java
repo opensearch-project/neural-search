@@ -101,7 +101,6 @@ public class SparsePostingsReaderTests extends AbstractSparseTestBase {
 
     @SneakyThrows
     public void testMerge_success() {
-
         reader.merge(mockSparseTermsWriter, mockClusteredWriter);
 
         verify(mockSparseTermsWriter, times(1)).writeFieldCount(1);

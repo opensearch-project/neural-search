@@ -5,10 +5,13 @@
 package org.opensearch.neuralsearch.sparse.cache;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.index.SegmentInfo;
 import org.junit.Before;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
+
+import static org.mockito.Mockito.mock;
 
 public class LruDocumentCacheTests extends AbstractSparseTestBase {
 
@@ -21,8 +24,8 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
         super.setUp();
 
         // Prepare forward index and cache key
-        cacheKey1 = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), "test_field_1");
-        cacheKey2 = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), "test_field_2");
+        cacheKey1 = prepareUniqueCacheKey(mock(SegmentInfo.class));
+        cacheKey2 = prepareUniqueCacheKey(mock(SegmentInfo.class));
         ForwardIndexCache.getInstance().getOrCreate(cacheKey1, 10);
         ForwardIndexCache.getInstance().getOrCreate(cacheKey2, 10);
     }

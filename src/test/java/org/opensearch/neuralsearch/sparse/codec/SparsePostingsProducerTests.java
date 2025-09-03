@@ -18,7 +18,6 @@ import org.junit.Before;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -44,8 +43,8 @@ public class SparsePostingsProducerTests extends AbstractSparseTestBase {
     private Supplier<SparseTermsLuceneReader> readerSupplier = () -> mockReader;
 
     @Before
-    public void init() throws IOException {
-
+    public void setUp() {
+        super.setUp();
         mockDelegate = mock(FieldsProducer.class);
 
         // Setup segment info

@@ -85,9 +85,10 @@ public class SparseDocValuesConsumerTests extends AbstractSparseTestBase {
 
         when(fieldInfos.iterator()).thenReturn(List.of(sparseFieldInfo, nonSparseFieldInfo).iterator());
         when(mockMergeStateFacade.getMergeFieldInfos()).thenReturn(fieldInfos);
+        when(mockMergeStateFacade.getFieldInfos()).thenReturn(new FieldInfos[] { fieldInfos });
 
         docValuesProducer = mock(DocValuesProducer.class);
-        cacheKey = new CacheKey(segmentInfo, sparseFieldInfo);
+        cacheKey = prepareUniqueCacheKey(segmentInfo);
         sparseDocValuesConsumer = new SparseDocValuesConsumer(segmentWriteState, delegate, mockMergeHelper);
     }
 
@@ -201,6 +202,7 @@ public class SparseDocValuesConsumerTests extends AbstractSparseTestBase {
     @SneakyThrows
     public void testMerge_WithSparseField() {
         FieldInfo mergeFieldInfo = mock(FieldInfo.class);
+        when(mergeFieldInfo.getDocValuesType()).thenReturn(DocValuesType.BINARY);
         when(mergeFieldInfo.attributes()).thenReturn(
             Map.of(SPARSE_FIELD, String.valueOf(true), APPROXIMATE_THRESHOLD_FIELD, String.valueOf(10))
         );

@@ -5,9 +5,11 @@
 package org.opensearch.neuralsearch.sparse;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.index.SegmentInfo;
 import org.junit.Before;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.common.DocWeightIterator;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
@@ -22,6 +24,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -162,5 +165,9 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
         attributes.put(N_POSTINGS_FIELD, String.valueOf(posting));
         attributes.put(SUMMARY_PRUNE_RATIO_FIELD, String.valueOf(summary));
         return attributes;
+    }
+
+    protected CacheKey prepareUniqueCacheKey(SegmentInfo segmentInfo) {
+        return new CacheKey(segmentInfo, UUID.randomUUID().toString());
     }
 }

@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.codec;
 
 import lombok.SneakyThrows;
 import org.apache.lucene.index.PostingsEnum;
+import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.util.BytesRef;
 import org.junit.After;
@@ -34,10 +35,11 @@ public class SparseTermsTests extends AbstractSparseTestBase {
     private static final String TEST_FIELD = "test_field";
 
     @Mock
-    private CacheKey mockCacheKey;
+    private SegmentInfo mockSegmentInfo;
     @Mock
     private SparseTermsLuceneReader mockReader;
 
+    private CacheKey cacheKey;
     private Set<BytesRef> terms;
     private SparseTerms sparseTerms;
 
@@ -50,24 +52,25 @@ public class SparseTermsTests extends AbstractSparseTestBase {
 
         terms = new HashSet<>();
         terms.add(new BytesRef("term"));
+        cacheKey = prepareUniqueCacheKey(mockSegmentInfo);
         when(mockReader.getTerms(TEST_FIELD)).thenReturn(terms);
-        ClusteredPostingCache.getInstance().getOrCreate(mockCacheKey);
-        sparseTerms = new SparseTerms(mockCacheKey, mockReader, TEST_FIELD);
+        ClusteredPostingCache.getInstance().getOrCreate(cacheKey);
+        sparseTerms = new SparseTerms(cacheKey, mockReader, TEST_FIELD);
     }
 
     @After
     @Override
     @SneakyThrows
     public void tearDown() {
-        ClusteredPostingCache.getInstance().removeIndex(mockCacheKey);
+        ClusteredPostingCache.getInstance().removeIndex(cacheKey);
         super.tearDown();
     }
 
     @SneakyThrows
     public void testConstructor() {
-        SparseTerms sparseTerms = new SparseTerms(mockCacheKey, mockReader, TEST_FIELD);
+        SparseTerms sparseTerms = new SparseTerms(cacheKey, mockReader, TEST_FIELD);
         assertNotNull(sparseTerms);
-        assertEquals(mockCacheKey, sparseTerms.getCacheKey());
+        assertEquals(cacheKey, sparseTerms.getCacheKey());
         // verify that sparseTerms.reader creates successfully by calling size
         assertEquals(1, sparseTerms.size());
     }

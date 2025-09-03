@@ -90,7 +90,7 @@ public class SparseTermsLuceneReader extends FieldsProducer {
                     long fileOffset = termsIn.readVLong();
                     terms.put(term, fileOffset);
                 }
-                fieldToTerms.put(state.fieldInfos.fieldInfo(fieldId).name, terms);
+                fieldToTerms.put(state.fieldInfos.fieldInfo(fieldId).getName(), terms);
             }
             success = true;
         } catch (Exception e) {

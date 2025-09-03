@@ -299,4 +299,9 @@ public class MergeHelperTests extends AbstractSparseTestBase {
         Set<BytesRef> allTerms = mergeHelper.getAllTerms(mergeStateFacade, mockFieldInfo);
         assertEquals(terms, allTerms);
     }
+
+    public void test_convertToMergeStateFacade() {
+        MergeState mergeState = mock(MergeState.class);
+        assertNotNull(mergeHelper.convertToMergeStateFacade(mergeState));
+    }
 }
