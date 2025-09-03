@@ -86,7 +86,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                 agentId,
                 agenticQuery.getQueryText()
             );
-            log.warn(errorMessage);
             requestListener.onFailure(new IllegalArgumentException(errorMessage));
             return;
         }
@@ -138,7 +137,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                         agentId,
                         agenticQuery.getQueryText()
                     );
-                    log.error(errorMessage);
                     throw new IllegalArgumentException(errorMessage);
                 }
 
@@ -151,7 +149,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                         agenticQuery.getQueryText(),
                         MAX_AGENT_RESPONSE_SIZE
                     );
-                    log.error(errorMessage);
                     throw new IllegalArgumentException(errorMessage);
                 }
 
@@ -171,7 +168,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     agenticQuery.getQueryText(),
                     e.getMessage()
                 );
-                log.error(errorMessage);
                 requestListener.onFailure(new IOException(errorMessage, e));
             }
         }, e -> {
@@ -182,7 +178,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                 agenticQuery.getQueryText(),
                 e.getMessage()
             );
-            log.error(errorMessage);
             requestListener.onFailure(new RuntimeException(errorMessage, e));
         }));
     }
