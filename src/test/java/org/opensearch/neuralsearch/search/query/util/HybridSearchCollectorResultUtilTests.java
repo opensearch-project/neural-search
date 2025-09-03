@@ -97,7 +97,7 @@ public class HybridSearchCollectorResultUtilTests extends OpenSearchQueryTestCas
         when(hybridTopScoreDocCollector.getTotalHits()).thenReturn(4);
         when(hybridTopScoreDocCollector.getMaxScore()).thenReturn(0.7f);
 
-        TopDocsAndMaxScore topDocsAndMaxScore = hybridSearchCollectorResultUtil.getTopDocsAndAndMaxScore();
+        TopDocsAndMaxScore topDocsAndMaxScore = hybridSearchCollectorResultUtil.getTopDocsAndMaxScore();
         assertEquals(4, topDocsAndMaxScore.topDocs.totalHits.value());
         assertEquals(0.7f, topDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
         ScoreDoc[] updatedScoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;

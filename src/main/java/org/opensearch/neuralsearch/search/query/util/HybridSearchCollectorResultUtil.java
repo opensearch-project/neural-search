@@ -76,7 +76,7 @@ public class HybridSearchCollectorResultUtil {
     /**
      * Get topDocs and max score
      */
-    public TopDocsAndMaxScore getTopDocsAndAndMaxScore() throws IOException {
+    public TopDocsAndMaxScore getTopDocsAndMaxScore() throws IOException {
         List topDocs = hybridSearchCollector.topDocs();
         if (hybridSearchCollectorResultsDTO.isSortEnabled() || hybridSearchCollectorResultsDTO.isCollapseEnabled()) {
             return getSortedTopDocsAndMaxScore(topDocs);

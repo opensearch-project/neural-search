@@ -22,7 +22,7 @@ import java.io.IOException;
 import static org.opensearch.search.profile.query.CollectorResult.REASON_SEARCH_TOP_HITS;
 
 /**
- * Class that will inject QueryCollectorContextSpec for hybrid query directly in the QueryPhase
+ * Create hybrid collector manager and injects the hybrid collector into the query phase to allow custom scoring and top doc collection
  */
 @Log4j2
 public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpec {
@@ -57,7 +57,7 @@ public class HybridQueryCollectorContextSpec implements QueryCollectorContextSpe
             new HybridCollectorResultsUtilParams.Builder().searchContext(searchContext).build(),
             collector
         );
-        TopDocsAndMaxScore topDocsAndMaxScore = hybridSearchCollectorResultUtil.getTopDocsAndAndMaxScore();
+        TopDocsAndMaxScore topDocsAndMaxScore = hybridSearchCollectorResultUtil.getTopDocsAndMaxScore();
         hybridSearchCollectorResultUtil.reduceCollectorResults(result, topDocsAndMaxScore);
     }
 }
