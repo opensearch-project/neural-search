@@ -45,9 +45,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         ClusteredPostingCache.getInstance().getOrCreate(cacheKey2);
     }
 
-    /**
-     * Test that getInstance returns the singleton instance
-     */
     public void test_getInstance_returnsSingletonInstance() {
         LruTermCache instance1 = LruTermCache.getInstance();
         LruTermCache instance2 = LruTermCache.getInstance();
@@ -56,9 +53,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertSame(instance1, instance2);
     }
 
-    /**
-     * Test that doEviction correctly evicts a term
-     */
     @SneakyThrows
     public void test_doEviction_erasesTerm() {
         LruTermCache.TermKey termKey = new LruTermCache.TermKey(cacheKey1, term1);
@@ -80,9 +74,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertEquals(expectedCluster.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(term1) + term1.bytes.length, bytesFreed);
     }
 
-    /**
-     * Test that doEviction does nothing when the key is not within the clustered posting cache
-     */
     @SneakyThrows
     public void test_doEviction_withNonExistentKey() {
         CacheKey nonExistentCacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), "non_existent_field");
@@ -95,9 +86,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertEquals(0, bytesFreed);
     }
 
-    /**
-     * Test that evict correctly evicts terms until enough memory is freed
-     */
     @SneakyThrows
     public void test_evict_untilEnoughMemoryFreed() {
         // Add terms to the cache, this will update the access order
@@ -136,9 +124,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertEquals(posting3.getClusters(), remainingPosting.getClusters());
     }
 
-    /**
-     * Test that removeIndex correctly removes all terms for an index
-     */
     public void test_removeIndex_removesAllTermsForIndex() {
         // Add terms to the cache for different indices
         LruTermCache.TermKey termKey1 = new LruTermCache.TermKey(cacheKey1, term1);
@@ -159,17 +144,11 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertEquals(term3, remainingTerm.getTerm());
     }
 
-    /**
-     * Test that removeIndex throws NullPointerException when key is null
-     */
     public void test_removeIndex_withNullKey() {
         NullPointerException exception = expectThrows(NullPointerException.class, () -> lruTermCache.removeIndex(null));
         assertEquals("cacheKey is marked non-null but is null", exception.getMessage());
     }
 
-    /**
-     * Test TermKey equals
-     */
     public void test_TermKey_equals_returnsTrue_whenSame() {
         LruTermCache.TermKey key1 = new LruTermCache.TermKey(cacheKey1, term1);
         LruTermCache.TermKey key2 = new LruTermCache.TermKey(cacheKey1, term1);
@@ -177,9 +156,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertEquals(key1, key2);
     }
 
-    /**
-     * Test TermKey equals
-     */
     public void test_TermKey_equals_returnsFalse_withDifferentTerm() {
         LruTermCache.TermKey key1 = new LruTermCache.TermKey(cacheKey1, term1);
         LruTermCache.TermKey key2 = new LruTermCache.TermKey(cacheKey1, term2);
@@ -187,9 +163,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertNotEquals(key1, key2);
     }
 
-    /**
-     * Test TermKey equals
-     */
     public void test_TermKey_equals_returnsFalse_withDifferentCacheKey() {
         LruTermCache.TermKey key1 = new LruTermCache.TermKey(cacheKey1, term1);
         LruTermCache.TermKey key2 = new LruTermCache.TermKey(cacheKey2, term1);
@@ -197,9 +170,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertNotEquals(key1, key2);
     }
 
-    /**
-     * Test TermKey hashCode
-     */
     public void test_TermKey_hashCodeEquals_returnsEqualValues_whenSame() {
         LruTermCache.TermKey key1 = new LruTermCache.TermKey(cacheKey1, term1);
         LruTermCache.TermKey key2 = new LruTermCache.TermKey(cacheKey1, term1);
@@ -207,9 +177,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertEquals(key1.hashCode(), key2.hashCode());
     }
 
-    /**
-     * Test TermKey hashCode
-     */
     public void test_TermKey_hashCodeEquals_returnsDifferentValues_withDifferentTerm() {
         LruTermCache.TermKey key1 = new LruTermCache.TermKey(cacheKey1, term1);
         LruTermCache.TermKey key2 = new LruTermCache.TermKey(cacheKey1, term2);
@@ -217,9 +184,6 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertNotEquals(key1.hashCode(), key2.hashCode());
     }
 
-    /**
-     * Test TermKey hashCode
-     */
     public void test_TermKey_hashCodeEquals_returnsDifferentValues_withDifferentCacheKey() {
         LruTermCache.TermKey key1 = new LruTermCache.TermKey(cacheKey1, term1);
         LruTermCache.TermKey key2 = new LruTermCache.TermKey(cacheKey2, term1);
@@ -227,27 +191,18 @@ public class LruTermCacheTests extends AbstractSparseTestBase {
         assertNotEquals(key1.hashCode(), key2.hashCode());
     }
 
-    /**
-     * Test TermKey get CacheKey
-     */
     public void test_TermKey_getCacheKey() {
         LruTermCache.TermKey key = new LruTermCache.TermKey(cacheKey1, term1);
 
         assertEquals(cacheKey1, key.getCacheKey());
     }
 
-    /**
-     * Test TermKey get Term
-     */
     public void test_TermKey_getTerm() {
         LruTermCache.TermKey key = new LruTermCache.TermKey(cacheKey1, term1);
 
         assertEquals(term1, key.getTerm());
     }
 
-    /**
-     * Clear the LRU Term Cache and Clustered Posting Cache to avoid impact on other tests
-     */
     @Override
     public void tearDown() throws Exception {
         lruTermCache.evict(Long.MAX_VALUE);
