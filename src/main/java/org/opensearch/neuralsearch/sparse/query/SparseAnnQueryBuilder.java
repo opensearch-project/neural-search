@@ -70,6 +70,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     private Map<String, Float> queryTokens;
 
     private static final int DEFAULT_TOP_K = 10;
+    private static final int DEFAULT_QUERY_CUT = 10;
     private static final float DEFAULT_HEAP_FACTOR = 1.0f;
 
     public SparseAnnQueryBuilder(
@@ -189,7 +190,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     }
 
     private SparseQueryContext constructSparseQueryContext() {
-        int n = queryCut == null ? queryTokens.size() : Math.min(queryCut, queryTokens.size());
+        int n = queryCut == null ? DEFAULT_QUERY_CUT : queryCut;
+        n = Math.min(n, queryTokens.size());
         List<String> topTokens = queryTokens.entrySet()
             .stream()
             .sorted(Map.Entry.<String, Float>comparingByValue().reversed()) // Sort by values in descending order

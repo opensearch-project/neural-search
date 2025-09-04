@@ -276,15 +276,16 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertEquals(K, query.getQueryContext().getK());
     }
 
-    public void testDoToQuery_withValidContext_filterNull() throws IOException {
-        queryBuilder = SparseAnnQueryBuilder.builder()
-            .fieldName("test_field")
-            .queryCut(CUT)
-            .k(K)
-            .heapFactor(HEAP_FACTOR)
-            .queryTokens(queryTokens)
-            .filter(null)
-            .build();
+    public void testDoToQuery_withValidContext_defaultParameter() throws IOException {
+        queryTokens.put("4", 0.5f);
+        queryTokens.put("5", 0.6f);
+        queryTokens.put("6", 0.7f);
+        queryTokens.put("7", 0.8f);
+        queryTokens.put("8", 0.9f);
+        queryTokens.put("9", 1.0f);
+        queryTokens.put("10", 1.1f);
+        queryTokens.put("11", 1.2f);
+        queryBuilder = SparseAnnQueryBuilder.builder().fieldName("test_field").queryTokens(queryTokens).build();
         QueryShardContext context = mock(QueryShardContext.class);
         MappedFieldType fieldType = mock(MappedFieldType.class);
         when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
@@ -300,31 +301,8 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         queryTokens.remove("3"); // "3" has the smallest value
         assertEquals(queryTokens.keySet(), new HashSet<>(query.getQueryContext().getTokens()));
         assertNull(query.getFilter());
-        assertEquals(HEAP_FACTOR, query.getQueryContext().getHeapFactor(), DELTA_FOR_ASSERTION);
-        assertEquals(K, query.getQueryContext().getK());
-    }
-
-    public void testDoToQuery_withValidContext_cutIsNull() throws IOException {
-        queryBuilder = SparseAnnQueryBuilder.builder()
-            .fieldName("test_field")
-            .k(10)
-            .heapFactor(1.5f)
-            .queryTokens(queryTokens)
-            .filter(filter)
-            .build();
-        QueryShardContext context = mock(QueryShardContext.class);
-        MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
-        when(context.fieldMapper("test_field")).thenReturn(fieldType);
-        MappedFieldType fieldType2 = mock(MappedFieldType.class);
-        when(context.fieldMapper("field")).thenReturn(fieldType2);
-        Query termQuery = mock(Query.class);
-        when(fieldType2.termQuery(any(), any())).thenReturn(termQuery);
-
-        queryBuilder.fallbackQuery(mock(Query.class));
-
-        SparseVectorQuery query = (SparseVectorQuery) queryBuilder.doToQuery(context);
-        assertEquals(queryTokens.keySet(), new HashSet<>(query.getQueryContext().getTokens()));
+        assertEquals(1.0, query.getQueryContext().getHeapFactor(), DELTA_FOR_ASSERTION);
+        assertEquals(10, query.getQueryContext().getK());
     }
 
     public void testDoToQuery_invalidFieldType() throws IOException {
