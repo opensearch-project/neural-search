@@ -70,6 +70,15 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
         EventStatsManager.instance().initialize(mockSettingsAccessor);
 
+        // Mock cluster service
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockMetadata.index(any(String.class))).thenReturn(null); // Return null to trigger the catch block
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
         // Use factory to create processor since constructor is private
         AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
             mockMLClient,
@@ -151,7 +160,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         processor.processRequestAsync(request, mockContext, listener);
 
         verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
-        verify(listener).onFailure(any(RuntimeException.class));
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error"));
     }
 
     public void testProcessRequestAsync_withAgenticQuery_parseFailure() {
@@ -173,7 +184,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         processor.processRequestAsync(request, mockContext, listener);
 
         verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
-        verify(listener).onFailure(any(IOException.class));
+        ArgumentCaptor<IOException> exceptionCaptor = ArgumentCaptor.forClass(IOException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Parse error"));
     }
 
     public void testProcessRequest_throwsException() {
@@ -255,10 +268,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        assertEquals(
-            "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc.",
-            exceptionCaptor.getValue().getMessage()
-        );
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search blocked - Invalid usage with other search features"));
         verifyNoInteractions(mockMLClient);
     }
 
@@ -275,10 +285,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        assertEquals(
-            "Agentic search cannot be used with other search features like aggregations, sort, highlighters, etc.",
-            exceptionCaptor.getValue().getMessage()
-        );
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search blocked - Invalid usage with other search features"));
         verifyNoInteractions(mockMLClient);
     }
 
@@ -360,5 +367,54 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         verify(listener).onResponse(request);
 
         assertNotNull(request.source());
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_oversizedResponse() throws IOException {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Create a response larger than MAX_AGENT_RESPONSE_SIZE characters
+        String oversizedResponse = "x".repeat(10_001);
+
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(2);
+            agentListener.onResponse(oversizedResponse);
+            return null;
+        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        RuntimeException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("Agentic search blocked - Response size exceeded limit"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_nullResponse() throws IOException {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(2);
+            agentListener.onResponse(null);
+            return null;
+        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        RuntimeException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("Agentic search failed - Null response from agent"));
+        assertTrue(exception.getCause() instanceof IllegalArgumentException);
     }
 }

@@ -29,6 +29,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
+import java.util.Locale;
 import java.util.Objects;
 import java.util.List;
 import java.util.ArrayList;
@@ -48,6 +49,12 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     public static final String NAME = "agentic";
     public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     public static final ParseField QUERY_FIELDS = new ParseField("query_fields");
+
+    // Regex patterns for sanitizing query text
+    private static final String SYSTEM_INSTRUCTION_PATTERN = "(?i)\\b(system|instruction|prompt)\\s*:";
+    private static final String COMMAND_INJECTION_PATTERN = "(?i)\\b(execute|run|eval|script)\\s*[:\\(]";
+
+    private static final int MAX_QUERY_LENGTH = 1000;
     public String queryText;
     public List<String> queryFields;
 
@@ -150,6 +157,9 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             throw new ParsingException(parser.getTokenLocation(), "[" + QUERY_TEXT_FIELD.getPreferredName() + "] is required");
         }
 
+        // Sanitize query text to prevent prompt injection
+        agenticSearchQueryBuilder.queryText = sanitizeQueryText(agenticSearchQueryBuilder.queryText);
+
         return agenticSearchQueryBuilder;
     }
 
@@ -189,5 +199,34 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     @Override
     public String fieldName() {
         return NAME;
+    }
+
+    /**
+     * Sanitizes query text to prevent prompt injection attacks
+     */
+    private static String sanitizeQueryText(String queryText) {
+        if (queryText == null) {
+            return null;
+        }
+
+        // Remove potential prompt injection patterns
+        String sanitized = queryText
+            // Remove system/instruction keywords that could manipulate LLM behavior
+            .replaceAll(SYSTEM_INSTRUCTION_PATTERN, "")
+            // Remove potential command injection patterns
+            .replaceAll(COMMAND_INJECTION_PATTERN, "")
+            .trim();
+
+        // Validate length to prevent extremely long inputs
+        if (sanitized.length() > MAX_QUERY_LENGTH) {
+            String errorMessage = String.format(
+                Locale.ROOT,
+                "Query text too long. Maximum allowed length is [%s] characters",
+                MAX_QUERY_LENGTH
+            );
+            throw new IllegalArgumentException(errorMessage);
+        }
+
+        return sanitized;
     }
 }
