@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.commons.lang.math.RandomUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.get.MultiGetItemResponse;
 import org.opensearch.action.get.MultiGetResponse;
