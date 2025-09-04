@@ -43,7 +43,7 @@ import java.io.IOException;
 @Log4j2
 public class SparseQueryWeight extends Weight {
     private final float boost;
-    private final Weight booleanQueryWeight;
+    private final Weight fallbackQueryWeight;
     private final ForwardIndexCache forwardIndexCache;
 
     public SparseQueryWeight(
@@ -56,7 +56,7 @@ public class SparseQueryWeight extends Weight {
         super(query);
         this.boost = boost;
         this.forwardIndexCache = forwardIndexCache;
-        this.booleanQueryWeight = query.getOriginalQuery().createWeight(searcher, scoreMode, boost);
+        this.fallbackQueryWeight = query.getFallbackQuery().createWeight(searcher, scoreMode, boost);
     }
 
     @Override
@@ -71,7 +71,7 @@ public class SparseQueryWeight extends Weight {
         FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(query.getFieldName());
         // fallback to plain neural sparse query
         if (!PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
-            return booleanQueryWeight.scorerSupplier(context);
+            return fallbackQueryWeight.scorerSupplier(context);
         }
         final Scorer scorer = selectScorer(query, context, info);
         return new ScorerSupplier() {

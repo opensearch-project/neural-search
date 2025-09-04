@@ -53,7 +53,7 @@ public class SparseVectorQuery extends Query {
     @NonNull
     private final String fieldName;
     @NonNull
-    private final Query originalQuery;
+    private final Query fallbackQuery;
     private final Query filter;
     private Map<Object, BitSet> filterResults;
 
@@ -82,7 +82,7 @@ public class SparseVectorQuery extends Query {
         if (!this.fieldName.equals(otherQuery.fieldName)) {
             return false;
         }
-        if (!this.originalQuery.equals(otherQuery.getOriginalQuery())) {
+        if (!this.fallbackQuery.equals(otherQuery.getFallbackQuery())) {
             return false;
         }
         if ((this.filter == null) != (otherQuery.getFilter() == null)) {
@@ -96,7 +96,7 @@ public class SparseVectorQuery extends Query {
 
     @Override
     public int hashCode() {
-        return Objects.hash(queryVector, queryContext, fieldName, originalQuery, filter);
+        return Objects.hash(queryVector, queryContext, fieldName, fallbackQuery, filter);
     }
 
     @Override

@@ -26,6 +26,7 @@ import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldType;
@@ -40,7 +41,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
- * SparseAnnQueryBuilder is responsible for handling "neural_sparse" query types when it works SEISMIC index.
+ * SparseAnnQueryBuilder is a sub query builder of NeuralSparseQueryBuilder.
+ * It's responsible for handling "method_parameters" from "neural_sparse" query types when it works SEISMIC index.
  * It wraps a NeuralSparseQueryBuilder so that it can determine when to fall back to plain neural sparse query.
  */
 @Getter
@@ -49,7 +51,7 @@ import java.util.stream.Collectors;
 @NoArgsConstructor
 @Builder
 public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBuilder> {
-    public static final String NAME = "sparse_ann";
+    public static final String NAME = NeuralSparseQueryBuilder.NAME;
     @VisibleForTesting
     public static final ParseField TOP_N_FIELD = new ParseField("top_n");
     @VisibleForTesting
@@ -125,10 +127,28 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             } else if (token.isValue()) {
                 if (TOP_N_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
                     builder.queryCut = parser.intValue();
+                    if (builder.queryCut <= 0) {
+                        throw new ParsingException(
+                            parser.getTokenLocation(),
+                            String.format(Locale.ROOT, "[%s] %s must be a positive integer", NAME, TOP_N_FIELD.getPreferredName())
+                        );
+                    }
                 } else if (TOP_K_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
                     builder.k = parser.intValue();
+                    if (builder.k <= 0) {
+                        throw new ParsingException(
+                            parser.getTokenLocation(),
+                            String.format(Locale.ROOT, "[%s] %s must be a positive integer", NAME, TOP_K_FIELD.getPreferredName())
+                        );
+                    }
                 } else if (HEAP_FACTOR_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
                     builder.heapFactor = parser.floatValue();
+                    if (builder.heapFactor <= 0) {
+                        throw new ParsingException(
+                            parser.getTokenLocation(),
+                            String.format(Locale.ROOT, "[%s] %s must be a positive float", NAME, HEAP_FACTOR_FIELD.getPreferredName())
+                        );
+                    }
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -225,14 +245,22 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         return new SparseVectorQuery.SparseVectorQueryBuilder().fieldName(fieldName)
             .queryContext(sparseQueryContext)
             .queryVector(new SparseVector(integerTokens))
-            .originalQuery(fallbackQuery)
+            .fallbackQuery(fallbackQuery)
             .filter(filterQuery)
             .build();
     }
 
     public static void validateFieldType(MappedFieldType fieldType) {
         if (Objects.isNull(fieldType) || !SparseTokensFieldType.isSparseTokensType(fieldType.typeName())) {
-            throw new IllegalArgumentException("[" + NAME + "] query only works on [" + SparseTokensFieldMapper.CONTENT_TYPE + "] fields");
+            throw new IllegalArgumentException(
+                "["
+                    + NAME
+                    + "] query with ["
+                    + METHOD_PARAMETERS_FIELD.getPreferredName()
+                    + "] only works on ["
+                    + SparseTokensFieldMapper.CONTENT_TYPE
+                    + "] fields"
+            );
         }
     }
 

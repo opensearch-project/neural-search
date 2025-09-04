@@ -108,7 +108,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
 
         // Create a mock original query that returns our mock weight
         when(mockOriginalQuery.createWeight(any(IndexSearcher.class), any(ScoreMode.class), anyFloat())).thenReturn(mockBooleanQueryWeight);
-        when(sparseVectorQuery.getOriginalQuery()).thenReturn(mockOriginalQuery);
+        when(sparseVectorQuery.getFallbackQuery()).thenReturn(mockOriginalQuery);
         when(sparseVectorQuery.getFieldName()).thenReturn("name");
 
         // Mock LeafReaderContext and LeafReader
@@ -207,7 +207,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(mockOriginalQueryForFilter)
+            .fallbackQuery(mockOriginalQueryForFilter)
             .filterResults(filterResults)
             .build();
 
@@ -289,7 +289,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(mockOriginalQuery)
+            .fallbackQuery(mockOriginalQuery)
             .filterResults(filterResults)
             .build();
 

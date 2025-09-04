@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.PriorityQueue;
 
@@ -80,11 +81,13 @@ public abstract class SeismicBaseScorer extends Scorer {
             }
             PostingsEnum postingsEnum = termsEnum.postings(null, PostingsEnum.FREQS);
             if (!(postingsEnum instanceof SparsePostingsEnum sparsePostingsEnum)) {
-                log.error(
-                    "posting enum is not SparsePostingsEnum, actual type: {}",
-                    postingsEnum == null ? null : postingsEnum.getClass().getName()
+                throw new IllegalStateException(
+                    String.format(
+                        Locale.ROOT,
+                        "posting enum is not SparsePostingsEnum, actual type: %s",
+                        postingsEnum == null ? null : postingsEnum.getClass().getName()
+                    )
                 );
-                return;
             }
             subScorers.add(new SingleScorer(sparsePostingsEnum));
         }

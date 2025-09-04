@@ -116,8 +116,7 @@ public class SeismicBaseScorerTests extends AbstractSparseTestBase {
     public void testInitialize_unexpectedType() throws IOException {
         PostingsEnum postingsEnum1 = mock(PostingsEnum.class);
         when(termsEnum.postings(any(), anyInt())).thenReturn(postingsEnum1);
-        init();
-        assertEquals(0, testScorer.subScorers.size());
+        expectThrows(IllegalStateException.class, () -> init());
     }
 
     public void testInitialize_seekExactFalse() throws IOException {

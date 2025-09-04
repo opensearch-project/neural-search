@@ -116,7 +116,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(new MatchNoDocsQuery())
+            .fallbackQuery(new MatchNoDocsQuery())
             .build();
         assertEquals(FIELD_NAME, query.toString(FIELD_NAME));
     }
@@ -126,7 +126,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(new MatchNoDocsQuery())
+            .fallbackQuery(new MatchNoDocsQuery())
             .build();
         QueryVisitor visitor = mock(QueryVisitor.class);
         query.visit(visitor);
@@ -140,14 +140,14 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(originalQuery)
             .build();
         SparseVectorQuery query2 = SparseVectorQuery.builder()
             .queryVector(queryVector)
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(new MatchNoDocsQuery())
             .build();
         assertNotEquals(query.hashCode(), query2.hashCode());
@@ -155,7 +155,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(originalQuery)
             .build();
         assertEquals(query.hashCode(), query2.hashCode());
@@ -168,7 +168,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(originalQuery)
             .build();
 
@@ -179,7 +179,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(new SparseQueryContext(List.of("3", "2"), 1.0f, 2))
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(originalQuery)
             .build();
 
@@ -188,7 +188,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(context)
             .fieldName(FIELD_NAME + "2")
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(originalQuery)
             .build();
 
@@ -197,7 +197,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(new MatchNoDocsQuery())
+            .fallbackQuery(new MatchNoDocsQuery())
             .filter(originalQuery)
             .build();
 
@@ -207,7 +207,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(createVector(1, 1, 3, 2, 5, 4))
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(originalQuery)
             .build();
 
@@ -217,7 +217,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(createVector(1, 1, 3, 2, 5, 3))
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(null)
             .build();
 
@@ -227,7 +227,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(createVector(1, 1, 3, 2, 5, 3))
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(new MatchNoDocsQuery())
             .build();
 
@@ -237,7 +237,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(createVector(1, 1, 3, 2, 5, 3))
             .queryContext(context)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(originalQuery)
             .build();
 
@@ -251,7 +251,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .build();
 
         Weight weight = query.createWeight(mockSearcher, ScoreMode.COMPLETE, 1.0f);
@@ -270,7 +270,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .build();
 
         Query rewritten = query.rewrite(mockSearcher);
@@ -288,7 +288,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(filter)
             .build();
 
@@ -313,7 +313,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(filter)
             .build();
 
@@ -341,7 +341,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(filter)
             .build();
 
@@ -360,14 +360,14 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(originalQuery)
+            .fallbackQuery(originalQuery)
             .filter(filter)
             .build();
 
         assertEquals("Query vector should match", queryVector, query.getQueryVector());
         assertEquals("Query context should match", mockQueryContext, query.getQueryContext());
         assertEquals("Field name should match", FIELD_NAME, query.getFieldName());
-        assertEquals("Original query should match", originalQuery, query.getOriginalQuery());
+        assertEquals("Original query should match", originalQuery, query.getFallbackQuery());
         assertEquals("Filter should match", filter, query.getFilter());
     }
 
@@ -379,7 +379,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(new MatchAllDocsQuery())
+            .fallbackQuery(new MatchAllDocsQuery())
             .build();
         assertSame(bitSet, query.createBitSet(iter, null, 10));
         verify(iter).getBitSet();
@@ -396,7 +396,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
             .fieldName(FIELD_NAME)
-            .originalQuery(new MatchAllDocsQuery())
+            .fallbackQuery(new MatchAllDocsQuery())
             .build();
         BitSet result = query.createBitSet(iter, liveDocs, 10);
         assertTrue(result instanceof FixedBitSet);

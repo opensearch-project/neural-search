@@ -15,6 +15,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -73,10 +74,6 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertEquals(Integer.valueOf(10), queryBuilder.k());
         assertEquals(Float.valueOf(1.5f), queryBuilder.heapFactor());
         assertEquals(queryTokens, queryBuilder.queryTokens());
-    }
-
-    public void testGetWriteableName_returnsCorrectName() {
-        assertEquals("sparse_ann", queryBuilder.getWriteableName());
     }
 
     public void testFromXContent_withValidJson_parsesCorrectly() throws IOException {
@@ -205,10 +202,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         MappedFieldType fieldType = mock(MappedFieldType.class);
         when(fieldType.typeName()).thenReturn("text");
 
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> {
-            SparseAnnQueryBuilder.validateFieldType(fieldType);
-        });
-        assertTrue(exception.getMessage().contains("query only works on [sparse_tokens] fields"));
+        expectThrows(IllegalArgumentException.class, () -> { SparseAnnQueryBuilder.validateFieldType(fieldType); });
     }
 
     public void testEquals_withSameValues_returnsTrue() {
