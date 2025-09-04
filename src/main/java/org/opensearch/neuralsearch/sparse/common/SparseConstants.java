@@ -17,6 +17,7 @@ public final class SparseConstants {
     public static final String CLUSTER_RATIO_FIELD = "cluster_ratio";
     public static final String APPROXIMATE_THRESHOLD_FIELD = "approximate_threshold";
     public static final String INDEX_THREAD_QTY = "indexThreadQty";
+    public static final String THREAD_POOL_NAME = "seismic_thread_pool";
     public static final int MODULUS_FOR_SHORT = 65536;
 
     /**

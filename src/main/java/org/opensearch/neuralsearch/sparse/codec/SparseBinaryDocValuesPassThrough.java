@@ -14,10 +14,16 @@ import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
 
+/**
+ * A pass-through wrapper for BinaryDocValues that provides sparse vector reading capabilities.
+ */
 @AllArgsConstructor
 public class SparseBinaryDocValuesPassThrough extends BinaryDocValues implements SparseVectorReader {
 
+    /** The underlying BinaryDocValues instance that handles the actual binary data operations */
     private final BinaryDocValues delegate;
+
+    /** The segment information associated with this binary doc values instance */
     @Getter
     private final SegmentInfo segmentInfo;
 

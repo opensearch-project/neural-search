@@ -12,13 +12,14 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 
+import org.opensearch.neuralsearch.sparse.common.SparseConstants;
+
 /**
  * Singleton thread pool manager for cluster training operations.
  */
 public class ClusterTrainingExecutor {
     private ThreadPool threadpool = null;
     private static ClusterTrainingExecutor INSTANCE;
-    public static final String THREAD_POOL_NAME = "cluster_training_thread_pool";
 
     /**
      * Initializes the thread pool.
@@ -47,7 +48,7 @@ public class ClusterTrainingExecutor {
      * @return the cluster training executor
      */
     public Executor getExecutor() {
-        return threadpool.executor(THREAD_POOL_NAME);
+        return threadpool.executor(SparseConstants.THREAD_POOL_NAME);
     }
 
     /**
@@ -56,7 +57,7 @@ public class ClusterTrainingExecutor {
      * @param runnable the task to execute
      */
     public void run(Runnable runnable) {
-        threadpool.executor(THREAD_POOL_NAME).execute(runnable);
+        threadpool.executor(SparseConstants.THREAD_POOL_NAME).execute(runnable);
     }
 
     /**
@@ -67,7 +68,7 @@ public class ClusterTrainingExecutor {
      * @return a Future representing the result
      */
     public <T> Future<T> submit(Callable<T> callable) {
-        return threadpool.executor(THREAD_POOL_NAME).submit(callable);
+        return threadpool.executor(SparseConstants.THREAD_POOL_NAME).submit(callable);
     }
 
     /**
@@ -77,7 +78,7 @@ public class ClusterTrainingExecutor {
      */
     public static void updateThreadPoolSize(Integer newThreadQty) {
         Settings threadPoolSettings = Settings.builder()
-            .put(String.format(Locale.ROOT, "%s.size", ClusterTrainingExecutor.THREAD_POOL_NAME), newThreadQty)
+            .put(String.format(Locale.ROOT, "%s.size", SparseConstants.THREAD_POOL_NAME), newThreadQty)
             .build();
         INSTANCE.threadpool.setThreadPool(threadPoolSettings);
     }
