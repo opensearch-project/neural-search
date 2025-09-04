@@ -284,6 +284,7 @@ dependencies {
     runtimeOnly("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}")
     runtimeOnly("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
     testFixturesImplementation "org.opensearch:common-utils:${version}"
+    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: "${versions.commonslang}"
     testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     testFixturesImplementation fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
     testImplementation fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
