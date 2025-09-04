@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.util;
 
 import lombok.NonNull;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.opensearch.index.mapper.RankFeaturesFieldMapper;
 import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;

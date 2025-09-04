@@ -15,7 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.lucene.search.BooleanClause.Occur;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.Queries;
