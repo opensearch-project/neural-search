@@ -6,7 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.apache.commons.lang.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;

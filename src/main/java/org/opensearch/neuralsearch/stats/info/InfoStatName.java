@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.stats.info;
 
 import lombok.Getter;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.opensearch.Version;
 import org.opensearch.neuralsearch.stats.common.StatName;
 

@@ -6,8 +6,8 @@ package org.opensearch.neuralsearch.mapper.dto;
 
 import lombok.Getter;
 import lombok.NonNull;
-import org.apache.commons.lang.builder.EqualsBuilder;
-import org.apache.commons.lang.builder.HashCodeBuilder;
+import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.mapper.MapperParsingException;
 import org.opensearch.neuralsearch.util.prune.PruneType;
