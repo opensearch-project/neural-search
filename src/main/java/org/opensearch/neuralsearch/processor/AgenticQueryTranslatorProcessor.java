@@ -127,7 +127,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
         mlClient.executeAgent(agentId, parameters, ActionListener.wrap(agentResponse -> {
             try {
-                log.info("Generated Query: [{}]", agentResponse);
+                log.debug("Generated Query: [{}]", agentResponse);
 
                 // Validate response size to prevent memory exhaustion
                 if (agentResponse == null) {
@@ -163,9 +163,8 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             } catch (IOException e) {
                 String errorMessage = String.format(
                     Locale.ROOT,
-                    "Agentic search failed - Parse error - Agent ID: [%s], Query: [%s], Error: [%s]",
+                    "Agentic search failed - Parse error - Agent ID: [%s], Error: [%s]",
                     agentId,
-                    agenticQuery.getQueryText(),
                     e.getMessage()
                 );
                 requestListener.onFailure(new IOException(errorMessage, e));
