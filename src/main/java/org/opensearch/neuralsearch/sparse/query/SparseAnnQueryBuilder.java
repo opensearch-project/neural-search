@@ -51,7 +51,7 @@ import java.util.stream.Collectors;
 public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBuilder> {
     public static final String NAME = "sparse_ann";
     @VisibleForTesting
-    public static final ParseField CUT_FIELD = new ParseField("cut");
+    public static final ParseField TOP_N_FIELD = new ParseField("top_n");
     @VisibleForTesting
     public static final ParseField TOP_K_FIELD = new ParseField("k");
     @VisibleForTesting
@@ -123,7 +123,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             if (token == Token.FIELD_NAME) {
                 methodFieldName = parser.currentName();
             } else if (token.isValue()) {
-                if (CUT_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
+                if (TOP_N_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
                     builder.queryCut = parser.intValue();
                 } else if (TOP_K_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
                     builder.k = parser.intValue();
@@ -166,7 +166,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     @Override
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
         if (Objects.nonNull(queryCut)) {
-            xContentBuilder.field(CUT_FIELD.getPreferredName(), queryCut);
+            xContentBuilder.field(TOP_N_FIELD.getPreferredName(), queryCut);
         }
         if (Objects.nonNull(k)) {
             xContentBuilder.field(TOP_K_FIELD.getPreferredName(), k);

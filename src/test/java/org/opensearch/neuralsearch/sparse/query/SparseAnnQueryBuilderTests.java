@@ -80,7 +80,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
     }
 
     public void testFromXContent_withValidJson_parsesCorrectly() throws IOException {
-        String json = "{\"cut\": 5, \"k\": 20, \"heap_factor\": 2.0}";
+        String json = "{\"top_n\": 5, \"k\": 20, \"heap_factor\": 2.0}";
         XContentParser parser = createParser(json);
         parser.nextToken();
 
@@ -108,7 +108,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         builder.endObject();
 
         String result = builder.toString();
-        assertTrue(result.contains("\"cut\":2"));
+        assertTrue(result.contains("\"top_n\":2"));
         assertTrue(result.contains("\"k\":10"));
         assertTrue(result.contains("\"heap_factor\":1.5"));
         assertTrue(result.contains("\"filter\":{"));
@@ -128,7 +128,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         builder.endObject();
 
         String result = builder.toString();
-        assertFalse(result.contains("\"cut\":"));
+        assertFalse(result.contains("\"top_n\":"));
         assertTrue(result.contains("\"k\":10"));
         assertTrue(result.contains("\"heap_factor\":1.5"));
         assertTrue(result.contains("\"filter\":{"));
@@ -148,7 +148,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         builder.endObject();
 
         String result = builder.toString();
-        assertTrue(result.contains("\"cut\":2"));
+        assertTrue(result.contains("\"top_n\":2"));
         assertFalse(result.contains("\"k\":"));
         assertTrue(result.contains("\"heap_factor\":1.5"));
         assertTrue(result.contains("\"filter\":{"));
@@ -168,7 +168,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         builder.endObject();
 
         String result = builder.toString();
-        assertTrue(result.contains("\"cut\":2"));
+        assertTrue(result.contains("\"top_n\":2"));
         assertTrue(result.contains("\"k\":10"));
         assertFalse(result.contains("\"heap_factor\":"));
         assertTrue(result.contains("\"filter\":{"));
@@ -188,7 +188,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         builder.endObject();
 
         String result = builder.toString();
-        assertTrue(result.contains("\"cut\":2"));
+        assertTrue(result.contains("\"top_n\":2"));
         assertTrue(result.contains("\"k\":10"));
         assertTrue(result.contains("\"heap_factor\":"));
         assertFalse(result.contains("\"filter\":"));
@@ -365,7 +365,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
     }
 
     public void testFromXContent_withFilter_triggersFilterParsing() throws IOException {
-        String json = "{\"cut\": 3, \"filter\": {\"match_all\": {}}}";
+        String json = "{\"top_n\": 3, \"filter\": {\"match_all\": {}}}";
         XContentParser parser = createParser(json);
         parser.nextToken();
 
@@ -380,7 +380,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
     }
 
     public void testFromXContent_withUnknownToken_throwsException() throws IOException {
-        String json = "{\"cut\": {\"nested\": \"object\"}}";
+        String json = "{\"top_n\": {\"nested\": \"object\"}}";
         XContentParser parser = createParser(json);
         parser.nextToken();
 
