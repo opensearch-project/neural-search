@@ -125,7 +125,7 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
         when(termsEnum.postings(null, PostingsEnum.FREQS)).thenReturn(postingsEnum);
     }
 
-    protected void prepareCluster(SparsePostingsEnum postingsEnum) {
+    protected DocumentCluster prepareCluster(SparsePostingsEnum postingsEnum) {
         // Setup cluster iterator for postingsEnum
         DocumentCluster cluster = mock(DocumentCluster.class);
         DocWeightIterator docWeightIterator = constructDocWeightIterator(1, 2, 3);
@@ -138,6 +138,7 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
         IteratorWrapper<DocumentCluster> clusterIterator = mock(IteratorWrapper.class);
         when(clusterIterator.next()).thenReturn(cluster).thenReturn(null);
         when(postingsEnum.clusterIterator()).thenReturn(clusterIterator);
+        return cluster;
     }
 
     protected SparseQueryContext constructSparseQueryContext(int k, float hf, List<String> tokens) {

@@ -28,7 +28,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.PriorityQueue;
 
@@ -73,11 +72,6 @@ public abstract class SeismicBaseScorer extends Scorer {
 
     protected void initialize(LeafReader leafReader) throws IOException {
         Terms terms = Terms.getTerms(leafReader, fieldName);
-        if (terms == null) {
-            log.error(String.format(Locale.ROOT, "Terms in field %s is null!", fieldName));
-            return;
-        }
-
         for (String token : sparseQueryContext.getTokens()) {
             TermsEnum termsEnum = terms.iterator();
             BytesRef term = new BytesRef(token);

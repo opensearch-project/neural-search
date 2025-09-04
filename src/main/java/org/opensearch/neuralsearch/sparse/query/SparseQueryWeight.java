@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.query;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
@@ -25,9 +26,11 @@ import org.apache.lucene.util.BitSetIterator;
 import org.apache.lucene.util.Bits;
 import org.opensearch.common.lucene.Lucene;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorForwardIndex;
+import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.cache.CacheGatedForwardIndexReader;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
+import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
@@ -41,10 +44,18 @@ import java.io.IOException;
 public class SparseQueryWeight extends Weight {
     private final float boost;
     private final Weight booleanQueryWeight;
+    private final ForwardIndexCache forwardIndexCache;
 
-    public SparseQueryWeight(SparseVectorQuery query, IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
+    public SparseQueryWeight(
+        SparseVectorQuery query,
+        IndexSearcher searcher,
+        ScoreMode scoreMode,
+        float boost,
+        ForwardIndexCache forwardIndexCache
+    ) throws IOException {
         super(query);
         this.boost = boost;
+        this.forwardIndexCache = forwardIndexCache;
         this.booleanQueryWeight = query.getOriginalQuery().createWeight(searcher, scoreMode, boost);
     }
 
@@ -100,12 +111,13 @@ public class SparseQueryWeight extends Weight {
         };
     }
 
-    private Scorer selectScorer(SparseVectorQuery query, LeafReaderContext context, SegmentInfo segmentInfo) throws IOException {
-        CacheGatedForwardIndexReader cacheGatedForwardIndexReader = new CacheGatedForwardIndexReader(null, null, null);
+    @VisibleForTesting
+    Scorer selectScorer(SparseVectorQuery query, LeafReaderContext context, SegmentInfo segmentInfo) throws IOException {
+        SparseVectorReader cacheGatedForwardIndexReader = SparseVectorReader.NOOP_READER;
         if (segmentInfo != null) {
             CacheKey key = new CacheKey(segmentInfo, query.getFieldName());
-            ForwardIndexCache.getInstance().getOrCreate(key, segmentInfo.maxDoc());
-            cacheGatedForwardIndexReader = getCacheGatedForwardIndexReader(context.reader(), query.getFieldName());
+            ForwardIndexCacheItem cacheItem = forwardIndexCache.getOrCreate(key, segmentInfo.maxDoc());
+            cacheGatedForwardIndexReader = getCacheGatedForwardIndexReader(cacheItem, context.reader(), query.getFieldName());
         }
         Similarity.SimScorer simScorer = ByteQuantizer.getSimScorer(boost);
         BitSetIterator filterBitIterator = null;
@@ -131,18 +143,13 @@ public class SparseQueryWeight extends Weight {
         );
     }
 
-    private CacheGatedForwardIndexReader getCacheGatedForwardIndexReader(LeafReader leafReader, String fieldName) throws IOException {
+    private SparseVectorReader getCacheGatedForwardIndexReader(SparseVectorForwardIndex index, LeafReader leafReader, String fieldName)
+        throws IOException {
         BinaryDocValues docValues = leafReader.getBinaryDocValues(fieldName);
         if (docValues instanceof SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough) {
-            SegmentInfo segmentInfo = sparseBinaryDocValuesPassThrough.getSegmentInfo();
-            CacheKey key = new CacheKey(segmentInfo, fieldName);
-            SparseVectorForwardIndex index = ForwardIndexCache.getInstance().get(key);
-            if (index == null) {
-                return new CacheGatedForwardIndexReader(null, null, sparseBinaryDocValuesPassThrough);
-            }
             return new CacheGatedForwardIndexReader(index.getReader(), index.getWriter(), sparseBinaryDocValuesPassThrough);
         }
-        return new CacheGatedForwardIndexReader(null, null, null);
+        return SparseVectorReader.NOOP_READER;
     }
 
     @Override

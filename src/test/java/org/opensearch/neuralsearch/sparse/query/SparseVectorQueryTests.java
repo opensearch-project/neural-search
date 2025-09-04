@@ -17,7 +17,9 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.QueryVisitor;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
@@ -28,6 +30,7 @@ import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
 import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.BitSetIterator;
+import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;
 import org.junit.Before;
 import org.mockito.Mock;
@@ -44,6 +47,9 @@ import java.util.concurrent.Executors;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class SparseVectorQueryTests extends AbstractSparseTestBase {
@@ -103,6 +109,139 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
         when(mockRewrittenFilterWeight.scorer(any(LeafReaderContext.class))).thenReturn(mockFilterWeightScorer);
         when(mockRewrittenFilterWeight.scorerSupplier(any(LeafReaderContext.class))).thenReturn(mockScorerSupplier);
         when(mockScorerSupplier.get(anyLong())).thenReturn(mockFilterWeightScorer);
+    }
+
+    public void testToString() {
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(mockQueryContext)
+            .fieldName(FIELD_NAME)
+            .originalQuery(new MatchNoDocsQuery())
+            .build();
+        assertEquals(FIELD_NAME, query.toString(FIELD_NAME));
+    }
+
+    public void testVisit() {
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(mockQueryContext)
+            .fieldName(FIELD_NAME)
+            .originalQuery(new MatchNoDocsQuery())
+            .build();
+        QueryVisitor visitor = mock(QueryVisitor.class);
+        query.visit(visitor);
+        verify(visitor).visitLeaf(eq(query));
+    }
+
+    public void testHashCode() {
+        Query originalQuery = new MatchAllDocsQuery();
+        SparseQueryContext context = new SparseQueryContext(List.of("1", "2"), 1.0f, 2);
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(originalQuery)
+            .build();
+        SparseVectorQuery query2 = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(new MatchNoDocsQuery())
+            .build();
+        assertNotEquals(query.hashCode(), query2.hashCode());
+        query2 = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(originalQuery)
+            .build();
+        assertEquals(query.hashCode(), query2.hashCode());
+    }
+
+    public void testEquals() {
+        Query originalQuery = new MatchAllDocsQuery();
+        SparseQueryContext context = new SparseQueryContext(List.of("1", "2"), 1.0f, 2);
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(originalQuery)
+            .build();
+
+        assertFalse(query.equals(null));
+        assertFalse(query.equals("hello"));
+
+        SparseVectorQuery query2 = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(new SparseQueryContext(List.of("3", "2"), 1.0f, 2))
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(originalQuery)
+            .build();
+
+        assertFalse(query.equals(query2));
+        query2 = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(context)
+            .fieldName(FIELD_NAME + "2")
+            .originalQuery(originalQuery)
+            .filter(originalQuery)
+            .build();
+
+        assertFalse(query.equals(query2));
+        query2 = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(new MatchNoDocsQuery())
+            .filter(originalQuery)
+            .build();
+
+        assertFalse(query.equals(query2));
+
+        query2 = SparseVectorQuery.builder()
+            .queryVector(createVector(1, 1, 3, 2, 5, 4))
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(originalQuery)
+            .build();
+
+        assertFalse(query.equals(query2));
+
+        query2 = SparseVectorQuery.builder()
+            .queryVector(createVector(1, 1, 3, 2, 5, 3))
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(null)
+            .build();
+
+        assertFalse(query.equals(query2));
+
+        query2 = SparseVectorQuery.builder()
+            .queryVector(createVector(1, 1, 3, 2, 5, 3))
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(new MatchNoDocsQuery())
+            .build();
+
+        assertFalse(query.equals(query2));
+
+        query2 = SparseVectorQuery.builder()
+            .queryVector(createVector(1, 1, 3, 2, 5, 3))
+            .queryContext(context)
+            .fieldName(FIELD_NAME)
+            .originalQuery(originalQuery)
+            .filter(originalQuery)
+            .build();
+
+        assertTrue(query.equals(query2));
     }
 
     public void testCreateWeight() throws IOException {
@@ -230,6 +369,39 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
         assertEquals("Field name should match", FIELD_NAME, query.getFieldName());
         assertEquals("Original query should match", originalQuery, query.getOriginalQuery());
         assertEquals("Filter should match", filter, query.getFilter());
+    }
+
+    public void testCreateBitSet_bitSetAvailable() throws IOException {
+        BitSetIterator iter = mock(BitSetIterator.class);
+        BitSet bitSet = mock(BitSet.class);
+        when(iter.getBitSet()).thenReturn(bitSet);
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(mockQueryContext)
+            .fieldName(FIELD_NAME)
+            .originalQuery(new MatchAllDocsQuery())
+            .build();
+        assertSame(bitSet, query.createBitSet(iter, null, 10));
+        verify(iter).getBitSet();
+    }
+
+    public void testCreateBitSet_BitSetIteratorNullLiveDocs() throws IOException {
+        DocIdSetIterator iter = mock(DocIdSetIterator.class);
+        when(iter.cost()).thenReturn(5L);
+        when(iter.nextDoc()).thenReturn(1, 2, DocIdSetIterator.NO_MORE_DOCS);
+        Bits liveDocs = mock(Bits.class);
+        when(liveDocs.get(1)).thenReturn(true);
+        when(liveDocs.get(2)).thenReturn(false);
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(mockQueryContext)
+            .fieldName(FIELD_NAME)
+            .originalQuery(new MatchAllDocsQuery())
+            .build();
+        BitSet result = query.createBitSet(iter, liveDocs, 10);
+        assertTrue(result instanceof FixedBitSet);
+        assertTrue(result.get(1));
+        assertFalse(result.get(2));
     }
 
     private IndexReader createTestIndexReader() throws IOException {

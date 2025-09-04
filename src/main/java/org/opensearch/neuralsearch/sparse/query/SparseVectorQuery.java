@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.query;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -26,6 +27,7 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.BitSetIterator;
 import org.apache.lucene.util.Bits;
+import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
@@ -130,7 +132,8 @@ public class SparseVectorQuery extends Query {
         return Map.entry(ctx.id(), createBitSet(scorer.iterator(), reader.getLiveDocs(), reader.maxDoc()));
     }
 
-    private BitSet createBitSet(DocIdSetIterator iterator, Bits liveDocs, int maxDoc) throws IOException {
+    @VisibleForTesting
+    BitSet createBitSet(DocIdSetIterator iterator, Bits liveDocs, int maxDoc) throws IOException {
         if (liveDocs == null && iterator instanceof BitSetIterator bitSetIterator) {
             // If we already have a BitSet and no deletions, reuse the BitSet
             return bitSetIterator.getBitSet();
@@ -160,6 +163,6 @@ public class SparseVectorQuery extends Query {
 
     @Override
     public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        return new SparseQueryWeight(this, searcher, scoreMode, boost);
+        return new SparseQueryWeight(this, searcher, scoreMode, boost, ForwardIndexCache.getInstance());
     }
 }
