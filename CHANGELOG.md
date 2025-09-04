@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Semantic Field] Support the sparse two phase processor for the semantic field.
 - [Stats] Add stats for agentic query and agentic query translator processor.
 - [Agentic Search] Adds validations and logging for agentic query
+- [Performance Improvement] Introduce QueryCollectContextSpec in Hybrid Query to improve search performance.
 
 ### Bug Fixes
 
