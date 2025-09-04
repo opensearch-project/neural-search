@@ -5,9 +5,11 @@
 package org.opensearch.neuralsearch.sparse;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.index.SegmentInfo;
 import org.junit.Before;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.common.DocWeightIterator;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
@@ -19,10 +21,18 @@ import org.opensearch.core.common.breaker.CircuitBreaker;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.mapper.SparseTokensField.SPARSE_FIELD;
 
 public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
 
@@ -145,5 +155,19 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
 
     protected PostingClusters preparePostingClusters() {
         return new PostingClusters(prepareClusterList());
+    }
+
+    protected Map<String, String> prepareAttributes(boolean sparse, int threshold, float ratio, int posting, float summary) {
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put(SPARSE_FIELD, String.valueOf(sparse));
+        attributes.put(APPROXIMATE_THRESHOLD_FIELD, String.valueOf(threshold));
+        attributes.put(CLUSTER_RATIO_FIELD, String.valueOf(ratio));
+        attributes.put(N_POSTINGS_FIELD, String.valueOf(posting));
+        attributes.put(SUMMARY_PRUNE_RATIO_FIELD, String.valueOf(summary));
+        return attributes;
+    }
+
+    protected CacheKey prepareUniqueCacheKey(SegmentInfo segmentInfo) {
+        return new CacheKey(segmentInfo, UUID.randomUUID().toString());
     }
 }

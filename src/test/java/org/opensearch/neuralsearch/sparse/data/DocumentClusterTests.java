@@ -17,9 +17,9 @@ import java.util.Map;
 public class DocumentClusterTests extends AbstractSparseTestBase {
 
     public void testConstructor_withValidInputs_createsCluster() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 0.5f);
-        summaryMap.put("2", 0.8f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 0.5f);
+        summaryMap.put(2, 0.8f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(10, (byte) 2), new DocWeight(5, (byte) 1));
 
@@ -41,8 +41,8 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testConstructor_sortsDocumentsByDocId() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 1.0f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 1.0f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(10, (byte) 2), new DocWeight(5, (byte) 1), new DocWeight(15, (byte) 3));
 
@@ -120,9 +120,9 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testRamBytesUsed_withSummary_includesSummarySize() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 0.5f);
-        summaryMap.put("2", 0.8f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 0.5f);
+        summaryMap.put(2, 0.8f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
 
@@ -140,8 +140,8 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testGetChildResources_withSummary_returnsSummary() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 1.0f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 1.0f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
 
@@ -152,8 +152,8 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testEquals_withSameValues_returnsTrue() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 1.0f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 1.0f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
 
@@ -164,8 +164,8 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testEquals_withDifferentShouldNotSkip_returnsFalse() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 1.0f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 1.0f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
 
@@ -176,8 +176,8 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testHashCode_withSameValues_returnsSameHashCode() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 1.0f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 1.0f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
 
@@ -188,12 +188,12 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testSetSummary_updatesCorrectly() {
-        Map<String, Float> originalSummaryMap = new HashMap<>();
-        originalSummaryMap.put("1", 1.0f);
+        Map<Integer, Float> originalSummaryMap = new HashMap<>();
+        originalSummaryMap.put(1, 1.0f);
         SparseVector originalSummary = new SparseVector(originalSummaryMap);
 
-        Map<String, Float> newSummaryMap = new HashMap<>();
-        newSummaryMap.put("2", 2.0f);
+        Map<Integer, Float> newSummaryMap = new HashMap<>();
+        newSummaryMap.put(2, 2.0f);
         SparseVector newSummary = new SparseVector(newSummaryMap);
 
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
@@ -205,8 +205,8 @@ public class DocumentClusterTests extends AbstractSparseTestBase {
     }
 
     public void testSetShouldNotSkip_updatesCorrectly() {
-        Map<String, Float> summaryMap = new HashMap<>();
-        summaryMap.put("1", 1.0f);
+        Map<Integer, Float> summaryMap = new HashMap<>();
+        summaryMap.put(1, 1.0f);
         SparseVector summary = new SparseVector(summaryMap);
         List<DocWeight> docs = Arrays.asList(new DocWeight(1, (byte) 1));
 

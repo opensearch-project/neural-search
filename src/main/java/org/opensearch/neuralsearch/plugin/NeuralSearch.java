@@ -31,6 +31,8 @@ import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.search.collector.HybridQueryCollectorContextSpecFactory;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
+import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
+import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
@@ -87,6 +89,10 @@ import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
+import org.opensearch.neuralsearch.transport.NeuralSparseClearCacheAction;
+import org.opensearch.neuralsearch.transport.NeuralSparseClearCacheTransportAction;
+import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;
+import org.opensearch.neuralsearch.transport.NeuralSparseWarmupTransportAction;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineServiceUtil;
 import org.opensearch.plugins.ActionPlugin;
@@ -193,12 +199,24 @@ public class NeuralSearch extends Plugin
         Supplier<DiscoveryNodes> nodesInCluster
     ) {
         RestNeuralStatsAction restNeuralStatsAction = new RestNeuralStatsAction(settingsAccessor, NeuralSearchClusterUtil.instance());
-        return ImmutableList.of(restNeuralStatsAction);
+        RestNeuralSparseWarmupHandler restNeuralSparseWarmupCacheHandler = new RestNeuralSparseWarmupHandler(
+            NeuralSearchClusterUtil.instance().getClusterService(),
+            indexNameExpressionResolver
+        );
+        RestNeuralSparseClearCacheHandler restNeuralSparseClearCacheHandler = new RestNeuralSparseClearCacheHandler(
+            NeuralSearchClusterUtil.instance().getClusterService(),
+            indexNameExpressionResolver
+        );
+        return ImmutableList.of(restNeuralStatsAction, restNeuralSparseWarmupCacheHandler, restNeuralSparseClearCacheHandler);
     }
 
     @Override
     public List<ActionHandler<? extends ActionRequest, ? extends ActionResponse>> getActions() {
-        return Arrays.asList(new ActionHandler<>(NeuralStatsAction.INSTANCE, NeuralStatsTransportAction.class));
+        return Arrays.asList(
+            new ActionHandler<>(NeuralStatsAction.INSTANCE, NeuralStatsTransportAction.class),
+            new ActionHandler<>(NeuralSparseWarmupAction.INSTANCE, NeuralSparseWarmupTransportAction.class),
+            new ActionHandler<>(NeuralSparseClearCacheAction.INSTANCE, NeuralSparseClearCacheTransportAction.class)
+        );
     }
 
     @Override

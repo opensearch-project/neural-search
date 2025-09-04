@@ -8,10 +8,11 @@ import lombok.SneakyThrows;
 import org.apache.lucene.index.SegmentInfo;
 import org.junit.After;
 import org.junit.Before;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
-import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorWriter;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
@@ -28,29 +29,20 @@ import static org.mockito.Mockito.never;
 public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
 
     private static final int testDocCount = 10;
-    private static final String testFieldName = "test_field";
 
     private CacheKey cacheKey;
+    @Mock
     private SegmentInfo segmentInfo;
 
-    /**
-     * Set up the test environment before each test.
-     * Creates a segment info and cache key for testing.
-     */
     @Before
     @Override
     @SneakyThrows
     public void setUp() {
         super.setUp();
-
-        segmentInfo = TestsPrepareUtils.prepareSegmentInfo();
-        cacheKey = new CacheKey(segmentInfo, testFieldName);
+        MockitoAnnotations.openMocks(this);
+        cacheKey = prepareUniqueCacheKey(segmentInfo);
     }
 
-    /**
-     * Tear down the test environment after each test.
-     * Removes the test index from the cache.
-     */
     @After
     @Override
     public void tearDown() throws Exception {
@@ -58,10 +50,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         super.tearDown();
     }
 
-    /**
-     * Tests that reading a vector with an out-of-bounds index returns null.
-     * This verifies the bounds checking in the SparseVectorReader.
-     */
     @SneakyThrows
     public void test_readerRead_withOutOfBoundVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -72,10 +60,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertNull("Read out of bound vector should return null", readVector);
     }
 
-    /**
-     * Tests that a vector can be successfully inserted and read back.
-     * This verifies the basic functionality of the writer and reader.
-     */
     @SneakyThrows
     public void test_writerInsert_withValidVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -95,10 +79,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Read vector should match inserted vector", vector, readVector);
     }
 
-    /**
-     * Tests that inserting a vector with an out-of-bounds index is ignored.
-     * This verifies the bounds checking in the SparseVectorWriter.
-     */
     @SneakyThrows
     public void test_writerInsert_withOutOfBoundVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -118,10 +98,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Inserting vector out of bound will not increase memory usage", ramBytesUsed1, ramBytesUsed2);
     }
 
-    /**
-     * Tests that inserting a vector at an index that already has a vector is ignored.
-     * This verifies that the writer doesn't overwrite existing vectors.
-     */
     @SneakyThrows
     public void test_writerInsert_withNullVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -139,10 +115,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertNull("Vector should still be null", reader.read(2));
     }
 
-    /**
-     * Tests that inserting a vector at an index that already has a vector is ignored.
-     * This verifies that the writer doesn't overwrite existing vectors.
-     */
     @SneakyThrows
     public void test_writerInsert_skipsDuplicates() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -159,10 +131,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Original vector should remain unchanged", vector1, reader.read(0));
     }
 
-    /**
-     * Tests that vector insertion fails gracefully when the circuit breaker throws an exception.
-     * This verifies the error handling in the SparseVectorWriter.
-     */
     @SneakyThrows
     public void test_writerInsert_whenCircuitBreakerThrowException() {
         doThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT)).when(mockedCircuitBreaker)
@@ -185,9 +153,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertNull("Read vector should be null", readVector);
     }
 
-    /**
-     * Tests that ramBytesUsed correctly records the memory on the sparse vector array
-     */
     @SneakyThrows
     public void test_ramBytesUsed_withDifferentVectorSize() {
         int docCount1 = 10, docCount2 = 20;
@@ -201,10 +166,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertTrue("Initial RAM usage should increase when the size of forward index increases", ramBytesUsed2 > ramBytesUsed1);
     }
 
-    /**
-     * Tests that erasing a vector with an out-of-bounds index returns 0 bytes freed.
-     * This verifies the bounds checking in the erase method.
-     */
     @SneakyThrows
     public void test_writerErase_withOutOfBoundVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -214,10 +175,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Erasing out of bounds vector should free 0 bytes", 0, bytesFreed);
     }
 
-    /**
-     * Tests that erasing a null vector (one that doesn't exist) returns 0 bytes freed.
-     * This verifies the null checking in the erase method.
-     */
     @SneakyThrows
     public void test_writerErase_withNullVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -227,10 +184,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Erasing null vector should free 0 bytes", 0, bytesFreed);
     }
 
-    /**
-     * Tests that a vector can be successfully erased and memory is properly released.
-     * This verifies the basic functionality of the erase method.
-     */
     @SneakyThrows
     public void test_writerErase_withValidVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -257,10 +210,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         verify(mockedCircuitBreaker).addWithoutBreaking(-vectorSize);
     }
 
-    /**
-     * Tests that erasing a vector that was already erased returns 0 bytes freed.
-     * This verifies the compareAndSet logic in the erase method.
-     */
     @SneakyThrows
     public void test_writerErase_withAlreadyErasedVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -279,10 +228,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Second erase should return 0 bytes", 0, secondErase);
     }
 
-    /**
-     * Tests that multiple vectors can be inserted and erased correctly.
-     * This verifies the erase method works with multiple vectors.
-     */
     @SneakyThrows
     public void test_writerErase_withMultipleVectors() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -307,10 +252,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         assertEquals("RAM usage should decrease by vector1 size", initialRam - vector1.ramBytesUsed(), cacheItem.ramBytesUsed());
     }
 
-    /**
-     * Tests that ramBytesUsed correctly reports the memory usage after vectors are inserted.
-     * This verifies the memory tracking functionality of the ForwardIndexCacheItem.
-     */
     @SneakyThrows
     public void test_ramBytesUsed_withInsertedVector() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -330,23 +271,16 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         );
     }
 
-    /**
-     * Tests that creating multiple indices with different keys returns different instances.
-     * This verifies that the ForwardIndexCache correctly differentiates between different keys.
-     */
     public void test_create_withMultipleIndices() {
         ForwardIndexCacheItem cacheItem1 = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
 
-        CacheKey cacheKey2 = new CacheKey(segmentInfo, "another_field");
+        CacheKey cacheKey2 = prepareUniqueCacheKey(segmentInfo);
         ForwardIndexCacheItem cacheItem2 = ForwardIndexCache.getInstance().getOrCreate(cacheKey2, testDocCount);
 
         assertNotSame("Should be different index instances", cacheItem1, cacheItem2);
+        ForwardIndexCache.getInstance().removeIndex(cacheKey2);
     }
 
-    /**
-     * Tests that getWriter with circuitBreakerHandler returns a writer with the handler.
-     * This verifies the new getWriter method functionality.
-     */
     @SneakyThrows
     public void test_getWriter_withCircuitBreakerHandler() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -365,10 +299,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         verify(mockHandler, never()).accept(anyLong());
     }
 
-    /**
-     * Tests that circuitBreakerHandler is called when circuit breaker trips.
-     * This verifies the circuit breaker handler functionality.
-     */
     @SneakyThrows
     public void test_writerInsert_withCircuitBreakerHandler_whenCircuitBreakerTrips() {
         doThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT)).when(mockedCircuitBreaker)
@@ -387,10 +317,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         verify(mockHandler).accept(anyLong());
     }
 
-    /**
-     * Tests that circuitBreakerHandler is not called when circuit breaker doesn't trip.
-     * This verifies the conditional calling of the handler.
-     */
     @SneakyThrows
     public void test_writerInsert_withCircuitBreakerHandler_whenCircuitBreakerDoesNotTrip() {
         ForwardIndexCacheItem cacheItem = ForwardIndexCache.getInstance().getOrCreate(cacheKey, testDocCount);
@@ -406,10 +332,6 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         verify(mockHandler, never()).accept(anyLong());
     }
 
-    /**
-     * Tests that default writer (without handler) works correctly when circuit breaker trips.
-     * This verifies backward compatibility.
-     */
     @SneakyThrows
     public void test_defaultWriter_whenCircuitBreakerTrips() {
         doThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT)).when(mockedCircuitBreaker)

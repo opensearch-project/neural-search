@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.algorithm;
 
 import org.mockito.ArgumentCaptor;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.util.concurrent.Future;
@@ -33,7 +34,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
 
         threadPool = mock(ThreadPool.class);
         executorService = mock(ExecutorService.class);
-        when(threadPool.executor(ClusterTrainingExecutor.THREAD_POOL_NAME)).thenReturn(executorService);
+        when(threadPool.executor(SparseConstants.THREAD_POOL_NAME)).thenReturn(executorService);
     }
 
     public void testGetExecutor_returnsCorrectExecutor() {
@@ -41,7 +42,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
         ExecutorService result = (ExecutorService) ClusterTrainingExecutor.getInstance().getExecutor();
 
         assertEquals(executorService, result);
-        verify(threadPool, times(1)).executor(ClusterTrainingExecutor.THREAD_POOL_NAME);
+        verify(threadPool, times(1)).executor(SparseConstants.THREAD_POOL_NAME);
     }
 
     public void testRun_executesRunnable() {
@@ -50,7 +51,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
 
         ClusterTrainingExecutor.getInstance().run(runnable);
 
-        verify(threadPool, times(1)).executor(ClusterTrainingExecutor.THREAD_POOL_NAME);
+        verify(threadPool, times(1)).executor(SparseConstants.THREAD_POOL_NAME);
         verify(executorService, times(1)).execute(runnable);
     }
 
@@ -63,7 +64,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
         Future<String> result = ClusterTrainingExecutor.getInstance().submit(callable);
 
         assertEquals(expectedFuture, result);
-        verify(threadPool, times(1)).executor(ClusterTrainingExecutor.THREAD_POOL_NAME);
+        verify(threadPool, times(1)).executor(SparseConstants.THREAD_POOL_NAME);
         verify(executorService, times(1)).submit(callable);
     }
 
@@ -82,7 +83,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
     }
 
     public void testThreadPoolName_hasCorrectValue() {
-        assertEquals("cluster_training_thread_pool", ClusterTrainingExecutor.THREAD_POOL_NAME);
+        assertEquals("seismic_thread_pool", SparseConstants.THREAD_POOL_NAME);
     }
 
     public void testMultipleRuns_callsExecutorMultipleTimes() {
@@ -93,7 +94,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
         ClusterTrainingExecutor.getInstance().run(runnable1);
         ClusterTrainingExecutor.getInstance().run(runnable2);
 
-        verify(threadPool, times(2)).executor(ClusterTrainingExecutor.THREAD_POOL_NAME);
+        verify(threadPool, times(2)).executor(SparseConstants.THREAD_POOL_NAME);
         verify(executorService, times(1)).execute(runnable1);
         verify(executorService, times(1)).execute(runnable2);
     }
@@ -102,14 +103,14 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
         ClusterTrainingExecutor.getInstance().initialize(threadPool);
         ClusterTrainingExecutor.getInstance().submit(null);
 
-        verify(threadPool, times(1)).executor(ClusterTrainingExecutor.THREAD_POOL_NAME);
+        verify(threadPool, times(1)).executor(SparseConstants.THREAD_POOL_NAME);
         verify(executorService, times(1)).submit((Callable<Object>) null);
     }
 
     public void testRun_withNullRunnable_passesToExecutor() {
         ClusterTrainingExecutor.getInstance().initialize(threadPool);
         ClusterTrainingExecutor.getInstance().run(null);
-        verify(threadPool, times(1)).executor(ClusterTrainingExecutor.THREAD_POOL_NAME);
+        verify(threadPool, times(1)).executor(SparseConstants.THREAD_POOL_NAME);
         verify(executorService, times(1)).execute(null);
     }
 
@@ -125,7 +126,7 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
 
         Settings capturedSettings = settingsCaptor.getValue();
 
-        String expectedKey = ClusterTrainingExecutor.THREAD_POOL_NAME + ".size";
+        String expectedKey = SparseConstants.THREAD_POOL_NAME + ".size";
         assertTrue("Settings should contain the thread pool size key", capturedSettings.keySet().contains(expectedKey));
     }
 }

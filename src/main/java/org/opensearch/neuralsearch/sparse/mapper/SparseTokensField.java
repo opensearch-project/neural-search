@@ -8,6 +8,8 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexableFieldType;
 
+import java.util.Optional;
+
 /**
  * Lucene field for sparse token storage.
  */
@@ -28,6 +30,6 @@ public class SparseTokensField extends Field {
         if (field == null) {
             return false;
         }
-        return field.attributes().containsKey(SPARSE_FIELD);
+        return Optional.ofNullable(field.attributes().get(SPARSE_FIELD)).map(Boolean::parseBoolean).orElse(false);
     }
 }

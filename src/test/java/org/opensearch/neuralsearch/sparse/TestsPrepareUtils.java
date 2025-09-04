@@ -9,6 +9,7 @@ import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.codecs.FieldsProducer;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
+import org.apache.lucene.document.FieldType;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DirectoryReader;
@@ -17,11 +18,14 @@ import org.apache.lucene.index.DocValuesSkipper;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
+import org.apache.lucene.index.FilterDirectoryReader;
+import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.IndexableFieldType;
+import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.MergeState;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.SegmentCommitInfo;
@@ -38,14 +42,18 @@ import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.IOContext;
 import org.apache.lucene.tests.analysis.MockAnalyzer;
-import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.InfoStream;
 import org.apache.lucene.util.StringHelper;
 import org.apache.lucene.util.Version;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.ContentPath;
+import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
+import org.opensearch.neuralsearch.sparse.common.SparseConstants;
+import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.HashMap;
@@ -286,72 +294,6 @@ public class TestsPrepareUtils {
         return mergeState;
     }
 
-    /**
-     * Creates a MergeState with mocked BinaryDocValues
-     */
-    public static MergeState prepareMergeStateWithMockedBinaryDocValues(boolean withLiveDocs, boolean nullLiveDocs) throws IOException {
-        MergeState.DocMap[] docMaps = new MergeState.DocMap[1];
-        docMaps[0] = docID -> docID;
-        SegmentInfo segmentInfo = TestsPrepareUtils.prepareSegmentInfo();
-
-        // Create a DocValuesProducer that returns mocked BinaryDocValues
-        DocValuesProducer docValuesProducer = prepareDocValuesProducer(prepareBinaryDocValues());
-
-        DocValuesProducer[] docValuesProducers = new DocValuesProducer[1];
-        docValuesProducers[0] = docValuesProducer;
-
-        // Create FieldInfos
-        FieldInfos fieldInfos = new FieldInfos(new FieldInfo[] { prepareKeyFieldInfo() });
-        FieldInfos[] fieldInfosArray = new FieldInfos[1];
-        fieldInfosArray[0] = fieldInfos;
-
-        // Create FieldsProducer
-        FieldsProducer fieldsProducer = TestsPrepareUtils.prepareFieldsProducer();
-        FieldsProducer[] fieldsProducers = new FieldsProducer[1];
-        fieldsProducers[0] = fieldsProducer;
-
-        // Create live docs if needed
-        Bits[] liveDocs = new Bits[1];
-        if (withLiveDocs) {
-            liveDocs[0] = new Bits() {
-                @Override
-                public boolean get(int index) {
-                    return index % 2 == 0; // Only even document IDs are live
-                }
-
-                @Override
-                public int length() {
-                    return 10;
-                }
-            };
-        } else {
-            liveDocs[0] = null;
-        }
-        if (nullLiveDocs) {
-            liveDocs = null;
-        }
-
-        // Create MergeState
-        return new MergeState(
-            docMaps,
-            segmentInfo,
-            fieldInfos,                // mergeFieldInfos
-            null,                      // storedFieldsReaders
-            null,                      // termVectorsReaders
-            null,                      // normsProducers
-            docValuesProducers,        // docValuesProducers
-            fieldInfosArray,           // fieldInfos
-            liveDocs,                  // liveDocs
-            fieldsProducers,           // fieldsProducers
-            null,                      // pointsReaders
-            null,                      // knnVectorsReaders
-            new int[] { 10 },          // maxDocs
-            null,                      // infoStream
-            null,                      // executor
-            false                      // needsIndexSort
-        );
-    }
-
     public static IndexableFieldType prepareIndexableFieldType() {
         return new IndexableFieldType() {
             @Override
@@ -494,23 +436,104 @@ public class TestsPrepareUtils {
         return new SegmentWriteState(InfoStream.getDefault(), directory, segmentInfo, fieldInfos, null, ioContext);
     }
 
+    public static SegmentWriteState prepareSegmentWriteState(Directory directory, FieldInfos fieldInfos) {
+        SegmentInfo segmentInfo = prepareSegmentInfo();
+        IOContext ioContext = IOContext.DEFAULT;
+
+        return new SegmentWriteState(InfoStream.getDefault(), directory, segmentInfo, fieldInfos, null, ioContext);
+    }
+
     public static BytesRef prepareValidSparseVectorBytes() {
         // Create a valid sparse vector BytesRef with token "1" -> 0.5f
         try {
-            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream dos = new java.io.DataOutputStream(baos);
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            DataOutputStream dos = new DataOutputStream(baos);
 
             // Write one token-value pair: "1" -> 0.5f
-            String token = "1";
-            byte[] tokenBytes = token.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            dos.writeInt(tokenBytes.length);
-            dos.write(tokenBytes);
+            dos.writeInt(1);
             dos.writeFloat(0.5f);
-
             dos.close();
             return new BytesRef(baos.toByteArray());
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public static DirectoryReader prepareIndexReaderWithSparseField(int docNumbers) throws IOException {
+        Directory directory = new ByteBuffersDirectory();
+        IndexWriterConfig config = new IndexWriterConfig(new MockAnalyzer(random()));
+        IndexWriter writer = new IndexWriter(directory, config);
+
+        // Create custom field type for sparse field
+        FieldType sparseFieldType = new FieldType();
+        sparseFieldType.setStored(false);
+        sparseFieldType.setTokenized(false);
+        sparseFieldType.setIndexOptions(IndexOptions.DOCS);
+        sparseFieldType.setDocValuesType(DocValuesType.BINARY);
+
+        // Add required attributes for sparse field
+        sparseFieldType.putAttribute(SparseTokensField.SPARSE_FIELD, "true");
+        sparseFieldType.putAttribute(SparseConstants.APPROXIMATE_THRESHOLD_FIELD, "10");
+        sparseFieldType.freeze();
+
+        // Create documents with sparse field
+        for (int i = 0; i < docNumbers; i++) {
+            Document doc = new Document();
+            BytesRef sparseValue = TestsPrepareUtils.prepareValidSparseVectorBytes();
+            Field sparseField = new Field("sparse_field", sparseValue, sparseFieldType);
+            doc.add(sparseField);
+            writer.addDocument(doc);
+        }
+
+        writer.close();
+        DirectoryReader baseReader = DirectoryReader.open(directory);
+        return new TestDirectoryReaderWrapper(baseReader);
+    }
+
+    /**
+     * Wrapper to ensure sparse field BinaryDocValues are wrapped with SparseBinaryDocValuesPassThrough.
+     * This mimics the behavior of the neural-search codec in production.
+     */
+    private static class TestDirectoryReaderWrapper extends FilterDirectoryReader {
+
+        public TestDirectoryReaderWrapper(DirectoryReader in) throws IOException {
+            super(in, new SubReaderWrapper() {
+                @Override
+                public LeafReader wrap(LeafReader reader) {
+                    return new FilterLeafReader(reader) {
+                        @Override
+                        public BinaryDocValues getBinaryDocValues(String field) throws IOException {
+                            BinaryDocValues original = super.getBinaryDocValues(field);
+                            if (original != null && field.equals("sparse_field")) {
+                                // Wrap with SparseBinaryDocValuesPassThrough for sparse fields
+                                SegmentInfo segmentInfo = prepareSegmentInfo();
+                                return new SparseBinaryDocValuesPassThrough(original, segmentInfo);
+                            }
+                            return original;
+                        }
+
+                        @Override
+                        public CacheHelper getCoreCacheHelper() {
+                            return in.getCoreCacheHelper();
+                        }
+
+                        @Override
+                        public CacheHelper getReaderCacheHelper() {
+                            return in.getReaderCacheHelper();
+                        }
+                    };
+                }
+            });
+        }
+
+        @Override
+        protected DirectoryReader doWrapDirectoryReader(DirectoryReader in) throws IOException {
+            return new TestDirectoryReaderWrapper(in);
+        }
+
+        @Override
+        public CacheHelper getReaderCacheHelper() {
+            return in.getReaderCacheHelper();
         }
     }
 }

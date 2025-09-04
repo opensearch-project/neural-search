@@ -18,6 +18,10 @@ import java.io.IOException;
  */
 @FunctionalInterface
 public interface SparseVectorReader {
+    /**
+     * A no-op implementation of SparseVectorReader that always returns null.
+     */
+    SparseVectorReader NOOP_READER = docId -> null;
 
     /**
      * Reads and returns the sparse vector associated with the specified document ID.

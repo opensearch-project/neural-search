@@ -19,6 +19,10 @@ import java.io.IOException;
  */
 @FunctionalInterface
 public interface SparseVectorWriter {
+    /**
+     * A no-op implementation of SparseVectorWriter that ignores all write operations.
+     */
+    SparseVectorWriter NOOP_WRITER = (docId, vector) -> {};
 
     /**
      * Inserts a sparse vector for the specified document ID.

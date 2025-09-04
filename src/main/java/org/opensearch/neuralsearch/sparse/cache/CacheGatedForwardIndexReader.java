@@ -16,16 +16,6 @@ import java.io.IOException;
  */
 public class CacheGatedForwardIndexReader implements SparseVectorReader {
 
-    /**
-     * A no-op implementation of SparseVectorReader that always returns null.
-     */
-    private static final SparseVectorReader NOOP_READER = docId -> null;
-
-    /**
-     * A no-op implementation of SparseVectorWriter that ignores all write operations.
-     */
-    private static final SparseVectorWriter NOOP_WRITER = (docId, vector) -> {};
-
     private final SparseVectorReader cacheReader;
     private final SparseVectorWriter cacheWriter;
     private final SparseVectorReader luceneReader;
@@ -38,9 +28,9 @@ public class CacheGatedForwardIndexReader implements SparseVectorReader {
      * @param luceneReader the reader for accessing sparse vectors from Lucene storage
      */
     public CacheGatedForwardIndexReader(SparseVectorReader cacheReader, SparseVectorWriter cacheWriter, SparseVectorReader luceneReader) {
-        this.cacheReader = cacheReader == null ? NOOP_READER : cacheReader;
-        this.cacheWriter = cacheWriter == null ? NOOP_WRITER : cacheWriter;
-        this.luceneReader = luceneReader == null ? NOOP_READER : luceneReader;
+        this.cacheReader = cacheReader == null ? SparseVectorReader.NOOP_READER : cacheReader;
+        this.cacheWriter = cacheWriter == null ? SparseVectorWriter.NOOP_WRITER : cacheWriter;
+        this.luceneReader = luceneReader == null ? SparseVectorReader.NOOP_READER : luceneReader;
     }
 
     /**
