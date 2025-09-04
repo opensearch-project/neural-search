@@ -92,15 +92,15 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         // there.
         // 1. createHybridCollectorManager is called from HybridQueryCollectorContextSpec
         // 2. HybridQueryCollectorContextSpec is created from the DefaultQueryPhaseSearcher [searchWithCollector
-        // method](https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/query/QueryPhase.java#L441).
+        // method](https://github.com/opensearch-project/OpenSearch/blob/3.2/server/src/main/java/org/opensearch/search/query/QueryPhase.java#L441).
 
         // In case of concurrent search
         // 1. ConcurrentQueryPhaseSearcher extends DefaultQueryPhaseSearcher and uses its [searchWith method]
-        // (https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/query/QueryPhase.java#L425)
+        // (https://github.com/opensearch-project/OpenSearch/blob/3.2/server/src/main/java/org/opensearch/search/query/QueryPhase.java#L425)
         // for creating QueryCollectorContextSpec.
         // 2. After loading collectors, if it is concurrent search then it gets directed to ConcurrentQueryPhaseSearcher
         // [searchWithCollector
-        // method](https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/search/query/ConcurrentQueryPhaseSearcher.java#L43).
+        // method](https://github.com/opensearch-project/OpenSearch/blob/3.2/server/src/main/java/org/opensearch/search/query/ConcurrentQueryPhaseSearcher.java#L43).
         return new HybridCollectorManager(
             numDocs,
             new HitsThresholdChecker(Math.max(numDocs, trackTotalHitsUpTo)),
