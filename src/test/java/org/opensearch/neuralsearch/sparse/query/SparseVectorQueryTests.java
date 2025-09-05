@@ -47,8 +47,10 @@ import java.util.concurrent.Executors;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -121,7 +123,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
         assertEquals(FIELD_NAME, query.toString(FIELD_NAME));
     }
 
-    public void testVisit() {
+    public void testVisit_acceptField() {
         SparseVectorQuery query = SparseVectorQuery.builder()
             .queryVector(queryVector)
             .queryContext(mockQueryContext)
@@ -129,8 +131,22 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .fallbackQuery(new MatchNoDocsQuery())
             .build();
         QueryVisitor visitor = mock(QueryVisitor.class);
+        when(visitor.acceptField(anyString())).thenReturn(true);
         query.visit(visitor);
         verify(visitor).visitLeaf(eq(query));
+    }
+
+    public void testVisit_notAcceptField() {
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(mockQueryContext)
+            .fieldName(FIELD_NAME)
+            .fallbackQuery(new MatchNoDocsQuery())
+            .build();
+        QueryVisitor visitor = mock(QueryVisitor.class);
+        when(visitor.acceptField(anyString())).thenReturn(false);
+        query.visit(visitor);
+        verify(visitor, never()).visitLeaf(eq(query));
     }
 
     public void testHashCode() {

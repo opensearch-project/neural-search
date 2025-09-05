@@ -64,7 +64,9 @@ public class SparseVectorQuery extends Query {
 
     @Override
     public void visit(QueryVisitor visitor) {
-        visitor.visitLeaf(this);
+        if (visitor.acceptField(getFieldName())) {
+            visitor.visitLeaf(this);
+        }
     }
 
     @Override
