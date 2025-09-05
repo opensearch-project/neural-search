@@ -62,4 +62,8 @@ public class SparseTokensFieldType extends MappedFieldType {
             "[" + SparseTokensFieldMapper.CONTENT_TYPE + "] fields do not support sorting, scripting or aggregating"
         );
     }
+
+    public static boolean isSparseTokensType(String type) {
+        return SparseTokensFieldMapper.CONTENT_TYPE.equals(type);
+    }
 }

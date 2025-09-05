@@ -21,6 +21,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTIN
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper.CONTENT_TYPE;
 
 public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
     private SparseTokensFieldType fieldType;
@@ -126,5 +127,13 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
         assertFalse(fieldType.isSearchable()); // Set to false in constructor
         assertFalse(fieldType.isStored()); // Our stored parameter
         assertFalse(fieldType.hasDocValues()); // Our hasDocValues parameter
+    }
+
+    public void test_isSparseTokensType_returnsTrue_withSparseTokensType() {
+        assertTrue(SparseTokensFieldType.isSparseTokensType(CONTENT_TYPE));
+    }
+
+    public void test_isSparseTokensType_returnsFalse_withNonSparseTokensType() {
+        assertFalse(SparseTokensFieldType.isSparseTokensType("non_sparse_tokens"));
     }
 }
