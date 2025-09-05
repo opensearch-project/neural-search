@@ -17,15 +17,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-public class SparseCacheTests extends AbstractSparseTestBase {
+public class MemMonitoredCacheTests extends AbstractSparseTestBase {
 
-    private static final CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
+    private static final CacheKey cacheKey = prepareUniqueCacheKey(TestsPrepareUtils.prepareSegmentInfo());
 
     private static final long cacheItemSize = 100L;
     private static final long cacheKeySize = RamUsageEstimator.shallowSizeOf(cacheKey);
     private static final long emptyCacheMapSize = RamUsageEstimator.shallowSizeOf(new ConcurrentHashMap<>());
 
-    private TestSparseCache sparseCache;
+    private TestCache sparseCache;
     private TestAccountable mockAccountableItem;
 
     /**
@@ -37,7 +37,7 @@ public class SparseCacheTests extends AbstractSparseTestBase {
     @SneakyThrows
     public void setUp() {
         super.setUp();
-        sparseCache = new TestSparseCache();
+        sparseCache = new TestCache();
         mockAccountableItem = new TestAccountable();
     }
 
@@ -74,34 +74,34 @@ public class SparseCacheTests extends AbstractSparseTestBase {
     }
 
     /**
-     * Test that removeIndex method correctly removes an item from the cache when the key exists.
+     * Test that onIndexRemoval method correctly removes an item from the cache when the key exists.
      * This also verifies that the circuit breaker is updated to release the memory.
      */
-    public void test_removeIndex_whenKeyExists_removesFromCache() {
+    public void test_onIndexRemoval_whenKeyExists_removesFromCache() {
         sparseCache.put(cacheKey, mockAccountableItem);
 
-        sparseCache.removeIndex(cacheKey);
+        sparseCache.onIndexRemoval(cacheKey);
 
         assertFalse(sparseCache.cacheMap.containsKey(cacheKey));
         verify(mockedCircuitBreaker).addWithoutBreaking(-cacheItemSize - cacheKeySize);
     }
 
     /**
-     * Test that removeIndex method does nothing when the key does not exist in the cache.
+     * Test that onIndexRemoval method does nothing when the key does not exist in the cache.
      * This verifies that the circuit breaker is not updated when no item is removed.
      */
-    public void test_removeIndex_whenKeyDoesNotExist_doesNothing() {
-        sparseCache.removeIndex(cacheKey);
+    public void test_onIndexRemoval_whenKeyDoesNotExist_doesNothing() {
+        sparseCache.onIndexRemoval(cacheKey);
 
         verify(mockedCircuitBreaker, never()).addWithoutBreaking(cacheItemSize);
     }
 
     /**
-     * Test that removeIndex method throws NullPointerException when null is passed as a key.
+     * Test that onIndexRemoval method throws NullPointerException when null is passed as a key.
      * This test verifies the @NonNull annotation on the method parameter.
      */
-    public void test_removeIndex_whenKeyIsNull_throwsNullPointerException() {
-        NullPointerException exception = expectThrows(NullPointerException.class, () -> sparseCache.removeIndex(null));
+    public void test_onIndexRemoval_whenKeyIsNull_throwsNullPointerException() {
+        NullPointerException exception = expectThrows(NullPointerException.class, () -> sparseCache.onIndexRemoval(null));
 
         assertEquals("key is marked non-null but is null", exception.getMessage());
     }
@@ -132,7 +132,7 @@ public class SparseCacheTests extends AbstractSparseTestBase {
      * Concrete implementation of SparseCache for testing purposes.
      * Adds a put method to allow adding items to the cache for testing.
      */
-    private static class TestSparseCache extends SparseCache<TestAccountable> {
+    private static class TestCache extends MemMonitoredCache<TestAccountable> {
         public void put(@NonNull CacheKey key, @NonNull TestAccountable value) {
             cacheMap.put(key, value);
         }

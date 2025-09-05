@@ -42,7 +42,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
     private Environment environment;
 
     @Mock
-    private ClusterService clusterService;
+    private ClusterService mockClusterService;
     @Mock
     private ClusterState clusterState;
     @Mock
@@ -61,7 +61,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
-        when(clusterService.state()).thenReturn(clusterState);
+        when(mockClusterService.state()).thenReturn(clusterState);
         when(clusterState.metadata()).thenReturn(metadata);
         when(metadata.index(anyString())).thenReturn(indexMetadata);
         when(indexMetadata.getSettings()).thenReturn(null);
@@ -201,7 +201,7 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         List<List<String>> allInferenceInputs = new ArrayList<>();
 
         public TestInferenceProcessor(List<?> vectors, int batchSize, Exception exception) {
-            super(TAG, DESCRIPTION, batchSize, TYPE, MAP_KEY, MODEL_ID, FIELD_MAP, clientAccessor, environment, clusterService);
+            super(TAG, DESCRIPTION, batchSize, TYPE, MAP_KEY, MODEL_ID, FIELD_MAP, clientAccessor, environment, mockClusterService);
             this.vectors = vectors;
             this.exception = exception;
         }

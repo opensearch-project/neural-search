@@ -12,7 +12,7 @@ import lombok.Value;
 public class LruDocumentCache extends AbstractLruCache<LruDocumentCache.DocumentKey> {
     private static final LruDocumentCache INSTANCE = new LruDocumentCache();
 
-    private LruDocumentCache() {
+    protected LruDocumentCache() {
         super();
     }
 
