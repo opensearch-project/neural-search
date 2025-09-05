@@ -108,7 +108,7 @@ public class SparseDocValuesConsumerTests extends AbstractSparseTestBase {
     public void tearDown() throws Exception {
         // Clean up any created indices
         if (cacheKey != null) {
-            ForwardIndexCache.getInstance().removeIndex(cacheKey);
+            ForwardIndexCache.getInstance().onIndexRemoval(cacheKey);
         }
         super.tearDown();
     }

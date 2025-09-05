@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.plugin;
 
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -15,16 +16,20 @@ import java.util.Set;
 
 import org.junit.Before;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+import org.opensearch.core.common.breaker.CircuitBreaker;
+import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.env.Environment;
 import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.indices.IndicesService;
+import org.opensearch.indices.breaker.BreakerSettings;
 import org.opensearch.ingest.IngestService;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
@@ -45,6 +50,7 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
+import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.plugins.SearchPlugin.SearchExtSpec;
@@ -97,7 +103,12 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         // Mock ClusterSettings
         ClusterSettings clusterSettings = new ClusterSettings(
             settings,
-            Set.of(NeuralSearchSettings.NEURAL_STATS_ENABLED, NeuralSearchSettings.AGENTIC_SEARCH_ENABLED)
+            Set.of(
+                NeuralSearchSettings.NEURAL_STATS_ENABLED,
+                NeuralSearchSettings.AGENTIC_SEARCH_ENABLED,
+                NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT,
+                NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD
+            )
         );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
 
@@ -171,7 +182,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(5, settings.size());
+        assertEquals(7, settings.size());
     }
 
     public void testRequestProcessors() {
@@ -227,5 +238,27 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertTrue(
             systemIngestProcessors.get(SemanticFieldProcessorFactory.PROCESSOR_FACTORY_TYPE) instanceof SemanticFieldProcessorFactory
         );
+    }
+
+    public void testGetCircuitBreaker() {
+        Settings defaultSettings = Settings.EMPTY;
+
+        BreakerSettings breakerSettings = plugin.getCircuitBreaker(defaultSettings);
+
+        assertEquals(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_NAME, breakerSettings.getName());
+        assertEquals(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT.get(defaultSettings).getBytes(), breakerSettings.getLimit());
+        assertEquals(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD.get(defaultSettings), breakerSettings.getOverhead(), 0.0);
+        assertEquals(CircuitBreaker.Type.MEMORY, breakerSettings.getType());
+        assertEquals(CircuitBreaker.Durability.PERMANENT, breakerSettings.getDurability());
+    }
+
+    public void testSetCircuitBreaker() {
+        CircuitBreaker circuitBreaker = mock(CircuitBreaker.class);
+        Mockito.when(circuitBreaker.addEstimateBytesAndMaybeBreak(anyLong(), anyString()))
+            .thenThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT));
+
+        plugin.setCircuitBreaker(circuitBreaker);
+
+        assertFalse(CircuitBreakerManager.addMemoryUsage(2048L, "test_memory"));
     }
 }

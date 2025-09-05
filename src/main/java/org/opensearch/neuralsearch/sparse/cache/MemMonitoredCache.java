@@ -17,7 +17,7 @@ import java.util.function.Function;
  * Provides common functionality for caching forward index and clustered postings.
  * @param <T> The type of Accountable objects stored in the cache
  */
-public abstract class SparseCache<T extends Accountable> implements Accountable {
+public abstract class MemMonitoredCache<T extends Accountable> implements Accountable {
 
     protected final Map<CacheKey, T> cacheMap = new ConcurrentHashMap<>();
 
@@ -29,12 +29,14 @@ public abstract class SparseCache<T extends Accountable> implements Accountable 
      *
      * @param key The CacheKey that identifies the index to be removed
      */
-    public void removeIndex(@NonNull CacheKey key) {
+    public void onIndexRemoval(@NonNull CacheKey key) {
         cacheMap.computeIfPresent(key, (k, value) -> {
             long ramBytesUsed = value.ramBytesUsed() + RamUsageEstimator.shallowSizeOf(k);
-            CircuitBreakerManager.releaseBytes(ramBytesUsed);
-            LruTermCache.getInstance().removeIndex(k);
-            LruDocumentCache.getInstance().removeIndex(k);
+            MemoryUsageManager.getInstance()
+                .getMemoryUsageTracker()
+                .recordWithoutValidation(-ramBytesUsed, CircuitBreakerManager::addWithoutBreaking);
+            LruTermCache.getInstance().onIndexRemoval(k);
+            LruDocumentCache.getInstance().onIndexRemoval(k);
             return null;
         });
     }

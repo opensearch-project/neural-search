@@ -158,8 +158,8 @@ public class NeuralSparseIndexShard {
     private void clearAllCaches(List<CacheOperationContext> contexts) {
         for (CacheOperationContext context : contexts) {
             CacheKey cacheKey = context.cacheKey;
-            ClusteredPostingCache.getInstance().removeIndex(cacheKey);
-            ForwardIndexCache.getInstance().removeIndex(cacheKey);
+            ClusteredPostingCache.getInstance().onIndexRemoval(cacheKey);
+            ForwardIndexCache.getInstance().onIndexRemoval(cacheKey);
         }
     }
 

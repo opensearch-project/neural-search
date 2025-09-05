@@ -132,7 +132,7 @@ public class SparseBinaryDocValuesTests extends AbstractSparseTestBase {
         assertEquals(testVector, result);
 
         // Clean up
-        ForwardIndexCache.getInstance().removeIndex(testKey);
+        ForwardIndexCache.getInstance().onIndexRemoval(testKey);
     }
 
     public void testCachedSparseVector_WithExistingIndexButNoVector() throws IOException {
@@ -153,7 +153,7 @@ public class SparseBinaryDocValuesTests extends AbstractSparseTestBase {
         assertNull(result); // No vector at docId 3
 
         // Clean up
-        ForwardIndexCache.getInstance().removeIndex(testKey);
+        ForwardIndexCache.getInstance().onIndexRemoval(testKey);
     }
 
     public void testSetTotalLiveDocs() {

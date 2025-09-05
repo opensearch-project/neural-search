@@ -211,9 +211,9 @@ public class AbstractLruCacheTests extends AbstractSparseTestBase {
     }
 
     /**
-     * Test that removeIndex calls the doRemoveIndex method with the correct key
+     * Test that onIndexRemoval calls the doRemoveIndex method with the correct key
      */
-    public void test_removeIndex() {
+    public void test_onIndexRemoval() {
         TestLruCache testCache = new TestLruCache();
         TestLruCacheKey key = new TestLruCacheKey("key");
         CacheKey cacheKey = key.getCacheKey();
@@ -221,19 +221,17 @@ public class AbstractLruCacheTests extends AbstractSparseTestBase {
 
         testCache.updateAccess(key);
 
-        // Call removeIndex
-        testCache.removeIndex(cacheKey);
+        testCache.onIndexRemoval(cacheKey);
 
-        // Verify the key was removed
         assertFalse(testCache.accessRecencyMap.containsKey(key));
     }
 
     /**
-     * Test that removeIndex throws NullPointerException when key is null
+     * Test that onIndexRemoval throws NullPointerException when key is null
      */
-    public void test_removeIndex_withNullKey() {
+    public void test_onIndexRemoval_withNullKey() {
         TestLruCache testCache = new TestLruCache();
-        NullPointerException exception = expectThrows(NullPointerException.class, () -> testCache.removeIndex(null));
+        NullPointerException exception = expectThrows(NullPointerException.class, () -> testCache.onIndexRemoval(null));
         assertEquals("cacheKey is marked non-null but is null", exception.getMessage());
     }
 

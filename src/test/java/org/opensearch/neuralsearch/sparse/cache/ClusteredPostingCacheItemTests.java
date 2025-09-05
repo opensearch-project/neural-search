@@ -8,8 +8,6 @@ import lombok.SneakyThrows;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.junit.Before;
-import org.opensearch.core.common.breaker.CircuitBreaker;
-import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.accessor.ClusteredPostingReader;
@@ -24,19 +22,21 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.Consumer;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.when;
 
 public class ClusteredPostingCacheItemTests extends AbstractSparseTestBase {
 
     private static final BytesRef testTerm = new BytesRef("test_term");
     private List<DocumentCluster> testClusters;
     private ClusteredPostingCacheItem cacheItem;
+    private RamBytesRecorder globalRecorder;
 
     /**
      * Set up the test environment before each test.
@@ -48,8 +48,27 @@ public class ClusteredPostingCacheItemTests extends AbstractSparseTestBase {
     public void setUp() {
         super.setUp();
         testClusters = prepareClusterList();
-        CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
-        cacheItem = new ClusteredPostingCacheItem(cacheKey);
+        globalRecorder = mock(RamBytesRecorder.class);
+        when(globalRecorder.record(anyLong())).thenReturn(true);
+        CacheKey cacheKey = prepareUniqueCacheKey(TestsPrepareUtils.prepareSegmentInfo());
+        cacheItem = new ClusteredPostingCacheItem(cacheKey, globalRecorder);
+    }
+
+    public void test_constructor() {
+        verify(globalRecorder, times(1)).recordWithoutValidation(anyLong(), any());
+    }
+
+    /**
+     * Tests that with different getWriter function calling, correct writer will be returned.
+     * This verifies the basic functionality of the ClusteredPostingWriter.
+     */
+    @SneakyThrows
+    public void test_writer_gettingMethods() {
+        ClusteredPostingWriter originalWriter = cacheItem.getWriter();
+        ClusteredPostingWriter consumerWriter = cacheItem.getWriter((lambdaPlaceHolder) -> {});
+
+        // Test CacheClusteredPostingWriter and EarlyStopCacheClusteredPostingWriter can be correctly created
+        assertNotEquals("Two writers should be different", originalWriter, consumerWriter);
     }
 
     /**
@@ -120,24 +139,6 @@ public class ClusteredPostingCacheItemTests extends AbstractSparseTestBase {
 
         assertEquals("Cache should be empty", 0, reader.size());
         assertEquals("RAM usage should not change", initialRam, cacheItem.ramBytesUsed());
-    }
-
-    /**
-     * Tests that cluster insertion fails gracefully when the circuit breaker throws an exception.
-     * This verifies the error handling in the ClusteredPostingWriter.
-     */
-    @SneakyThrows
-    public void test_writerInsert_whenCircuitBreakerThrowException() {
-        doThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT)).when(mockedCircuitBreaker)
-            .addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
-        ClusteredPostingWriter writer = cacheItem.getWriter();
-        ClusteredPostingReader reader = cacheItem.getReader();
-
-        writer.insert(testTerm, testClusters);
-
-        assertEquals("Cache should be empty when circuit breaker trips", 0, reader.size());
-        assertNull("Term should not exist when circuit breaker trips", reader.read(testTerm));
     }
 
     /**
@@ -330,24 +331,19 @@ public class ClusteredPostingCacheItemTests extends AbstractSparseTestBase {
         verify(mockHandler, never()).accept(anyLong());
     }
 
-    /**
-     * Tests that circuitBreakerHandler is called when circuit breaker trips.
-     * This verifies the circuit breaker handler functionality.
-     */
     @SneakyThrows
-    public void test_writerInsert_withCircuitBreakerHandler_whenCircuitBreakerTrips() {
-        doThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT)).when(mockedCircuitBreaker)
-            .addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
+    public void test_writerInsert_whenRecordReturnFalse() {
         Consumer<Long> mockHandler = mock(Consumer.class);
         ClusteredPostingWriter writer = cacheItem.getWriter(mockHandler);
         ClusteredPostingReader reader = cacheItem.getReader();
+        when(globalRecorder.record(anyLong())).thenReturn(false);
 
         writer.insert(testTerm, testClusters);
 
-        assertEquals("Cache should be empty when circuit breaker trips", 0, reader.size());
-        assertNull("Term should not exist when circuit breaker trips", reader.read(testTerm));
+        assertEquals("Cache should be empty when record fails", 0, reader.size());
+        assertNull("Term should not exist when record fails", reader.read(testTerm));
         verify(mockHandler).accept(anyLong());
+        verify(globalRecorder, times(2)).record(anyLong());
     }
 
     /**
@@ -365,25 +361,6 @@ public class ClusteredPostingCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Cache should have one entry", 1, reader.size());
         assertNotNull("Term should exist", reader.read(testTerm));
         verify(mockHandler, never()).accept(anyLong());
-    }
-
-    /**
-     * Tests that default writer (without handler) works correctly when circuit breaker trips.
-     * This verifies backward compatibility.
-     */
-    @SneakyThrows
-    public void test_defaultWriter_whenCircuitBreakerTrips() {
-        doThrow(new CircuitBreakingException("Memory limit exceeded", CircuitBreaker.Durability.PERMANENT)).when(mockedCircuitBreaker)
-            .addEstimateBytesAndMaybeBreak(anyLong(), anyString());
-
-        ClusteredPostingWriter writer = cacheItem.getWriter();
-        ClusteredPostingReader reader = cacheItem.getReader();
-
-        // Should not throw exception even without handler
-        writer.insert(testTerm, testClusters);
-
-        assertEquals("Cache should be empty when circuit breaker trips", 0, reader.size());
-        assertNull("Term should not exist when circuit breaker trips", reader.read(testTerm));
     }
 
     /**
@@ -478,23 +455,18 @@ public class ClusteredPostingCacheItemTests extends AbstractSparseTestBase {
         assertEquals("Cache should have two entries", 2, reader.size());
     }
 
-    /**
-     * Tests that erasing a term updates the circuit breaker correctly.
-     * This verifies the circuit breaker interaction in the erase method.
-     */
     @SneakyThrows
-    public void test_writerErase_updatesCircuitBreaker() {
+    public void test_writerErase_updatesRecord() {
         CacheableClusteredPostingWriter writer = cacheItem.getWriter();
-
         // Insert a term
         writer.insert(testTerm, testClusters);
-        // Verify circuit breaker was updated by insertion
-        verify(mockedCircuitBreaker, times(1)).addWithoutBreaking(anyLong());
+
+        verify(globalRecorder, times(1)).record(anyLong());
 
         // Erase the term
         writer.erase(testTerm);
-        // Verify circuit breaker was updated by erasing
-        verify(mockedCircuitBreaker, times(2)).addWithoutBreaking(anyLong());
+        // one from constructor, one from erase
+        verify(globalRecorder, times(2)).recordWithoutValidation(anyLong(), any());
     }
 
     /**

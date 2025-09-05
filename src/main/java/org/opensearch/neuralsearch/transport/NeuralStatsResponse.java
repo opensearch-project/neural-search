@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForMetricStats;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForStatCategoryFiltering;
 
 /**
@@ -28,17 +29,20 @@ import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isCluster
 @Getter
 public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeResponse> implements ToXContentObject {
     public static final String INFO_KEY_PREFIX = "info";
+    public static final String METRIC_KEY_PREFIX = "metric";
     public static final String NODES_KEY_PREFIX = "nodes";
     public static final String AGGREGATED_NODES_KEY_PREFIX = "all_nodes";
 
-    private Map<String, StatSnapshot<?>> infoStats;
-    private Map<String, StatSnapshot<?>> aggregatedNodeStats;
-    private Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
-    private boolean flatten;
-    private boolean includeMetadata;
-    private boolean includeIndividualNodes;
-    private boolean includeAllNodes;
-    private boolean includeInfo;
+    private final Map<String, StatSnapshot<?>> infoStats;
+    private final Map<String, StatSnapshot<?>> metricStats;
+    private final Map<String, StatSnapshot<?>> aggregatedNodeStats;
+    private final Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
+    private final boolean flatten;
+    private final boolean includeMetadata;
+    private final boolean includeIndividualNodes;
+    private final boolean includeAllNodes;
+    private final boolean includeInfo;
+    private final boolean includeMetric;
 
     /**
      * Constructor
@@ -49,11 +53,16 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     public NeuralStatsResponse(StreamInput in) throws IOException {
         super(new ClusterName(in), in.readList(NeuralStatsNodeResponse::readStats), in.readList(FailedNodeException::new));
         Map<String, StatSnapshot<?>> castedInfoStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
+        Map<String, StatSnapshot<?>> castedMetricStats = Map.of();
+        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            castedMetricStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
+        }
         Map<String, StatSnapshot<?>> castedAggregatedNodeStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
         Map<String, Map<String, StatSnapshot<?>>> castedNodeIdToNodeEventStats = (Map<String, Map<String, StatSnapshot<?>>>) (Map) in
             .readMap();
 
         this.infoStats = castedInfoStats;
+        this.metricStats = castedMetricStats;
         this.aggregatedNodeStats = castedAggregatedNodeStats;
         this.nodeIdToNodeEventStats = castedNodeIdToNodeEventStats;
         this.flatten = in.readBoolean();
@@ -63,9 +72,14 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             this.includeAllNodes = in.readBoolean();
             this.includeInfo = in.readBoolean();
         } else {
-            includeIndividualNodes = true;
-            includeAllNodes = true;
-            includeInfo = true;
+            this.includeIndividualNodes = true;
+            this.includeAllNodes = true;
+            this.includeInfo = true;
+        }
+        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            this.includeMetric = in.readBoolean();
+        } else {
+            this.includeMetric = true;
         }
     }
 
@@ -80,22 +94,29 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      * @param nodeIdToNodeEventStats the node id to node event stats
      * @param flatten whether to flatten keys
      * @param includeMetadata whether to include metadata
+     * @param includeIndividualNodes whether to include stats for individual nodes
+     * @param includeAllNodes whether to include aggregated stats across all nodes
+     * @param includeInfo whether to include cluster-wide information stats
+     * @param includeMetric whether to include cluster-wide metric stats
      */
     public NeuralStatsResponse(
         ClusterName clusterName,
         List<NeuralStatsNodeResponse> nodes,
         List<FailedNodeException> failures,
         Map<String, StatSnapshot<?>> infoStats,
+        Map<String, StatSnapshot<?>> metricStats,
         Map<String, StatSnapshot<?>> aggregatedNodeStats,
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats,
         boolean flatten,
         boolean includeMetadata,
         boolean includeIndividualNodes,
         boolean includeAllNodes,
-        boolean includeInfo
+        boolean includeInfo,
+        boolean includeMetric
     ) {
         super(clusterName, nodes, failures);
         this.infoStats = infoStats;
+        this.metricStats = metricStats;
         this.aggregatedNodeStats = aggregatedNodeStats;
         this.nodeIdToNodeEventStats = nodeIdToNodeEventStats;
         this.flatten = flatten;
@@ -103,16 +124,21 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         this.includeIndividualNodes = includeIndividualNodes;
         this.includeAllNodes = includeAllNodes;
         this.includeInfo = includeInfo;
+        this.includeMetric = includeMetric;
     }
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         Map<String, Object> downcastedInfoStats = (Map<String, Object>) (Map) (infoStats);
+        Map<String, Object> downcastedMetricStats = (Map<String, Object>) (Map) (metricStats);
         Map<String, Object> downcastedAggregatedNodeStats = (Map<String, Object>) (Map) (aggregatedNodeStats);
         Map<String, Object> downcastedNodeIdToNodeEventStats = (Map<String, Object>) (Map) (nodeIdToNodeEventStats);
 
         out.writeMap(downcastedInfoStats);
+        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            out.writeMap(downcastedMetricStats);
+        }
         out.writeMap(downcastedAggregatedNodeStats);
         out.writeMap(downcastedNodeIdToNodeEventStats);
         out.writeBoolean(flatten);
@@ -121,6 +147,9 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             out.writeBoolean(includeIndividualNodes);
             out.writeBoolean(includeAllNodes);
             out.writeBoolean(includeInfo);
+        }
+        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            out.writeBoolean(includeMetric);
         }
     }
 
@@ -140,6 +169,13 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             Map<String, Object> formattedInfoStats = formatStats(infoStats);
             builder.startObject(INFO_KEY_PREFIX);
             builder.mapContents(formattedInfoStats);
+            builder.endObject();
+        }
+
+        if (includeMetric) {
+            Map<String, Object> formattedMetricStats = formatStats(metricStats);
+            builder.startObject(METRIC_KEY_PREFIX);
+            builder.mapContents(formattedMetricStats);
             builder.endObject();
         }
 

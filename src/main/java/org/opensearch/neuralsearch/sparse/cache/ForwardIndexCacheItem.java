@@ -6,14 +6,12 @@ package org.opensearch.neuralsearch.sparse.cache;
 
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
-import org.apache.lucene.util.Accountable;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.Consumer;
 
@@ -21,12 +19,11 @@ import java.util.function.Consumer;
  * This class stores sparse vector in cache and provides read/write operations.
  */
 @Log4j2
-public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accountable {
+public class ForwardIndexCacheItem extends AccountableTracker implements SparseVectorForwardIndex {
 
-    private static final String CIRCUIT_BREAKER_LABEL = "Cache Forward Index";
     private final CacheKey cacheKey;
     private final AtomicReferenceArray<SparseVector> sparseVectors;
-    private final AtomicLong usedRamBytes;
+    private final RamBytesRecorder globalRamBytes;
     @Getter
     private final SparseVectorReader reader = new CacheSparseVectorReader();
     @Getter
@@ -41,21 +38,17 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
         return new CacheSparseVectorWriter(circuitBreakerHandler);
     }
 
-    public ForwardIndexCacheItem(CacheKey cacheKey, int docCount) {
+    public ForwardIndexCacheItem(CacheKey cacheKey, int docCount, RamBytesRecorder globalRamBytes) {
         this.cacheKey = cacheKey;
+        this.globalRamBytes = globalRamBytes;
         sparseVectors = new AtomicReferenceArray<>(docCount);
         // Account for the array itself in memory usage
-        usedRamBytes = new AtomicLong(
+        recordUsedBytes(
             RamUsageEstimator.shallowSizeOf(sparseVectors) + RamUsageEstimator.alignObjectSize(
                 (long) docCount * RamUsageEstimator.NUM_BYTES_OBJECT_REF
             )
         );
-        CircuitBreakerManager.addWithoutBreaking(usedRamBytes.get());
-    }
-
-    @Override
-    public long ramBytesUsed() {
-        return usedRamBytes.get();
+        globalRamBytes.recordWithoutValidation(ramBytesUsed(), CircuitBreakerManager::addWithoutBreaking);
     }
 
     private class CacheSparseVectorReader implements SparseVectorReader {
@@ -89,22 +82,19 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
 
         @Override
         public void insert(int docId, SparseVector vector) {
-            if (vector == null || docId < 0 || docId >= sparseVectors.length()) {
+            if (vector == null || docId < 0 || docId >= sparseVectors.length() || sparseVectors.get(docId) != null) {
                 return;
             }
 
             long ramBytesUsed = vector.ramBytesUsed();
 
-            // TODO: avoid excessive log produced by circuit breaker
-            if (!CircuitBreakerManager.addMemoryUsage(ramBytesUsed, CIRCUIT_BREAKER_LABEL)) {
+            if (!globalRamBytes.record(ramBytesUsed)) {
                 if (circuitBreakerTriggerHandler != null) {
                     circuitBreakerTriggerHandler.accept(ramBytesUsed);
-                }
-
-                // Try again after eviction
-                if (!CircuitBreakerManager.addMemoryUsage(ramBytesUsed, CIRCUIT_BREAKER_LABEL)) {
-                    log.warn("Failed to add to cache even after eviction, vector will not be cached");
-                    return;
+                    // Try again after eviction
+                    if (!globalRamBytes.record(ramBytesUsed)) {
+                        return;
+                    }
                 }
             }
 
@@ -114,9 +104,9 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
 
             // Only update memory usage if we actually inserted a new document
             if (sparseVectors.compareAndSet(docId, null, vector)) {
-                usedRamBytes.addAndGet(ramBytesUsed);
+                recordUsedBytes(ramBytesUsed);
             } else {
-                CircuitBreakerManager.releaseBytes(ramBytesUsed);
+                globalRamBytes.recordWithoutValidation(-ramBytesUsed, CircuitBreakerManager::addWithoutBreaking);
             }
         }
 
@@ -141,8 +131,8 @@ public class ForwardIndexCacheItem implements SparseVectorForwardIndex, Accounta
 
             // Only update memory usage if we actually erased a new document
             if (sparseVectors.compareAndSet(docId, vector, null)) {
-                usedRamBytes.addAndGet(-ramBytesReleased);
-                CircuitBreakerManager.releaseBytes(ramBytesReleased);
+                recordUsedBytes(-ramBytesReleased);
+                globalRamBytes.recordWithoutValidation(-ramBytesReleased, CircuitBreakerManager::addWithoutBreaking);
                 return ramBytesReleased;
             }
 

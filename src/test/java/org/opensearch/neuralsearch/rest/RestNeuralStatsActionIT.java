@@ -52,7 +52,7 @@ public class RestNeuralStatsActionIT extends BaseNeuralSearchIT {
         super.setUp();
         updateClusterSettings();
 
-        // Only enable stats for this IT to prevent collisions
+        // Only enable stats for stats related tests to prevent collisions
         updateClusterSettings(NeuralSearchSettings.NEURAL_STATS_ENABLED.getKey(), true);
     }
 

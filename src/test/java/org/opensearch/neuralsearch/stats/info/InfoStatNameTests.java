@@ -2,10 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.stats.events;
+package org.opensearch.neuralsearch.stats.info;
 
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
-import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
@@ -93,5 +92,4 @@ public class InfoStatNameTests extends OpenSearchTestCase {
         }
         return false;
     }
-
 }

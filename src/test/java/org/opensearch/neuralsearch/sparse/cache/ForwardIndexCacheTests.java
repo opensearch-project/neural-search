@@ -15,12 +15,13 @@ import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import java.util.List;
 
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 public class ForwardIndexCacheTests extends AbstractSparseTestBase {
 
     private static final int TEST_DOC_COUNT = 10;
-    private static final CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
+    private static final CacheKey cacheKey = prepareUniqueCacheKey(TestsPrepareUtils.prepareSegmentInfo());
     private static final long cacheKeySize = RamUsageEstimator.shallowSizeOf(cacheKey);
 
     private long emptyForwardIndexCacheSize;
@@ -39,9 +40,9 @@ public class ForwardIndexCacheTests extends AbstractSparseTestBase {
 
         forwardIndexCache = ForwardIndexCache.getInstance();
         emptyForwardIndexCacheSize = forwardIndexCache.ramBytesUsed();
-
+        RamBytesRecorder mockGlobalRecorder = mock(RamBytesRecorder.class);
         CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
-        emptyForwardIndexCacheItemSize = new ForwardIndexCacheItem(cacheKey, TEST_DOC_COUNT).ramBytesUsed();
+        emptyForwardIndexCacheItemSize = new ForwardIndexCacheItem(cacheKey, TEST_DOC_COUNT, mockGlobalRecorder).ramBytesUsed();
     }
 
     /**
@@ -52,7 +53,7 @@ public class ForwardIndexCacheTests extends AbstractSparseTestBase {
     @Override
     @SneakyThrows
     public void tearDown() {
-        forwardIndexCache.removeIndex(cacheKey);
+        forwardIndexCache.onIndexRemoval(cacheKey);
         super.tearDown();
     }
 

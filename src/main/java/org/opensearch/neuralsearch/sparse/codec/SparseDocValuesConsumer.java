@@ -88,7 +88,7 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
         }
         if (isMerge) {
             if (valuesProducer instanceof SparseDocValuesReader reader) {
-                mergeHelper.clearCacheData(reader.getMergeStateFacade(), field, ForwardIndexCache.getInstance()::removeIndex);
+                mergeHelper.clearCacheData(reader.getMergeStateFacade(), field, ForwardIndexCache.getInstance()::onIndexRemoval);
             }
         }
     }

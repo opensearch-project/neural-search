@@ -13,7 +13,7 @@ import org.apache.lucene.util.BytesRef;
 public class LruTermCache extends AbstractLruCache<LruTermCache.TermKey> {
     private static final LruTermCache INSTANCE = new LruTermCache();
 
-    private LruTermCache() {
+    protected LruTermCache() {
         super();
     }
 

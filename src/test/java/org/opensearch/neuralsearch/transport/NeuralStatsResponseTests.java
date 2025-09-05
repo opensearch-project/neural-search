@@ -38,6 +38,7 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
     private List<NeuralStatsNodeResponse> nodes;
     private List<FailedNodeException> failures;
     private Map<String, StatSnapshot<?>> infoStats;
+    private Map<String, StatSnapshot<?>> metricStats;
     private Map<String, StatSnapshot<?>> aggregatedNodeStats;
     private Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
 
@@ -54,6 +55,7 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
         nodes = new ArrayList<>();
         failures = new ArrayList<>();
         infoStats = new HashMap<>();
+        metricStats = new HashMap<>();
         aggregatedNodeStats = new HashMap<>();
         nodeIdToNodeEventStats = new HashMap<>();
         setUpClusterService();
@@ -87,10 +89,12 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             true,
             false,
+            true,
             true,
             true,
             true
@@ -105,8 +109,8 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
 
         // 2 calls, one by BaseNodesResponse, one by class under test
         verify(mockStreamOutput, times(2)).writeList(failures);
-        verify(mockStreamOutput, times(3)).writeMap(any());
-        verify(mockStreamOutput, times(4)).writeBoolean(true);
+        verify(mockStreamOutput, times(4)).writeMap(any());
+        verify(mockStreamOutput, times(5)).writeBoolean(true);
         verify(mockStreamOutput, times(1)).writeBoolean(false);
     }
 
@@ -116,9 +120,11 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
+            true,
             true,
             true,
             true,
@@ -146,10 +152,12 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             false,
+            true,
             true,
             true,
             true
@@ -177,10 +185,12 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             true,
             false,
+            true,
             true,
             true,
             true
@@ -208,10 +218,12 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             false,
+            true,
             true,
             true,
             true
@@ -241,10 +253,12 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             true,
             false,
+            true,
             true,
             true,
             true
@@ -275,9 +289,11 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
+            true,
             true,
             true,
             true,
@@ -316,11 +332,13 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             false,
             false,
+            true,
             true,
             true
         );
@@ -358,12 +376,14 @@ public class NeuralStatsResponseTests extends OpenSearchTestCase {
             nodes,
             failures,
             infoStats,
+            metricStats,
             aggregatedNodeStats,
             nodeIdToNodeEventStats,
             false,
             false,
             true,
             false,
+            true,
             true
         );
         XContentBuilder builder = XContentFactory.jsonBuilder();

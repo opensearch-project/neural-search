@@ -29,6 +29,7 @@ public final class MinClusterVersionUtil {
     public static final Version MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD = Version.V_3_1_0;
     public static final Version MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE = Version.V_3_3_0;
     public static final Version MINIMAL_SUPPORTED_VERSION_STATS_CATEGORY_FILTERING = Version.V_3_1_0;
+    public static final Version MINIMAL_SUPPORTED_VERSION_METRICS_STATS = Version.V_3_3_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER = Version.V_3_0_0;
 
     // Constant for neural_knn_query version check
@@ -57,6 +58,10 @@ public final class MinClusterVersionUtil {
 
     public static boolean isClusterOnOrAfterMinReqVersionForStatCategoryFiltering() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_STATS_CATEGORY_FILTERING);
+    }
+
+    public static boolean isClusterOnOrAfterMinReqVersionForMetricStats() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_METRICS_STATS);
     }
 
     public static boolean isClusterOnOrAfterMinReqVersion(String key) {

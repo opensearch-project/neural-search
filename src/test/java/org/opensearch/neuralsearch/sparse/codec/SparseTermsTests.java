@@ -62,7 +62,7 @@ public class SparseTermsTests extends AbstractSparseTestBase {
     @Override
     @SneakyThrows
     public void tearDown() {
-        ClusteredPostingCache.getInstance().removeIndex(cacheKey);
+        ClusteredPostingCache.getInstance().onIndexRemoval(cacheKey);
         super.tearDown();
     }
 
