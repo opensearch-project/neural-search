@@ -34,7 +34,6 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     public static final String AGGREGATED_NODES_KEY_PREFIX = "all_nodes";
 
     private final Map<String, StatSnapshot<?>> infoStats;
-    private final Map<String, StatSnapshot<?>> metricStats;
     private final Map<String, StatSnapshot<?>> aggregatedNodeStats;
     private final Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
     private final boolean flatten;
@@ -72,11 +71,8 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             this.includeInfo = true;
         }
         if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
-            Map<String, StatSnapshot<?>> castedMetricStats = (Map<String, StatSnapshot<?>>) (Map) in.readMap();
-            this.metricStats = castedMetricStats;
             this.includeMetric = in.readBoolean();
         } else {
-            this.metricStats = Map.of();
             this.includeMetric = true;
         }
     }
@@ -102,7 +98,6 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         List<NeuralStatsNodeResponse> nodes,
         List<FailedNodeException> failures,
         Map<String, StatSnapshot<?>> infoStats,
-        Map<String, StatSnapshot<?>> metricStats,
         Map<String, StatSnapshot<?>> aggregatedNodeStats,
         Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats,
         boolean flatten,
@@ -114,7 +109,6 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     ) {
         super(clusterName, nodes, failures);
         this.infoStats = infoStats;
-        this.metricStats = metricStats;
         this.aggregatedNodeStats = aggregatedNodeStats;
         this.nodeIdToNodeEventStats = nodeIdToNodeEventStats;
         this.flatten = flatten;
@@ -129,7 +123,6 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
     public void writeTo(StreamOutput out) throws IOException {
         super.writeTo(out);
         Map<String, Object> downcastedInfoStats = (Map<String, Object>) (Map) (infoStats);
-        Map<String, Object> downcastedMetricStats = (Map<String, Object>) (Map) (metricStats);
         Map<String, Object> downcastedAggregatedNodeStats = (Map<String, Object>) (Map) (aggregatedNodeStats);
         Map<String, Object> downcastedNodeIdToNodeEventStats = (Map<String, Object>) (Map) (nodeIdToNodeEventStats);
 
@@ -144,7 +137,6 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             out.writeBoolean(includeInfo);
         }
         if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
-            out.writeMap(downcastedMetricStats);
             out.writeBoolean(includeMetric);
         }
     }
@@ -165,13 +157,6 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             Map<String, Object> formattedInfoStats = formatStats(infoStats);
             builder.startObject(INFO_KEY_PREFIX);
             builder.mapContents(formattedInfoStats);
-            builder.endObject();
-        }
-
-        if (includeMetric) {
-            Map<String, Object> formattedMetricStats = formatStats(metricStats);
-            builder.startObject(METRIC_KEY_PREFIX);
-            builder.mapContents(formattedMetricStats);
             builder.endObject();
         }
 

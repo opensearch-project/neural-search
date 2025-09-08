@@ -108,25 +108,11 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
                 .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
         }
 
-        Map<String, StatSnapshot<?>> flatMetricStats = Collections.emptyMap();
-        if (request.getNeuralStatsInput().isIncludeMetrics()) {
-            // Get metric stats
-            Map<MetricStatName, MemoryStatSnapshot> metricStats = metricStatsManager.getStats(
-                request.getNeuralStatsInput().getMetricStatNames()
-            );
-
-            // Convert stat name keys into flat path strings
-            flatMetricStats = metricStats.entrySet()
-                .stream()
-                .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
-        }
-
         return new NeuralStatsResponse(
             clusterService.getClusterName(),
             responses,
             failures,
             flatInfoStats,
-            flatMetricStats,
             aggregatedNodeStats,
             nodeIdToEventStats,
             request.getNeuralStatsInput().isFlatten(),
