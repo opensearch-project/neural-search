@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -37,7 +38,7 @@ import static org.opensearch.neuralsearch.plugin.NeuralSearch.NEURAL_BASE_URI;
 
 /**
  * Rest action handler for the neural stats API
- * Calculates info stats and aggregates event stats from nodes and returns them in the response
+ * Calculates info stats, aggregates event stats and metric stats from nodes and returns them in the response
  */
 @Log4j2
 @AllArgsConstructor
@@ -78,6 +79,11 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     public static final String INCLUDE_INFO_PARAM = "include_info";
 
     /**
+     * Query parameter name to include metrics data across nodes
+     */
+    public static final String INCLUDE_METRIC_PARAM = "include_metric";
+
+    /**
      * Regex for valid params, containing only alphanumeric, -, or _
      */
     public static final String PARAM_REGEX = "^[A-Za-z0-9-_]+$";
@@ -98,6 +104,12 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     private static final Set<String> INFO_STAT_NAMES = EnumSet.allOf(InfoStatName.class)
         .stream()
         .map(InfoStatName::getNameString)
+        .map(str -> str.toLowerCase(Locale.ROOT))
+        .collect(Collectors.toSet());
+
+    private static final Set<String> METRIC_STAT_NAMES = EnumSet.allOf(MetricStatName.class)
+        .stream()
+        .map(MetricStatName::getNameString)
         .map(str -> str.toLowerCase(Locale.ROOT))
         .collect(Collectors.toSet());
 
@@ -204,6 +216,9 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         boolean includeInfo = request.paramAsBoolean(INCLUDE_INFO_PARAM, true);
         neuralStatsInput.setIncludeInfo(includeInfo);
 
+        boolean includeMetrics = request.paramAsBoolean(INCLUDE_METRIC_PARAM, true);
+        neuralStatsInput.setIncludeMetrics(includeMetrics);
+
         // Process requested stats parameters
         processStatsRequestParameters(request, neuralStatsInput);
 
@@ -225,15 +240,15 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         Set<String> invalidStatNames = new HashSet<>();
         boolean includeEvents = neuralStatsInput.isIncludeEvents();
         boolean includeInfo = neuralStatsInput.isIncludeInfo();
+        boolean includeMetrics = neuralStatsInput.isIncludeMetrics();
 
         for (String stat : stats) {
             // Validate parameter
             String normalizedStat = stat.toLowerCase(Locale.ROOT);
-            if (isValidParamString(normalizedStat) == false || isValidEventOrInfoStatName(normalizedStat) == false) {
+            if (!isValidParamString(normalizedStat) || !isValidStatName(normalizedStat)) {
                 invalidStatNames.add(normalizedStat);
                 continue;
             }
-
             if (includeInfo && InfoStatName.isValidName(normalizedStat)) {
                 InfoStatName infoStatName = InfoStatName.from(normalizedStat);
                 if (infoStatName.version().onOrBefore(minClusterVersion)) {
@@ -243,6 +258,11 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 EventStatName eventStatName = EventStatName.from(normalizedStat);
                 if (eventStatName.version().onOrBefore(minClusterVersion)) {
                     neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                }
+            } else if (includeMetrics && MetricStatName.isValidName(normalizedStat)) {
+                MetricStatName metricStatName = MetricStatName.from(normalizedStat);
+                if (metricStatName.version().onOrBefore(minClusterVersion)) {
+                    neuralStatsInput.getMetricStatNames().add(MetricStatName.from(normalizedStat));
                 }
             }
         }
@@ -264,8 +284,10 @@ public class RestNeuralStatsAction extends BaseRestHandler {
             if (neuralStatsInput.isIncludeEvents()) {
                 neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
             }
+            if (neuralStatsInput.isIncludeMetrics()) {
+                neuralStatsInput.getMetricStatNames().addAll(EnumSet.allOf(MetricStatName.class));
+            }
         } else {
-            // Use a separate case here to save on version comparison if not necessary
             if (neuralStatsInput.isIncludeInfo()) {
                 neuralStatsInput.getInfoStatNames()
                     .addAll(
@@ -284,6 +306,15 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
                     );
             }
+            if (neuralStatsInput.isIncludeMetrics()) {
+                neuralStatsInput.getMetricStatNames()
+                    .addAll(
+                        EnumSet.allOf(MetricStatName.class)
+                            .stream()
+                            .filter(statName -> statName.version().onOrBefore(minVersion))
+                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(MetricStatName.class)))
+                    );
+            }
         }
     }
 
@@ -296,7 +327,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         return isValidParamString(nodeId) && nodeId.length() == 22;
     }
 
-    private boolean isValidEventOrInfoStatName(String statName) {
-        return InfoStatName.isValidName(statName) || EventStatName.isValidName(statName);
+    private boolean isValidStatName(String statName) {
+        return InfoStatName.isValidName(statName) || EventStatName.isValidName(statName) || MetricStatName.isValidName(statName);
     }
 }

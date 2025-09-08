@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsRequest;
 import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
@@ -93,6 +94,7 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
         assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
         assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertEquals(capturedInput.getMetricStatNames(), EnumSet.allOf(MetricStatName.class));
         assertFalse(capturedInput.isFlatten());
         assertFalse(capturedInput.isIncludeMetadata());
         assertTrue(capturedInput.isIncludeIndividualNodes());
@@ -109,7 +111,8 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
             RestNeuralStatsAction.INCLUDE_METADATA_PARAM, "true",
             RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, "false",
             RestNeuralStatsAction.INCLUDE_ALL_NODES_PARAM, "true",
-            RestNeuralStatsAction.INCLUDE_INFO_PARAM, "true"
+            RestNeuralStatsAction.INCLUDE_INFO_PARAM, "true",
+            RestNeuralStatsAction.INCLUDE_METRIC_PARAM, "true"
         );
         RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withParams(params).build();
 
@@ -122,11 +125,13 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
 
         assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
         assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertEquals(capturedInput.getMetricStatNames(), EnumSet.allOf(MetricStatName.class));
         assertTrue(capturedInput.isFlatten());
         assertTrue(capturedInput.isIncludeMetadata());
         assertFalse(capturedInput.isIncludeIndividualNodes());
         assertTrue(capturedInput.isIncludeAllNodes());
         assertTrue(capturedInput.isIncludeInfo());
+        assertTrue(capturedInput.isIncludeMetrics());
     }
 
     public void test_execute_customParams_includeNone() throws Exception {
@@ -141,6 +146,8 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         params.put(RestNeuralStatsAction.INCLUDE_INDIVIDUAL_NODES_PARAM, "false");
         params.put(RestNeuralStatsAction.INCLUDE_ALL_NODES_PARAM, "false");
         params.put(RestNeuralStatsAction.INCLUDE_INFO_PARAM, "false");
+        params.put(RestNeuralStatsAction.INCLUDE_METRIC_PARAM, "false");
+
         RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY).withParams(params).build();
 
         restNeuralStatsAction.handleRequest(request, channel, client);
@@ -150,14 +157,16 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
 
         NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
 
-        // Since we we set individual nodes and all nodes to false, we shouldn't fetch any stats
+        // Since we set individual nodes and all nodes to false, we shouldn't fetch any stats
         assertEquals(capturedInput.getEventStatNames(), EnumSet.noneOf(EventStatName.class));
         assertEquals(capturedInput.getInfoStatNames(), EnumSet.noneOf(InfoStatName.class));
+        assertEquals(capturedInput.getMetricStatNames(), EnumSet.noneOf(MetricStatName.class));
         assertTrue(capturedInput.isFlatten());
         assertTrue(capturedInput.isIncludeMetadata());
         assertFalse(capturedInput.isIncludeIndividualNodes());
         assertFalse(capturedInput.isIncludeAllNodes());
         assertFalse(capturedInput.isIncludeInfo());
+        assertFalse(capturedInput.isIncludeMetrics());
     }
 
     public void test_handleRequest_disabledForbidden() throws Exception {
@@ -228,7 +237,8 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
                 EventStatName.TEXT_CHUNKING_PROCESSOR_EXECUTIONS.getNameString(),
                 EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS.getNameString(),
                 InfoStatName.TEXT_CHUNKING_PROCESSORS.getNameString(),
-                InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString()
+                InfoStatName.TEXT_EMBEDDING_PROCESSORS.getNameString(),
+                MetricStatName.MEMORY_SPARSE_CLUSTERED_POSTING_USAGE.getNameString()
         ));
         RestRequest request = new FakeRestRequest.Builder(NamedXContentRegistry.EMPTY)
                 .withParams(params)
@@ -248,6 +258,7 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
                 InfoStatName.TEXT_CHUNKING_PROCESSORS,
                 InfoStatName.TEXT_EMBEDDING_PROCESSORS
         ));
+        assertEquals(capturedInput.getMetricStatNames(), EnumSet.of(MetricStatName.MEMORY_SPARSE_CLUSTERED_POSTING_USAGE));
     }
 
     public void test_execute_statParameters_olderVersion() throws Exception {

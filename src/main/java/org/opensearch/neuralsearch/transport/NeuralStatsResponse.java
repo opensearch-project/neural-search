@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForMetricStats;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForStatCategoryFiltering;
 
 /**
@@ -28,17 +29,19 @@ import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isCluster
 @Getter
 public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeResponse> implements ToXContentObject {
     public static final String INFO_KEY_PREFIX = "info";
+    public static final String METRIC_KEY_PREFIX = "metric";
     public static final String NODES_KEY_PREFIX = "nodes";
     public static final String AGGREGATED_NODES_KEY_PREFIX = "all_nodes";
 
-    private Map<String, StatSnapshot<?>> infoStats;
-    private Map<String, StatSnapshot<?>> aggregatedNodeStats;
-    private Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
-    private boolean flatten;
-    private boolean includeMetadata;
-    private boolean includeIndividualNodes;
-    private boolean includeAllNodes;
-    private boolean includeInfo;
+    private final Map<String, StatSnapshot<?>> infoStats;
+    private final Map<String, StatSnapshot<?>> aggregatedNodeStats;
+    private final Map<String, Map<String, StatSnapshot<?>>> nodeIdToNodeEventStats;
+    private final boolean flatten;
+    private final boolean includeMetadata;
+    private final boolean includeIndividualNodes;
+    private final boolean includeAllNodes;
+    private final boolean includeInfo;
+    private final boolean includeMetric;
 
     /**
      * Constructor
@@ -63,9 +66,14 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             this.includeAllNodes = in.readBoolean();
             this.includeInfo = in.readBoolean();
         } else {
-            includeIndividualNodes = true;
-            includeAllNodes = true;
-            includeInfo = true;
+            this.includeIndividualNodes = true;
+            this.includeAllNodes = true;
+            this.includeInfo = true;
+        }
+        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            this.includeMetric = in.readBoolean();
+        } else {
+            this.includeMetric = true;
         }
     }
 
@@ -80,6 +88,10 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
      * @param nodeIdToNodeEventStats the node id to node event stats
      * @param flatten whether to flatten keys
      * @param includeMetadata whether to include metadata
+     * @param includeIndividualNodes whether to include stats for individual nodes
+     * @param includeAllNodes whether to include aggregated stats across all nodes
+     * @param includeInfo whether to include cluster-wide information stats
+     * @param includeMetric whether to include cluster-wide metric stats
      */
     public NeuralStatsResponse(
         ClusterName clusterName,
@@ -92,7 +104,8 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         boolean includeMetadata,
         boolean includeIndividualNodes,
         boolean includeAllNodes,
-        boolean includeInfo
+        boolean includeInfo,
+        boolean includeMetric
     ) {
         super(clusterName, nodes, failures);
         this.infoStats = infoStats;
@@ -103,6 +116,7 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
         this.includeIndividualNodes = includeIndividualNodes;
         this.includeAllNodes = includeAllNodes;
         this.includeInfo = includeInfo;
+        this.includeMetric = includeMetric;
     }
 
     @Override
@@ -121,6 +135,9 @@ public class NeuralStatsResponse extends BaseNodesResponse<NeuralStatsNodeRespon
             out.writeBoolean(includeIndividualNodes);
             out.writeBoolean(includeAllNodes);
             out.writeBoolean(includeInfo);
+        }
+        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            out.writeBoolean(includeMetric);
         }
     }
 

@@ -211,7 +211,7 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
         return attributes;
     }
 
-    protected CacheKey prepareUniqueCacheKey(SegmentInfo segmentInfo) {
+    protected static CacheKey prepareUniqueCacheKey(SegmentInfo segmentInfo) {
         return new CacheKey(segmentInfo, UUID.randomUUID().toString());
     }
 }

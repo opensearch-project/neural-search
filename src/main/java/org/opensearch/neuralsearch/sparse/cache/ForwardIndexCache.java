@@ -12,20 +12,30 @@ import org.apache.lucene.util.RamUsageEstimator;
  * Given the limited cache introduced by CacheKey, we will simply use the addWithoutBreaking
  * method to ensure success insertion in registry.
  */
-public class ForwardIndexCache extends SparseCache<ForwardIndexCacheItem> {
+public class ForwardIndexCache extends MemMonitoredCache<ForwardIndexCacheItem> {
 
-    private static final ForwardIndexCache INSTANCE = new ForwardIndexCache();
+    private static volatile ForwardIndexCache INSTANCE;
 
     private ForwardIndexCache() {
-        CircuitBreakerManager.addWithoutBreaking(RamUsageEstimator.shallowSizeOf(cacheMap));
+        MemoryUsageManager.getInstance()
+            .getMemoryUsageTracker()
+            .recordWithoutValidation(RamUsageEstimator.shallowSizeOf(cacheMap), CircuitBreakerManager::addWithoutBreaking);
     }
 
     public static ForwardIndexCache getInstance() {
+        if (INSTANCE == null) {
+            synchronized (ForwardIndexCache.class) {
+                if (INSTANCE == null) {
+                    INSTANCE = new ForwardIndexCache();
+                }
+            }
+        }
         return INSTANCE;
     }
 
     @NonNull
     public ForwardIndexCacheItem getOrCreate(@NonNull CacheKey key, int docCount) {
-        return super.getOrCreate(key, k -> new ForwardIndexCacheItem(k, docCount));
+        RamBytesRecorder globalRecorder = MemoryUsageManager.getInstance().getMemoryUsageTracker();
+        return super.getOrCreate(key, k -> new ForwardIndexCacheItem(k, docCount, globalRecorder));
     }
 }

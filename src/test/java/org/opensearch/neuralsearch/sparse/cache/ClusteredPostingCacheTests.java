@@ -15,11 +15,12 @@ import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import java.util.List;
 
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
 
-    private static final CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
+    private static final CacheKey cacheKey = prepareUniqueCacheKey(TestsPrepareUtils.prepareSegmentInfo());
     private static final long cacheKeySize = RamUsageEstimator.shallowSizeOf(cacheKey);
 
     private long emptyClusteredPostingCacheSize;
@@ -36,10 +37,9 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
     public void setUp() {
         super.setUp();
         clusteredPostingCache = ClusteredPostingCache.getInstance();
-
         emptyClusteredPostingCacheSize = clusteredPostingCache.ramBytesUsed();
-        CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
-        emptyClusteredPostingCacheItemSize = new ClusteredPostingCacheItem(cacheKey).ramBytesUsed();
+        RamBytesRecorder globalRecorder = mock(RamBytesRecorder.class);
+        emptyClusteredPostingCacheItemSize = new ClusteredPostingCacheItem(cacheKey, globalRecorder).ramBytesUsed();
     }
 
     /**
@@ -50,7 +50,7 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
     @Override
     @SneakyThrows
     public void tearDown() {
-        clusteredPostingCache.removeIndex(cacheKey);
+        clusteredPostingCache.onIndexRemoval(cacheKey);
         super.tearDown();
     }
 
