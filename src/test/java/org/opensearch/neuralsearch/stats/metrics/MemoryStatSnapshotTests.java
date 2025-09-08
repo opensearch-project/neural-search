@@ -19,26 +19,24 @@ import java.util.Set;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 public class MemoryStatSnapshotTests extends OpenSearchTestCase {
 
     public void testConstructor_withBuilder() {
         MetricStatName expectedStatName = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE;
         boolean expectedIsAggregationMetric = true;
-        String expectedValue = "128b";
-        long expectedByteSize = 128L;
+        double expectedValue = 0.0d;
 
         MemoryStatSnapshot snapshot = MemoryStatSnapshot.builder()
             .statName(expectedStatName)
             .isAggregationMetric(expectedIsAggregationMetric)
             .value(expectedValue)
-            .byteSize(expectedByteSize)
             .build();
 
         assertEquals(expectedStatName, snapshot.getStatName());
         assertTrue(snapshot.isAggregationMetric());
-        assertEquals(expectedValue, snapshot.getValue());
-        assertEquals(expectedByteSize, snapshot.getByteSize());
+        assertEquals(expectedValue, snapshot.getValue(), DELTA_FOR_SCORE_ASSERTION);
     }
 
     @SneakyThrows
@@ -47,54 +45,48 @@ public class MemoryStatSnapshotTests extends OpenSearchTestCase {
 
         MetricStatName expectedStatName = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE;
         boolean expectedIsAggregationMetric = true;
-        String expectedValue = "128b";
-        long expectedByteSize = 128L;
+        double expectedValue = 0.0d;
         when(streamInput.readEnum(MetricStatName.class)).thenReturn(expectedStatName);
         when(streamInput.readBoolean()).thenReturn(expectedIsAggregationMetric);
-        when(streamInput.readString()).thenReturn(expectedValue);
-        when(streamInput.readLong()).thenReturn(expectedByteSize);
+        when(streamInput.readDouble()).thenReturn(expectedValue);
 
         MemoryStatSnapshot snapshot = new MemoryStatSnapshot(streamInput);
         assertEquals(expectedStatName, snapshot.getStatName());
         assertEquals(expectedIsAggregationMetric, snapshot.isAggregationMetric());
-        assertEquals(expectedValue, snapshot.getValue());
-        assertEquals(expectedByteSize, snapshot.getByteSize());
+        assertEquals(expectedValue, snapshot.getValue(), DELTA_FOR_SCORE_ASSERTION);
     }
 
     @SneakyThrows
     public void testWriteTo() {
         MetricStatName expectedStatName = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE;
         boolean expectedIsAggregationMetric = true;
-        String expectedValue = "128b";
-        long expectedByteSize = 128L;
+        double expectedValue = 0.0d;
 
         MemoryStatSnapshot snapshot = MemoryStatSnapshot.builder()
             .statName(expectedStatName)
             .isAggregationMetric(expectedIsAggregationMetric)
             .value(expectedValue)
-            .byteSize(expectedByteSize)
             .build();
 
         StreamOutput streamOutput = mock(StreamOutput.class);
         snapshot.writeTo(streamOutput);
         verify(streamOutput).writeEnum(expectedStatName);
         verify(streamOutput).writeBoolean(expectedIsAggregationMetric);
-        verify(streamOutput).writeString(expectedValue);
-        verify(streamOutput).writeLong(expectedByteSize);
+        verify(streamOutput).writeDouble(expectedValue);
     }
 
     public void testAggregateMetricSnapshots() {
         MemoryStatSnapshot snapshot1 = MemoryStatSnapshot.builder()
             .statName(MetricStatName.MEMORY_SPARSE_MEMORY_USAGE)
-            .byteSize(100L)
+            .value(100.0d)
             .build();
         MemoryStatSnapshot snapshot2 = MemoryStatSnapshot.builder()
             .statName(MetricStatName.MEMORY_SPARSE_MEMORY_USAGE)
-            .byteSize(200L)
+            .value(200.0d)
             .build();
         MemoryStatSnapshot snapshot3 = MemoryStatSnapshot.builder()
             .statName(MetricStatName.MEMORY_SPARSE_MEMORY_USAGE)
-            .byteSize(300L)
+            .value(300.0d)
             .build();
 
         List<MemoryStatSnapshot> snapshots = List.of(snapshot1, snapshot2, snapshot3);
@@ -102,7 +94,7 @@ public class MemoryStatSnapshotTests extends OpenSearchTestCase {
 
         assertNotNull(result);
         assertEquals(MetricStatName.MEMORY_SPARSE_MEMORY_USAGE, result.getStatName());
-        assertEquals(600L, result.getByteSize());
+        assertEquals(600.0d, result.getValue(), DELTA_FOR_SCORE_ASSERTION);
     }
 
     public void testAggregateMetricSnapshots_withEmptyList() {
@@ -112,6 +104,7 @@ public class MemoryStatSnapshotTests extends OpenSearchTestCase {
     }
 
     public void testAggregateMetricSnapshots_withNullStat() {
+        double expectedValue = 0.0d;
         Set<MemoryStatSnapshot> memoryStatSnapshotCollection = new HashSet<>();
         memoryStatSnapshotCollection.add(null);
 
@@ -120,17 +113,17 @@ public class MemoryStatSnapshotTests extends OpenSearchTestCase {
         assertNotNull(result);
         assertNull(result.getStatName());
         assertFalse(result.isAggregationMetric());
-        assertEquals(0L, result.getByteSize());
+        assertEquals(expectedValue, result.getValue(), DELTA_FOR_SCORE_ASSERTION);
     }
 
     public void testAggregateMetricSnapshots_withDifferentStatName() {
         MemoryStatSnapshot snapshot1 = MemoryStatSnapshot.builder()
             .statName(MetricStatName.MEMORY_SPARSE_MEMORY_USAGE)
-            .byteSize(100L)
+            .value(100.0d)
             .build();
         MemoryStatSnapshot snapshot2 = MemoryStatSnapshot.builder()
             .statName(MetricStatName.MEMORY_SPARSE_FORWARD_INDEX_USAGE)
-            .byteSize(200L)
+            .value(200.0d)
             .build();
 
         List<MemoryStatSnapshot> snapshots = List.of(snapshot1, snapshot2);
@@ -142,14 +135,12 @@ public class MemoryStatSnapshotTests extends OpenSearchTestCase {
     public void testToXContent() {
         MetricStatName expectedStatName = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE;
         boolean expectedIsAggregationMetric = true;
-        String expectedValue = "128b";
-        long expectedByteSize = 128L;
+        Double expectedValue = 1.0d;
 
         MemoryStatSnapshot snapshot = MemoryStatSnapshot.builder()
             .statName(expectedStatName)
             .isAggregationMetric(expectedIsAggregationMetric)
             .value(expectedValue)
-            .byteSize(expectedByteSize)
             .build();
 
         XContentBuilder builder = mock(XContentBuilder.class);

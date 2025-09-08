@@ -10,9 +10,11 @@ public class MemoryStatTests extends AbstractSparseTestBase {
 
     public void testGetValue_withUsagePercentage() {
         MemoryStat memoryStat = new MemoryStat(MetricStatName.MEMORY_SPARSE_MEMORY_USAGE_PERCENTAGE);
-        String value = memoryStat.getValue();
+        Double value = memoryStat.getValue();
         assertNotNull(value);
-        assertTrue(value.endsWith("%"));
+
+        double expectedValue = 0.0d;
+        assertEquals(expectedValue, value, DELTA_FOR_ASSERTION);
     }
 
     public void testGetValue_withUsage() {
@@ -20,11 +22,11 @@ public class MemoryStatTests extends AbstractSparseTestBase {
         MemoryStatSnapshot clusteredPosting = new MemoryStat(MetricStatName.MEMORY_SPARSE_CLUSTERED_POSTING_USAGE).getStatSnapshot();
         MemoryStatSnapshot total = new MemoryStat(MetricStatName.MEMORY_SPARSE_MEMORY_USAGE).getStatSnapshot();
 
-        long forwardIndexSize = forwardIndex.getByteSize();
-        long clusteredPostingSize = clusteredPosting.getByteSize();
-        long totalSize = total.getByteSize();
+        double forwardIndexSize = forwardIndex.getValue();
+        double clusteredPostingSize = clusteredPosting.getValue();
+        double totalSize = total.getValue();
 
-        assertEquals(totalSize, forwardIndexSize + clusteredPostingSize);
+        assertEquals(totalSize, forwardIndexSize + clusteredPostingSize, 0.02d);
     }
 
     public void testGetStatSnapshot_withUsagePercentage() {

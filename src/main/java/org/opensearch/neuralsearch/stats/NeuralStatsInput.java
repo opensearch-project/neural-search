@@ -152,11 +152,6 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         nodeIds = input.readOptionalStringList();
         eventStatNames = input.readOptionalEnumSet(EventStatName.class);
         infoStatNames = input.readOptionalEnumSet(InfoStatName.class);
-        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
-            metricStatNames = input.readOptionalEnumSet(MetricStatName.class);
-        } else {
-            metricStatNames = EnumSet.noneOf(MetricStatName.class);
-        }
         includeMetadata = input.readBoolean();
         flatten = input.readBoolean();
         if (isClusterOnOrAfterMinReqVersionForStatCategoryFiltering()) {
@@ -169,8 +164,10 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
             includeInfo = true;
         }
         if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            metricStatNames = input.readOptionalEnumSet(MetricStatName.class);
             includeMetrics = input.readBoolean();
         } else {
+            metricStatNames = EnumSet.noneOf(MetricStatName.class);
             includeMetrics = true;
         }
     }
@@ -186,9 +183,6 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
         out.writeOptionalStringCollection(nodeIds);
         out.writeOptionalEnumSet(eventStatNames);
         out.writeOptionalEnumSet(infoStatNames);
-        if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
-            out.writeOptionalEnumSet(metricStatNames);
-        }
         out.writeBoolean(includeMetadata);
         out.writeBoolean(flatten);
         if (isClusterOnOrAfterMinReqVersionForStatCategoryFiltering()) {
@@ -197,6 +191,7 @@ public class NeuralStatsInput implements ToXContentObject, Writeable {
             out.writeBoolean(includeInfo);
         }
         if (isClusterOnOrAfterMinReqVersionForMetricStats()) {
+            out.writeOptionalEnumSet(metricStatNames);
             out.writeBoolean(includeMetrics);
         }
     }

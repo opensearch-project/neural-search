@@ -4,22 +4,22 @@
  */
 package org.opensearch.neuralsearch.stats.metrics;
 
-import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.util.Locale;
-import java.util.concurrent.atomic.AtomicLong;
+
+import static org.opensearch.knn.common.KNNConstants.BYTES_PER_KILOBYTES;
 
 /**
  * Memory stat information class which gets memory stat data
  */
 public class MemoryStat implements MetricStat {
 
+    public static final int BYTES_PER_KILOBYTES = 1024;
     private final MetricStatName statName;
-    private final AtomicLong byteSize = new AtomicLong(0);
 
     /**
      * Constructor
@@ -47,16 +47,17 @@ public class MemoryStat implements MetricStat {
     }
 
     @Override
-    public String getValue() {
+    public Double getValue() {
         long byteSize = getByteSize();
-        this.byteSize.set(getByteSize());
         if (statName == MetricStatName.MEMORY_SPARSE_MEMORY_USAGE_PERCENTAGE) {
             MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
             // memoryMXBean.getHeapMemoryUsage().getMax() might return -1 in special case
             long heapMaxBytes = Math.max(0, memoryMXBean.getHeapMemoryUsage().getMax());
-            return String.format(Locale.ROOT, "%.2f%%", (double) byteSize / heapMaxBytes * 100);
+            double percentage = (double) byteSize / heapMaxBytes * 100;
+            return Math.round(percentage * 100.0) / 100.0;
         }
-        return new ByteSizeValue(byteSize).toString();
+        long kbSize = byteSize / BYTES_PER_KILOBYTES;
+        return Math.round(kbSize * 100.0) / 100.0;
     }
 
     @Override
@@ -66,7 +67,6 @@ public class MemoryStat implements MetricStat {
         return MemoryStatSnapshot.builder()
             .statName(statName)
             .value(getValue())
-            .byteSize(this.byteSize.get())
             .isAggregationMetric(statName != MetricStatName.MEMORY_SPARSE_MEMORY_USAGE_PERCENTAGE)
             .build();
     }

@@ -10,7 +10,6 @@ import lombok.Getter;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.common.io.stream.Writeable;
-import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 
@@ -25,12 +24,11 @@ import java.util.Collection;
 @Getter
 @Builder
 @AllArgsConstructor
-public class MemoryStatSnapshot implements Writeable, StatSnapshot<String> {
+public class MemoryStatSnapshot implements Writeable, StatSnapshot<Double> {
 
     private final MetricStatName statName;
     private final boolean isAggregationMetric;
-    private String value;
-    private long byteSize;
+    private Double value;
 
     /**
      * Create a stat new snapshot from an input stream
@@ -40,8 +38,7 @@ public class MemoryStatSnapshot implements Writeable, StatSnapshot<String> {
     public MemoryStatSnapshot(StreamInput in) throws IOException {
         this.statName = in.readEnum(MetricStatName.class);
         this.isAggregationMetric = in.readBoolean();
-        this.value = in.readString();
-        this.byteSize = in.readLong();
+        this.value = in.readDouble();
     }
 
     /**
@@ -53,8 +50,7 @@ public class MemoryStatSnapshot implements Writeable, StatSnapshot<String> {
     public void writeTo(StreamOutput out) throws IOException {
         out.writeEnum(statName);
         out.writeBoolean(isAggregationMetric);
-        out.writeString(value);
-        out.writeLong(byteSize);
+        out.writeDouble(value);
     }
 
     /**
@@ -71,7 +67,7 @@ public class MemoryStatSnapshot implements Writeable, StatSnapshot<String> {
         }
 
         MetricStatName name = null;
-        long totalByteSize = 0;
+        double totalValue = 0L;
 
         for (MemoryStatSnapshot stat : snapshots) {
             // Mixed version clusters may have nodes that return null stat snapshots not available on older versions.
@@ -88,11 +84,10 @@ public class MemoryStatSnapshot implements Writeable, StatSnapshot<String> {
             }
 
             // The value is summed
-            totalByteSize += stat.getByteSize();
+            totalValue += stat.getValue();
         }
-        String totalValue = new ByteSizeValue(totalByteSize).toString();
 
-        return MemoryStatSnapshot.builder().statName(name).value(totalValue).byteSize(totalByteSize).build();
+        return MemoryStatSnapshot.builder().statName(name).value(totalValue).build();
     }
 
     /**

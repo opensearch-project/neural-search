@@ -171,7 +171,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
      * Helper to aggregate node response event stats to give cluster level aggregate info on node-level stats
      * @param responses node stat responses
      * @param eventStatsToRetrieve a list of event stats to filter
-     * @param eventStatsToRetrieve a list of metrics stats to filter
+     * @param metricStatsToRetrieve a list of metrics stats to filter
      * @return A map associating cluster level aggregated stat name strings with their stat snapshot values
      */
     private Map<String, StatSnapshot<?>> aggregateNodesResponses(
