@@ -10,7 +10,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.any;
 
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -21,6 +20,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -43,6 +43,9 @@ import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.get.MultiGetAction;
 import org.opensearch.action.get.MultiGetRequest;
 import org.opensearch.action.get.MultiGetResponse;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
@@ -62,6 +65,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -81,7 +85,16 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     @Captor
     private ArgumentCaptor<TextInferenceRequest> inferenceRequestCaptor;
 
-    private ClusterService clusterService = mock(ClusterService.class, RETURNS_DEEP_STUBS);
+    @Mock
+    private ClusterService mockClusterService;
+    @Mock
+    private ClusterState mockClusterState;
+    @Mock
+    private Metadata mockMetadata;
+    @Mock
+    private IndexMetadata mockIndexMetadata;
+    @Mock
+    private SparseFieldUtils mockSparseFieldUtils;
 
     @InjectMocks
     private SparseEncodingProcessorFactory sparseEncodingProcessorFactory;
@@ -98,7 +111,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     public void setup() {
         MockitoAnnotations.openMocks(this);
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
-        when(clusterService.state().metadata().index(anyString()).getSettings()).thenReturn(settings);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockMetadata.index(anyString())).thenReturn(mockIndexMetadata);
+        when(mockIndexMetadata.getSettings()).thenReturn(settings);
+        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(Collections.emptySet());
         TestUtils.initializeEventStatsManager();
     }
 
@@ -180,7 +197,8 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
             openSearchClient,
             accessor,
             environment,
-            clusterService
+            mockClusterService,
+            mockSparseFieldUtils
         );
 
         Map<String, Object> config = new HashMap<>();
@@ -1068,11 +1086,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
     private void mockSeismic(String... fieldValues) {
         Settings settings = Settings.builder().put("index.sparse", true).build();
-        when(clusterService.state().metadata().index(anyString()).getSettings()).thenReturn(settings);
-        Map<String, Object> fields = new HashMap<>();
-        for (int i = 0; i < fieldValues.length; i += 2) {
-            fields.put(fieldValues[i], Map.of("type", fieldValues[i + 1]));
-        }
-        when(clusterService.state().metadata().index(anyString()).mapping().sourceAsMap()).thenReturn(Map.of("properties", fields));
+        when(mockIndexMetadata.getSettings()).thenReturn(settings);
+        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(new HashSet<>(List.of(fieldValues)));
     }
 }

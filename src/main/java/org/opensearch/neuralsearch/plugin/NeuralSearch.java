@@ -103,8 +103,6 @@ import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
-import org.opensearch.neuralsearch.transport.NeuralSparseClearCacheAction;
-import org.opensearch.neuralsearch.transport.NeuralSparseClearCacheTransportAction;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupTransportAction;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -115,7 +113,6 @@ import org.opensearch.plugins.IngestPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
-import org.opensearch.plugins.EnginePlugin;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.rest.RestController;
 import org.opensearch.rest.RestHandler;
@@ -128,9 +125,6 @@ import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
-import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
-import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;
-import org.opensearch.neuralsearch.transport.NeuralSparseWarmupTransportAction;
 
 import lombok.extern.log4j.Log4j2;
 
@@ -269,7 +263,8 @@ public class NeuralSearch extends Plugin
                 parameters.client,
                 clientAccessor,
                 parameters.env,
-                parameters.ingestService.getClusterService()
+                parameters.ingestService.getClusterService(),
+                new SparseFieldUtils(parameters.ingestService.getClusterService())
             ),
             TextImageEmbeddingProcessor.TYPE,
             new TextImageEmbeddingProcessorFactory(

@@ -29,6 +29,7 @@ public class ClusteredPostingCacheItem extends AccountableTracker implements Clu
     private final CacheKey cacheKey;
     private final Map<BytesRef, PostingClusters> clusteredPostings = new ConcurrentHashMap<>();
     private final RamBytesRecorder globalTracker;
+    private final LruTermCache lruTermCache;
     @Getter
     private final ClusteredPostingReader reader = new CacheClusteredPostingReader();
     @Getter
@@ -43,9 +44,10 @@ public class ClusteredPostingCacheItem extends AccountableTracker implements Clu
         return new CacheClusteredPostingWriter(circuitBreakerHandler);
     }
 
-    public ClusteredPostingCacheItem(CacheKey cacheKey, RamBytesRecorder globalTracker) {
+    public ClusteredPostingCacheItem(CacheKey cacheKey, RamBytesRecorder globalTracker, LruTermCache lruTermCache) {
         this.cacheKey = cacheKey;
         this.globalTracker = globalTracker;
+        this.lruTermCache = lruTermCache;
         recordUsedBytes(RamUsageEstimator.shallowSizeOf(clusteredPostings));
         globalTracker.recordWithoutValidation(ramBytesUsed(), CircuitBreakerManager::addWithoutBreaking);
     }
@@ -57,7 +59,7 @@ public class ClusteredPostingCacheItem extends AccountableTracker implements Clu
             if (clusters != null) {
                 // Record access to update LRU status
                 LruTermCache.TermKey termKey = new LruTermCache.TermKey(cacheKey, term.clone());
-                LruTermCache.getInstance().updateAccess(termKey);
+                lruTermCache.updateAccess(termKey);
             }
             return clusters;
         }
@@ -115,7 +117,7 @@ public class ClusteredPostingCacheItem extends AccountableTracker implements Clu
             PostingClusters existingClusters = clusteredPostings.putIfAbsent(clonedTerm, postingClusters);
             // Record access to update LRU status
             LruTermCache.TermKey termKey = new LruTermCache.TermKey(cacheKey, clonedTerm);
-            LruTermCache.getInstance().updateAccess(termKey);
+            lruTermCache.updateAccess(termKey);
 
             // Only update memory usage if we actually inserted a new entry
             if (existingClusters == null) {

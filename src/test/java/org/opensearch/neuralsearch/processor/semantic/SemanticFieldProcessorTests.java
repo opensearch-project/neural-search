@@ -576,7 +576,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
         doAnswer(invocationOnMock -> {
             final TextInferenceRequest textInferenceRequest = invocationOnMock.getArgument(0);
             final String modelId = textInferenceRequest.getModelId();
-            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
+            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(2);
             assertEquals("sparse model should be the model id 2", DUMMY_MODEL_ID_2, modelId);
             listener.onResponse(List.of(Map.of("response", List.of(Map.of("high score token", 1.0)))));
             return null;
@@ -627,7 +627,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
         doAnswer(invocationOnMock -> {
             final TextInferenceRequest textInferenceRequest = invocationOnMock.getArgument(0);
             final String modelId = textInferenceRequest.getModelId();
-            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
+            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(2);
             assertEquals("sparse model should be the model id 2", DUMMY_MODEL_ID_2, modelId);
             listener.onResponse(List.of(Map.of("response", List.of(Map.of("high score token", 1.0, "low score token", 0.1)))));
             return null;

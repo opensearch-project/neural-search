@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.cache;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.NonNull;
 import org.apache.lucene.util.RamUsageEstimator;
 
@@ -16,7 +17,8 @@ public class ClusteredPostingCache extends MemMonitoredCache<ClusteredPostingCac
 
     private static volatile ClusteredPostingCache INSTANCE;
 
-    private ClusteredPostingCache() {
+    @VisibleForTesting
+    protected ClusteredPostingCache() {
         MemoryUsageManager.getInstance()
             .getMemoryUsageTracker()
             .recordWithoutValidation(RamUsageEstimator.shallowSizeOf(cacheMap), CircuitBreakerManager::addWithoutBreaking);
@@ -36,6 +38,6 @@ public class ClusteredPostingCache extends MemMonitoredCache<ClusteredPostingCac
     @NonNull
     public ClusteredPostingCacheItem getOrCreate(@NonNull CacheKey key) {
         RamBytesRecorder globalRecorder = MemoryUsageManager.getInstance().getMemoryUsageTracker();
-        return super.getOrCreate(key, k -> new ClusteredPostingCacheItem(k, globalRecorder));
+        return super.getOrCreate(key, k -> new ClusteredPostingCacheItem(k, globalRecorder, LruTermCache.getInstance()));
     }
 }

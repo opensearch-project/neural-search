@@ -65,7 +65,6 @@ import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
 import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
 import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;
@@ -101,18 +100,18 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
     private static final Float MAX_TOKEN_SCORE = 123f;
-    private static final Map<String, Float> QUERY_TOKENS = Map.of("hello", 1.f, "world", 2.f);
+    private static final Map<String, Float> QUERY_TOKENS = Map.of("1000", 1.f, "2000", 2.f);
     private static final Supplier<Map<String, Float>> QUERY_TOKENS_SUPPLIER = () -> QUERY_TOKENS;
-    private static final SparseAnnQueryBuilder sparseAnnQueryBuilder = new SparseAnnQueryBuilder().queryCut(3)
-        .fieldName(FIELD_NAME)
-        .heapFactor(1.0f)
-        .k(10)
-        .queryTokens(QUERY_TOKENS);
+    private SparseAnnQueryBuilder sparseAnnQueryBuilder;
 
     @Before
     public void setup() {
         setUpClusterService(Version.CURRENT);
-
+        sparseAnnQueryBuilder = new SparseAnnQueryBuilder().queryCut(3)
+            .fieldName(FIELD_NAME)
+            .heapFactor(1.0f)
+            .k(10)
+            .queryTokens(QUERY_TOKENS);
         // Initialize EventStatsManager for tests
         TestUtils.initializeEventStatsManager();
     }
@@ -928,8 +927,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
 
         BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "1000", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "2000", 2.f), BooleanClause.Occur.SHOULD);
 
         assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
     }
@@ -1152,7 +1151,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
         assertTrue(query instanceof SparseVectorQuery);
         SparseVectorQuery sparseVectorQuery = (SparseVectorQuery) query;
-        assertEquals(sparseVectorQuery.getFallbackQuery(), booleanQueryBuilder.build());
+        BooleanQuery booleanQuery = booleanQueryBuilder.build();
+        assertTrue(booleanQuery.equals(sparseVectorQuery.getFallbackQuery()));
     }
 
     @SneakyThrows

@@ -744,7 +744,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
 
         // mock async action is done
         doAnswer(invocation -> {
-            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[1];
+            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[2];
             listener.onResponse(TEST_QUERY_TOKENS);
             return null;
         }).when(mlClient).inferenceSentencesWithMapResult(any(), isNull(), any());
@@ -817,7 +817,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // mock async action is done
         doAnswer(invocation -> {
             final TextInferenceRequest inferenceRequest = (TextInferenceRequest) invocation.getArguments()[0];
-            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[1];
+            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[2];
             if (MODEL_ID_1.equals(inferenceRequest.getModelId())) {
                 listener.onResponse(TEST_QUERY_TOKENS);
             } else if (MODEL_ID_2.equals(inferenceRequest.getModelId())) {
@@ -954,7 +954,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         // mock async action is done
         doAnswer(invocation -> {
             final TextInferenceRequest inferenceRequest = (TextInferenceRequest) invocation.getArguments()[0];
-            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[1];
+            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[2];
             if (MODEL_ID_1.equals(inferenceRequest.getModelId())) {
                 listener.onResponse(TEST_QUERY_TOKENS);
             } else if (MODEL_ID_2.equals(inferenceRequest.getModelId())) {
@@ -1379,7 +1379,7 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
 
         // mock async action is done
         doAnswer(invocation -> {
-            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[1];
+            final ActionListener<List<Map<String, ?>>> listener = (ActionListener<List<Map<String, ?>>>) invocation.getArguments()[2];
             listener.onResponse(TEST_QUERY_TOKENS_3);
             return null;
         }).when(mlClient).inferenceSentencesWithMapResult(any(), isNull(), any());

@@ -60,6 +60,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     private static final AsymmetricTextEmbeddingParameters tokenIdParameter = AsymmetricTextEmbeddingParameters.builder()
         .sparseEmbeddingFormat(SparseEmbeddingFormat.TOKEN_ID)
         .build();
+    private final SparseFieldUtils sparseFieldUtils;
 
     @Getter
     private final PruneType pruneType;
@@ -79,7 +80,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         OpenSearchClient openSearchClient,
         MLCommonsClientAccessor clientAccessor,
         Environment environment,
-        ClusterService clusterService
+        ClusterService clusterService,
+        SparseFieldUtils sparseFieldUtils
     ) {
         super(tag, description, batchSize, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, clusterService);
         this.pruneType = pruneType;
@@ -87,6 +89,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         this.skipExisting = skipExisting;
         this.textEmbeddingInferenceFilter = textEmbeddingInferenceFilter;
         this.openSearchClient = openSearchClient;
+        this.sparseFieldUtils = sparseFieldUtils;
     }
 
     @Override
@@ -148,7 +151,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         // https://tiny.amazon.com/imoy8qta ingest documents in a batch belong to the same index
         Object indexObj = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj == null ? null : indexObj.toString();
-        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index);
+        Set<String> sparseAnnFields = sparseFieldUtils.getSparseAnnFields(index);
         if (sparseAnnFields.isEmpty()) {
             super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
             return;
@@ -306,7 +309,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     ) {
         Object indexObj = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj == null ? null : indexObj.toString();
-        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index);
+        Set<String> sparseAnnFields = sparseFieldUtils.getSparseAnnFields(index);
         Map<String, Object> tokenIdProcessMap = new HashMap<>();
         Map<String, Object> wordProcessMap = new HashMap<>();
         for (Map.Entry<String, Object> entry : processMap.entrySet()) {

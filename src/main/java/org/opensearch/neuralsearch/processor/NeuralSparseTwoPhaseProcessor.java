@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.query.AbstractNeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -48,6 +49,8 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
     private PruneType pruneType;
     private float windowExpansion;
     private int maxWindowSize;
+    @Setter
+    private SparseFieldUtils sparseFieldUtils;
     private static final String PARAMETER_KEY = "two_phase_parameter";
     private static final String ENABLE_KEY = "enabled";
     private static final String EXPANSION_KEY = "expansion_rate";
@@ -69,7 +72,8 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         float pruneRatio,
         PruneType pruneType,
         float windowExpansion,
-        int maxWindowSize
+        int maxWindowSize,
+        SparseFieldUtils sparseFieldUtils
     ) {
         super(tag, description, ignoreFailure);
         this.enabled = enabled;
@@ -87,6 +91,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             );
         }
         this.maxWindowSize = maxWindowSize;
+        this.sparseFieldUtils = sparseFieldUtils;
     }
 
     /**
@@ -217,7 +222,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
 
     private void validateSeismicQuery(String[] indices, Multimap<AbstractNeuralQueryBuilder<?>, Float> queryBuilderMap) {
         for (String index : indices) {
-            Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index);
+            Set<String> sparseAnnFields = sparseFieldUtils.getSparseAnnFields(index);
             for (Map.Entry<AbstractNeuralQueryBuilder<?>, Float> entry : queryBuilderMap.entries()) {
                 NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) entry.getKey();
                 String fieldName = neuralSparseQueryBuilder.fieldName();
@@ -281,7 +286,8 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
                 pruneRatio,
                 pruneType,
                 windowExpansion,
-                maxWindowSize
+                maxWindowSize,
+                new SparseFieldUtils(NeuralSearchClusterUtil.instance().getClusterService())
             );
         }
     }

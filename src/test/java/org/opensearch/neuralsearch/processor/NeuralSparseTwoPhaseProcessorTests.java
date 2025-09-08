@@ -6,12 +6,10 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
 import org.junit.Before;
-import org.junit.After;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.neuralsearch.NeuralSearchTests;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.util.TestUtils;
@@ -20,7 +18,6 @@ import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
-import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 
 import static org.mockito.ArgumentMatchers.anyFloat;
@@ -36,7 +34,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 
-public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
+public class NeuralSparseTwoPhaseProcessorTests extends NeuralSearchTests {
     static final private String PARAMETER_KEY = "two_phase_parameter";
     static final private String ENABLE_KEY = "enabled";
     static final private String EXPANSION_KEY = "expansion_rate";
@@ -44,25 +42,13 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     private static final String TEST_INDEX_NAME = "test_index";
     private static final String TEST_SPARSE_FIELD_NAME = "test_sparse_field";
 
-    private MockedStatic<SparseFieldUtils> sparseFieldUtilsMock;
+    private SparseFieldUtils mockSparseFieldUtils;
 
     @Override
+    @Before
     public void setUp() throws Exception {
         super.setUp();
-        sparseFieldUtilsMock = Mockito.mockStatic(SparseFieldUtils.class);
-    }
-
-    @After
-    @Override
-    public void tearDown() throws Exception {
-        if (sparseFieldUtilsMock != null) {
-            sparseFieldUtilsMock.close();
-        }
-        super.tearDown();
-    }
-
-    @Before
-    public void setup() {
+        mockSparseFieldUtils = mock(SparseFieldUtils.class);
         TestUtils.initializeEventStatsManager();
     }
 
@@ -234,8 +220,8 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     public void testProcessRequest_whenTwoPhaseEnabledWithNeuralQuerySparseEmbedding_thenSuccess() throws Exception {
         setUpClusterService();
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
-        NeuralQueryBuilder neuralQueryBuilder = Mockito.mock(NeuralQueryBuilder.class);
-        NeuralQueryBuilder copy = Mockito.mock(NeuralQueryBuilder.class);
+        NeuralQueryBuilder neuralQueryBuilder = mock(NeuralQueryBuilder.class);
+        NeuralQueryBuilder copy = mock(NeuralQueryBuilder.class);
 
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
@@ -257,7 +243,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     public void testProcessRequest_whenTwoPhaseEnabledWithNeuralQueryNonSparseEmbedding_thenNoRescorer() throws Exception {
         setUpClusterService();
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
-        NeuralQueryBuilder neuralQueryBuilder = Mockito.mock(NeuralQueryBuilder.class);
+        NeuralQueryBuilder neuralQueryBuilder = mock(NeuralQueryBuilder.class);
 
         SearchRequest searchRequest = new SearchRequest();
         searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder));
@@ -314,6 +300,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         searchRequest.source(new SearchSourceBuilder().query(boolQueryBuilder));
 
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.setSparseFieldUtils(mockSparseFieldUtils);
 
         Exception exception = expectThrows(IllegalArgumentException.class, () -> processor.processRequest(searchRequest));
 
@@ -324,7 +311,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     }
 
     private void configureSparseFieldUtils(Set<String> seismicFields) {
-        sparseFieldUtilsMock.when(() -> SparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(seismicFields);
+        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(seismicFields);
     }
 
     private NeuralSparseTwoPhaseProcessor createTestProcessor(
