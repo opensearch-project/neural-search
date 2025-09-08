@@ -16,6 +16,9 @@ import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.metrics.MemoryStatSnapshot;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
+import org.opensearch.neuralsearch.stats.metrics.MetricStatsManager;
 import org.opensearch.transport.TransportService;
 import org.opensearch.threadpool.ThreadPool;
 
@@ -39,6 +42,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
     NeuralStatsNodeResponse> {
     private final EventStatsManager eventStatsManager;
     private final InfoStatsManager infoStatsManager;
+    private final MetricStatsManager metricStatsManager;
 
     /**
      * Constructor
@@ -55,7 +59,8 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         TransportService transportService,
         ActionFilters actionFilters,
         EventStatsManager eventStatsManager,
-        InfoStatsManager infoStatsManager
+        InfoStatsManager infoStatsManager,
+        MetricStatsManager metricStatsManager
     ) {
         super(
             NeuralStatsAction.NAME,
@@ -70,6 +75,7 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         );
         this.eventStatsManager = eventStatsManager;
         this.infoStatsManager = infoStatsManager;
+        this.metricStatsManager = metricStatsManager;
     }
 
     @Override
@@ -84,7 +90,11 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
         // Sum the map to aggregate
         Map<String, StatSnapshot<?>> aggregatedNodeStats = Collections.emptyMap();
         if (request.getNeuralStatsInput().isIncludeAllNodes()) {
-            aggregatedNodeStats = aggregateNodesResponses(responses, request.getNeuralStatsInput().getEventStatNames());
+            aggregatedNodeStats = aggregateNodesResponses(
+                responses,
+                request.getNeuralStatsInput().getEventStatNames(),
+                request.getNeuralStatsInput().getMetricStatNames()
+            );
         }
 
         Map<String, StatSnapshot<?>> flatInfoStats = Collections.emptyMap();
@@ -109,7 +119,8 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             request.getNeuralStatsInput().isIncludeMetadata(),
             request.getNeuralStatsInput().isIncludeIndividualNodes(),
             request.getNeuralStatsInput().isIncludeAllNodes(),
-            request.getNeuralStatsInput().isIncludeInfo()
+            request.getNeuralStatsInput().isIncludeInfo(),
+            request.getNeuralStatsInput().isIncludeMetrics()
         );
     }
 
@@ -136,18 +147,23 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             eventStatsToRetrieve
         );
 
-        return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatDataMap);
+        EnumSet<MetricStatName> metricStatsToRetrieve = request.getRequest().getNeuralStatsInput().getMetricStatNames();
+        Map<MetricStatName, MemoryStatSnapshot> metricStatDataMap = metricStatsManager.getStats(metricStatsToRetrieve);
+
+        return new NeuralStatsNodeResponse(clusterService.localNode(), eventStatDataMap, metricStatDataMap);
     }
 
     /**
      * Helper to aggregate node response event stats to give cluster level aggregate info on node-level stats
      * @param responses node stat responses
-     * @param statsToRetrieve a list of stats to filter
+     * @param eventStatsToRetrieve a list of event stats to filter
+     * @param metricStatsToRetrieve a list of metrics stats to filter
      * @return A map associating cluster level aggregated stat name strings with their stat snapshot values
      */
     private Map<String, StatSnapshot<?>> aggregateNodesResponses(
         List<NeuralStatsNodeResponse> responses,
-        EnumSet<EventStatName> statsToRetrieve
+        EnumSet<EventStatName> eventStatsToRetrieve,
+        EnumSet<MetricStatName> metricStatsToRetrieve
     ) {
         // Catch empty nodes responses case.
         if (responses == null || responses.isEmpty()) {
@@ -156,13 +172,13 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
 
         // Convert node responses into list of Map<EventStatName, EventStatData>
         List<Map<EventStatName, TimestampedEventStatSnapshot>> nodeEventStatsList = responses.stream()
-            .map(NeuralStatsNodeResponse::getStats)
+            .map(NeuralStatsNodeResponse::getEventStats)
             .map(map -> map.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
             .toList();
 
         // Aggregate all events from all responses for all stats to retrieve
         Map<String, StatSnapshot<?>> aggregatedMap = new HashMap<>();
-        for (EventStatName eventStatName : statsToRetrieve) {
+        for (EventStatName eventStatName : eventStatsToRetrieve) {
             Set<TimestampedEventStatSnapshot> timestampedEventStatSnapshotCollection = new HashSet<>();
             for (Map<EventStatName, TimestampedEventStatSnapshot> eventStats : nodeEventStatsList) {
                 timestampedEventStatSnapshotCollection.add(eventStats.get(eventStatName));
@@ -175,6 +191,29 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             // Skip adding null event stats. This happens when a node id parameter is invalid.
             if (aggregatedEventSnapshots != null) {
                 aggregatedMap.put(eventStatName.getFullPath(), aggregatedEventSnapshots);
+            }
+        }
+
+        // Convert node responses into list of Map<MetricStatName, MemoryStatSnapshot>
+        List<Map<MetricStatName, MemoryStatSnapshot>> nodeMetricStatsList = responses.stream()
+            .map(NeuralStatsNodeResponse::getMetricStats)
+            .map(map -> map.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)))
+            .toList();
+
+        // Aggregate all metrics from all responses for all stats to retrieve
+        for (MetricStatName metricStatName : metricStatsToRetrieve) {
+            Set<MemoryStatSnapshot> memoryStatSnapshotCollection = new HashSet<>();
+            for (Map<MetricStatName, MemoryStatSnapshot> metricStats : nodeMetricStatsList) {
+                if (metricStats.get(metricStatName).isAggregationMetric()) {
+                    memoryStatSnapshotCollection.add(metricStats.get(metricStatName));
+                }
+            }
+
+            MemoryStatSnapshot aggregatedMetricSnapshot = MemoryStatSnapshot.aggregateMetricSnapshots(memoryStatSnapshotCollection);
+
+            // Skip adding null event stats. This happens when a node id parameter is invalid.
+            if (aggregatedMetricSnapshot != null) {
+                aggregatedMap.put(metricStatName.getFullPath(), aggregatedMetricSnapshot);
             }
         }
 
@@ -195,10 +234,17 @@ public class NeuralStatsTransportAction extends TransportNodesAction<
             nodeId = nodesResponse.getNode().getId();
 
             // Convert StatNames into paths
-            Map<String, StatSnapshot<?>> resultNodeStatsMap = nodesResponse.getStats()
+            Map<String, StatSnapshot<?>> resultNodeStatsMap = nodesResponse.getEventStats()
                 .entrySet()
                 .stream()
                 .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue));
+
+            resultNodeStatsMap.putAll(
+                nodesResponse.getMetricStats()
+                    .entrySet()
+                    .stream()
+                    .collect(Collectors.toMap(entry -> entry.getKey().getFullPath(), Map.Entry::getValue))
+            );
 
             // Map each node id to its stats
             results.put(nodeId, resultNodeStatsMap);

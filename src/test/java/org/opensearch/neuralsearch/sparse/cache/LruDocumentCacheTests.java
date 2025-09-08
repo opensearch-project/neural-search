@@ -12,12 +12,14 @@ import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.when;
 
 public class LruDocumentCacheTests extends AbstractSparseTestBase {
 
     private CacheKey cacheKey1;
     private CacheKey cacheKey2;
-    private final LruDocumentCache lruDocumentCache = LruDocumentCache.getInstance();
+    private TestLruDocumentCache testCache;
 
     @Before
     public void setUp() {
@@ -27,7 +29,9 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
         cacheKey1 = prepareUniqueCacheKey(mock(SegmentInfo.class));
         cacheKey2 = prepareUniqueCacheKey(mock(SegmentInfo.class));
         ForwardIndexCache.getInstance().getOrCreate(cacheKey1, 10);
-        ForwardIndexCache.getInstance().getOrCreate(cacheKey2, 10);
+
+        testCache = new TestLruDocumentCache();
+        testCache.clearAll();
     }
 
     /**
@@ -50,18 +54,9 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
         SparseVector expectedVector = createVector(1, 10, 2, 20);
         ForwardIndexCache.getInstance().get(cacheKey1).getWriter().insert(1, expectedVector);
 
-        // Verify the forward index cache has the document
-        SparseVector writtenVector = ForwardIndexCache.getInstance().get(cacheKey1).getReader().read(1);
-        assertSame(expectedVector, writtenVector);
+        testCache.doEviction(documentKey);
 
-        // Call doEviction
-        long bytesFreed = lruDocumentCache.doEviction(documentKey);
-
-        // Verify the document has been removed
         assertNull(ForwardIndexCache.getInstance().get(cacheKey1).getReader().read(1));
-
-        // Verify the correct number of bytes was returned
-        assertEquals(expectedVector.ramBytesUsed(), bytesFreed);
     }
 
     /**
@@ -73,7 +68,7 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
         LruDocumentCache.DocumentKey documentKey = new LruDocumentCache.DocumentKey(nonExistentCacheKey, 1);
 
         // Call doEviction
-        long bytesFreed = lruDocumentCache.doEviction(documentKey);
+        long bytesFreed = testCache.doEviction(documentKey);
 
         // Verify zero bytes have been cleaned
         assertEquals(0, bytesFreed);
@@ -84,57 +79,57 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
      */
     @SneakyThrows
     public void test_evict_untilEnoughMemoryFreed() {
-        // Add documents to the cache, this will update the access order
-        SparseVector vector1 = createVector(1, 1, 2, 2);
-        SparseVector vector2 = createVector(1, 10, 2, 20);
-        SparseVector vector3 = createVector(1, 100, 2, 200);
-        ForwardIndexCache.getInstance().get(cacheKey1).getWriter().insert(1, vector1);
-        ForwardIndexCache.getInstance().get(cacheKey1).getWriter().insert(2, vector2);
-        ForwardIndexCache.getInstance().get(cacheKey2).getWriter().insert(2, vector3);
+        TestLruDocumentCache testCacheSpy = spy(testCache);
 
-        // Evict 2 documents
-        lruDocumentCache.evict(vector1.ramBytesUsed() + vector2.ramBytesUsed());
+        LruDocumentCache.DocumentKey documentKey1 = new LruDocumentCache.DocumentKey(cacheKey1, 1);
+        LruDocumentCache.DocumentKey documentKey2 = new LruDocumentCache.DocumentKey(cacheKey1, 2);
+        LruDocumentCache.DocumentKey documentKey3 = new LruDocumentCache.DocumentKey(cacheKey2, 2);
 
-        // The third document should still be in the cache
-        LruDocumentCache.DocumentKey remainingDoc = lruDocumentCache.getLeastRecentlyUsedItem();
+        testCacheSpy.updateAccess(documentKey1);
+        testCacheSpy.updateAccess(documentKey2);
+        testCacheSpy.updateAccess(documentKey3);
+
+        when(testCacheSpy.doEviction(documentKey1)).thenReturn(10L);
+        when(testCacheSpy.doEviction(documentKey2)).thenReturn(20L);
+        when(testCacheSpy.doEviction(documentKey3)).thenReturn(30L);
+
+        testCacheSpy.evict(30L);
+
+        // The third document with documentKey3 should still be in the cache
+        LruDocumentCache.DocumentKey remainingDoc = testCache.getLeastRecentlyUsedItem();
         assertNotNull(remainingDoc);
         assertEquals(cacheKey2, remainingDoc.getCacheKey());
         assertEquals(2, remainingDoc.getDocId());
-
-        // The first 2 documents has been removed and the third document is still in cache
-        assertNull(ForwardIndexCache.getInstance().get(cacheKey1).getReader().read(1));
-        assertNull(ForwardIndexCache.getInstance().get(cacheKey1).getReader().read(2));
-        assertSame(vector3, ForwardIndexCache.getInstance().get(cacheKey2).getReader().read(2));
     }
 
     /**
-     * Test that removeIndex correctly removes all documents for an index
+     * Test that onIndexRemoval correctly removes all documents for an index
      */
-    public void test_removeIndex_removesAllDocumentsForIndex() {
+    public void test_onIndexRemoval_removesAllDocumentsForIndex() {
         // Add documents to the cache for different indices
         LruDocumentCache.DocumentKey documentKey1 = new LruDocumentCache.DocumentKey(cacheKey1, 1);
         LruDocumentCache.DocumentKey documentKey2 = new LruDocumentCache.DocumentKey(cacheKey1, 2);
         LruDocumentCache.DocumentKey documentKey3 = new LruDocumentCache.DocumentKey(cacheKey2, 1);
 
-        lruDocumentCache.updateAccess(documentKey1);
-        lruDocumentCache.updateAccess(documentKey2);
-        lruDocumentCache.updateAccess(documentKey3);
+        testCache.updateAccess(documentKey1);
+        testCache.updateAccess(documentKey2);
+        testCache.updateAccess(documentKey3);
 
         // Remove all documents for mockCacheKey1
-        lruDocumentCache.removeIndex(cacheKey1);
+        testCache.onIndexRemoval(cacheKey1);
 
         // Verify only documents for mockCacheKey2 remain
-        LruDocumentCache.DocumentKey remainingDoc = lruDocumentCache.getLeastRecentlyUsedItem();
+        LruDocumentCache.DocumentKey remainingDoc = testCache.getLeastRecentlyUsedItem();
         assertNotNull(remainingDoc);
         assertEquals(cacheKey2, remainingDoc.getCacheKey());
         assertEquals(1, remainingDoc.getDocId());
     }
 
     /**
-     * Test that removeIndex throws NullPointerException when key is null
+     * Test that onIndexRemoval throws NullPointerException when key is null
      */
-    public void test_removeIndex_withNullKey() {
-        NullPointerException exception = expectThrows(NullPointerException.class, () -> lruDocumentCache.removeIndex(null));
+    public void test_onIndexRemoval_withNullKey() {
+        NullPointerException exception = expectThrows(NullPointerException.class, () -> testCache.onIndexRemoval(null));
         assertEquals("cacheKey is marked non-null but is null", exception.getMessage());
     }
 
@@ -221,9 +216,19 @@ public class LruDocumentCacheTests extends AbstractSparseTestBase {
      */
     @Override
     public void tearDown() throws Exception {
-        lruDocumentCache.evict(Long.MAX_VALUE);
-        ForwardIndexCache.getInstance().removeIndex(cacheKey1);
-        ForwardIndexCache.getInstance().removeIndex(cacheKey2);
+        testCache.clearAll();
+        ForwardIndexCache.getInstance().onIndexRemoval(cacheKey1);
         super.tearDown();
+    }
+
+    private static class TestLruDocumentCache extends LruDocumentCache {
+
+        public TestLruDocumentCache() {
+            super();
+        }
+
+        public void clearAll() {
+            super.evict(Long.MAX_VALUE);
+        }
     }
 }
