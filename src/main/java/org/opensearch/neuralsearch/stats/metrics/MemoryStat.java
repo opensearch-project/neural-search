@@ -56,7 +56,7 @@ public class MemoryStat implements MetricStat {
             double percentage = (double) byteSize / heapMaxBytes * 100;
             return Math.round(percentage * 100.0) / 100.0;
         }
-        long kbSize = byteSize / BYTES_PER_KILOBYTES;
+        double kbSize = (double) byteSize / BYTES_PER_KILOBYTES;
         return Math.round(kbSize * 100.0) / 100.0;
     }
 
