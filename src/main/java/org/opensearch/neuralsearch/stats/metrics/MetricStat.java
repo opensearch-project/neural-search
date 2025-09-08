@@ -11,12 +11,6 @@ import org.opensearch.neuralsearch.stats.common.StatSnapshot;
  */
 public interface MetricStat {
     /**
-     * Returns a single point in time value associated with the stat.
-     * @return the value of the stat
-     */
-    Double getValue();
-
-    /**
      * Returns a snapshot of the stat. Used to cross transport layer/rest layer
      * @return a snapshot of the stat
      */

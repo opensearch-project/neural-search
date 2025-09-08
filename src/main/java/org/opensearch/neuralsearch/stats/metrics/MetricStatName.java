@@ -12,6 +12,7 @@ import org.opensearch.neuralsearch.stats.common.StatName;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -48,10 +49,8 @@ public enum MetricStatName implements StatName {
         this.statType = statType;
         this.version = version;
 
-        switch (statType) {
-            case MetricStatType.MEMORY:
-                metricStat = new MemoryStat(this);
-                break;
+        if (Objects.requireNonNull(statType) == MetricStatType.MEMORY) {
+            metricStat = new MemoryStat(this);
         }
 
         // Validates all event stats are instantiated correctly. This is covered by unit tests as well.

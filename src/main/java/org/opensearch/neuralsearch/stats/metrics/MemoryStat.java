@@ -46,7 +46,6 @@ public class MemoryStat implements MetricStat {
         }
     }
 
-    @Override
     public Double getValue() {
         long byteSize = getByteSize();
         if (statName == MetricStatName.MEMORY_SPARSE_MEMORY_USAGE_PERCENTAGE) {
