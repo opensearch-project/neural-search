@@ -56,6 +56,9 @@ import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.index.IndexModule;
 import org.opensearch.index.shard.IndexEventListener;
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.codec.CodecServiceFactory;
+import java.util.Optional;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.plugins.SearchPlugin.SearchExtSpec;
@@ -268,18 +271,41 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertFalse(CircuitBreakerManager.addMemoryUsage(2048L, "test_memory"));
     }
 
-    public void testOnIndexModule() {
+    public void testOnIndexModuleWithSparseIndexSettings() {
         IndexModule indexModule = mock(IndexModule.class);
         Settings sparseIndexSettings = Settings.builder().put(SparseSettings.SPARSE_INDEX, true).build();
-        Settings nonSparseIndexSettings = Settings.builder().put(SparseSettings.SPARSE_INDEX, false).build();
-
         when(indexModule.getSettings()).thenReturn(sparseIndexSettings);
-        plugin.onIndexModule(indexModule);
-        Mockito.verify(indexModule).addIndexEventListener(Mockito.any(SparseIndexEventListener.class));
 
-        Mockito.reset(indexModule);
-        when(indexModule.getSettings()).thenReturn(nonSparseIndexSettings);
         plugin.onIndexModule(indexModule);
+
+        Mockito.verify(indexModule).addIndexEventListener(Mockito.any(SparseIndexEventListener.class));
+    }
+
+    public void testOnIndexModuleWithNonSparseIndexSettings() {
+        IndexModule indexModule = mock(IndexModule.class);
+        Settings nonSparseIndexSettings = Settings.builder().put(SparseSettings.SPARSE_INDEX, false).build();
+        when(indexModule.getSettings()).thenReturn(nonSparseIndexSettings);
+
+        plugin.onIndexModule(indexModule);
+
         Mockito.verify(indexModule, Mockito.never()).addIndexEventListener(Mockito.any(IndexEventListener.class));
+    }
+
+    public void testGetCustomCodecServiceFactory_withSparseIndex_returnsCodecFactory() {
+        IndexSettings indexSettings = mock(IndexSettings.class);
+        when(indexSettings.getValue(SparseSettings.IS_SPARSE_INDEX_SETTING)).thenReturn(true);
+
+        Optional<CodecServiceFactory> result = plugin.getCustomCodecServiceFactory(indexSettings);
+
+        assertTrue(result.isPresent());
+    }
+
+    public void testGetCustomCodecServiceFactory_withNonSparseIndex_returnsEmpty() {
+        IndexSettings indexSettings = mock(IndexSettings.class);
+        when(indexSettings.getValue(SparseSettings.IS_SPARSE_INDEX_SETTING)).thenReturn(false);
+
+        Optional<CodecServiceFactory> result = plugin.getCustomCodecServiceFactory(indexSettings);
+
+        assertFalse(result.isPresent());
     }
 }

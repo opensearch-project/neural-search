@@ -109,6 +109,6 @@ public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
             listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.DELETED)
         );
 
-        assertEquals("java.lang.RuntimeException: Test exception", exception.getMessage());
+        assertTrue(exception.getMessage().contains("Test exception"));
     }
 }

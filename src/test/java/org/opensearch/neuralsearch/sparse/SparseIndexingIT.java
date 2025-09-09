@@ -29,7 +29,6 @@ public class SparseIndexingIT extends SparseBaseIT {
     private static final String NON_SPARSE_TEST_INDEX_NAME = TEST_INDEX_NAME + "_non_sparse";
     private static final String INVALID_PARAM_TEST_INDEX_NAME = TEST_INDEX_NAME + "_invalid";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
-    private static final List<String> TEST_TOKENS = List.of("hello", "world", "test", "sparse", "index");
 
     @Before
     public void setUp() throws Exception {
@@ -114,7 +113,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     /**
      * Test error handling when creating a sparse tokens field with invalid parameters
      */
-    public void testSparseTokensFieldWithInvalidParameters() throws IOException {
+    public void testSparseTokensFieldWithInvalidParameters1() throws IOException {
         expectThrows(
             IOException.class,
             () -> { createSparseIndex(INVALID_PARAM_TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, -1, 0.4f, 0.1f, 8); }
@@ -154,10 +153,10 @@ public class SparseIndexingIT extends SparseBaseIT {
             .startObject(TEST_SPARSE_FIELD_NAME)
             .field("type", SparseTokensFieldMapper.CONTENT_TYPE)
             .startObject("method")
-            .field("name", ALGO_NAME) // Integer: length of posting list
+            .field("name", ALGO_NAME)
             .startObject("parameters")
             .field("n_postings", 100) // Integer: length of posting list
-            .field("summary_prune_ratio", 0.1f) // Float
+            .field("summary_prune_ratio", 0.1f) // Float: alpha-prune ration for summary
             .field("cluster_ratio", 0.1f) // Float: cluster ratio
             .field("approximate_threshold", 8)
             .field("additional_parameter", 8)
