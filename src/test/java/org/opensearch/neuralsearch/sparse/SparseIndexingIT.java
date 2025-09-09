@@ -16,6 +16,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,7 +43,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     private static final String INVALID_PARAM_TEST_INDEX_NAME = TEST_INDEX_NAME + "_invalid";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
     private static final String TEST_TEXT_FIELD_NAME = "text";
-    private static final List<String> TEST_TOKENS = List.of("hello", "world", "test", "sparse", "index");
+    private static final List<String> TEST_TOKENS = List.of("1000", "2000", "3000", "4000", "5000");
     private static final String PIPELINE_NAME = "seismic_test_pipeline";
 
     @Before
@@ -384,7 +385,7 @@ public class SparseIndexingIT extends SparseBaseIT {
 
     public void testIngestDocumentsSeismicHeapFactor() throws Exception {
         final int docCount = 100;
-        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, docCount, 0.4f, 0.5f, docCount);
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, docCount, 1.0f, 0.5f, docCount);
 
         List<Map<String, Float>> docs = new ArrayList<>();
         for (int i = 0; i < docCount; ++i) {
@@ -654,7 +655,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     public void testSeismicWithModelInferencing() throws Exception {
         String modelId = prepareSparseEncodingModel();
         String sparseFieldName = "title_sparse"; // configured in SparseEncodingPipelineConfiguration.json
-        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING, 2);
         createSparseIndex(TEST_INDEX_NAME, sparseFieldName, 4, 0.4f, 0.5f, 8);
         String payload = prepareSparseBulkIngestPayload(
             TEST_INDEX_NAME,
@@ -670,14 +671,13 @@ public class SparseIndexingIT extends SparseBaseIT {
 
         assertEquals(10, getDocCount(TEST_INDEX_NAME));
 
-        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
-            sparseFieldName,
-            2,
-            1.0f,
-            9,
-            Map.of("67564", 0.1f, "2048", 0.3f), // one -> 2028, two -> 2048, 67564 % 65535 = 2028
-            null
-        );
+        SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2).fieldName(sparseFieldName).heapFactor(1.0f).k(9);
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
+            .fieldName(sparseFieldName)
+            .modelId(modelId)
+            .queryText("one two");
+
         Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
         assertNotNull(searchResults);
         assertEquals(2, getHitCount(searchResults));

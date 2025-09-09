@@ -32,6 +32,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.input.MLInput;
+import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.MLResultDataType;
 import org.opensearch.ml.common.output.model.ModelTensor;
@@ -188,6 +189,24 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
 
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        verify(resultListener).onResponse(List.of(map));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void testInferenceSentencesWithMapResult_whenValidInput_withParameter() {
+        final Map<String, Object> map = Map.of("key", "value");
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
+        MLAlgoParams algoParameter = mock(MLAlgoParams.class);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(map));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, algoParameter, resultListener);
+
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertSame(algoParameter, mlInputCaptor.getValue().getParameters());
         verify(resultListener).onResponse(List.of(map));
         Mockito.verifyNoMoreInteractions(resultListener);
     }

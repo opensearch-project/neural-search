@@ -12,9 +12,11 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.BiConsumer;
 
 import lombok.experimental.Accessors;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -28,7 +30,10 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
+import org.opensearch.action.IndicesRequest;
+import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
@@ -100,6 +105,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
     // this field so that the rescore query can use it to save an inference call.
     protected Map<String, Float> twoPhaseSharedQueryToken;
     private SparseAnnQueryBuilder sparseAnnQueryBuilder;
+    private SparseFieldUtils sparseFieldUtils;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_1_0;
@@ -387,7 +393,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             return this;
         }
 
-        boolean withTokenId = shouldInferenceWithTokenIdResponse(queryRewriteContext.convertToShardContext());
+        boolean withTokenId = shouldInferenceWithTokenIdResponse(queryRewriteContext);
         validateForRewrite(queryText, modelId);
         SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
         queryRewriteContext.registerAsyncAction(getModelInferenceAsync(queryTokensSetOnce, withTokenId));
@@ -428,7 +434,18 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         return false;
     }
 
-    private boolean shouldInferenceWithTokenIdResponse(QueryShardContext queryShardContext) {
+    private boolean shouldInferenceWithTokenIdResponse(QueryRewriteContext queryRewriteContext) {
+        final QueryCoordinatorContext coordinatorContext = queryRewriteContext.convertToCoordinatorContext();
+        if (coordinatorContext != null) {
+            final IndicesRequest searchRequest = coordinatorContext.getSearchRequest();
+            for (String index : searchRequest.indices()) {
+                Set<String> sparseAnnFields = getSparseFieldUtils().getSparseAnnFields(index);
+                if (CollectionUtils.isNotEmpty(sparseAnnFields) && sparseAnnFields.contains(fieldName)) {
+                    return true;
+                }
+            }
+        }
+        final QueryShardContext queryShardContext = queryRewriteContext.convertToShardContext();
         if (queryShardContext == null) {
             return false;
         }
@@ -635,5 +652,17 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
 
     private boolean isSeismicFieldType(MappedFieldType fieldType) {
         return isSeismicSupported() && Objects.nonNull(fieldType) && SparseTokensFieldType.isSparseTokensType(fieldType.typeName());
+    }
+
+    /**
+     * Lazy load of SparseFieldUtils
+     * @return {@link SparseFieldUtils}
+     */
+    @VisibleForTesting
+    SparseFieldUtils getSparseFieldUtils() {
+        if (sparseFieldUtils == null) {
+            sparseFieldUtils = new SparseFieldUtils(NeuralSearchClusterUtil.instance().getClusterService());
+        }
+        return sparseFieldUtils;
     }
 }

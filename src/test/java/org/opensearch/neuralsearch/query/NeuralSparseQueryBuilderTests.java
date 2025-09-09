@@ -32,6 +32,7 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
@@ -52,12 +53,15 @@ import org.junit.Before;
 import org.opensearch.OpenSearchException;
 import org.mockito.ArgumentCaptor;
 import org.opensearch.Version;
+import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.index.analysis.AnalyzerScope;
 import org.opensearch.index.analysis.IndexAnalyzers;
 import org.opensearch.index.analysis.NamedAnalyzer;
+import org.opensearch.index.query.QueryCoordinatorContext;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
@@ -854,7 +858,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testRewrite_whenQueryTokensSupplierNull_withSeismicField() {
-        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID);
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
@@ -870,7 +874,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
         QueryRewriteContext queryRewriteContext = mock(QueryRewriteContext.class);
-        mockSeismic(queryRewriteContext);
+        mockSeismicWithQueryShardContext(queryRewriteContext);
         doAnswer(invocation -> {
             BiConsumer<Client, ActionListener<?>> biConsumer = invocation.getArgument(0);
             biConsumer.accept(
@@ -883,7 +887,49 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             return null;
         }).when(queryRewriteContext).registerAsyncAction(any());
 
-        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) sparseEncodingQueryBuilder.doRewrite(queryRewriteContext);
+        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) neuralSparseQueryBuilder.doRewrite(queryRewriteContext);
+        verify(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), captor.capture(), any());
+        MLAlgoParams params = captor.getValue();
+        assertTrue(params instanceof AsymmetricTextEmbeddingParameters);
+        AsymmetricTextEmbeddingParameters asymmetricTextEmbeddingParameters = (AsymmetricTextEmbeddingParameters) params;
+        assertEquals(SparseEmbeddingFormat.TOKEN_ID, asymmetricTextEmbeddingParameters.getSparseEmbeddingFormat());
+        assertNotNull(queryBuilder.queryTokensMapSupplier());
+        assertTrue(inProgressLatch.await(5, TimeUnit.SECONDS));
+        assertEquals(expectedMap, queryBuilder.queryTokensMapSupplier().get());
+    }
+
+    @SneakyThrows
+    public void testRewrite_whenQueryTokensSupplierNull_withSeismicField_NoShardContext() {
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID);
+        Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
+        MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
+        ArgumentCaptor<MLAlgoParams> captor = ArgumentCaptor.forClass(MLAlgoParams.class);
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), any(), isA(ActionListener.class));
+        NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
+
+        final CountDownLatch inProgressLatch = new CountDownLatch(1);
+        QueryRewriteContext queryRewriteContext = mock(QueryRewriteContext.class);
+        mockSeismicWithQueryCoordinatorContext(neuralSparseQueryBuilder, queryRewriteContext);
+        doAnswer(invocation -> {
+            BiConsumer<Client, ActionListener<?>> biConsumer = invocation.getArgument(0);
+            biConsumer.accept(
+                null,
+                ActionListener.wrap(
+                    response -> inProgressLatch.countDown(),
+                    err -> fail("Failed to set query tokens supplier: " + err.getMessage())
+                )
+            );
+            return null;
+        }).when(queryRewriteContext).registerAsyncAction(any());
+
+        NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) neuralSparseQueryBuilder.doRewrite(queryRewriteContext);
         verify(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), captor.capture(), any());
         MLAlgoParams params = captor.getValue();
         assertTrue(params instanceof AsymmetricTextEmbeddingParameters);
@@ -1186,11 +1232,23 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(sparseVectorQuery.getFallbackQuery(), booleanQueryBuilder.build());
     }
 
-    private void mockSeismic(QueryRewriteContext queryRewriteContext) {
+    private void mockSeismicWithQueryShardContext(QueryRewriteContext queryRewriteContext) {
         QueryShardContext queryShardContext = mock(QueryShardContext.class);
         MappedFieldType seismicFieldType = mock(MappedFieldType.class);
+        when(queryRewriteContext.convertToCoordinatorContext()).thenReturn(null);
         when(queryRewriteContext.convertToShardContext()).thenReturn(queryShardContext);
         when(queryShardContext.fieldMapper(anyString())).thenReturn(seismicFieldType);
         when(seismicFieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+    }
+
+    private void mockSeismicWithQueryCoordinatorContext(NeuralSparseQueryBuilder queryBuilder, QueryRewriteContext queryRewriteContext) {
+        QueryCoordinatorContext context = mock(QueryCoordinatorContext.class);
+        when(queryRewriteContext.convertToCoordinatorContext()).thenReturn(context);
+        IndicesRequest searchIndices = mock(IndicesRequest.class);
+        when(context.getSearchRequest()).thenReturn(searchIndices);
+        when(searchIndices.indices()).thenReturn(new String[] { queryBuilder.fieldName() });
+        SparseFieldUtils sparseFieldUtils = mock(SparseFieldUtils.class);
+        queryBuilder.sparseFieldUtils(sparseFieldUtils);
+        when(sparseFieldUtils.getSparseAnnFields(queryBuilder.fieldName())).thenReturn(Set.of(queryBuilder.fieldName()));
     }
 }
