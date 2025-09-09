@@ -38,12 +38,15 @@ import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
 import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
+import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
 import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
+import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
@@ -53,6 +56,7 @@ import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.plugins.CircuitBreakerPlugin;
+import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
@@ -192,6 +196,12 @@ public class NeuralSearch extends Plugin
         infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
         EventStatsManager.instance().initialize(settingsAccessor);
         this.xContentRegistry = xContentRegistry;
+        clusterService.getClusterSettings()
+            .addSettingsUpdateConsumer(
+                NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
+                ClusterTrainingExecutor::updateThreadPoolSize
+            );
+        ClusterTrainingExecutor.getInstance().initialize(threadPool);
         return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
     }
 
@@ -239,7 +249,18 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
-        return List.of(HybridQueryExecutor.getExecutorBuilder(settings));
+        int allocatedProcessors = NeuralSearchSettings.updateThreadQtySettings(settings);
+        return List.of(
+            HybridQueryExecutor.getExecutorBuilder(settings),
+            new FixedExecutorBuilder(
+                settings,
+                SparseConstants.THREAD_POOL_NAME,
+                allocatedProcessors,
+                -1,
+                SparseConstants.THREAD_POOL_NAME,
+                false
+            )
+        );
     }
 
     @Override
@@ -298,6 +319,7 @@ public class NeuralSearch extends Plugin
             HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
             AGENTIC_SEARCH_ENABLED,
             SparseSettings.IS_SPARSE_INDEX_SETTING,
+            NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
             NEURAL_CIRCUIT_BREAKER_LIMIT,
             NEURAL_CIRCUIT_BREAKER_OVERHEAD
         );
