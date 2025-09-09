@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.plugin;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
@@ -294,7 +293,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         ClusterTrainingExecutor.updateThreadPoolSize(NEW_THREAD_COUNT);
 
         ArgumentCaptor<Settings> settingsCaptor = ArgumentCaptor.forClass(Settings.class);
-        verify(mockThreadPool).setThreadPool(settingsCaptor.capture());
+        Mockito.verify(mockThreadPool).setThreadPool(settingsCaptor.capture());
 
         Settings capturedSettings = settingsCaptor.getValue();
         assertEquals(String.valueOf(NEW_THREAD_COUNT), capturedSettings.get(SparseConstants.THREAD_POOL_NAME + ".size"));
@@ -342,7 +341,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
         plugin.onIndexModule(indexModule);
 
-        verify(indexModule).addIndexEventListener(Mockito.any(SparseIndexEventListener.class));
+        Mockito.verify(indexModule).addIndexEventListener(Mockito.any(SparseIndexEventListener.class));
     }
 
     public void testOnIndexModuleWithNonSparseIndexSettings() {
@@ -352,7 +351,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
         plugin.onIndexModule(indexModule);
 
-        verify(indexModule, Mockito.never()).addIndexEventListener(Mockito.any(IndexEventListener.class));
+        Mockito.verify(indexModule, Mockito.never()).addIndexEventListener(Mockito.any(IndexEventListener.class));
     }
 
     public void testGetCustomCodecServiceFactory_withSparseIndex_returnsCodecFactory() {
