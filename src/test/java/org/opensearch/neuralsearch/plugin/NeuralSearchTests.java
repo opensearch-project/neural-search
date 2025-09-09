@@ -182,7 +182,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(7, settings.size());
+        assertEquals(8, settings.size());
     }
 
     public void testRequestProcessors() {
@@ -221,7 +221,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetMappers_shouldReturnMappers() {
         final Map<String, Mapper.TypeParser> typeParserMap = plugin.getMappers();
-        assertEquals(1, typeParserMap.size());
+        assertEquals(2, typeParserMap.size());
         assertTrue(typeParserMap.get(SemanticFieldMapper.CONTENT_TYPE) instanceof SemanticFieldMapper.TypeParser);
     }
 
