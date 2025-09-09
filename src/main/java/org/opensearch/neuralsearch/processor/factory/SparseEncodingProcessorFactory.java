@@ -1,4 +1,4 @@
-/*
+    /*
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -26,6 +26,7 @@ import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.transport.client.OpenSearchClient;
@@ -39,18 +40,21 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
     private final MLCommonsClientAccessor clientAccessor;
     private final Environment environment;
     private final ClusterService clusterService;
+    private final SparseFieldUtils sparseFieldUtils;
 
     public SparseEncodingProcessorFactory(
         OpenSearchClient openSearchClient,
         MLCommonsClientAccessor clientAccessor,
         Environment environment,
-        ClusterService clusterService
+        ClusterService clusterService,
+        SparseFieldUtils sparseFieldUtils
     ) {
         super(TYPE);
         this.clientAccessor = clientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
         this.openSearchClient = openSearchClient;
+        this.sparseFieldUtils = sparseFieldUtils;
     }
 
     @Override
@@ -94,7 +98,8 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
             openSearchClient,
             clientAccessor,
             environment,
-            clusterService
+            clusterService,
+            sparseFieldUtils
         );
     }
 }

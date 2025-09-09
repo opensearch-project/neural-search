@@ -14,8 +14,11 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.AbstractNeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -28,6 +31,9 @@ import org.opensearch.search.rescore.RescorerBuilder;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 
 /**
  * A SearchRequestProcessor to generate two-phase NeuralSparseQueryBuilder,
@@ -43,6 +49,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
     private PruneType pruneType;
     private float windowExpansion;
     private int maxWindowSize;
+    private SparseFieldUtils sparseFieldUtils;
     private static final String PARAMETER_KEY = "two_phase_parameter";
     private static final String ENABLE_KEY = "enabled";
     private static final String EXPANSION_KEY = "expansion_rate";
@@ -64,7 +71,8 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         float pruneRatio,
         PruneType pruneType,
         float windowExpansion,
-        int maxWindowSize
+        int maxWindowSize,
+        SparseFieldUtils sparseFieldUtils
     ) {
         super(tag, description, ignoreFailure);
         this.enabled = enabled;
@@ -82,6 +90,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             );
         }
         this.maxWindowSize = maxWindowSize;
+        this.sparseFieldUtils = sparseFieldUtils;
     }
 
     /**
@@ -105,6 +114,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         if (queryBuilderMap.isEmpty()) {
             return request;
         }
+        validateSeismicQuery(request.indices(), queryBuilderMap);
         // Make a nestedQueryBuilder which includes all the two-phase QueryBuilder.
         QueryBuilder nestedTwoPhaseQueryBuilder = getNestedQueryBuilderFromNeuralSparseQueryBuilderMap(queryBuilderMap);
         nestedTwoPhaseQueryBuilder.boost(getOriginQueryWeightAfterRescore(request.source()));
@@ -209,6 +219,21 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         return twoPhaseRescorer;
     }
 
+    private void validateSeismicQuery(String[] indices, Multimap<AbstractNeuralQueryBuilder<?>, Float> queryBuilderMap) {
+        for (String index : indices) {
+            Set<String> sparseAnnFields = sparseFieldUtils.getSparseAnnFields(index);
+            for (Map.Entry<AbstractNeuralQueryBuilder<?>, Float> entry : queryBuilderMap.entries()) {
+                NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) entry.getKey();
+                String fieldName = neuralSparseQueryBuilder.fieldName();
+                if (sparseAnnFields.contains(fieldName)) {
+                    throw new IllegalArgumentException(
+                        String.format(Locale.ROOT, "Two phase search processor is not compatible with [%s] field for now", SEISMIC)
+                    );
+                }
+            }
+        }
+    }
+
     /**
      * Factory to create NeuralSparseTwoPhaseProcessor, provide default parameter,
      *
@@ -259,7 +284,8 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
                 pruneRatio,
                 pruneType,
                 windowExpansion,
-                maxWindowSize
+                maxWindowSize,
+                new SparseFieldUtils(NeuralSearchClusterUtil.instance().getClusterService())
             );
         }
     }

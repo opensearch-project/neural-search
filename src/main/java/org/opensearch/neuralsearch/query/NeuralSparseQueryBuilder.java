@@ -29,6 +29,7 @@ import org.apache.lucene.search.Query;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
+import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.Client;
@@ -59,6 +60,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
+
+import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.METHOD_PARAMETERS_FIELD;
 
 /**
  * SparseEncodingQueryBuilder is responsible for handling "neural_sparse" query types. It uses an ML NEURAL_SPARSE model
@@ -93,9 +96,11 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
     // A field that for neural_sparse_two_phase_processor. Original query builder will set the lower score tokens to
     // this field so that the rescore query can use it to save an inference call.
     protected Map<String, Float> twoPhaseSharedQueryToken;
+    private SparseAnnQueryBuilder sparseAnnQueryBuilder;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_1_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_SEISMIC = Version.V_3_3_0;
 
     /**
      * Constructor from stream input
@@ -129,6 +134,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         if (StringUtils.EMPTY.equals(this.modelId)) {
             this.modelId = null;
         }
+        if (isSeismicSupported() && in.readBoolean()) {
+            this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder(in);
+        }
     }
 
     @Override
@@ -153,6 +161,14 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             out.writeOptionalString(this.searchAnalyzer);
             this.neuralSparseQueryTwoPhaseInfo.writeTo(out);
         }
+        if (isSeismicSupported()) {
+            if (this.sparseAnnQueryBuilder != null) {
+                out.writeBoolean(true);
+                this.sparseAnnQueryBuilder.writeTo(out);
+            } else {
+                out.writeBoolean(false);
+            }
+        }
     }
 
     /**
@@ -176,7 +192,8 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             .maxTokenScore(this.maxTokenScore)
             .neuralSparseQueryTwoPhaseInfo(
                 new NeuralSparseQueryTwoPhaseInfo(NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_TWO, pruneRatio, pruneType)
-            );
+            )
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
 
         // If raw tokens are provided directly in the query, split them without additional processing
         if (Objects.nonNull(this.queryTokensMapSupplier)) {
@@ -213,6 +230,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         }
         if (Objects.nonNull(queryTokensMapSupplier) && Objects.nonNull(queryTokensMapSupplier.get())) {
             xContentBuilder.field(QUERY_TOKENS_FIELD.getPreferredName(), queryTokensMapSupplier.get());
+        }
+        if (Objects.nonNull(sparseAnnQueryBuilder) && isSeismicSupported()) {
+            xContentBuilder.field(METHOD_PARAMETERS_FIELD.getPreferredName(), sparseAnnQueryBuilder);
         }
         printBoostAndQueryName(xContentBuilder);
         xContentBuilder.endObject();
@@ -333,6 +353,10 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                 Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
                 sparseEncodingQueryBuilder.queryTokensMapSupplier(() -> queryTokens);
+            } else if (METHOD_PARAMETERS_FIELD.match(currentFieldName, parser.getDeprecationHandler())
+                    && sparseEncodingQueryBuilder.isSeismicSupported()) {
+                SparseAnnQueryBuilder builder = SparseAnnQueryBuilder.fromXContent(parser);
+                sparseEncodingQueryBuilder.sparseAnnQueryBuilder(builder);
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
@@ -359,7 +383,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         if (shouldUseAnalyzer()) {
             return this;
         }
-
+        boolean withTokenId = shouldInferenceWithTokenIdResponse(queryRewriteContext.convertToShardContext());
         validateForRewrite(queryText, modelId);
         SetOnce<Map<String, Float>> queryTokensSetOnce = new SetOnce<>();
         queryRewriteContext.registerAsyncAction(getModelInferenceAsync(queryTokensSetOnce));

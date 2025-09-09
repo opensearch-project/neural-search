@@ -40,6 +40,7 @@ import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.AbstractBatchingProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
+import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -223,18 +224,12 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         inferenceList = sortedResult.v1();
         Map<Integer, Integer> originalOrder = sortedResult.v2();
         doBatchExecute(inferenceList, results -> {
-            batchExecuteHandler(results, ingestDocumentWrappers, dataForInferences, originalOrder, handler);
+            batchExecuteHandler(results, dataForInferences, originalOrder);
             handler.accept(ingestDocumentWrappers);
         }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
     }
 
-    private void batchExecuteHandler(
-        List<?> results,
-        List<IngestDocumentWrapper> ingestDocumentWrappers,
-        List<DataForInference> dataForInferences,
-        Map<Integer, Integer> originalOrder,
-        Consumer<List<IngestDocumentWrapper>> handler
-    ) {
+    protected void batchExecuteHandler(List<?> results, List<DataForInference> dataForInferences, Map<Integer, Integer> originalOrder) {
         int startIndex = 0;
         results = restoreToOriginalOrder(results, originalOrder);
         for (DataForInference dataForInference : dataForInferences) {
@@ -252,7 +247,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         }
     }
 
-    private Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
+    protected Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
         List<Tuple<Integer, String>> docsWithIndex = new ArrayList<>();
         for (int i = 0; i < inferenceList.size(); ++i) {
             docsWithIndex.add(Tuple.tuple(i, inferenceList.get(i)));
@@ -310,7 +305,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     @Getter
     @AllArgsConstructor
-    protected static class DataForInference {
+    public static class DataForInference {
         private final IngestDocumentWrapper ingestDocumentWrapper;
         private final Map<String, Object> processMap;
         private final List<String> inferenceList;
@@ -812,10 +807,12 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         List<String> inferenceList,
         PruneType pruneType,
         float pruneRatio,
+        MLAlgoParams mlAlgoParams,
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
             TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            mlAlgoParams,
             ActionListener.wrap(resultMaps -> {
                 List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                     .stream()
