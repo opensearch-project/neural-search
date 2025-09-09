@@ -51,6 +51,11 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
+import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
+import org.opensearch.index.IndexModule;
+import org.opensearch.index.shard.IndexEventListener;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
 import org.opensearch.plugins.SearchPlugin.SearchExtSpec;
@@ -222,6 +227,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     public void testGetMappers_shouldReturnMappers() {
         final Map<String, Mapper.TypeParser> typeParserMap = plugin.getMappers();
         assertEquals(2, typeParserMap.size());
+        assertTrue(typeParserMap.get(SparseTokensFieldMapper.CONTENT_TYPE) instanceof SparseTokensFieldMapper.SparseTypeParser);
         assertTrue(typeParserMap.get(SemanticFieldMapper.CONTENT_TYPE) instanceof SemanticFieldMapper.TypeParser);
     }
 
@@ -260,5 +266,20 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         plugin.setCircuitBreaker(circuitBreaker);
 
         assertFalse(CircuitBreakerManager.addMemoryUsage(2048L, "test_memory"));
+    }
+
+    public void testOnIndexModule() {
+        IndexModule indexModule = mock(IndexModule.class);
+        Settings sparseIndexSettings = Settings.builder().put(SparseSettings.SPARSE_INDEX, true).build();
+        Settings nonSparseIndexSettings = Settings.builder().put(SparseSettings.SPARSE_INDEX, false).build();
+
+        when(indexModule.getSettings()).thenReturn(sparseIndexSettings);
+        plugin.onIndexModule(indexModule);
+        Mockito.verify(indexModule).addIndexEventListener(Mockito.any(SparseIndexEventListener.class));
+
+        Mockito.reset(indexModule);
+        when(indexModule.getSettings()).thenReturn(nonSparseIndexSettings);
+        plugin.onIndexModule(indexModule);
+        Mockito.verify(indexModule, Mockito.never()).addIndexEventListener(Mockito.any(IndexEventListener.class));
     }
 }
