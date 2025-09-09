@@ -29,7 +29,7 @@ public class SparseIndexEventListener implements IndexEventListener {
     @Override
     /**
      * This function is used to remove data from cache when index is removed.
-     * The parameter reason is not used, because all kind os its enum will have to go through this cache removing procedure.
+     * The parameter reason is not used, because all kinds of its enum will have to go through this cache removing procedure.
      * @param indexService The index service for the removed index
      * @param reason The reason for the index removal
      */

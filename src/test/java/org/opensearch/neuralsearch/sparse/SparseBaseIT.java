@@ -272,16 +272,12 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         }
     }
 
-    protected int getNodeCount() {
+    protected int getNodeCount() throws Exception {
         Request request = new Request("GET", "/_cat/nodes/");
-        try {
-            Response response = client().performRequest(request);
-            String str = EntityUtils.toString(response.getEntity());
-            String[] lines = str.split("\n");
-            return lines.length;
-        } catch (IOException | ParseException e) {
-            throw new RuntimeException(e);
-        }
+        Response response = client().performRequest(request);
+        String str = EntityUtils.toString(response.getEntity());
+        String[] lines = str.split("\n");
+        return lines.length;
     }
 
     @SneakyThrows
