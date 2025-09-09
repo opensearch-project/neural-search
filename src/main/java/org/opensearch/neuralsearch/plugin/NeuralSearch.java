@@ -20,6 +20,9 @@ import java.util.function.Supplier;
 
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.unit.ByteSizeValue;
+import org.opensearch.index.IndexModule;
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.codec.CodecServiceFactory;
 import org.opensearch.index.mapper.Mapper;
 import org.opensearch.indices.breaker.BreakerSettings;
 import org.opensearch.ml.client.MachineLearningNodeClient;
@@ -36,8 +39,12 @@ import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
 import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
+import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
+import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.index.mapper.MappingTransformer;
@@ -104,6 +111,7 @@ import org.opensearch.plugins.IngestPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
+import org.opensearch.plugins.EnginePlugin;
 import org.opensearch.repositories.RepositoriesService;
 import org.opensearch.rest.RestController;
 import org.opensearch.rest.RestHandler;
@@ -135,6 +143,7 @@ public class NeuralSearch extends Plugin
         IngestPlugin,
         ExtensiblePlugin,
         SearchPipelinePlugin,
+        EnginePlugin,
         CircuitBreakerPlugin {
     private MLCommonsClientAccessor clientAccessor;
     private NamedXContentRegistry xContentRegistry;
@@ -288,6 +297,7 @@ public class NeuralSearch extends Plugin
             SEMANTIC_INGEST_BATCH_SIZE,
             HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
             AGENTIC_SEARCH_ENABLED,
+            SparseSettings.IS_SPARSE_INDEX_SETTING,
             NEURAL_CIRCUIT_BREAKER_LIMIT,
             NEURAL_CIRCUIT_BREAKER_OVERHEAD
         );
@@ -330,6 +340,14 @@ public class NeuralSearch extends Plugin
         );
     }
 
+    @Override
+    public Optional<CodecServiceFactory> getCustomCodecServiceFactory(IndexSettings indexSettings) {
+        if (indexSettings.getValue(SparseSettings.IS_SPARSE_INDEX_SETTING)) {
+            return Optional.of(SparseCodecService::new);
+        }
+        return Optional.empty();
+    }
+
     /**
      * Register semantic highlighter
      */
@@ -340,7 +358,12 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Mapper.TypeParser> getMappers() {
-        return Map.of(SemanticFieldMapper.CONTENT_TYPE, new SemanticFieldMapper.TypeParser());
+        return Map.of(
+            SemanticFieldMapper.CONTENT_TYPE,
+            new SemanticFieldMapper.TypeParser(),
+            SparseTokensFieldMapper.CONTENT_TYPE,
+            new SparseTokensFieldMapper.SparseTypeParser()
+        );
     }
 
     @Override
@@ -360,6 +383,12 @@ public class NeuralSearch extends Plugin
                 parameters.client
             )
         );
+    }
+
+    public void onIndexModule(IndexModule indexModule) {
+        if (SparseSettings.IS_SPARSE_INDEX_SETTING.get(indexModule.getSettings())) {
+            indexModule.addIndexEventListener(new SparseIndexEventListener());
+        }
     }
 
     @Override
