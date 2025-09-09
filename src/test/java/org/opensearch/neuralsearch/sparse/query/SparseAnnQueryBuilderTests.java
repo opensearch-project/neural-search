@@ -420,7 +420,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertEquals(expectedQueryTokens, builder.queryTokens());
 
         SparseAnnQueryBuilder builder2 = new SparseAnnQueryBuilder();
-        builder2.setQueryTokens(queryTokens);
+        builder2.queryTokens(queryTokens);
         assertEquals(expectedQueryTokens, builder2.queryTokens());
 
         SparseAnnQueryBuilder builder3 = new SparseAnnQueryBuilder("name", 3, 10, 1.0f, null, null, queryTokens);

@@ -18,6 +18,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.client.OpenSearchClient;
@@ -44,7 +45,13 @@ public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTest
         clientAccessor = mock(MLCommonsClientAccessor.class);
         environment = mock(Environment.class);
         clusterService = mock(ClusterService.class);
-        sparseEncodingProcessorFactory = new SparseEncodingProcessorFactory(openSearchClient, clientAccessor, environment, clusterService);
+        sparseEncodingProcessorFactory = new SparseEncodingProcessorFactory(
+            openSearchClient,
+            clientAccessor,
+            environment,
+            clusterService,
+            new SparseFieldUtils(clusterService)
+        );
     }
 
     @SneakyThrows
