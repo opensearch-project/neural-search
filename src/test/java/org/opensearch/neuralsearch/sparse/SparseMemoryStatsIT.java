@@ -208,7 +208,6 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
         double originalSparseMemoryUsageSum = originalSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
         long originalCircuitBreakerMemoryStatsSum = originalCircuitBreakerMemoryStats.stream().mapToLong(Long::longValue).sum();
         double currentSparseMemoryUsageSum = currentSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
-        long currentCircuitBreakerMemoryStatsSum = currentCircuitBreakerMemoryStats.stream().mapToLong(Long::longValue).sum();
 
         // Increase size consists of two cache keys, one array for forward index and one map for clustered posting
         CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
@@ -227,7 +226,7 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
         currentSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         currentCircuitBreakerMemoryStats = getNeuralCircuitBreakerMemoryStatsAcrossNodes();
         currentSparseMemoryUsageSum = currentSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
-        currentCircuitBreakerMemoryStatsSum = currentCircuitBreakerMemoryStats.stream().mapToLong(Long::longValue).sum();
+        long currentCircuitBreakerMemoryStatsSum = currentCircuitBreakerMemoryStats.stream().mapToLong(Long::longValue).sum();
         assertEquals(originalSparseMemoryUsageSum, currentSparseMemoryUsageSum, DELTA_FOR_MEMORY_STATS_ASSERTION);
         assertEquals(originalCircuitBreakerMemoryStatsSum, currentCircuitBreakerMemoryStatsSum);
         verityMemoryStatsAlign(currentSparseMemoryUsageStats, currentCircuitBreakerMemoryStats);
