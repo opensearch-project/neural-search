@@ -77,9 +77,8 @@ import org.opensearch.threadpool.ThreadPool;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
-    private static final int NEW_THREAD_COUNT = 10;
+    private static final int NEW_THREAD_COUNT = OpenSearchExecutors.allocatedProcessors(Settings.EMPTY);
     private static final int CURRENT_THREAD_COUNT = 6;
-    private static final int CUSTOM_THREAD_QTY = 12;
     private static final int EXPECTED_EXECUTOR_BUILDERS_COUNT = 2;
 
     private NeuralSearch plugin;
@@ -316,9 +315,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     }
 
     public void testGetExecutorBuildersWithCustomThreadQty() {
-        Settings customSettings = Settings.builder()
-            .put(NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY, CUSTOM_THREAD_QTY)
-            .build();
+        Settings customSettings = Settings.builder().put(NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY, NEW_THREAD_COUNT).build();
 
         List<ExecutorBuilder<?>> executorBuilders = plugin.getExecutorBuilders(customSettings);
 
