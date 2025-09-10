@@ -104,7 +104,7 @@ public final class NeuralSearchSettings {
         Setting.Property.Dynamic
     );
 
-    public static int updateThreadQtySettings(Settings settings) {
+    public static int initializeThreadQtySettings(Settings settings) {
         int maxThreadQty = OpenSearchExecutors.allocatedProcessors(settings);
         int threadQty = SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING.get(settings);
         if (threadQty == DEFAULT_INDEX_THREAD_QTY) {

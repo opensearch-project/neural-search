@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.settings;
 import lombok.Getter;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -51,5 +52,10 @@ public class NeuralSearchSettingsAccessor {
                 CircuitBreakerManager.setLimitAndOverhead(limit, overhead);
                 MemoryUsageManager.getInstance().setLimitAndOverhead(limit, overhead);
             });
+        clusterService.getClusterSettings()
+            .addSettingsUpdateConsumer(
+                NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
+                ClusterTrainingExecutor::updateThreadPoolSize
+            );
     }
 }

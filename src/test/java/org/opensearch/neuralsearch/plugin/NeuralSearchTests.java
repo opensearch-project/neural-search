@@ -315,7 +315,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         // So we check that it's either the original default (-1) or the computed default
         int defaultValue = (int) threadQtySetting.getDefault(Settings.EMPTY);
         assertTrue(
-            "Default value should be either -1 or computed default", 
+            "Default value should be either -1 or computed default",
             defaultValue == NeuralSearchSettings.DEFAULT_INDEX_THREAD_QTY || defaultValue > 0
         );
     }

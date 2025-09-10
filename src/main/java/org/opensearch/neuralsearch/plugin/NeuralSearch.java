@@ -196,11 +196,6 @@ public class NeuralSearch extends Plugin
         infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
         EventStatsManager.instance().initialize(settingsAccessor);
         this.xContentRegistry = xContentRegistry;
-        clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(
-                NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
-                ClusterTrainingExecutor::updateThreadPoolSize
-            );
         ClusterTrainingExecutor.getInstance().initialize(threadPool);
         return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
     }
@@ -249,7 +244,7 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
-        int allocatedProcessors = NeuralSearchSettings.updateThreadQtySettings(settings);
+        int allocatedProcessors = NeuralSearchSettings.initializeThreadQtySettings(settings);
         return List.of(
             HybridQueryExecutor.getExecutorBuilder(settings),
             new FixedExecutorBuilder(
