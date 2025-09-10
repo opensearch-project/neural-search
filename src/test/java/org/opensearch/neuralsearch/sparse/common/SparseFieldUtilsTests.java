@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class SparseFieldUtilsTests extends OpenSearchTestCase {
@@ -52,6 +53,12 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         assertEquals(0, sparseFieldUtils.getSparseAnnFields(null).size());
     }
 
+    public void testGetSparseAnnFields_whenNullIndexMetadata_thenReturnEmptySet() {
+        configureSparseIndexSetting(true);
+        when(metadata.index(anyString())).thenReturn(null);
+        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+    }
+
     public void testGetSparseAnnFields_whenNonSparseIndex_thenReturnEmptySet() {
         // Setup mock cluster service with non-sparse index
         configureSparseIndexSetting(false);
@@ -61,7 +68,18 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
 
     public void testGetSparseAnnFields_whenNullMappingMetaData_thenReturnEmptySet() {
         // Setup mock cluster service with null mapping metadata
-        configureIndexMapping(null);
+        configureSparseIndexSetting(true);
+        when(indexMetadata.mapping()).thenReturn(null);
+
+        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+    }
+
+    public void testGetSparseAnnFields_whenNullSourceAsMap_thenReturnEmptySet() {
+        // Setup mock cluster service with null mapping metadata
+        configureSparseIndexSetting(true);
+        MappingMetadata mappingMetadata = mock(MappingMetadata.class);
+        when(indexMetadata.mapping()).thenReturn(mappingMetadata);
+        when(mappingMetadata.sourceAsMap()).thenReturn(null);
 
         assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
     }
@@ -94,14 +112,10 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         when(indexMetadata.getSettings()).thenReturn(settings);
     }
 
-    private void configureIndexMapping(MappingMetadata mappingMetadata) {
-        configureSparseIndexSetting(true);
-        when(indexMetadata.mapping()).thenReturn(mappingMetadata);
-    }
-
     private void configureIndexMappingProperties(Map<String, Object> properties) {
         MappingMetadata mappingMetadata = new MappingMetadata("_doc", properties);
-        configureIndexMapping(mappingMetadata);
+        configureSparseIndexSetting(true);
+        when(indexMetadata.mapping()).thenReturn(mappingMetadata);
     }
 
     private Map<String, Object> createFieldMappingProperties(boolean isSeismicField) {

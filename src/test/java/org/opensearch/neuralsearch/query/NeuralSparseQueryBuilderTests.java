@@ -4,41 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.argThat;
-import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
-import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
-import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
-import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.ANALYZER_FIELD;
-import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.HEAP_FACTOR_FIELD;
-import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.METHOD_PARAMETERS_FIELD;
-import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.TOP_K_FIELD;
-import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.TOP_N_FIELD;
-import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
-import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
-import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MAX_TOKEN_SCORE_FIELD;
-import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MODEL_ID_FIELD;
-import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.NAME;
-import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TEXT_FIELD;
-import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TOKENS_FIELD;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
-import java.util.function.Supplier;
-
+import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.Tokenizer;
@@ -56,24 +22,11 @@ import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.ThreadContext;
-import org.opensearch.index.analysis.AnalyzerScope;
-import org.opensearch.index.analysis.IndexAnalyzers;
-import org.opensearch.index.analysis.NamedAnalyzer;
-import org.opensearch.index.query.QueryCoordinatorContext;
-import org.opensearch.ml.common.input.parameter.MLAlgoParams;
-import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
-import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
-import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
-import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
-import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
-import org.opensearch.neuralsearch.util.TestUtils;
-import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
@@ -83,18 +36,64 @@ import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.analysis.AnalyzerScope;
+import org.opensearch.index.analysis.IndexAnalyzers;
+import org.opensearch.index.analysis.NamedAnalyzer;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.ml.common.input.parameter.MLAlgoParams;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
+import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
+import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.transport.client.Client;
 
-import lombok.SneakyThrows;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
+import java.util.function.Supplier;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
+import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.ANALYZER_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MAX_TOKEN_SCORE_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.MODEL_ID_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.NAME;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TEXT_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder.QUERY_TOKENS_FIELD;
+import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.HEAP_FACTOR_FIELD;
+import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.METHOD_PARAMETERS_FIELD;
+import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.TOP_K_FIELD;
+import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.TOP_N_FIELD;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
@@ -104,9 +103,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     private static final String ANALYZER_NAME = "standard";
     private static final float BOOST = 1.8f;
     private static final String QUERY_NAME = "queryName";
+    private static final String DEFAULT_ANALYZER = "default";
     private static final Float MAX_TOKEN_SCORE = 123f;
-    private static final Map<String, Float> QUERY_TOKENS = Map.of("1000", 1.f, "2000", 2.f);
+    private static final Map<String, Float> QUERY_TOKENS = Map.of("hello", 1.f, "world", 2.f);
     private static final Supplier<Map<String, Float>> QUERY_TOKENS_SUPPLIER = () -> QUERY_TOKENS;
+    private static final Map<String, Float> QUERY_TOKENS_IN_ID = Map.of("1000", 1.f, "2000", 2.f);
     private SparseAnnQueryBuilder sparseAnnQueryBuilder;
 
     @Before
@@ -116,7 +117,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .fieldName(FIELD_NAME)
             .heapFactor(1.0f)
             .k(10)
-            .queryTokens(QUERY_TOKENS);
+            .queryTokens(QUERY_TOKENS_IN_ID);
         // Initialize EventStatsManager for tests
         TestUtils.initializeEventStatsManager();
     }
@@ -232,6 +233,22 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
         assertEquals(QUERY_TOKENS_SUPPLIER.get(), sparseEncodingQueryBuilder.queryTokensMapSupplier().get());
         assertEquals(sparseAnnQueryBuilder, sparseEncodingQueryBuilder.sparseAnnQueryBuilder());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenBuiltWithMethodParameters_seismicNotSupported() {
+        setUpClusterService(Version.V_3_2_0);
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TOKENS_FIELD.getPreferredName(), QUERY_TOKENS_SUPPLIER.get())
+            .field(METHOD_PARAMETERS_FIELD.getPreferredName(), sparseAnnQueryBuilder)
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(ParsingException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
     }
 
     @SneakyThrows
@@ -455,6 +472,20 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         XContentParser contentParser = createParser(xContentBuilder);
         contentParser.nextToken();
         expectThrows(IllegalArgumentException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_unknownField_thenException() {
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field("unknown_field", "unknown_value")
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        expectThrows(ParsingException.class, () -> NeuralSparseQueryBuilder.fromXContent(contentParser));
     }
 
     @SuppressWarnings("unchecked")
@@ -974,8 +1005,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
 
         BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "1000", 1.f), BooleanClause.Occur.SHOULD);
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "2000", 2.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
 
         assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
     }
@@ -1035,11 +1066,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     public void testGetQueryTokens_useAnalyzerWithoutTokenWeights() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .queryText("hello world")
-            .searchAnalyzer("default");
+            .searchAnalyzer(DEFAULT_ANALYZER);
 
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         IndexAnalyzers mockIndexAnalyzers = new IndexAnalyzers(
-            Map.of("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
+            Map.of(DEFAULT_ANALYZER, new NamedAnalyzer(DEFAULT_ANALYZER, AnalyzerScope.INDEX, new StandardAnalyzer())),
             Collections.emptyMap(),
             Collections.emptyMap()
         );
@@ -1059,7 +1090,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
 
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         IndexAnalyzers mockIndexAnalyzers = new IndexAnalyzers(
-            Map.of("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, new StandardAnalyzer())),
+            Map.of(DEFAULT_ANALYZER, new NamedAnalyzer(DEFAULT_ANALYZER, AnalyzerScope.INDEX, new StandardAnalyzer())),
             Collections.emptyMap(),
             Collections.emptyMap()
         );
@@ -1076,7 +1107,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     public void testGetQueryTokens_useAnalyzerWithTokenWeights() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .queryText("hello world")
-            .searchAnalyzer("default");
+            .searchAnalyzer(DEFAULT_ANALYZER);
 
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         Analyzer mockedAnalyzer = new Analyzer() {
@@ -1111,7 +1142,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         };
 
         IndexAnalyzers mockIndexAnalyzers = new IndexAnalyzers(
-            Map.of("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, mockedAnalyzer)),
+            Map.of(DEFAULT_ANALYZER, new NamedAnalyzer(DEFAULT_ANALYZER, AnalyzerScope.INDEX, mockedAnalyzer)),
             Collections.emptyMap(),
             Collections.emptyMap()
         );
@@ -1127,7 +1158,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     public void testGetQueryTokens_useAnalyzerWithMalformedTokenWeights_thenFail() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .queryText("hello world")
-            .searchAnalyzer("default");
+            .searchAnalyzer(DEFAULT_ANALYZER);
 
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         Analyzer mockedAnalyzer = new Analyzer() {
@@ -1162,7 +1193,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         };
 
         IndexAnalyzers mockIndexAnalyzers = new IndexAnalyzers(
-            Map.of("default", new NamedAnalyzer("default", AnalyzerScope.INDEX, mockedAnalyzer)),
+            Map.of(DEFAULT_ANALYZER, new NamedAnalyzer(DEFAULT_ANALYZER, AnalyzerScope.INDEX, mockedAnalyzer)),
             Collections.emptyMap(),
             Collections.emptyMap()
         );
@@ -1183,7 +1214,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .queryTokensMapSupplier(numberTokenSupplier)
-            .searchAnalyzer("default")
+            .searchAnalyzer(DEFAULT_ANALYZER)
             .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
@@ -1203,6 +1234,30 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testDoToQuery_seismicType_nullQueryBuilder() {
+        Supplier<Map<String, Float>> numberTokenSupplier = () -> Map.of("1000", 1.f, "2000", 2.f);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(numberTokenSupplier)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(null);
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
+        doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
+        doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
+        when(mockedMappedFieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+
+        BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
+        booleanQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "1000", 1.f), BooleanClause.Occur.SHOULD);
+        booleanQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "2000", 2.f), BooleanClause.Occur.SHOULD);
+
+        Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
+        assertTrue(query instanceof BooleanQuery);
+    }
+
+    @SneakyThrows
     public void testDoToQuery_seismicType_withFilter() {
         Supplier<Map<String, Float>> numberTokenSupplier = () -> Map.of("1000", 1.f, "2000", 2.f);
         QueryBuilder filter = mock(QueryBuilder.class);
@@ -1213,7 +1268,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryText(QUERY_TEXT)
             .modelId(MODEL_ID)
             .queryTokensMapSupplier(numberTokenSupplier)
-            .searchAnalyzer("default")
+            .searchAnalyzer(DEFAULT_ANALYZER)
             .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
@@ -1231,6 +1286,174 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertTrue(query instanceof SparseVectorQuery);
         SparseVectorQuery sparseVectorQuery = (SparseVectorQuery) query;
         assertEquals(sparseVectorQuery.getFallbackQuery(), booleanQueryBuilder.build());
+    }
+
+    public void testDoXContent_withAllFields_serializesCorrectly() throws IOException {
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        queryBuilder.doXContent(builder, null);
+        builder.endObject();
+
+        String result = builder.toString();
+        assertTrue(result.contains("\"query_text\":\"" + QUERY_TEXT));
+        assertTrue(result.contains("\"model_id\":\"" + MODEL_ID));
+        assertTrue(result.contains("\"analyzer\":\"" + DEFAULT_ANALYZER));
+        assertTrue(result.contains("\"max_token_score\":" + MAX_TOKEN_SCORE));
+        assertTrue(result.contains("\"query_tokens\":{"));
+        assertTrue(result.contains("\"method_parameters\":{"));
+    }
+
+    public void testDoXContent_nullFields() throws IOException {
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME);
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        queryBuilder.doXContent(builder, null);
+        builder.endObject();
+
+        String result = builder.toString();
+        assertFalse(result.contains("\"query_text\":\"" + QUERY_TEXT));
+        assertFalse(result.contains("\"model_id\":\"" + MODEL_ID));
+        assertFalse(result.contains("\"analyzer\":\"" + DEFAULT_ANALYZER));
+        assertFalse(result.contains("\"max_token_score\":" + MAX_TOKEN_SCORE));
+        assertFalse(result.contains("\"query_tokens\":{"));
+        assertFalse(result.contains("\"method_parameters\":{"));
+    }
+
+    public void testDoXContent_seismicNotSupported() throws IOException {
+        setUpClusterService(Version.V_3_2_0);
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        XContentBuilder builder = XContentFactory.jsonBuilder();
+        builder.startObject();
+        queryBuilder.doXContent(builder, null);
+        builder.endObject();
+
+        String result = builder.toString();
+        assertTrue(result.contains("\"query_text\":\"" + QUERY_TEXT));
+        assertTrue(result.contains("\"model_id\":\"" + MODEL_ID));
+        assertTrue(result.contains("\"analyzer\":\"" + DEFAULT_ANALYZER));
+        assertTrue(result.contains("\"max_token_score\":" + MAX_TOKEN_SCORE));
+        assertTrue(result.contains("\"query_tokens\":{"));
+        assertFalse(result.contains("\"method_parameters\":{"));
+    }
+
+    public void testDoEquals_equal() {
+        NeuralSparseQueryBuilder queryBuilder1 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        NeuralSparseQueryBuilder queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertTrue(queryBuilder1.equals(queryBuilder1));
+        assertTrue(queryBuilder1.equals(queryBuilder2));
+    }
+
+    public void testDoEquals_unequal() {
+        NeuralSparseQueryBuilder queryBuilder1 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+
+        assertFalse(queryBuilder1.equals(null));
+        assertFalse(queryBuilder1.equals("hello"));
+
+        NeuralSparseQueryBuilder queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE + 1)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME + "_2")
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT + "_2")
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID + "_2")
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(null)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(() -> Map.of())
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER + "_2")
+            .sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(null);
+        assertFalse(queryBuilder1.equals(queryBuilder2));
+        queryBuilder2 = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(
+                new SparseAnnQueryBuilder().queryCut(3).fieldName(FIELD_NAME).heapFactor(2.0f).k(10).queryTokens(QUERY_TOKENS_IN_ID)
+            );
+        assertFalse(queryBuilder1.equals(queryBuilder2));
     }
 
     private void mockSeismicWithQueryShardContext(QueryRewriteContext queryRewriteContext) {

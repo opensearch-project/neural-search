@@ -4,20 +4,9 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiConsumer;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-
 import lombok.Data;
 import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.get.GetAction;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.get.MultiGetAction;
@@ -35,12 +24,22 @@ import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInference
 import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
-import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
-
-import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.transport.client.OpenSearchClient;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
@@ -57,7 +56,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     private final OpenSearchClient openSearchClient;
     private final boolean skipExisting;
     private final TextEmbeddingInferenceFilter textEmbeddingInferenceFilter;
-    private static final AsymmetricTextEmbeddingParameters tokenIdParameter = AsymmetricTextEmbeddingParameters.builder()
+    private static final AsymmetricTextEmbeddingParameters TOKEN_ID_PARAMETER = AsymmetricTextEmbeddingParameters.builder()
         .sparseEmbeddingFormat(SparseEmbeddingFormat.TOKEN_ID)
         .build();
     private final SparseFieldUtils sparseFieldUtils;
@@ -150,7 +149,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         }
         // https://tiny.amazon.com/imoy8qta ingest documents in a batch belong to the same index
         Object indexObj = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
-        String index = indexObj == null ? null : indexObj.toString();
+        String index = indexObj.toString();
         Set<String> sparseAnnFields = sparseFieldUtils.getSparseAnnFields(index);
         if (sparseAnnFields.isEmpty()) {
             super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
@@ -195,7 +194,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
         inferenceList = sortedResult.v1();
         Map<Integer, Integer> originalOrder = sortedResult.v2();
-        final AsymmetricTextEmbeddingParameters parameters = format == SparseEmbeddingFormat.TOKEN_ID ? tokenIdParameter : null;
+        final AsymmetricTextEmbeddingParameters parameters = format == SparseEmbeddingFormat.TOKEN_ID ? TOKEN_ID_PARAMETER : null;
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
             TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
             parameters,
@@ -342,7 +341,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
                 updatedInferenceList,
                 pruneType,
                 pruneRatio,
-                tokenIdParameter,
+                TOKEN_ID_PARAMETER,
                 getCountDownHandler(counter, exceptions, handler)
             );
         }

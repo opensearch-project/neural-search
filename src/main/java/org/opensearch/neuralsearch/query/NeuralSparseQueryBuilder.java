@@ -4,17 +4,11 @@
  */
 package org.opensearch.neuralsearch.query;
 
-import java.io.IOException;
-import java.nio.BufferUnderflowException;
-import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.BiConsumer;
-
+import com.google.common.annotations.VisibleForTesting;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -31,16 +25,6 @@ import org.apache.lucene.search.Query;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
-import org.opensearch.index.query.QueryCoordinatorContext;
-import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
-import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
-import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
-import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldType;
-import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
-import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.events.EventStatsManager;
-import org.opensearch.transport.client.Client;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.ParseField;
@@ -52,22 +36,36 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.WithFieldName;
+import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.WithFieldName;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
+import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldType;
+import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
-
-import com.google.common.annotations.VisibleForTesting;
-
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
+import org.opensearch.transport.client.Client;
+
+import java.io.IOException;
+import java.nio.BufferUnderflowException;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.BiConsumer;
 
 import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.METHOD_PARAMETERS_FIELD;
 
@@ -365,8 +363,8 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             } else if (QUERY_TOKENS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                 Map<String, Float> queryTokens = parser.map(HashMap::new, XContentParser::floatValue);
                 sparseEncodingQueryBuilder.queryTokensMapSupplier(() -> queryTokens);
-            } else if (METHOD_PARAMETERS_FIELD.match(currentFieldName, parser.getDeprecationHandler())
-                && sparseEncodingQueryBuilder.isSeismicSupported()) {
+            } else if (METHOD_PARAMETERS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                if (sparseEncodingQueryBuilder.isSeismicSupported()) {
                     SparseAnnQueryBuilder builder = SparseAnnQueryBuilder.fromXContent(parser);
                     sparseEncodingQueryBuilder.sparseAnnQueryBuilder(builder);
                 } else {
@@ -375,6 +373,12 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                         String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, currentFieldName)
                     );
                 }
+            } else {
+                throw new ParsingException(
+                    parser.getTokenLocation(),
+                    String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, currentFieldName)
+                );
+            }
         }
     }
 
@@ -544,9 +548,6 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             validateFieldType(ft);
         }
         Map<String, Float> queryTokens = getQueryTokens(context);
-        if (Objects.isNull(queryTokens)) {
-            throw new IllegalArgumentException("Query tokens cannot be null.");
-        }
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
