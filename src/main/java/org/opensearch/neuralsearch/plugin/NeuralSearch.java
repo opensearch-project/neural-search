@@ -244,17 +244,9 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
-        int allocatedProcessors = NeuralSearchSettings.initializeThreadQtySettings(settings);
         return List.of(
             HybridQueryExecutor.getExecutorBuilder(settings),
-            new FixedExecutorBuilder(
-                settings,
-                SparseConstants.THREAD_POOL_NAME,
-                allocatedProcessors,
-                -1,
-                SparseConstants.THREAD_POOL_NAME,
-                false
-            )
+            new FixedExecutorBuilder(settings, SparseConstants.THREAD_POOL_NAME, 1, -1, SparseConstants.THREAD_POOL_NAME, false)
         );
     }
 

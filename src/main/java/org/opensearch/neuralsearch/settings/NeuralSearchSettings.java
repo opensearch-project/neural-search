@@ -8,8 +8,6 @@ import org.opensearch.common.settings.Setting;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
-import org.opensearch.common.settings.Settings;
-import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.core.common.unit.ByteSizeValue;
 
 /**
@@ -20,7 +18,7 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NeuralSearchSettings {
 
-    public static final int DEFAULT_INDEX_THREAD_QTY = -1;
+    public static final int DEFAULT_INDEX_THREAD_QTY = 1;
     public static int MAX_INDEX_THREAD_QTY = 1024;
     public static final String SPARSE_ALGO_PARAM_INDEX_THREAD_QTY = "neural.sparse.algo_param.index_thread_qty";
     public static Integer SPARSE_DEFAULT_ALGO_PARAM_INDEX_THREAD_QTY = DEFAULT_INDEX_THREAD_QTY;
@@ -98,30 +96,11 @@ public final class NeuralSearchSettings {
     public static Setting<Integer> SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING = Setting.intSetting(
         SPARSE_ALGO_PARAM_INDEX_THREAD_QTY,
         SPARSE_DEFAULT_ALGO_PARAM_INDEX_THREAD_QTY,
-        -1, // -1 means that user did not give specific thread quantity
+        1, // 1 means that user did not give specific thread quantity
         MAX_INDEX_THREAD_QTY,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
-
-    public static int initializeThreadQtySettings(Settings settings) {
-        int maxThreadQty = OpenSearchExecutors.allocatedProcessors(settings);
-        int threadQty = SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING.get(settings);
-        if (threadQty == DEFAULT_INDEX_THREAD_QTY) {
-            threadQty = Math.max(maxThreadQty / 2, 1);
-        }
-        MAX_INDEX_THREAD_QTY = maxThreadQty;
-        SPARSE_DEFAULT_ALGO_PARAM_INDEX_THREAD_QTY = threadQty;
-        SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING = Setting.intSetting(
-            SPARSE_ALGO_PARAM_INDEX_THREAD_QTY,
-            SPARSE_DEFAULT_ALGO_PARAM_INDEX_THREAD_QTY,
-            1,
-            MAX_INDEX_THREAD_QTY,
-            Setting.Property.NodeScope,
-            Setting.Property.Dynamic
-        );
-        return threadQty;
-    }
 
     /**
      * A constant by which the neural memory estimations are multiplied to determine the final estimation. Default is 1.

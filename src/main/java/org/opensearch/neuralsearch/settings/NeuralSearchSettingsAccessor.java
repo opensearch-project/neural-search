@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.settings;
 import lombok.Getter;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
@@ -33,10 +34,10 @@ public class NeuralSearchSettingsAccessor {
     public NeuralSearchSettingsAccessor(ClusterService clusterService, Settings settings) {
         isStatsEnabled = NeuralSearchSettings.NEURAL_STATS_ENABLED.get(settings);
         isAgenticSearchEnabled = NeuralSearchSettings.AGENTIC_SEARCH_ENABLED.get(settings);
-        registerSettingsCallbacks(clusterService);
+        registerSettingsCallbacks(clusterService, settings);
     }
 
-    private void registerSettingsCallbacks(ClusterService clusterService) {
+    private void registerSettingsCallbacks(ClusterService clusterService, Settings settings) {
         clusterService.getClusterSettings().addSettingsUpdateConsumer(NeuralSearchSettings.NEURAL_STATS_ENABLED, value -> {
             // If stats are being toggled off, clear and reset all stats
             if (isStatsEnabled && (value == false)) {
@@ -53,9 +54,9 @@ public class NeuralSearchSettingsAccessor {
                 MemoryUsageManager.getInstance().setLimitAndOverhead(limit, overhead);
             });
         clusterService.getClusterSettings()
-            .addSettingsUpdateConsumer(
-                NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
-                ClusterTrainingExecutor::updateThreadPoolSize
-            );
+            .addSettingsUpdateConsumer(NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING, (setting) -> {
+                int maxThreadQty = OpenSearchExecutors.allocatedProcessors(settings);
+                ClusterTrainingExecutor.updateThreadPoolSize(maxThreadQty, setting);
+            });
     }
 }

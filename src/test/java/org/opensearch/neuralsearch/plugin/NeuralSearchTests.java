@@ -77,7 +77,7 @@ import org.opensearch.threadpool.ThreadPool;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
-    private static final int NEW_THREAD_COUNT = OpenSearchExecutors.allocatedProcessors(Settings.EMPTY);
+    private static final int NEW_THREAD_COUNT = Math.max(OpenSearchExecutors.allocatedProcessors(Settings.EMPTY) / 2, 1);
     private static final int CURRENT_THREAD_COUNT = 6;
     private static final int EXPECTED_EXECUTOR_BUILDERS_COUNT = 2;
 
@@ -289,7 +289,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         when(mockExecutor.getMaximumPoolSize()).thenReturn(CURRENT_THREAD_COUNT);
 
         ClusterTrainingExecutor.getInstance().initialize(mockThreadPool);
-        ClusterTrainingExecutor.updateThreadPoolSize(NEW_THREAD_COUNT);
+        ClusterTrainingExecutor.updateThreadPoolSize(OpenSearchExecutors.allocatedProcessors(Settings.EMPTY), NEW_THREAD_COUNT);
 
         ArgumentCaptor<Settings> settingsCaptor = ArgumentCaptor.forClass(Settings.class);
         Mockito.verify(mockThreadPool).setThreadPool(settingsCaptor.capture());
@@ -311,13 +311,9 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertTrue("Setting should be dynamic", threadQtySetting.isDynamic());
         assertTrue("Setting should be node scope", threadQtySetting.hasNodeScope());
 
-        // The default value may have been updated by previous tests calling updateThreadQtySettings
-        // So we check that it's either the original default (-1) or the computed default
+        // The default should be 1
         int defaultValue = (int) threadQtySetting.getDefault(Settings.EMPTY);
-        assertTrue(
-            "Default value should be either -1 or computed default",
-            defaultValue == NeuralSearchSettings.DEFAULT_INDEX_THREAD_QTY || defaultValue > 0
-        );
+        assertEquals("Default value should be 1", 1, defaultValue);
     }
 
     public void testGetExecutorBuildersWithCustomThreadQty() {
