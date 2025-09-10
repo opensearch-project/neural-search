@@ -14,7 +14,6 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.AbstractNeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -223,8 +222,8 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         for (String index : indices) {
             Set<String> sparseAnnFields = sparseFieldUtils.getSparseAnnFields(index);
             for (Map.Entry<AbstractNeuralQueryBuilder<?>, Float> entry : queryBuilderMap.entries()) {
-                NeuralSparseQueryBuilder neuralSparseQueryBuilder = (NeuralSparseQueryBuilder) entry.getKey();
-                String fieldName = neuralSparseQueryBuilder.fieldName();
+                AbstractNeuralQueryBuilder<?> queryBuilder = entry.getKey();
+                String fieldName = queryBuilder.fieldName();
                 if (sparseAnnFields.contains(fieldName)) {
                     throw new IllegalArgumentException(
                         String.format(Locale.ROOT, "Two phase search processor is not compatible with [%s] field for now", SEISMIC)
