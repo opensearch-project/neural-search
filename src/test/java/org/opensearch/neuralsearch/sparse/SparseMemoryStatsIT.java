@@ -39,14 +39,14 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
     public void setUp() {
         super.setUp();
         // Only enable stats for stats related tests to prevent collisions
-        updateClusterSettings(NeuralSearchSettings.NEURAL_STATS_ENABLED.getKey(), true);
+        enableStats();
     }
 
     @After
     @Override
     @SneakyThrows
     public void tearDown() {
-        updateClusterSettings(NeuralSearchSettings.NEURAL_STATS_ENABLED.getKey(), false);
+        disableStats();
         updateClusterSettings(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT.getKey(), "50%");
         super.tearDown();
     }
