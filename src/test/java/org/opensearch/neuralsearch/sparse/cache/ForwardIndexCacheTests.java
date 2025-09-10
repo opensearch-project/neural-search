@@ -27,7 +27,6 @@ public class ForwardIndexCacheTests extends AbstractSparseTestBase {
     private long emptyForwardIndexCacheSize;
     private long emptyForwardIndexCacheItemSize;
     private ForwardIndexCache forwardIndexCache;
-    private RamBytesRecorder mockGlobalRecorder;
 
     /**
      * Set up the test environment before each test.

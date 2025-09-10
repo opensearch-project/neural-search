@@ -65,10 +65,6 @@ import static org.apache.lucene.tests.util.LuceneTestCase.random;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import org.apache.lucene.index.LeafReader;
-import org.apache.lucene.index.FilterLeafReader;
-import org.apache.lucene.index.FilterDirectoryReader;
-
 public class TestsPrepareUtils {
 
     private final static String fieldName = "test_field";

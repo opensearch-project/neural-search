@@ -238,7 +238,7 @@ public class RestNeuralStatsAction extends BaseRestHandler {
 
         String[] stats = optionalStats.get();
         Set<String> invalidStatNames = new HashSet<>();
-        boolean includeEventsAndMetrics = neuralStatsInput.includeEventsAndMetrics();
+        boolean includeEvents = neuralStatsInput.isIncludeEvents();
         boolean includeInfo = neuralStatsInput.isIncludeInfo();
         boolean includeMetrics = neuralStatsInput.isIncludeMetrics();
 
@@ -254,17 +254,10 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                 if (infoStatName.version().onOrBefore(minClusterVersion)) {
                     neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
                 }
-            } else if (includeEventsAndMetrics) {
-                if (EventStatName.isValidName(normalizedStat)) {
-                    EventStatName eventStatName = EventStatName.from(normalizedStat);
-                    if (eventStatName.version().onOrBefore(minClusterVersion)) {
-                        neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
-                    }
-                } else if (MetricStatName.isValidName(normalizedStat)) {
-                    MetricStatName metricStatName = MetricStatName.from(normalizedStat);
-                    if (metricStatName.version().onOrBefore(minClusterVersion)) {
-                        neuralStatsInput.getMetricStatNames().add(MetricStatName.from(normalizedStat));
-                    }
+            } else if (includeEvents && EventStatName.isValidName(normalizedStat)) {
+                EventStatName eventStatName = EventStatName.from(normalizedStat);
+                if (eventStatName.version().onOrBefore(minClusterVersion)) {
+                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
                 }
             } else if (includeMetrics && MetricStatName.isValidName(normalizedStat)) {
                 MetricStatName metricStatName = MetricStatName.from(normalizedStat);
@@ -288,9 +281,8 @@ public class RestNeuralStatsAction extends BaseRestHandler {
             if (neuralStatsInput.isIncludeInfo()) {
                 neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
             }
-            if (neuralStatsInput.includeEventsAndMetrics()) {
+            if (neuralStatsInput.isIncludeEvents()) {
                 neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
-                neuralStatsInput.getMetricStatNames().addAll(EnumSet.allOf(MetricStatName.class));
             }
             if (neuralStatsInput.isIncludeMetrics()) {
                 neuralStatsInput.getMetricStatNames().addAll(EnumSet.allOf(MetricStatName.class));
@@ -305,20 +297,13 @@ public class RestNeuralStatsAction extends BaseRestHandler {
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(InfoStatName.class)))
                     );
             }
-            if (neuralStatsInput.includeEventsAndMetrics()) {
+            if (neuralStatsInput.isIncludeEvents()) {
                 neuralStatsInput.getEventStatNames()
                     .addAll(
                         EnumSet.allOf(EventStatName.class)
                             .stream()
                             .filter(statName -> statName.version().onOrBefore(minVersion))
                             .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
-                    );
-                neuralStatsInput.getMetricStatNames()
-                    .addAll(
-                        EnumSet.allOf(MetricStatName.class)
-                            .stream()
-                            .filter(statName -> statName.version().onOrBefore(minVersion))
-                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(MetricStatName.class)))
                     );
             }
             if (neuralStatsInput.isIncludeMetrics()) {
@@ -345,5 +330,4 @@ public class RestNeuralStatsAction extends BaseRestHandler {
     private boolean isValidStatName(String statName) {
         return InfoStatName.isValidName(statName) || EventStatName.isValidName(statName) || MetricStatName.isValidName(statName);
     }
-
 }

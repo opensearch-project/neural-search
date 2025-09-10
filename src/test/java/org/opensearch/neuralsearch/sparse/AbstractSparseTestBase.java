@@ -15,7 +15,6 @@ import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
-
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.apache.lucene.index.LeafReader;

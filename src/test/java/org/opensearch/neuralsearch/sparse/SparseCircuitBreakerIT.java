@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse;
 
 import lombok.SneakyThrows;
 import org.junit.After;
+import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 
@@ -80,6 +81,46 @@ public class SparseCircuitBreakerIT extends SparseBaseIT {
         assertEquals(expectedHits, hits);
     }
 
+    /**
+     * By setting circuit breaker limit to be zero, the LRU cache eviction will be enabled.
+     * Given the same index, the Seismic query should return the same results with cache eviction
+     */
+    @SneakyThrows
+    public void testQueryWithLRUEviction() {
+        // Create index and perform ingestion
+        int docCount = 100;
+        List<Map<String, Float>> docs1 = prepareIngestDocuments(docCount);
+        List<Map<String, Float>> docs2 = prepareIngestDocuments(docCount);
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 0.1f, "2000", 0.2f)
+        );
+
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, 100);
+        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs1);
+        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs2);
+
+        MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
+        Map<String, Object> expectedHits = getTotalHits(search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10));
+        Map<String, Object> expectedIngestedDocuments = getTotalHits(search(TEST_INDEX_NAME, matchAllQueryBuilder, 200));
+
+        // Delete index, ingest half documents and enable cache eviction by setting limit to zero
+        deleteIndex(TEST_INDEX_NAME);
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, 100);
+        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs1);
+        updateClusterSettings(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT.getKey(), "0%");
+        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs2);
+
+        Map<String, Object> hits = getTotalHits(search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10));
+        Map<String, Object> ingestedDocuments = getTotalHits(search(TEST_INDEX_NAME, matchAllQueryBuilder, 200));
+
+        assertEquals(expectedHits, hits);
+        assertEquals(expectedIngestedDocuments, ingestedDocuments);
+    }
+
     @SneakyThrows
     private Map<String, Object> ingestSparseIndexAndSearch(
         String indexName,
@@ -96,7 +137,7 @@ public class SparseCircuitBreakerIT extends SparseBaseIT {
         ingestDocumentsAndForceMerge(indexName, textField, sparseField, docs);
 
         // Verify that without cache, the search results remain the same
-        return getTotalHits(search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10));
+        return getTotalHits(search(indexName, neuralSparseQueryBuilder, 10));
     }
 
     @SneakyThrows

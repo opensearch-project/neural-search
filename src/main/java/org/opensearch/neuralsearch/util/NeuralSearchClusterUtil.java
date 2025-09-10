@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.util;
 
 import lombok.Getter;
 import lombok.NonNull;
-import lombok.Getter;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
