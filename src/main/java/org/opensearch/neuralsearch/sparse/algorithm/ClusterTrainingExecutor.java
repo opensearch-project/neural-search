@@ -5,9 +5,7 @@
 package org.opensearch.neuralsearch.sparse.algorithm;
 
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.threadpool.ThreadPool;
 
 import java.util.Locale;
@@ -16,8 +14,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Future;
 
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
-
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY;
 
 /**
  * Singleton thread pool manager for cluster training operations.
