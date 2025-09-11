@@ -51,7 +51,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
     }
 
     /**
-     * Resets circuit breaker and neural stats to default settings
+     * Resets neural stats to default settings
      */
     @After
     @Override
