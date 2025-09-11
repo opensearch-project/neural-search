@@ -155,7 +155,7 @@ runs:
         # Wait for TorchServe to be ready
         echo "Waiting for TorchServe to restart..."
         for i in {1..30}; do
-          if docker exec $CONTAINER_ID wget -qO- http://localhost:8080/ping 2>/dev/null | grep -q "Healthy"; then
+          if curl -s http://localhost:8080/ping | grep -q "Healthy"; then
             echo "TorchServe is ready!"
             break
           fi
@@ -164,24 +164,39 @@ runs:
         done
         echo ""
 
-        # Verify model is loaded
-        echo "Verifying model is loaded..."
-        for i in {1..20}; do
-          MODEL_CHECK=$(docker exec $CONTAINER_ID wget -qO- http://localhost:8081/models 2>/dev/null || echo "[]")
-          if echo "$MODEL_CHECK" | grep -q "semantic_highlighter"; then
-            echo "Model loaded successfully!"
-            echo "$MODEL_CHECK"
+        # Register the model with TorchServe
+        echo "Registering model with TorchServe..."
+        REGISTER_RESPONSE=$(curl -s -X POST "http://localhost:8081/models" \
+          -F "model_name=semantic_highlighter" \
+          -F "url=semantic_highlighter.mar" \
+          -F "initial_workers=1" \
+          -F "synchronous=true" \
+          -F "max_batch_delay=50")
+        
+        echo "Register response: $REGISTER_RESPONSE"
+        
+        # Wait for model to be ready
+        echo "Waiting for model to be ready..."
+        for i in {1..30}; do
+          MODEL_STATUS=$(curl -s http://localhost:8081/models/semantic_highlighter | jq -r '.[] | select(.modelName=="semantic_highlighter") | .workers[0].status' 2>/dev/null || echo "")
+          if [ "$MODEL_STATUS" = "READY" ]; then
+            echo "Model is ready!"
             break
           fi
-          echo "Waiting for model to load... ($i/20)"
+          echo "Model status: $MODEL_STATUS (attempt $i/30)"
           sleep 3
         done
 
+        # Verify model is loaded
+        echo "Verifying model is loaded..."
+        MODEL_CHECK=$(curl -s http://localhost:8081/models)
+        echo "Models loaded: $MODEL_CHECK"
+
         # Test inference
         echo "Testing inference..."
-        TEST_RESPONSE=$(docker exec $CONTAINER_ID wget -qO- --post-data='{"question": "What is OpenSearch?", "context": "OpenSearch is a search engine"}' \
-          --header="Content-Type: application/json" \
-          http://localhost:8080/predictions/semantic_highlighter 2>/dev/null || echo "{}")
+        TEST_RESPONSE=$(curl -s -X POST http://localhost:8080/predictions/semantic_highlighter \
+          -H "Content-Type: application/json" \
+          -d '{"question": "What is OpenSearch?", "context": "OpenSearch is a search engine"}' || echo "{}")
 
         if echo "$TEST_RESPONSE" | grep -q "tokens"; then
           echo "✓ TorchServe model deployment successful!"
