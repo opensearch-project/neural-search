@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
@@ -91,15 +92,22 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertTrue("Memory usage should increase after warm up", afterWarmUpSparseMemoryUsageSum > originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterWarmUpSparseMemoryUsageStats.size());
         // In multi-node environment, only nodes with shards will have memory usage changes
-        // Verify at least one node has increased memory usage
-        boolean hasMemoryIncrease = false;
+        int nodesIncreaseMemoryNumber = 0;
+        int nodesRemainMemoryNumber = 0;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
             if (afterWarmUpSparseMemoryUsageStats.get(i) > originalSparseMemoryUsageStats.get(i)) {
-                hasMemoryIncrease = true;
-                break;
+                nodesIncreaseMemoryNumber += 1;
+            }
+            if (Objects.equals(afterWarmUpSparseMemoryUsageStats.get(i), originalSparseMemoryUsageStats.get(i))) {
+                nodesRemainMemoryNumber += 1;
             }
         }
-        assertTrue("At least one node should have increased memory usage after warm up", hasMemoryIncrease);
+        assertEquals("One node should have increased memory usage after warm up", 1, nodesIncreaseMemoryNumber);
+        assertEquals(
+            "The nodes without shard should have remained the same memory usage after warm up",
+            getNodeCount() - 1,
+            nodesRemainMemoryNumber
+        );
     }
 
     /**
@@ -128,15 +136,22 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertTrue("Memory usage should decrease after clear cache", afterClearCacheSparseMemoryUsageSum < originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterClearCacheSparseMemoryUsageStats.size());
         // In multi-node environment, only nodes with shards will have memory usage changes
-        // Verify at least one node has decreased memory usage
-        boolean hasMemoryDecrease = false;
+        int nodesDecreaseMemoryNumber = 0;
+        int nodesRemainMemoryNumber = 0;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
             if (afterClearCacheSparseMemoryUsageStats.get(i) < originalSparseMemoryUsageStats.get(i)) {
-                hasMemoryDecrease = true;
-                break;
+                nodesDecreaseMemoryNumber += 1;
+            }
+            if (Objects.equals(afterClearCacheSparseMemoryUsageStats.get(i), originalSparseMemoryUsageStats.get(i))) {
+                nodesRemainMemoryNumber += 1;
             }
         }
-        assertTrue("At least one node should have decreased memory usage after clear cache", hasMemoryDecrease);
+        assertEquals("One node should have decreased memory usage after clear cache", 1, nodesDecreaseMemoryNumber);
+        assertEquals(
+            "The nodes without shard should have remained the same memory usage after clear cache",
+            getNodeCount() - 1,
+            nodesRemainMemoryNumber
+        );
     }
 
     /**
@@ -166,10 +181,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(
-            responseMap.get("_shards"),
-            Map.of("total", 3 * originalSparseMemoryUsageStats.size(), "successful", 3 * originalSparseMemoryUsageStats.size(), "failed", 0)
-        );
+        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * getNodeCount(), "successful", 3 * getNodeCount(), "failed", 0));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -203,10 +215,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(
-            responseMap.get("_shards"),
-            Map.of("total", 3 * originalSparseMemoryUsageStats.size(), "successful", 3 * originalSparseMemoryUsageStats.size(), "failed", 0)
-        );
+        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * getNodeCount(), "successful", 3 * getNodeCount(), "failed", 0));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -253,15 +262,22 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertTrue("Memory usage should increase after warm up", afterWarmUpSparseMemoryUsageSum > originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterWarmUpSparseMemoryUsageStats.size());
         // In multi-node environment, only nodes with shards will have memory usage changes
-        // Verify at least one node has increased memory usage
-        boolean hasMemoryIncrease = false;
+        int nodesIncreaseMemoryNumber = 0;
+        int nodesRemainMemoryNumber = 0;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
             if (afterWarmUpSparseMemoryUsageStats.get(i) > originalSparseMemoryUsageStats.get(i)) {
-                hasMemoryIncrease = true;
-                break;
+                nodesIncreaseMemoryNumber += 1;
+            }
+            if (Objects.equals(afterWarmUpSparseMemoryUsageStats.get(i), originalSparseMemoryUsageStats.get(i))) {
+                nodesRemainMemoryNumber += 1;
             }
         }
-        assertTrue("At least one node should have increased memory usage after warm up", hasMemoryIncrease);
+        assertEquals("One node should have increased memory usage after warm up", 1, nodesIncreaseMemoryNumber);
+        assertEquals(
+            "The nodes without shard should have remained the same memory usage after warm up",
+            getNodeCount() - 1,
+            nodesRemainMemoryNumber
+        );
     }
 
     /**
@@ -294,15 +310,22 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertTrue("Memory usage should decrease after clear cache", afterClearCacheSparseMemoryUsageSum < originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterClearCacheSparseMemoryUsageStats.size());
         // In multi-node environment, only nodes with shards will have memory usage changes
-        // Verify at least one node has decreased memory usage
-        boolean hasMemoryDecrease = false;
+        int nodesDecreaseMemoryNumber = 0;
+        int nodesRemainMemoryNumber = 0;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
             if (afterClearCacheSparseMemoryUsageStats.get(i) < originalSparseMemoryUsageStats.get(i)) {
-                hasMemoryDecrease = true;
-                break;
+                nodesDecreaseMemoryNumber += 1;
+            }
+            if (Objects.equals(afterClearCacheSparseMemoryUsageStats.get(i), originalSparseMemoryUsageStats.get(i))) {
+                nodesRemainMemoryNumber += 1;
             }
         }
-        assertTrue("At least one node should have decreased memory usage after clear cache", hasMemoryDecrease);
+        assertEquals("One node should have decreased memory usage after clear cache", 1, nodesDecreaseMemoryNumber);
+        assertEquals(
+            "The nodes without shard should have remained the same memory usage after clear cache",
+            getNodeCount() - 1,
+            nodesRemainMemoryNumber
+        );
     }
 
     /**
