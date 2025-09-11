@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.algorithm;
 
+import lombok.extern.log4j.Log4j2;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.threadpool.ThreadPool;
 
@@ -17,6 +18,7 @@ import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 /**
  * Singleton thread pool manager for cluster training operations.
  */
+@Log4j2
 public class ClusterTrainingExecutor {
     private ThreadPool threadpool = null;
     private static ClusterTrainingExecutor INSTANCE;
@@ -74,9 +76,18 @@ public class ClusterTrainingExecutor {
     /**
      * Updates the thread pool size.
      *
-     * @param newThreadQty the new thread count
+     * @param availableProcessors the available processor counts of environment
+     * @param userSettingNumber the user setting for thread pool size
      */
-    public static void updateThreadPoolSize(Integer newThreadQty) {
+    public static void updateThreadPoolSize(Integer availableProcessors, Integer userSettingNumber) {
+        int newThreadQty = userSettingNumber <= availableProcessors ? userSettingNumber : availableProcessors;
+        if (userSettingNumber > availableProcessors) {
+            log.warn(
+                "User specified thread count ({}) exceeds available processors ({}). Limiting to available processor count.",
+                userSettingNumber,
+                availableProcessors
+            );
+        }
         Settings threadPoolSettings = Settings.builder()
             .put(String.format(Locale.ROOT, "%s.size", SparseConstants.THREAD_POOL_NAME), newThreadQty)
             .build();

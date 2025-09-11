@@ -116,11 +116,12 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
 
     public void testUpdateThreadPoolSize_updatesThreadPoolWithCorrectSettings() {
         ClusterTrainingExecutor.getInstance().initialize(threadPool);
-        Integer newThreadQty = 10;
+        Integer userSettingNumber = 10;
+        Integer availableProcessors = 12; // Larger than user setting
 
         ArgumentCaptor<Settings> settingsCaptor = ArgumentCaptor.forClass(Settings.class);
 
-        ClusterTrainingExecutor.updateThreadPoolSize(newThreadQty);
+        ClusterTrainingExecutor.updateThreadPoolSize(availableProcessors, userSettingNumber);
 
         verify(threadPool).setThreadPool(settingsCaptor.capture());
 
@@ -128,5 +129,28 @@ public class ClusterTrainingExecutorTests extends AbstractSparseTestBase {
 
         String expectedKey = SparseConstants.THREAD_POOL_NAME + ".size";
         assertTrue("Settings should contain the thread pool size key", capturedSettings.keySet().contains(expectedKey));
+        assertEquals("Thread pool size should match user setting", userSettingNumber, capturedSettings.getAsInt(expectedKey, -1));
+    }
+
+    public void testUpdateThreadPoolSize_limitsToAvailableProcessors() {
+        ClusterTrainingExecutor.getInstance().initialize(threadPool);
+        Integer userSettingNumber = 10;
+        Integer availableProcessors = 8; // Smaller than user setting
+
+        ArgumentCaptor<Settings> settingsCaptor = ArgumentCaptor.forClass(Settings.class);
+
+        ClusterTrainingExecutor.updateThreadPoolSize(availableProcessors, userSettingNumber);
+
+        verify(threadPool).setThreadPool(settingsCaptor.capture());
+
+        Settings capturedSettings = settingsCaptor.getValue();
+
+        String expectedKey = SparseConstants.THREAD_POOL_NAME + ".size";
+        assertTrue("Settings should contain the thread pool size key", capturedSettings.keySet().contains(expectedKey));
+        assertEquals(
+            "Thread pool size should be capped at available processor count",
+            availableProcessors,
+            capturedSettings.getAsInt(expectedKey, -1)
+        );
     }
 }

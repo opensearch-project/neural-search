@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.junit.Before;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
@@ -23,6 +24,7 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+import org.opensearch.common.util.concurrent.OpenSearchThreadPoolExecutor;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.breaker.CircuitBreakingException;
 import org.opensearch.env.Environment;
@@ -50,7 +52,9 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
+import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
+import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
@@ -72,6 +76,10 @@ import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 
 public class NeuralSearchTests extends OpenSearchQueryTestCase {
+
+    private static final int NEW_THREAD_COUNT = Math.max(OpenSearchExecutors.allocatedProcessors(Settings.EMPTY) / 2, 1);
+    private static final int CURRENT_THREAD_COUNT = 6;
+    private static final int EXPECTED_EXECUTOR_BUILDERS_COUNT = 2;
 
     private NeuralSearch plugin;
 
@@ -115,7 +123,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
                 NeuralSearchSettings.NEURAL_STATS_ENABLED,
                 NeuralSearchSettings.AGENTIC_SEARCH_ENABLED,
                 NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT,
-                NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD
+                NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD,
+                NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING
             )
         );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
@@ -190,7 +199,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(8, settings.size());
+        assertEquals(9, settings.size());
     }
 
     public void testRequestProcessors() {
@@ -223,7 +232,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
         assertNotNull(executorBuilders);
         assertFalse(executorBuilders.isEmpty());
-        assertEquals("Unexpected number of executor builders are registered", 1, executorBuilders.size());
+        assertEquals("Unexpected number of executor builders are registered", 2, executorBuilders.size());
         assertTrue(executorBuilders.get(0) instanceof FixedExecutorBuilder);
     }
 
@@ -269,6 +278,59 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         plugin.setCircuitBreaker(circuitBreaker);
 
         assertFalse(CircuitBreakerManager.addMemoryUsage(2048L, "test_memory"));
+    }
+
+    public void testUpdateThreadPoolSize() {
+        ThreadPool mockThreadPool = mock(ThreadPool.class);
+        OpenSearchThreadPoolExecutor mockExecutor = mock(OpenSearchThreadPoolExecutor.class);
+
+        when(mockThreadPool.executor(SparseConstants.THREAD_POOL_NAME)).thenReturn(mockExecutor);
+        when(mockExecutor.getCorePoolSize()).thenReturn(CURRENT_THREAD_COUNT);
+        when(mockExecutor.getMaximumPoolSize()).thenReturn(CURRENT_THREAD_COUNT);
+
+        ClusterTrainingExecutor.getInstance().initialize(mockThreadPool);
+        ClusterTrainingExecutor.updateThreadPoolSize(OpenSearchExecutors.allocatedProcessors(Settings.EMPTY), NEW_THREAD_COUNT);
+
+        ArgumentCaptor<Settings> settingsCaptor = ArgumentCaptor.forClass(Settings.class);
+        Mockito.verify(mockThreadPool).setThreadPool(settingsCaptor.capture());
+
+        Settings capturedSettings = settingsCaptor.getValue();
+        assertEquals(String.valueOf(NEW_THREAD_COUNT), capturedSettings.get(SparseConstants.THREAD_POOL_NAME + ".size"));
+    }
+
+    public void testThreadPoolSettingRegistration() {
+        List<Setting<?>> settings = plugin.getSettings();
+
+        assertTrue(
+            "SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING should be registered",
+            settings.contains(NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING)
+        );
+
+        Setting<Integer> threadQtySetting = NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING;
+        assertEquals(NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY, threadQtySetting.getKey());
+        assertTrue("Setting should be dynamic", threadQtySetting.isDynamic());
+        assertTrue("Setting should be node scope", threadQtySetting.hasNodeScope());
+
+        // The default should be 1
+        int defaultValue = (int) threadQtySetting.getDefault(Settings.EMPTY);
+        assertEquals("Default value should be 1", 1, defaultValue);
+    }
+
+    public void testGetExecutorBuildersWithCustomThreadQty() {
+        Settings customSettings = Settings.builder().put(NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY, NEW_THREAD_COUNT).build();
+
+        List<ExecutorBuilder<?>> executorBuilders = plugin.getExecutorBuilders(customSettings);
+
+        assertNotNull(executorBuilders);
+        assertEquals(EXPECTED_EXECUTOR_BUILDERS_COUNT, executorBuilders.size());
+
+        ExecutorBuilder<?> clusterTrainingBuilder = executorBuilders.get(1);
+        assertTrue("Should be FixedExecutorBuilder", clusterTrainingBuilder instanceof FixedExecutorBuilder);
+
+        Settings defaultSettings = Settings.builder().build();
+        List<ExecutorBuilder<?>> defaultBuilders = plugin.getExecutorBuilders(defaultSettings);
+        assertEquals(EXPECTED_EXECUTOR_BUILDERS_COUNT, defaultBuilders.size());
+        assertTrue(defaultBuilders.get(1) instanceof FixedExecutorBuilder);
     }
 
     public void testOnIndexModuleWithSparseIndexSettings() {
