@@ -4,13 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
-import static org.mockito.Mockito.mock;
-import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
-import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
-import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
-import static org.opensearch.neuralsearch.util.prune.PruneUtils.PRUNE_TYPE_FIELD;
-import static org.opensearch.neuralsearch.util.prune.PruneUtils.PRUNE_RATIO_FIELD;
-
 import lombok.SneakyThrows;
 import org.junit.Before;
 import org.opensearch.OpenSearchParseException;
@@ -25,6 +18,13 @@ import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import static org.mockito.Mockito.mock;
+import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
+import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
+import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
+import static org.opensearch.neuralsearch.util.prune.PruneUtils.PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.util.prune.PruneUtils.PRUNE_TYPE_FIELD;
 
 public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTestCase {
     private static final String PROCESSOR_TAG = "mockTag";
@@ -50,7 +50,7 @@ public class SparseEncodingEmbeddingProcessorFactoryTests extends OpenSearchTest
             clientAccessor,
             environment,
             clusterService,
-            new SparseFieldUtils(clusterService)
+            mock(SparseFieldUtils.class)
         );
     }
 

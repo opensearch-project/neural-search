@@ -662,7 +662,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
     @VisibleForTesting
     SparseFieldUtils getSparseFieldUtils() {
         if (sparseFieldUtils == null) {
-            sparseFieldUtils = new SparseFieldUtils(NeuralSearchClusterUtil.instance().getClusterService());
+            sparseFieldUtils = SparseFieldUtils.getInstance();
         }
         return sparseFieldUtils;
     }

@@ -46,7 +46,8 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         when(clusterState.metadata()).thenReturn(metadata);
         when(metadata.index(anyString())).thenReturn(indexMetadata);
 
-        sparseFieldUtils = new SparseFieldUtils(clusterService);
+        SparseFieldUtils.initialize(clusterService);
+        sparseFieldUtils = SparseFieldUtils.getInstance();
     }
 
     public void testGetSparseAnnFields_whenNullSparseIndex_thenReturnEmptySet() {

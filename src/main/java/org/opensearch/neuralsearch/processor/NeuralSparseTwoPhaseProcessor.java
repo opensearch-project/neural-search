@@ -17,7 +17,6 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -284,7 +283,7 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
                 pruneType,
                 windowExpansion,
                 maxWindowSize,
-                new SparseFieldUtils(NeuralSearchClusterUtil.instance().getClusterService())
+                SparseFieldUtils.getInstance()
             );
         }
     }
