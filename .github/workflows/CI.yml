@@ -119,16 +119,91 @@ jobs:
         os: [ ubuntu-latest ]
     name: Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
-      - name: Build and Run Tests
+
+      - name: Start TorchServe Container
         run: |
-          ./gradlew integTest
+          echo "Starting TorchServe container..."
+          docker run -d \
+            --name torchserve \
+            -p 8080:8080 \
+            -p 8081:8081 \
+            --memory 2g \
+            --cpus 1 \
+            pytorch/torchserve:0.9.0-cpu \
+            torchserve --start --model-store /home/model-server/model-store --ts-config /home/model-server/config.properties
+
+          # Give container time to start
+          sleep 10
+
+          echo "Container status:"
+          docker ps
+
+          echo "Checking TorchServe health..."
+          for i in {1..10}; do
+            if curl -s http://localhost:8080/ping | grep -q "Healthy"; then
+              echo "✓ TorchServe is ready!"
+              break
+            fi
+            echo "Waiting for TorchServe... ($i/10)"
+            [ $i -eq 10 ] && { echo "ERROR: TorchServe not responding"; exit 1; }
+            sleep 3
+          done
+
+      - name: Setup TorchServe Model
+        uses: ./.github/actions/setup-torchserve
+        with:
+          python-version: '3.9'
+          torchserve-endpoint: 'http://localhost:8080'
+          handler-path: 'src/test/resources/remote-models/torchserve/handlers/semantic_highlighting_handler.py'
+          model-name: 'semantic_highlighter'
+
+      - name: Verify Model Deployment
+        run: |
+          echo "Checking loaded models..."
+          curl -s http://localhost:8081/models | jq . || echo "Models: $(curl -s http://localhost:8081/models)"
+
+          echo ""
+          echo "Testing model inference..."
+          TEST_RESPONSE=$(curl -s -X POST http://localhost:8080/predictions/semantic_highlighter \
+            -H "Content-Type: application/json" \
+            -d '{
+              "question": "What is OpenSearch?",
+              "context": "OpenSearch is a distributed, community-driven, Apache 2.0-licensed, 100% open-source search and analytics suite."
+            }')
+
+          echo "Response: $TEST_RESPONSE"
+
+          if echo "$TEST_RESPONSE" | grep -q "highlights"; then
+            echo "✓ Model inference working correctly!"
+          else
+            echo "✗ Model inference failed"
+            docker logs torchserve --tail 50
+            exit 1
+          fi
+
+      - name: Build and Run Integration Tests
+        env:
+          TORCHSERVE_ENDPOINT: http://localhost:8080
+          REMOTE_MODEL_ENDPOINT: http://localhost:8080/predictions/semantic_highlighter
+        run: |
+          echo "Using TorchServe endpoint: $TORCHSERVE_ENDPOINT"
+          echo "Using Remote Model endpoint: $REMOTE_MODEL_ENDPOINT"
+          ./gradlew integTest --info
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop torchserve || true
+          docker rm torchserve || true
 
   integMultiNodeTest:
       needs: Precommit-neural-search-linux

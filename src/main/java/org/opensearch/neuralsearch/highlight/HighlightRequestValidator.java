@@ -58,6 +58,11 @@ public class HighlightRequestValidator {
             // Extract model ID
             String modelId = extractModelId(request, defaultModelId);
 
+            // Model ID must be provided either in pipeline or query
+            if (modelId == null || modelId.isEmpty()) {
+                return ValidationResult.invalid("Model ID is required either in pipeline configuration or query options");
+            }
+
             // Extract tags (query-level overrides pipeline-level)
             String preTag = extractPreTag(request, defaultPreTag);
             String postTag = extractPostTag(request, defaultPostTag);
