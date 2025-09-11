@@ -49,7 +49,7 @@ import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
 import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
+import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
@@ -65,7 +65,6 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
@@ -1471,8 +1470,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         IndicesRequest searchIndices = mock(IndicesRequest.class);
         when(context.getSearchRequest()).thenReturn(searchIndices);
         when(searchIndices.indices()).thenReturn(new String[] { queryBuilder.fieldName() });
-        SparseFieldUtils sparseFieldUtils = mock(SparseFieldUtils.class);
-        queryBuilder.sparseFieldUtils(sparseFieldUtils);
-        when(sparseFieldUtils.getSparseAnnFields(queryBuilder.fieldName())).thenReturn(Set.of(queryBuilder.fieldName()));
+        ClusterService clusterService = mock(ClusterService.class);
+        queryBuilder.clusterService(clusterService);
+        TestsPrepareUtils.prepareSparseFieldUtilsClusterServiceMock(clusterService, List.of(queryBuilder.fieldName()), null);
     }
 }

@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.sparse.common;
 
-import lombok.NoArgsConstructor;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
@@ -22,19 +21,7 @@ import java.util.Set;
 /**
  * Utility class for operations related to sparse fields in neural search indices.
  */
-@NoArgsConstructor(access = lombok.AccessLevel.PACKAGE)
 public class SparseFieldUtils {
-    private ClusterService clusterService;
-    private static final SparseFieldUtils INSTANCE = new SparseFieldUtils();
-
-    public static void initialize(ClusterService clusterService) {
-        INSTANCE.clusterService = clusterService;
-    }
-
-    public static SparseFieldUtils getInstance() {
-        return INSTANCE;
-    }
-
     /**
      * Retrieves all sparse ANN fields from a given index.
      *
@@ -42,7 +29,7 @@ public class SparseFieldUtils {
      * @return A set of field names that are configured as sparse token fields, or an empty set if none exist
      */
     @SuppressWarnings("unchecked")
-    public Set<String> getSparseAnnFields(String index) {
+    public static Set<String> getSparseAnnFields(String index, ClusterService clusterService) {
         if (index == null) {
             return Collections.emptySet();
         }

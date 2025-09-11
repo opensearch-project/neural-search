@@ -7,11 +7,12 @@ package org.opensearch.neuralsearch.processor;
 import lombok.SneakyThrows;
 import org.junit.Before;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
-import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
+import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
@@ -21,12 +22,11 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.anyFloat;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -41,13 +41,14 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
     private static final String TEST_INDEX_NAME = "test_index";
     private static final String TEST_SPARSE_FIELD_NAME = "test_sparse_field";
 
-    private SparseFieldUtils mockSparseFieldUtils;
+    private ClusterService mockClusterService;
 
     @Override
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        mockSparseFieldUtils = mock(SparseFieldUtils.class);
+        mockClusterService = mock(ClusterService.class);
+        TestsPrepareUtils.prepareSparseFieldUtilsClusterServiceMock(mockClusterService, Collections.emptyList(), null);
         TestUtils.initializeEventStatsManager();
     }
 
@@ -263,8 +264,6 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
 
     public void testValidateSeismicQuery_whenNonSeismicField_thenSuccess() throws Exception {
         // Setup mock cluster service with non-seismic field
-        configureSparseFieldUtils(Set.of());
-
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
         neuralQueryBuilder.fieldName(TEST_SPARSE_FIELD_NAME);
@@ -285,7 +284,6 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
 
     public void testValidateSeismicQuery_whenSeismicField_thenThrowException() throws Exception {
         // Setup mock cluster service with seismic field
-        configureSparseFieldUtils(Set.of(TEST_SPARSE_FIELD_NAME));
 
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
@@ -299,7 +297,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         searchRequest.source(new SearchSourceBuilder().query(boolQueryBuilder));
 
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
-        processor.setSparseFieldUtils(mockSparseFieldUtils);
+        configureSparseFieldUtils(processor, List.of(TEST_SPARSE_FIELD_NAME));
 
         Exception exception = expectThrows(IllegalArgumentException.class, () -> processor.processRequest(searchRequest));
 
@@ -309,8 +307,9 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         );
     }
 
-    private void configureSparseFieldUtils(Set<String> seismicFields) {
-        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(seismicFields);
+    private void configureSparseFieldUtils(NeuralSparseTwoPhaseProcessor processor, List<String> seismicFields) {
+        TestsPrepareUtils.prepareSparseFieldUtilsClusterServiceMock(mockClusterService, seismicFields, null);
+        processor.setClusterService(mockClusterService);
     }
 
     private NeuralSparseTwoPhaseProcessor createTestProcessor(

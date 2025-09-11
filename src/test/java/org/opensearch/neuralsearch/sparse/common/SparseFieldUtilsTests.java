@@ -12,9 +12,10 @@ import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -36,8 +37,6 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
     @Mock
     private ClusterState clusterState;
 
-    private SparseFieldUtils sparseFieldUtils;
-
     @Override
     public void setUp() throws Exception {
         super.setUp();
@@ -45,26 +44,23 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         when(clusterService.state()).thenReturn(clusterState);
         when(clusterState.metadata()).thenReturn(metadata);
         when(metadata.index(anyString())).thenReturn(indexMetadata);
-
-        SparseFieldUtils.initialize(clusterService);
-        sparseFieldUtils = SparseFieldUtils.getInstance();
     }
 
     public void testGetSparseAnnFields_whenNullSparseIndex_thenReturnEmptySet() {
-        assertEquals(0, sparseFieldUtils.getSparseAnnFields(null).size());
+        assertEquals(0, SparseFieldUtils.getSparseAnnFields(null, clusterService).size());
     }
 
     public void testGetSparseAnnFields_whenNullIndexMetadata_thenReturnEmptySet() {
         configureSparseIndexSetting(true);
         when(metadata.index(anyString())).thenReturn(null);
-        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+        assertEquals(0, SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService).size());
     }
 
     public void testGetSparseAnnFields_whenNonSparseIndex_thenReturnEmptySet() {
         // Setup mock cluster service with non-sparse index
         configureSparseIndexSetting(false);
 
-        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+        assertEquals(0, SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService).size());
     }
 
     public void testGetSparseAnnFields_whenNullMappingMetaData_thenReturnEmptySet() {
@@ -72,7 +68,7 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         configureSparseIndexSetting(true);
         when(indexMetadata.mapping()).thenReturn(null);
 
-        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+        assertEquals(0, SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService).size());
     }
 
     public void testGetSparseAnnFields_whenNullSourceAsMap_thenReturnEmptySet() {
@@ -82,30 +78,36 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         when(indexMetadata.mapping()).thenReturn(mappingMetadata);
         when(mappingMetadata.sourceAsMap()).thenReturn(null);
 
-        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+        assertEquals(0, SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService).size());
     }
 
     public void testGetSparseAnnFields_whenEmptyProperties_thenReturnEmptySet() {
         // Setup mock cluster service with empty properties
         configureIndexMappingProperties(Map.of());
 
-        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+        assertEquals(0, SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService).size());
     }
 
     public void testGetSparseAnnFields_whenNonSeismicField_thenReturnEmptySet() {
         // Setup mock cluster service with non-seismic field
-        Map<String, Object> properties = createFieldMappingProperties(false);
+        Map<String, Object> properties = TestsPrepareUtils.createFieldMappingProperties(
+            false,
+            Collections.singletonList(TEST_SPARSE_FIELD_NAME)
+        );
         configureIndexMappingProperties(properties);
 
-        assertEquals(0, sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME).size());
+        assertEquals(0, SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService).size());
     }
 
     public void testGetSparseAnnFields_whenSeismicField_thenReturnField() {
         // Setup mock cluster service with seismic field
-        Map<String, Object> properties = createFieldMappingProperties(true);
+        Map<String, Object> properties = TestsPrepareUtils.createFieldMappingProperties(
+            true,
+            Collections.singletonList(TEST_SPARSE_FIELD_NAME)
+        );
         configureIndexMappingProperties(properties);
 
-        assertEquals(Set.of(TEST_SPARSE_FIELD_NAME), sparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME));
+        assertEquals(Set.of(TEST_SPARSE_FIELD_NAME), SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService));
     }
 
     private void configureSparseIndexSetting(boolean isSparseIndex) {
@@ -117,16 +119,5 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         MappingMetadata mappingMetadata = new MappingMetadata("_doc", properties);
         configureSparseIndexSetting(true);
         when(indexMetadata.mapping()).thenReturn(mappingMetadata);
-    }
-
-    private Map<String, Object> createFieldMappingProperties(boolean isSeismicField) {
-        Map<String, Object> sparseFieldMapping = new HashMap<>();
-        Map<String, Object> sparseFieldProperties = new HashMap<>();
-        sparseFieldProperties.put("type", isSeismicField ? "sparse_tokens" : "rank_features");
-        sparseFieldMapping.put(TEST_SPARSE_FIELD_NAME, sparseFieldProperties);
-
-        Map<String, Object> properties = new HashMap<>();
-        properties.put("properties", sparseFieldMapping);
-        return properties;
     }
 }

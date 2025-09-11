@@ -19,9 +19,6 @@ import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.get.MultiGetAction;
 import org.opensearch.action.get.MultiGetRequest;
 import org.opensearch.action.get.MultiGetResponse;
-import org.opensearch.cluster.ClusterState;
-import org.opensearch.cluster.metadata.IndexMetadata;
-import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
@@ -36,7 +33,7 @@ import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbe
 import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
-import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
+import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -46,16 +43,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -66,7 +60,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
@@ -84,14 +77,6 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
     @Mock
     private ClusterService mockClusterService;
-    @Mock
-    private ClusterState mockClusterState;
-    @Mock
-    private Metadata mockMetadata;
-    @Mock
-    private IndexMetadata mockIndexMetadata;
-    @Mock
-    private SparseFieldUtils mockSparseFieldUtils;
 
     @InjectMocks
     private SparseEncodingProcessorFactory sparseEncodingProcessorFactory;
@@ -108,11 +93,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     public void setup() {
         MockitoAnnotations.openMocks(this);
         Settings settings = Settings.builder().put("index.mapping.depth.limit", 20).build();
-        when(mockClusterService.state()).thenReturn(mockClusterState);
-        when(mockClusterState.metadata()).thenReturn(mockMetadata);
-        when(mockMetadata.index(anyString())).thenReturn(mockIndexMetadata);
-        when(mockIndexMetadata.getSettings()).thenReturn(settings);
-        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(Collections.emptySet());
+        TestsPrepareUtils.prepareSparseFieldUtilsClusterServiceMock(mockClusterService, Collections.emptyList(), settings);
         TestUtils.initializeEventStatsManager();
     }
 
@@ -194,8 +175,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
             openSearchClient,
             accessor,
             environment,
-            mockClusterService,
-            mockSparseFieldUtils
+            mockClusterService
         );
 
         Map<String, Object> config = new HashMap<>();
@@ -1008,7 +988,6 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     public void test_doSubBatchExecute_noSeismicFields() {
         int docCount = 5;
         SparseEncodingProcessor processor = createInstance(docCount, false);
-        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(Set.of());
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         List<InferenceProcessor.DataForInference> dataForInferences = processor.getDataForInference(ingestDocumentWrappers);
         List<String> inferenceList = processor.constructInferenceTexts(dataForInferences);
@@ -1020,7 +999,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
     public void test_doSubBatchExecute_noSeismicFieldsAfterSplit() {
         int docCount = 5;
-        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(Set.of("key3"));
+        mockSeismic("key3");
         SparseEncodingProcessor processor = createInstance(docCount, false);
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         List<InferenceProcessor.DataForInference> dataForInferences = processor.getDataForInference(ingestDocumentWrappers);
@@ -1034,7 +1013,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
     public void test_doSubBatchExecute_withMixed() {
         int docCount = 5;
-        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(Set.of(KEY1_MAPPED));
+        mockSeismic(KEY1_MAPPED);
         SparseEncodingProcessor processor = createInstance(docCount, false);
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         List<InferenceProcessor.DataForInference> dataForInferences = processor.getDataForInference(ingestDocumentWrappers);
@@ -1059,7 +1038,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
 
     public void test_doSubBatchExecute_withMixed_oneThrowException() {
         int docCount = 5;
-        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(Set.of(KEY1_MAPPED));
+        mockSeismic(KEY1_MAPPED);
         SparseEncodingProcessor processor = createInstance(docCount, false);
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         List<InferenceProcessor.DataForInference> dataForInferences = processor.getDataForInference(ingestDocumentWrappers);
@@ -1174,8 +1153,6 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
     }
 
     private void mockSeismic(String... fieldValues) {
-        Settings settings = Settings.builder().put("index.sparse", true).build();
-        when(mockIndexMetadata.getSettings()).thenReturn(settings);
-        when(mockSparseFieldUtils.getSparseAnnFields(anyString())).thenReturn(new HashSet<>(List.of(fieldValues)));
+        TestsPrepareUtils.prepareSparseFieldUtilsClusterServiceMock(mockClusterService, List.of(fieldValues), null);
     }
 }

@@ -25,6 +25,7 @@ import org.apache.lucene.search.Query;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.ParseField;
@@ -106,7 +107,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
     // this field so that the rescore query can use it to save an inference call.
     protected Map<String, Float> twoPhaseSharedQueryToken;
     private SparseAnnQueryBuilder sparseAnnQueryBuilder;
-    private SparseFieldUtils sparseFieldUtils;
+    private ClusterService clusterService;
 
     private static final Version MINIMAL_SUPPORTED_VERSION_DEFAULT_MODEL_ID = Version.V_2_13_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_ANALYZER = Version.V_3_1_0;
@@ -445,7 +446,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         if (coordinatorContext != null) {
             final IndicesRequest searchRequest = coordinatorContext.getSearchRequest();
             for (String index : searchRequest.indices()) {
-                Set<String> sparseAnnFields = getSparseFieldUtils().getSparseAnnFields(index);
+                Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService());
                 if (CollectionUtils.isNotEmpty(sparseAnnFields) && sparseAnnFields.contains(fieldName)) {
                     return true;
                 }
@@ -655,15 +656,11 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         return isSeismicSupported() && Objects.nonNull(fieldType) && SparseTokensFieldType.isSparseTokensType(fieldType.typeName());
     }
 
-    /**
-     * Lazy load of SparseFieldUtils
-     * @return {@link SparseFieldUtils}
-     */
     @VisibleForTesting
-    SparseFieldUtils getSparseFieldUtils() {
-        if (sparseFieldUtils == null) {
-            sparseFieldUtils = SparseFieldUtils.getInstance();
+    ClusterService clusterService() {
+        if (clusterService == null) {
+            clusterService = NeuralSearchClusterUtil.instance().getClusterService();
         }
-        return sparseFieldUtils;
+        return clusterService;
     }
 }
