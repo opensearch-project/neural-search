@@ -147,7 +147,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             handler.accept(ingestDocumentWrappers);
             return;
         }
-        // https://tiny.amazon.com/imoy8qta ingest documents in a batch belong to the same index
+        // https://github.com/opensearch-project/OpenSearch/blob/main/server/src/main/java/org/opensearch/ingest/IngestService.java#L921-L935
+        // ingest documents in a batch belong to the same index
         Object indexObj = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj.toString();
         Set<String> sparseAnnFields = sparseFieldUtils.getSparseAnnFields(index);
