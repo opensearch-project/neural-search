@@ -84,13 +84,38 @@ runs:
         # Create directories
         mkdir -p model_store model_files
 
-        # Copy the handler from the repository
-        cp src/test/resources/remote-models/torchserve/handlers/torchserve_handler.py handler.py
+        # Check current directory and list files
+        echo "Current directory: $(pwd)"
+        echo "Looking for handler file..."
+        
+        # Try to find the handler file
+        HANDLER_PATH="src/test/resources/remote-models/torchserve/handlers/torchserve_handler.py"
+        
+        if [ -f "$HANDLER_PATH" ]; then
+          echo "Found handler at: $HANDLER_PATH"
+          cp "$HANDLER_PATH" handler.py
+        else
+          echo "Handler not found at $HANDLER_PATH, checking repository structure..."
+          ls -la src/test/resources/remote-models/torchserve/handlers/ 2>/dev/null || echo "Directory not found"
+          
+          # Try alternative paths
+          if [ -f "neural-search/$HANDLER_PATH" ]; then
+            echo "Found handler at neural-search/$HANDLER_PATH"
+            cp "neural-search/$HANDLER_PATH" handler.py
+          else
+            echo "ERROR: Could not find handler file in expected locations"
+            echo "Repository structure:"
+            find . -name "torchserve_handler.py" -type f 2>/dev/null | head -5
+            exit 1
+          fi
+        fi
 
         if [ ! -f "handler.py" ]; then
-          echo "ERROR: Handler file not found"
+          echo "ERROR: Failed to copy handler file"
           exit 1
         fi
+        
+        echo "✓ Handler file copied successfully"
 
         # Download model files from HuggingFace
         echo "Downloading model files from HuggingFace..."
