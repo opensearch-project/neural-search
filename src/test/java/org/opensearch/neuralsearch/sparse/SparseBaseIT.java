@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse;
 
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hc.core5.http.ParseException;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.Before;
@@ -17,6 +18,7 @@ import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
@@ -383,5 +385,23 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
             }
         }
         return routingIds;
+    }
+
+    @SneakyThrows
+    protected List<Double> getSparseMemoryUsageStatsAcrossNodes() {
+        Request request = new Request("GET", NeuralSearch.NEURAL_BASE_URI + "/stats/" + SPARSE_MEMORY_USAGE_METRIC_NAME);
+
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        String responseBody = EntityUtils.toString(response.getEntity());
+        List<Map<String, Object>> nodeStatsResponseList = parseNodeStatsResponse(responseBody);
+
+        List<Double> sparseMemoryUsageStats = new ArrayList<>();
+        for (Map<String, Object> nodeStatsResponse : nodeStatsResponseList) {
+            String stringValue = getNestedValue(nodeStatsResponse, SPARSE_MEMORY_USAGE_METRIC_PATH).toString();
+            sparseMemoryUsageStats.add(NumberUtils.createDouble(stringValue));
+        }
+        return sparseMemoryUsageStats;
     }
 }
