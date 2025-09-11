@@ -1,0 +1,169 @@
+name: 'Setup TorchServe Model'
+description: 'Setup and deploy semantic highlighter model to TorchServe'
+inputs:
+  python-version:
+    description: 'Python version to use'
+    required: false
+    default: '3.9'
+  torchserve-endpoint:
+    description: 'TorchServe endpoint URL'
+    required: false
+    default: 'http://localhost:8080'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    - name: Wait for TorchServe to be ready
+      shell: bash
+      run: |
+        echo "Waiting for TorchServe to be ready..."
+        for i in {1..30}; do
+          if wget -qO- ${{ inputs.torchserve-endpoint }}/ping 2>/dev/null; then
+            echo "TorchServe is ready!"
+            break
+          fi
+          echo "Waiting for TorchServe... ($i/30)"
+          sleep 5
+        done
+
+    - name: Prepare and Deploy Model
+      shell: bash
+      run: |
+        # Find the TorchServe container first
+        CONTAINER_ID=$(docker ps --format "{{.ID}}" --filter "publish=8080" | head -1)
+
+        if [ -z "$CONTAINER_ID" ]; then
+          echo "ERROR: Could not find TorchServe container on port 8080"
+          echo "Available containers:"
+          docker ps
+          exit 1
+        fi
+
+        echo "Found TorchServe container: $CONTAINER_ID"
+
+        # Install dependencies in the container
+        echo "Installing Python dependencies in container..."
+        docker exec $CONTAINER_ID pip install --no-cache-dir transformers==4.35.0 datasets nltk
+
+        echo "Downloading NLTK data..."
+        docker exec $CONTAINER_ID python -c "import nltk; nltk.download('punkt')"
+
+        echo "✓ Dependencies installed"
+
+        # Check if model is already loaded (from container startup)
+        MODEL_CHECK=$(docker exec $CONTAINER_ID wget -qO- http://localhost:8081/models 2>/dev/null || echo "[]")
+        if echo "$MODEL_CHECK" | grep -q "semantic_highlighter"; then
+          echo "Model 'semantic_highlighter' is already loaded in TorchServe"
+
+          # Test inference endpoint
+          echo "Testing inference endpoint..."
+          TEST_RESPONSE=$(docker exec $CONTAINER_ID wget -qO- --post-data='{"question": "What is OpenSearch?", "context": "OpenSearch is a search engine"}' \
+            --header="Content-Type: application/json" \
+            http://localhost:8080/predictions/semantic_highlighter 2>/dev/null || echo "{}")
+
+          if echo "$TEST_RESPONSE" | grep -q "highlights"; then
+            echo "✓ Model is working correctly!"
+            echo "Response: $TEST_RESPONSE"
+            exit 0
+          else
+            echo "Model is loaded but not responding correctly"
+            echo "Response: $TEST_RESPONSE"
+          fi
+        fi
+
+        echo "Model not loaded, setting it up..."
+
+        # Install required Python packages (only what's needed for MAR creation)
+        pip install torch-model-archiver --no-cache-dir
+
+        # Create directories
+        mkdir -p model_store model_files
+
+        # Copy the handler from the repository
+        cp src/test/resources/remote-models/torchserve/handlers/torchserve_handler.py handler.py
+
+        if [ ! -f "handler.py" ]; then
+          echo "ERROR: Handler file not found"
+          exit 1
+        fi
+
+        # Download model files from HuggingFace
+        echo "Downloading model files from HuggingFace..."
+
+        curl -fsSL https://huggingface.co/opensearch-project/opensearch-semantic-highlighter-v1/resolve/main/config.json -o model_files/config.json || exit 1
+        echo "✓ config.json"
+
+        curl -fsSL https://huggingface.co/opensearch-project/opensearch-semantic-highlighter-v1/resolve/main/tokenizer_config.json -o model_files/tokenizer_config.json || exit 1
+        echo "✓ tokenizer_config.json"
+
+        curl -fsSL https://huggingface.co/opensearch-project/opensearch-semantic-highlighter-v1/resolve/main/vocab.txt -o model_files/vocab.txt || exit 1
+        echo "✓ vocab.txt"
+
+        # Download the large model file
+        echo "Downloading model weights..."
+        curl -L --progress-bar https://huggingface.co/opensearch-project/opensearch-semantic-highlighter-v1/resolve/main/model.safetensors -o model_files/model.safetensors || exit 1
+        echo "✓ model.safetensors"
+
+        # Create MAR file
+        echo "Creating model archive..."
+        torch-model-archiver \
+          --model-name semantic_highlighter \
+          --version 1.0 \
+          --handler handler.py \
+          --extra-files model_files/ \
+          --export-path model_store \
+          --force
+
+        # Copy MAR file to container
+        echo "Copying MAR to container..."
+        docker cp model_store/semantic_highlighter.mar $CONTAINER_ID:/home/model-server/model-store/
+
+        # Restart TorchServe with the model
+        echo "Restarting TorchServe with model..."
+        docker restart $CONTAINER_ID
+
+        # Wait for TorchServe to be ready
+        echo "Waiting for TorchServe to restart..."
+        for i in {1..30}; do
+          if docker exec $CONTAINER_ID wget -qO- http://localhost:8080/ping 2>/dev/null | grep -q "Healthy"; then
+            echo "TorchServe is ready!"
+            break
+          fi
+          echo -n "."
+          sleep 2
+        done
+        echo ""
+
+        # Verify model is loaded
+        echo "Verifying model is loaded..."
+        for i in {1..20}; do
+          MODEL_CHECK=$(docker exec $CONTAINER_ID wget -qO- http://localhost:8081/models 2>/dev/null || echo "[]")
+          if echo "$MODEL_CHECK" | grep -q "semantic_highlighter"; then
+            echo "Model loaded successfully!"
+            echo "$MODEL_CHECK"
+            break
+          fi
+          echo "Waiting for model to load... ($i/20)"
+          sleep 3
+        done
+
+        # Test inference
+        echo "Testing inference..."
+        TEST_RESPONSE=$(docker exec $CONTAINER_ID wget -qO- --post-data='{"question": "What is OpenSearch?", "context": "OpenSearch is a search engine"}' \
+          --header="Content-Type: application/json" \
+          http://localhost:8080/predictions/semantic_highlighter 2>/dev/null || echo "{}")
+
+        if echo "$TEST_RESPONSE" | grep -q "tokens"; then
+          echo "✓ TorchServe model deployment successful!"
+          echo "Response: $TEST_RESPONSE"
+        else
+          echo "ERROR: Model not responding correctly"
+          echo "Response: $TEST_RESPONSE"
+          docker logs $CONTAINER_ID --tail 50
+          exit 1
+        fi

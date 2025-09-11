@@ -97,6 +97,9 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUE
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
+
+import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
@@ -2886,5 +2889,73 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             }
         }
         assertEquals(failedIds.size(), failedDocCount);
+    }
+
+    protected String createSemanticHighlightingPipeline(String pipelineName, String modelId, String fieldName, boolean batchInference)
+        throws Exception {
+        String pipelineBody = TestUtils.createSemanticHighlightingPipelineBody(modelId, fieldName, batchInference);
+        Request request = new Request("PUT", "/_search/pipeline/" + pipelineName);
+        request.setJsonEntity(pipelineBody);
+        client().performRequest(request);
+        return pipelineName;
+    }
+
+    protected String createRemoteModelConnector(String endpoint, boolean batchEnabled) throws Exception {
+        return RemoteModelTestUtils.createTorchServeConnector(client(), endpoint, batchEnabled);
+    }
+
+    protected String deployRemoteSemanticHighlightingModel(String connectorId, String modelName) throws Exception {
+        return RemoteModelTestUtils.deployRemoteModel(client(), connectorId, modelName);
+    }
+
+    protected String createIndexWithSemanticHighlightingPipeline(String indexName, String pipelineName) throws Exception {
+        String mappingBody = TestUtils.createIndexMappingWithDefaultPipeline(pipelineName);
+        createIndex(indexName, mappingBody);
+        return indexName;
+    }
+
+    protected void addSemanticHighlightingDocument(String indexName, String docId, String content, String title, String category)
+        throws Exception {
+        Request request = new Request("POST", "/" + indexName + "/_doc/" + docId + "?refresh=true");
+        String docBody = String.format(Locale.ROOT, """
+            {
+              "content": "%s",
+              "title": "%s",
+              "category": "%s"
+            }
+            """, content, title, category);
+        request.setJsonEntity(docBody);
+        client().performRequest(request);
+    }
+
+    protected Map<String, Object> performSemanticHighlightingSearch(String indexName, String query, String fieldName) throws Exception {
+        Request request = new Request("POST", "/" + indexName + "/_search?search_pipeline=semantic_highlighting_pipeline");
+        String searchBody = String.format(Locale.ROOT, """
+            {
+              "query": {
+                "match": {
+                  "%s": "%s"
+                }
+              },
+              "highlight": {
+                "fields": {
+                  "%s": {}
+                }
+              }
+            }
+            """, fieldName, query, fieldName);
+        request.setJsonEntity(searchBody);
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+    }
+
+    protected void cleanupSemanticHighlightingResources(String connectorId, String modelId) {
+        if (modelId != null) {
+            RemoteModelTestUtils.deleteModel(client(), modelId);
+        }
+        if (connectorId != null) {
+            RemoteModelTestUtils.deleteConnector(client(), connectorId);
+        }
     }
 }

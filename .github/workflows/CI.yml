@@ -119,15 +119,48 @@ jobs:
         os: [ ubuntu-latest ]
     name: Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+
+    services:
+      torchserve:
+        image: pytorch/torchserve:latest
+        ports:
+          - 8080:8080
+          - 8081:8081
+          - 8082:8082
+        options: >-
+          --memory 3g
+          --cpus 2
+          -e TS_DISABLE_TOKEN_AUTHORIZATION=true
+
     steps:
       - uses: actions/checkout@v4
+
       - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
-      - name: Build and Run Tests
+
+      - name: Setup TorchServe Model
+        uses: ./.github/actions/setup-torchserve
+        with:
+          python-version: '3.9'
+          torchserve-endpoint: 'http://localhost:8080'
+
+      - name: Verify TorchServe Status
         run: |
+          if wget -qO- http://localhost:8080/ping > /dev/null 2>&1; then
+            echo "TorchServe is UP and responding at http://localhost:8080"
+          else
+            echo "TorchServe is NOT responding at http://localhost:8080"
+            exit 1
+          fi
+
+      - name: Build and Run Tests
+        env:
+          TORCHSERVE_ENDPOINT: http://localhost:8080
+        run: |
+          echo "Using TorchServe endpoint: $TORCHSERVE_ENDPOINT"
           ./gradlew integTest
 
   integMultiNodeTest:

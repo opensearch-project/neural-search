@@ -1,0 +1,22 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "search.default_pipeline": "${PIPELINE_NAME}"
+    }
+  },
+  "mappings": {
+    "properties": {
+      "content": {
+        "type": "text"
+      },
+      "title": {
+        "type": "text"
+      },
+      "category": {
+        "type": "keyword"
+      }
+    }
+  }
+}

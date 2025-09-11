@@ -18,6 +18,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -422,5 +423,70 @@ public class TestUtils {
         EventStatsManager.instance().reset();
         when(settingsAccessor.isStatsEnabled()).thenReturn(true);
         EventStatsManager.instance().initialize(settingsAccessor);
+    }
+
+    public static String createSemanticHighlightingPipelineBody(String modelId, String fieldName, boolean batchInference) {
+        return """
+            {
+              "description": "Semantic highlighting pipeline",
+              "response_processors": [
+                {
+                  "semantic_highlighting": {}
+                }
+              ]
+            }
+            """;
+    }
+
+    public static String createIndexMappingWithDefaultPipeline(String pipelineName) {
+        return String.format(Locale.ROOT, """
+            {
+              "settings": {
+                "index": {
+                  "number_of_shards": 1,
+                  "number_of_replicas": 0,
+                  "search.default_pipeline": "%s"
+                }
+              },
+              "mappings": {
+                "properties": {
+                  "content": {
+                    "type": "text"
+                  },
+                  "title": {
+                    "type": "text"
+                  },
+                  "category": {
+                    "type": "keyword"
+                  }
+                }
+              }
+            }
+            """, pipelineName);
+    }
+
+    public static void assertSemanticHighlighting(Map<String, Object> responseMap, String fieldName, String expectedHighlight) {
+        Map<String, Object> hits = getTotalHits(responseMap);
+        List<Map<String, Object>> hitsList = getNestedHits(responseMap);
+        assertNotNull("Response should contain hits", hitsList);
+        assertFalse("Should have at least one hit", hitsList.isEmpty());
+
+        Map<String, Object> firstHit = hitsList.get(0);
+        assertNotNull("First hit should not be null", firstHit);
+
+        Map<String, Object> highlight = (Map<String, Object>) firstHit.get("highlight");
+        assertNotNull("Hit should contain highlight", highlight);
+
+        List<String> highlightedContent = (List<String>) highlight.get(fieldName);
+        assertNotNull("Highlighted content should not be null", highlightedContent);
+        assertFalse("Highlighted content should not be empty", highlightedContent.isEmpty());
+
+        String actualHighlight = highlightedContent.get(0);
+        // Strip HTML tags to get plain text for comparison
+        String plainTextHighlight = actualHighlight.replaceAll("<[^>]*>", "");
+        assertTrue(
+            "Highlight should contain expected text: " + expectedHighlight + " (actual: " + plainTextHighlight + ")",
+            plainTextHighlight.toLowerCase(Locale.ROOT).contains(expectedHighlight.toLowerCase(Locale.ROOT))
+        );
     }
 }
