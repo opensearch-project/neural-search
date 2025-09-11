@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.highlight;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.opensearch.OpenSearchParseException;
 import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingResponseProcessor;
 import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingResponseProcessorFactory;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
@@ -35,7 +34,7 @@ public class SemanticHighlightingResponseProcessorFactoryTests extends OpenSearc
         factory = new SemanticHighlightingResponseProcessorFactory(mlClientAccessor);
     }
 
-    public void testCreateWithRequiredConfig() throws IOException {
+    public void testCreateWithModelId() throws IOException {
         Map<String, Object> config = new HashMap<>();
         config.put(SemanticHighlightingConstants.MODEL_ID, "test-model-id");
 
@@ -74,20 +73,25 @@ public class SemanticHighlightingResponseProcessorFactoryTests extends OpenSearc
         assertTrue(processor.isIgnoreFailure());
     }
 
-    public void testCreateWithMissingModelIdThrowsException() {
+    public void testCreateWithoutModelIdSucceeds() throws IOException {
         Map<String, Object> config = new HashMap<>();
 
-        OpenSearchParseException exception = expectThrows(
-            OpenSearchParseException.class,
-            () -> factory.create(new HashMap<>(), "test-tag", "test-description", false, config, pipelineContext)
+        SemanticHighlightingResponseProcessor processor = factory.create(
+            new HashMap<>(),
+            "test-tag",
+            "test-description",
+            false,
+            config,
+            pipelineContext
         );
 
-        assertEquals("[model_id] required property is missing", exception.getMessage());
+        assertNotNull(processor);
+        assertEquals("test-tag", processor.getTag());
+        assertEquals("test-description", processor.getDescription());
     }
 
     public void testCreateWithDefaultValues() throws IOException {
         Map<String, Object> config = new HashMap<>();
-        config.put(SemanticHighlightingConstants.MODEL_ID, "test-model-id");
 
         SemanticHighlightingResponseProcessor processor = factory.create(
             new HashMap<>(),

@@ -40,8 +40,7 @@ public class SemanticHighlightingResponseProcessorFactory implements Processor.F
         Map<String, Object> config,
         Processor.PipelineContext pipelineContext
     ) throws IOException {
-        // Required configuration
-        String modelId = ConfigurationUtils.readStringProperty(
+        String modelId = ConfigurationUtils.readOptionalStringProperty(
             SemanticHighlightingConstants.PROCESSOR_TYPE,
             processorTag,
             config,
