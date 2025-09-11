@@ -12,7 +12,7 @@ import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.client.ResponseException;
 import org.opensearch.core.rest.RestStatus;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
+import org.opensearch.common.xcontent.XContentType;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -46,7 +46,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
             docs.add(tokens);
         }
         ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs);
-        updateClusterSettings(NeuralSearchSettings.NEURAL_STATS_ENABLED.getKey(), true);
+        enableStats();
     }
 
     /**
@@ -56,8 +56,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
     @Override
     @SneakyThrows
     public void tearDown() {
-        updateClusterSettings(NeuralSearchSettings.NEURAL_STATS_ENABLED.getKey(), false);
-        cleanUp();
+        disableStats();
         super.tearDown();
     }
 
@@ -69,6 +68,8 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         // First clear cache before warm up
         Request clearCacheRequest = new Request("POST", "/_plugins/_neural/clear_cache/" + TEST_INDEX_NAME);
         Response clearCacheResponse = client().performRequest(clearCacheRequest);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
+
         List<Double> originalSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double originalSparseMemoryUsageSum = originalSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
 
@@ -76,17 +77,13 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Request warmUpRequest = new Request("POST", "/_plugins/_neural/warmup/" + TEST_INDEX_NAME);
         Response warmUpResponse = client().performRequest(warmUpRequest);
 
-        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
         assertEquals(RestStatus.OK, RestStatus.fromCode(warmUpResponse.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            warmUpResponse.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -120,13 +117,10 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            response.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -169,29 +163,22 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.OK, RestStatus.fromCode(warmUpResponse.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            warmUpResponse.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(
+            responseMap.get("_shards"),
+            Map.of("total", 3 * originalSparseMemoryUsageStats.size(), "successful", 3 * originalSparseMemoryUsageStats.size(), "failed", 0)
+        );
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double afterWarmUpSparseMemoryUsageSum = afterWarmUpSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
         assertTrue("Memory usage should increase after warm up", afterWarmUpSparseMemoryUsageSum > originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterWarmUpSparseMemoryUsageStats.size());
-        // In multi-node environment, only nodes with shards will have memory usage changes
-        // Verify at least one node has increased memory usage
-        boolean hasMemoryIncrease = false;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
-            if (afterWarmUpSparseMemoryUsageStats.get(i) > originalSparseMemoryUsageStats.get(i)) {
-                hasMemoryIncrease = true;
-                break;
-            }
+            assertTrue(afterWarmUpSparseMemoryUsageStats.get(i) > originalSparseMemoryUsageStats.get(i));
         }
-        assertTrue("At least one node should have increased memory usage after warm up", hasMemoryIncrease);
     }
 
     /**
@@ -213,29 +200,22 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            response.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(
+            responseMap.get("_shards"),
+            Map.of("total", 3 * originalSparseMemoryUsageStats.size(), "successful", 3 * originalSparseMemoryUsageStats.size(), "failed", 0)
+        );
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double afterClearCacheSparseMemoryUsageSum = afterClearCacheSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
         assertTrue("Memory usage should decrease after clear cache", afterClearCacheSparseMemoryUsageSum < originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterClearCacheSparseMemoryUsageStats.size());
-        // In multi-node environment, only nodes with shards will have memory usage changes
-        // Verify at least one node has decreased memory usage
-        boolean hasMemoryDecrease = false;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
-            if (afterClearCacheSparseMemoryUsageStats.get(i) < originalSparseMemoryUsageStats.get(i)) {
-                hasMemoryDecrease = true;
-                break;
-            }
+            assertTrue(afterClearCacheSparseMemoryUsageStats.get(i) < originalSparseMemoryUsageStats.get(i));
         }
-        assertTrue("At least one node should have decreased memory usage after clear cache", hasMemoryDecrease);
     }
 
     /**
@@ -262,13 +242,10 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.OK, RestStatus.fromCode(warmUpResponse.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            warmUpResponse.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -306,13 +283,10 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            response.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -355,13 +329,10 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.OK, RestStatus.fromCode(warmUpResponse.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            warmUpResponse.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
 
         // Verify memory usage not changed after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -397,13 +368,10 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
         // Verify response structure
-        Map<String, Object> responseMap = createParser(
-            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
-            response.getEntity().getContent()
-        ).map();
+        Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertTrue(responseMap.containsKey("_shards"));
+        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
 
         // Verify memory usage not changed after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -458,6 +426,5 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         assertEquals(RestStatus.BAD_REQUEST, RestStatus.fromCode(exception.getResponse().getStatusLine().getStatusCode()));
         String responseBody = EntityUtils.toString(exception.getResponse().getEntity());
         assertTrue(responseBody.contains("don't support neural_sparse_clear_cache_action operation"));
-
     }
 }

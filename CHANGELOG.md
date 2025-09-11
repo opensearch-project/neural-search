@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 - [SEISMIC] Support SEISMIC, a new sparse ANN algorithm
+  - This PR is to supplement IT for warmUp and clearCache methods ([PR](https://github.com/opensearch-project/neural-search/pull/1538))
 
 ### Enhancements
 
