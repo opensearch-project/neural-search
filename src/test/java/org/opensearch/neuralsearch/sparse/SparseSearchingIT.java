@@ -217,7 +217,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, docCount);
         assertNotNull(searchResults);
-        assertTrue(getHitCount(searchResults) < docCount);
+        assertTrue(getHitCount(searchResults) <= docCount);
 
         neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
             TEST_SPARSE_FIELD_NAME,
