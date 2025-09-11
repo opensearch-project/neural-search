@@ -1,0 +1,82 @@
+name: Test TorchServe Setup Action
+
+on:
+  push:
+    branches:
+      - highlighting-processor-remote-model
+    paths:
+      - '.github/actions/setup-torchserve/**'
+      - '.github/workflows/test-torchserve-action.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/actions/setup-torchserve/**'
+      - '.github/workflows/test-torchserve-action.yml'
+  workflow_dispatch:
+
+jobs:
+  test-torchserve-setup:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Start TorchServe container
+        run: |
+          echo "Starting TorchServe container..."
+          docker run -d \
+            --name torchserve \
+            -p 8080:8080 \
+            -p 8081:8081 \
+            -p 8082:8082 \
+            -p 7070:7070 \
+            -p 7071:7071 \
+            pytorch/torchserve:0.9.0-cpu \
+            torchserve --start --model-store /home/model-server/model-store --ts-config /home/model-server/config.properties
+          
+          # Give container time to start
+          sleep 10
+          
+          echo "Container status:"
+          docker ps
+      
+      - name: Setup TorchServe Model
+        uses: ./.github/actions/setup-torchserve
+        with:
+          python-version: '3.9'
+          torchserve-endpoint: 'http://localhost:8080'
+      
+      - name: Verify Model Deployment
+        run: |
+          echo "Checking models loaded in TorchServe..."
+          curl -s http://localhost:8081/models | jq .
+          
+          echo ""
+          echo "Testing model inference..."
+          RESPONSE=$(curl -s -X POST http://localhost:8080/predictions/semantic_highlighter \
+            -H "Content-Type: application/json" \
+            -d '{
+              "question": "What is batch processing?",
+              "context": "Batch processing is a method of running high-volume, repetitive data jobs. The method allows users to process data when computing resources are available."
+            }')
+          
+          echo "Response from model:"
+          echo "$RESPONSE" | jq .
+          
+          # Check if response contains expected fields
+          if echo "$RESPONSE" | grep -q "highlights"; then
+            echo "✓ Model inference successful!"
+          else
+            echo "✗ Model inference failed!"
+            echo "Container logs:"
+            docker logs torchserve --tail 50
+            exit 1
+          fi
+      
+      - name: Show container logs on failure
+        if: failure()
+        run: |
+          echo "=== TorchServe Container Logs ==="
+          docker logs torchserve --tail 100
