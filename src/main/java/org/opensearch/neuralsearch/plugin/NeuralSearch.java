@@ -30,7 +30,6 @@ import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import com.google.common.collect.ImmutableList;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.ActionRequest;
-import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -87,7 +86,8 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
-import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingResponseProcessorFactory;
+import org.opensearch.neuralsearch.highlight.processor.SystemGeneratedSemanticHighlightingFactory;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
@@ -125,6 +125,7 @@ import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
@@ -323,10 +324,16 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory(),
-            SemanticHighlightingConstants.PROCESSOR_TYPE,
-            new SemanticHighlightingResponseProcessorFactory(clientAccessor)
+            new ExplanationResponseProcessorFactory()
         );
+    }
+
+    @Override
+    public Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor>> getSystemGeneratedResponseProcessors(
+        Parameters parameters
+    ) {
+        // System-generated semantic highlighting processor that automatically applies when semantic highlighting is detected
+        return Map.of(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE, new SystemGeneratedSemanticHighlightingFactory(clientAccessor));
     }
 
     @Override
@@ -350,7 +357,7 @@ public class NeuralSearch extends Plugin
 
     /**
      * Register minimal semantic highlighter for type validation
-     * Actual highlighting is done by SemanticHighlightingResponseProcessor
+     * Actual highlighting is done by SystemGeneratedSemanticHighlightingProcessor
      */
     @Override
     public Map<String, Highlighter> getHighlighters() {
