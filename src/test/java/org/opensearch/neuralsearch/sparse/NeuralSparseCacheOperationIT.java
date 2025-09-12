@@ -168,7 +168,8 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * getNodeCount(), "successful", 3 * getNodeCount(), "failed", 0));
+        int replicas = Math.min(3, getNodeCount() - 1);
+        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * (1 + replicas), "successful", 3 * (1 + replicas), "failed", 0));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -200,7 +201,8 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * getNodeCount(), "successful", 3 * getNodeCount(), "failed", 0));
+        int replicas = Math.min(3, getNodeCount() - 1);
+        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * (1 + replicas), "successful", 3 * (1 + replicas), "failed", 0));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
