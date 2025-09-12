@@ -2942,12 +2942,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return RemoteModelTestUtils.deployRemoteModel(client(), connectorId, modelName);
     }
 
-    protected String createIndexWithSemanticHighlightingPipeline(String indexName, String pipelineName) throws Exception {
-        String mappingBody = TestUtils.createIndexMappingWithDefaultPipeline(pipelineName);
-        createIndex(indexName, mappingBody);
-        return indexName;
-    }
-
     protected void addSemanticHighlightingDocument(String indexName, String docId, String content, String title, String category)
         throws Exception {
         Request request = new Request("POST", "/" + indexName + "/_doc/" + docId + "?refresh=true");
@@ -2960,14 +2954,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             """, content, title, category);
         request.setJsonEntity(docBody);
         client().performRequest(request);
-    }
-
-    protected Map<String, Object> performSemanticHighlightingSearch(String indexName, XContentBuilder searchBody) throws Exception {
-        Request request = new Request("POST", "/" + indexName + "/_search?search_pipeline=semantic_highlighting_pipeline");
-        request.setJsonEntity(searchBody.toString());
-        Response response = client().performRequest(request);
-        String responseBody = EntityUtils.toString(response.getEntity());
-        return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 
     protected void cleanupSemanticHighlightingResources(String connectorId, String modelId) {
