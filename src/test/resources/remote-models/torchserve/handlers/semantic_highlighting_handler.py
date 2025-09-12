@@ -346,16 +346,25 @@ def handle(data, context):
         logger.info(f"Processing input_data type: {type(input_data)}, content preview: {str(input_data)[:200]}")
         
         # Handle different input formats
-        # Check if input_data is directly an array (test connector with "${parameters.inputs}")
+        # Check if input_data is directly an array (unified connector always sends array)
         if isinstance(input_data, list):
-            # Direct array format from test connector
-            logger.info(f"Processing direct array with {len(input_data)} items")
-            batch_results = []
-            for item in input_data:
-                result = _process_single(item["question"], item["context"])
-                batch_results.append(result["highlights"])
-            # For direct array, TorchServe expects a single response containing all results
-            results.append({"highlights": batch_results})
+            # Array format - could be single or batch
+            logger.info(f"Processing array with {len(input_data)} items")
+            
+            if len(input_data) == 1:
+                # Single document wrapped in array - return single format
+                logger.info("Single document in array format")
+                result = _process_single(input_data[0]["question"], input_data[0]["context"])
+                results.append(result)
+            else:
+                # Multiple documents - return batch format
+                logger.info("Batch processing multiple documents")
+                batch_results = []
+                for item in input_data:
+                    result = _process_single(item["question"], item["context"])
+                    batch_results.append(result["highlights"])
+                # For batch, TorchServe expects a single response containing all results
+                results.append({"highlights": batch_results})
                 
         elif "inputs" in input_data:
             # Batch processing with wrapper - handle both array and JSON string formats
