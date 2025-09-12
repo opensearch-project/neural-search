@@ -115,7 +115,8 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
-import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingResponseProcessorFactory;
+import org.opensearch.neuralsearch.highlight.processor.SystemGeneratedSemanticHighlightingFactory;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
@@ -156,22 +157,14 @@ import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
+import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Supplier;
-
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.DEFAULT_INDEX_THREAD_QTY;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_NAME;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD;
@@ -371,10 +364,16 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory(),
-            SemanticHighlightingConstants.PROCESSOR_TYPE,
-            new SemanticHighlightingResponseProcessorFactory(clientAccessor)
+            new ExplanationResponseProcessorFactory()
         );
+    }
+
+    @Override
+    public Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor>> getSystemGeneratedResponseProcessors(
+        Parameters parameters
+    ) {
+        // System-generated semantic highlighting processor that automatically applies when semantic highlighting is detected
+        return Map.of(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE, new SystemGeneratedSemanticHighlightingFactory(clientAccessor));
     }
 
     @Override
@@ -398,7 +397,7 @@ public class NeuralSearch extends Plugin
 
     /**
      * Register minimal semantic highlighter for type validation
-     * Actual highlighting is done by SemanticHighlightingResponseProcessor
+     * Actual highlighting is done by SystemGeneratedSemanticHighlightingProcessor
      */
     @Override
     public Map<String, Highlighter> getHighlighters() {
