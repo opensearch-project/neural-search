@@ -34,6 +34,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
@@ -419,6 +420,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             )
         );
 
+        // Mock getModel to return REMOTE function
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(highlights));
@@ -447,6 +457,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentenceHighlighting_whenEmptyHighlights_thenReturnEmptyList() {
         final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
         final Map<String, Object> emptyHighlights = Map.of("highlights", Collections.emptyList());
+
+        // Mock getModel to return REMOTE function
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
 
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -478,6 +497,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             "Node not connected"
         );
 
+        // Mock getModel to return REMOTE function (will be called 4 times due to retries)
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(nodeNotConnectedException);
@@ -506,6 +534,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentenceHighlighting_whenNotRetryableException_thenFail() {
         final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
         final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
+
+        // Mock getModel to return REMOTE function
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
 
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);

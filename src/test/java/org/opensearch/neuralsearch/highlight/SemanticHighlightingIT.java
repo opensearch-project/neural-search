@@ -7,9 +7,14 @@ package org.opensearch.neuralsearch.highlight;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
@@ -209,6 +214,113 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
             List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
             log.info("Semantic highlights with batch enabled: {}", contentHighlights);
+        }
+    }
+
+    /**
+     * Test semantic highlighting with local TORCH_SCRIPT model using QUESTION_ANSWERING function
+     * This tests backward compatibility with OpenSearch 3.1 local models
+     */
+    public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithLocalModel() throws Exception {
+        // Step 0: Set up ML Commons settings for local model
+        updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
+        updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
+
+        // Step 1: Prepare local sentence highlighting model
+        // This uses the existing resource file at highlight/UploadSentenceHighlightingModelRequestBody.json
+        String localModelId = prepareSentenceHighlightingModel();
+        log.info("Prepared local model with ID: {}", localModelId);
+
+        // Step 2: Create a separate index for local model testing
+        String localTestIndex = TEST_INDEX + "-local";
+        String localPipelineName = PIPELINE_NAME + "-local";
+
+        // Step 3: Create semantic highlighting pipeline (without model_id in config for flexibility)
+        createSemanticHighlightingPipeline(localPipelineName, null, TEST_FIELD, false);
+
+        // Step 4: Create index with the pipeline
+        createIndexWithSemanticHighlightingPipeline(localTestIndex, localPipelineName);
+
+        // Step 5: Index test documents
+        addSemanticHighlightingDocument(
+            localTestIndex,
+            "1",
+            "OpenSearch is a scalable, flexible, and extensible open-source software suite for search, analytics, and observability applications. It is licensed under Apache 2.0.",
+            "OpenSearch Overview",
+            "software"
+        );
+        addSemanticHighlightingDocument(
+            localTestIndex,
+            "2",
+            "Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data.",
+            "Machine Learning Basics",
+            "technology"
+        );
+
+        try {
+            // Step 6: Create query with semantic highlighting and model_id in options
+            XContentBuilder searchBody = XContentFactory.jsonBuilder()
+                .startObject()
+                .field("size", 2)
+                .startObject("query")
+                .startObject("match")
+                .field(TEST_FIELD, "What is OpenSearch used for?")
+                .endObject()
+                .endObject()
+                .startObject("highlight")
+                .startObject("fields")
+                .startObject(TEST_FIELD)
+                .field("type", "semantic")
+                .endObject()
+                .endObject()
+                .startObject("options")
+                .field("model_id", localModelId)  // Local model ID specified here
+                .field("batch_inference", false)  // Local models don't support batch
+                .endObject()
+                .endObject()
+                .endObject();
+
+            // Step 7: Execute search and verify results with local pipeline
+            Request request = new Request("POST", "/" + localTestIndex + "/_search?search_pipeline=" + localPipelineName);
+            request.setJsonEntity(searchBody.toString());
+            Response response = client().performRequest(request);
+            String responseBody = EntityUtils.toString(response.getEntity());
+            Map<String, Object> searchResponse = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+            // Step 8: Verify semantic highlighting worked
+            TestUtils.assertSemanticHighlighting(searchResponse, TEST_FIELD, "OpenSearch");
+
+            // Step 9: Log highlights for debugging
+            List<Map<String, Object>> hitsList = TestUtils.getNestedHits(searchResponse);
+            if (!hitsList.isEmpty()) {
+                for (Map<String, Object> hit : hitsList) {
+                    Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
+                    if (highlight != null) {
+                        List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
+                        log.info("Local model semantic highlights: {}", contentHighlights);
+                    }
+                }
+            }
+
+            log.info("Local model test completed successfully");
+
+        } finally {
+            // Cleanup
+            try {
+                deleteIndex(localTestIndex);
+            } catch (Exception e) {
+                log.debug("Failed to delete local test index: {}", e.getMessage());
+            }
+            try {
+                deletePipeline("_search", localPipelineName);
+            } catch (Exception e) {
+                log.debug("Failed to delete local test pipeline: {}", e.getMessage());
+            }
+            try {
+                deleteModel(localModelId);
+            } catch (Exception e) {
+                log.debug("Failed to delete local model: {}", e.getMessage());
+            }
         }
     }
 }

@@ -482,6 +482,8 @@ public class MLCommonsClientAccessor {
     /**
      * Performs sentence highlighting inference using the provided model.
      * This method will highlight relevant sentences in the context based on the question.
+     * It automatically detects whether the model is local (QUESTION_ANSWERING) or remote (REMOTE)
+     * and uses the appropriate input format.
      *
      * @param inferenceRequest the request containing the question and context for highlighting
      * @param listener the listener to be called with the highlighting results
@@ -490,24 +492,68 @@ public class MLCommonsClientAccessor {
         @NonNull final SentenceHighlightingRequest inferenceRequest,
         @NonNull final ActionListener<List<Map<String, Object>>> listener
     ) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createSingleHighlightingMLInput(inferenceRequest),
-            mlOutput -> parseSingleHighlightingOutput(mlOutput),
-            listener
-        );
+        // First get the model to determine its type
+        getModel(inferenceRequest.getModelId(), ActionListener.wrap(model -> {
+            FunctionName functionName = model.getAlgorithm();
+
+            if (functionName == FunctionName.QUESTION_ANSWERING) {
+                // Local model - use QuestionAnsweringInputDataSet
+                retryableInference(
+                    inferenceRequest,
+                    0,
+                    () -> createLocalHighlightingMLInput(inferenceRequest),
+                    mlOutput -> parseSingleHighlightingOutput(mlOutput),
+                    listener
+                );
+            } else if (functionName == FunctionName.REMOTE) {
+                // Remote model - use RemoteInferenceInputDataSet with inputs array
+                retryableInference(
+                    inferenceRequest,
+                    0,
+                    () -> createRemoteHighlightingMLInput(inferenceRequest),
+                    mlOutput -> parseSingleHighlightingOutput(mlOutput),
+                    listener
+                );
+            } else {
+                listener.onFailure(new IllegalArgumentException("Unsupported model type for highlighting: " + functionName));
+            }
+        }, listener::onFailure));
     }
 
     /**
-     * Create MLInput for single highlighting inference
+     * Create MLInput for local model highlighting (QUESTION_ANSWERING)
      */
-    private MLInput createSingleHighlightingMLInput(SentenceHighlightingRequest inferenceRequest) {
+    private MLInput createLocalHighlightingMLInput(SentenceHighlightingRequest inferenceRequest) {
         try {
             MLInputDataset inputDataset = new QuestionAnsweringInputDataSet(inferenceRequest.getQuestion(), inferenceRequest.getContext());
             return new MLInput(FunctionName.QUESTION_ANSWERING, null, inputDataset);
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to create single highlighting ML input", e);
+            throw new IllegalStateException("Failed to create local highlighting ML input", e);
+        }
+    }
+
+    /**
+     * Create MLInput for remote model highlighting (REMOTE)
+     * Uses the same format as batch but with a single item array to maintain consistency
+     */
+    private MLInput createRemoteHighlightingMLInput(SentenceHighlightingRequest inferenceRequest) {
+        try {
+            Map<String, String> parameters = new HashMap<>();
+
+            // Create a single-item array in the same format as batch
+            XContentBuilder builder = XContentFactory.jsonBuilder();
+            builder.startArray();
+            builder.startObject()
+                .field(SemanticHighlightingConstants.QUESTION_KEY, inferenceRequest.getQuestion())
+                .field(SemanticHighlightingConstants.CONTEXT_KEY, inferenceRequest.getContext())
+                .endObject();
+            builder.endArray();
+
+            parameters.put(SemanticHighlightingConstants.INPUTS_KEY, builder.toString());
+            RemoteInferenceInputDataSet inputDataset = new RemoteInferenceInputDataSet(parameters);
+            return MLInput.builder().algorithm(FunctionName.REMOTE).inputDataset(inputDataset).build();
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to create remote highlighting ML input", e);
         }
     }
 
