@@ -223,17 +223,15 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             }
             List<String> tokenIdList = createInferenceList(tokenIdProcessMap);
             List<String> wordList = createInferenceList(wordProcessMap);
-            splitDataResponse.tokenIdResponseInferenceList.addAll(tokenIdList);
-            splitDataResponse.wordResponseInferenceList.addAll(wordList);
+            splitDataResponse.getTokenIdResponseInferenceList().addAll(tokenIdList);
+            splitDataResponse.getWordResponseInferenceList().addAll(wordList);
             if (!tokenIdList.isEmpty()) {
-                splitDataResponse.tokenIdDataForInference.add(
-                    new DataForInference(dataForInference.getIngestDocumentWrapper(), tokenIdProcessMap, tokenIdList)
-                );
+                splitDataResponse.getTokenIdDataForInference()
+                    .add(new DataForInference(dataForInference.getIngestDocumentWrapper(), tokenIdProcessMap, tokenIdList));
             }
             if (!wordList.isEmpty()) {
-                splitDataResponse.wordDataForInference.add(
-                    new DataForInference(dataForInference.getIngestDocumentWrapper(), wordProcessMap, wordList)
-                );
+                splitDataResponse.getWordDataForInference()
+                    .add(new DataForInference(dataForInference.getIngestDocumentWrapper(), wordProcessMap, wordList));
             }
         }
         return splitDataResponse;

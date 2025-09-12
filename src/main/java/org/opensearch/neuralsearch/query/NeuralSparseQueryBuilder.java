@@ -656,8 +656,11 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         return isSeismicSupported() && Objects.nonNull(fieldType) && SparseTokensFieldType.isSparseTokensType(fieldType.typeName());
     }
 
-    @VisibleForTesting
-    ClusterService clusterService() {
+    /**
+     * Overwrite clusterService's getter function
+     * @return ClusterService
+     */
+    public ClusterService clusterService() {
         if (clusterService == null) {
             clusterService = NeuralSearchClusterUtil.instance().getClusterService();
         }
