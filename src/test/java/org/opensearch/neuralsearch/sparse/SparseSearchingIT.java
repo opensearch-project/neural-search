@@ -12,7 +12,6 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -36,7 +35,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         super.setUp();
     }
 
-    public void testIngestDocumentsAllSeismicPostingPruning() throws Exception {
+    public void testSearchDocumentsAllSeismicPostingPruning() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
 
         ingestDocumentsAndForceMerge(
@@ -70,7 +69,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("8", "7", "6", "5"), actualIds);
     }
 
-    public void testIngestDocumentsMixSeismicWithRankFeatures() throws Exception {
+    public void testSearchDocumentsMixSeismicWithRankFeatures() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 4);
 
         ingestDocuments(
@@ -111,7 +110,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("8", "7", "6", "5", "3", "2", "1"), actualIds);
     }
 
-    public void testIngestDocumentsWithAllRankFeatures() throws Exception {
+    public void testSearchDocumentsWithAllRankFeatures() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 100);
 
         ingestDocuments(
@@ -155,7 +154,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("8", "7", "6", "5", "4", "3", "2", "1"), actualIds);
     }
 
-    public void testIngestDocumentsAllSeismicWithCut() throws Exception {
+    public void testSearchDocumentsAllSeismicWithCut() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
 
         ingestDocumentsAndForceMerge(
@@ -190,20 +189,11 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("9"), actualIds);
     }
 
-    public void testIngestDocumentsSeismicHeapFactor() throws Exception {
+    public void testSearchDocumentsSeismicHeapFactor() throws Exception {
         final int docCount = 100;
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, docCount, 1.0f, 0.5f, docCount);
 
-        List<Map<String, Float>> docs = new ArrayList<>();
-        for (int i = 0; i < docCount; ++i) {
-            Map<String, Float> tokens = new HashMap<>();
-            tokens.put("1000", randomFloat());
-            tokens.put("2000", randomFloat());
-            tokens.put("3000", randomFloat());
-            tokens.put("4000", randomFloat());
-            tokens.put("5000", randomFloat());
-            docs.add(tokens);
-        }
+        List<Map<String, Float>> docs = prepareIngestDocuments(docCount);
 
         ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs);
 
@@ -231,7 +221,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(docCount, getHitCount(searchResults));
     }
 
-    public void testIngestDocumentsAllSeismicWithPreFiltering() throws Exception {
+    public void testSearchDocumentsAllSeismicWithPreFiltering() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
         ingestDocumentsAndForceMerge(
@@ -288,7 +278,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("8", "6", "4", "2"), actualIds);
     }
 
-    public void testIngestDocumentsAllSeismicWithPostFiltering() throws Exception {
+    public void testSearchDocumentsAllSeismicWithPostFiltering() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
         ingestDocumentsAndForceMerge(
@@ -330,7 +320,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("7", "6", "5"), actualIds);
     }
 
-    public void testIngestDocumentsRankFeaturesWithFiltering() throws Exception {
+    public void testSearchDocumentsRankFeaturesWithFiltering() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 1, 0.4f, 0.5f, 100);
 
         ingestDocuments(
@@ -371,23 +361,15 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("7", "5", "3", "1"), actualIds);
     }
 
-    public void testIngestDocumentsMultipleShards() throws Exception {
+    public void testSearchDocumentsMultipleShards() throws Exception {
         int shards = 3;
+        int replicas = getEffectiveReplicaCount(3);
         int docCount = 20;
-        // effective number of replica is capped by the number of OpenSearch nodes minus 1
-        int replicas = Math.min(3, getNodeCount() - 1);
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 5, 0.4f, 0.5f, docCount, shards, replicas);
 
-        List<Map<String, Float>> docs = new ArrayList<>();
+        List<Map<String, Float>> docs = prepareIngestDocuments(docCount);
         List<String> text = new ArrayList<>();
         for (int i = 0; i < docCount; ++i) {
-            Map<String, Float> tokens = new HashMap<>();
-            tokens.put("1000", randomFloat());
-            tokens.put("2000", randomFloat());
-            tokens.put("3000", randomFloat());
-            tokens.put("4000", randomFloat());
-            tokens.put("5000", randomFloat());
-            docs.add(tokens);
             if (i % 2 == 0) {
                 text.add("apple");
             } else {
@@ -459,7 +441,7 @@ public class SparseSearchingIT extends SparseBaseIT {
             .contains(String.format(Locale.ROOT, "Two phase search processor is not compatible with [%s] field for now", SEISMIC)));
     }
 
-    public void testSeismicWithModelInferencing() throws Exception {
+    public void testSearchSeismicWithModelInferencing() throws Exception {
         String modelId = prepareSparseEncodingModel();
         String sparseFieldName = "title_sparse"; // configured in SparseEncodingPipelineConfiguration.json
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING, 2);
@@ -525,6 +507,50 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(2, getHitCount(searchResults));
         List<String> actualIds = getDocIDs(searchResults);
         assertEquals(List.of("8", "7"), actualIds);
+    }
+    
+    /**
+     * Test searching across multiple seismic fields
+     */
+    public void testSearchWithMultipleSeismicFields() {
+        String field1 = TEST_SPARSE_FIELD_NAME + "_1";
+        String field2 = TEST_SPARSE_FIELD_NAME + "_2";
+
+        createIndexWithMultipleSeismicFields(TEST_INDEX_NAME, List.of(field1, field2));
+
+        // Index multiple documents with different token distributions
+        addSparseEncodingDoc(
+            TEST_INDEX_NAME,
+            "1",
+            List.of(field1, field2),
+            List.of(Map.of("1000", 0.8f, "2000", 0.2f), Map.of("3000", 0.1f, "4000", 0.9f))
+        );
+        addSparseEncodingDoc(
+            TEST_INDEX_NAME,
+            "2",
+            List.of(field1, field2),
+            List.of(Map.of("1000", 0.3f, "2000", 0.7f), Map.of("3000", 0.6f, "4000", 0.4f))
+        );
+        addSparseEncodingDoc(
+            TEST_INDEX_NAME,
+            "3",
+            List.of(field1, field2),
+            List.of(Map.of("1000", 0.1f, "5000", 0.9f), Map.of("6000", 0.8f, "4000", 0.2f))
+        );
+
+        // Search on first field
+        NeuralSparseQueryBuilder queryBuilder1 = getNeuralSparseQueryBuilder(field1, 2, 1.0f, 10, Map.of("1000", 0.5f, "2000", 0.5f));
+
+        Map<String, Object> searchResults1 = search(TEST_INDEX_NAME, queryBuilder1, 10);
+        assertNotNull(searchResults1);
+        assertTrue(getHitCount(searchResults1) > 0);
+
+        // Search on second field
+        NeuralSparseQueryBuilder queryBuilder2 = getNeuralSparseQueryBuilder(field2, 2, 1.0f, 10, Map.of("3000", 0.5f, "4000", 0.5f));
+
+        Map<String, Object> searchResults2 = search(TEST_INDEX_NAME, queryBuilder2, 10);
+        assertNotNull(searchResults2);
+        assertTrue(getHitCount(searchResults2) > 0);
     }
 
     private List<String> getDocIDs(Map<String, Object> searchResults) {

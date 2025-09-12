@@ -25,7 +25,7 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
 
     private long emptyClusteredPostingCacheSize;
     private long emptyClusteredPostingCacheItemSize;
-    private ClusteredPostingCache clusteredPostingCache;
+    private TestClusteredPostingCache clusteredPostingCache;
 
     /**
      * Set up the test environment before each test.
@@ -36,9 +36,10 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
     @SneakyThrows
     public void setUp() {
         super.setUp();
-        clusteredPostingCache = ClusteredPostingCache.getInstance();
+        clusteredPostingCache = new TestClusteredPostingCache();
         emptyClusteredPostingCacheSize = clusteredPostingCache.ramBytesUsed();
         RamBytesRecorder globalRecorder = mock(RamBytesRecorder.class);
+        CacheKey cacheKey = prepareUniqueCacheKey(TestsPrepareUtils.prepareSegmentInfo());
         emptyClusteredPostingCacheItemSize = new ClusteredPostingCacheItem(cacheKey, globalRecorder).ramBytesUsed();
     }
 
@@ -111,5 +112,11 @@ public class ClusteredPostingCacheTests extends AbstractSparseTestBase {
         NullPointerException exception = expectThrows(NullPointerException.class, () -> { clusteredPostingCache.getOrCreate(null); });
 
         assertEquals("key is marked non-null but is null", exception.getMessage());
+    }
+
+    private static class TestClusteredPostingCache extends ClusteredPostingCache {
+        TestClusteredPostingCache() {
+            super();
+        }
     }
 }

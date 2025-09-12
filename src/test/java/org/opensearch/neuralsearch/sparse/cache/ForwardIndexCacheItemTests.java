@@ -252,7 +252,7 @@ public class ForwardIndexCacheItemTests extends AbstractSparseTestBase {
         ForwardIndexCacheItem cacheItem1 = new ForwardIndexCacheItem(cacheKey, testDocCount, mockGlobalRamBytesRecorder);
 
         CacheKey cacheKey2 = prepareUniqueCacheKey(segmentInfo);
-        ForwardIndexCacheItem cacheItem2 = ForwardIndexCache.getInstance().getOrCreate(cacheKey2, testDocCount);
+        ForwardIndexCacheItem cacheItem2 = new ForwardIndexCacheItem(cacheKey2, testDocCount, mockGlobalRamBytesRecorder);
 
         assertNotSame("Should be different index instances", cacheItem1, cacheItem2);
         ForwardIndexCache.getInstance().onIndexRemoval(cacheKey2);

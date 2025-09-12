@@ -496,7 +496,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
     Map<String, Float> getQueryTokens(QueryShardContext context) {
         // There can be certain cases that we can use the queryTokensSupplier directly:
         // 1. If the raw query tokens are provided through the query.
-        // 2. If we use a ML model to generate the query tokens based on the query text.
+        // 2. If we use an ML model to generate the query tokens based on the query text.
         if (Objects.nonNull(queryTokensMapSupplier) && Objects.nonNull(queryTokensMapSupplier.get())) {
             return queryTokensMapSupplier.get();
         }
@@ -560,6 +560,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             validateFieldType(ft);
         }
         Map<String, Float> queryTokens = getQueryTokens(context);
+        if (Objects.isNull(queryTokens)) {
+            throw new IllegalArgumentException("Query tokens cannot be null.");
+        }
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
