@@ -1158,6 +1158,7 @@ public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBu
             queryRewriteContext.registerAsyncAction(
                 ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
                     TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(queryText)).build(),
+                    null,
                     ActionListener.wrap(mapResultList -> {
                         final Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                         if (isSparseTwoPhaseOne()) {

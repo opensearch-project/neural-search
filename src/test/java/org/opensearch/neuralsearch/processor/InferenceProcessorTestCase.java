@@ -27,10 +27,16 @@ import java.util.Map;
 
 public class InferenceProcessorTestCase extends OpenSearchTestCase {
     protected List<IngestDocumentWrapper> createIngestDocumentWrappers(int count, String value) {
+        return createIngestDocumentWrappers(count, "key1", value);
+    }
+
+    protected List<IngestDocumentWrapper> createIngestDocumentWrappers(int count, String... values) {
         List<IngestDocumentWrapper> wrapperList = new ArrayList<>();
         for (int i = 1; i <= count; ++i) {
             Map<String, Object> sourceAndMetadata = new HashMap<>();
-            sourceAndMetadata.put("key1", value);
+            for (int j = 0; j < values.length; j += 2) {
+                sourceAndMetadata.put(values[j], values[j + 1]);
+            }
             sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
             sourceAndMetadata.put("_id", String.valueOf(i));
             wrapperList.add(new IngestDocumentWrapper(i, 0, new IngestDocument(sourceAndMetadata, new HashMap<>()), null));

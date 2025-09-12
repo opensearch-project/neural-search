@@ -4,6 +4,35 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
+import org.opensearch.action.get.GetResponse;
+import org.opensearch.action.get.MultiGetItemResponse;
+import org.opensearch.action.get.MultiGetRequest;
+import org.opensearch.action.get.MultiGetResponse;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.collect.Tuple;
+import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.util.CollectionUtils;
+import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.IndexFieldMapper;
+import org.opensearch.ingest.AbstractBatchingProcessor;
+import org.opensearch.ingest.IngestDocument;
+import org.opensearch.ingest.IngestDocumentWrapper;
+import org.opensearch.ml.common.input.parameter.MLAlgoParams;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.optimization.InferenceFilter;
+import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
+import org.opensearch.neuralsearch.util.TokenWeightUtil;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -20,37 +49,6 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
-import org.opensearch.action.get.GetResponse;
-import org.opensearch.action.get.MultiGetItemResponse;
-import org.opensearch.action.get.MultiGetRequest;
-import org.opensearch.action.get.MultiGetResponse;
-import org.opensearch.common.collect.Tuple;
-import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.util.CollectionUtils;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.IndexFieldMapper;
-
-import org.opensearch.ingest.AbstractBatchingProcessor;
-import org.opensearch.ingest.IngestDocument;
-import org.opensearch.ingest.IngestDocumentWrapper;
-import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
-
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableMap;
-
-import lombok.extern.log4j.Log4j2;
-import org.opensearch.neuralsearch.processor.optimization.InferenceFilter;
-import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
-import org.opensearch.neuralsearch.util.TokenWeightUtil;
-import org.opensearch.neuralsearch.util.prune.PruneType;
-import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
@@ -223,18 +221,12 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         inferenceList = sortedResult.v1();
         Map<Integer, Integer> originalOrder = sortedResult.v2();
         doBatchExecute(inferenceList, results -> {
-            batchExecuteHandler(results, ingestDocumentWrappers, dataForInferences, originalOrder, handler);
+            batchExecuteHandler(results, dataForInferences, originalOrder);
             handler.accept(ingestDocumentWrappers);
         }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
     }
 
-    private void batchExecuteHandler(
-        List<?> results,
-        List<IngestDocumentWrapper> ingestDocumentWrappers,
-        List<DataForInference> dataForInferences,
-        Map<Integer, Integer> originalOrder,
-        Consumer<List<IngestDocumentWrapper>> handler
-    ) {
+    protected void batchExecuteHandler(List<?> results, List<DataForInference> dataForInferences, Map<Integer, Integer> originalOrder) {
         int startIndex = 0;
         results = restoreToOriginalOrder(results, originalOrder);
         for (DataForInference dataForInference : dataForInferences) {
@@ -252,7 +244,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         }
     }
 
-    private Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
+    protected Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
         List<Tuple<Integer, String>> docsWithIndex = new ArrayList<>();
         for (int i = 0; i < inferenceList.size(); ++i) {
             docsWithIndex.add(Tuple.tuple(i, inferenceList.get(i)));
@@ -812,10 +804,12 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         List<String> inferenceList,
         PruneType pruneType,
         float pruneRatio,
+        MLAlgoParams mlAlgoParams,
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
             TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            mlAlgoParams,
             ActionListener.wrap(resultMaps -> {
                 List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                     .stream()
