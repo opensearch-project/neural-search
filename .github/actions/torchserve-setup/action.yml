@@ -76,13 +76,13 @@ runs:
           --cpus ${{ inputs.cpu-limit }} \
           pytorch/torchserve:${{ inputs.torchserve-version }} \
           torchserve --start --model-store /home/model-server/model-store --ts-config /home/model-server/config.properties
-        
+
         # Give container time to start
         sleep 10
-        
+
         echo "Container status:"
         docker ps
-        
+
         echo "Checking TorchServe health..."
         for i in {1..10}; do
           if curl -s http://localhost:${{ inputs.inference-port }}/ping | grep -q "Healthy"; then
