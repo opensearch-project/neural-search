@@ -1,14 +1,35 @@
-name: 'Setup TorchServe Model'
-description: 'Setup and deploy semantic highlighter model to TorchServe'
+name: 'TorchServe Complete Setup'
+description: 'Complete TorchServe setup including container start, model deployment, and optional cleanup'
+
 inputs:
+  action:
+    description: 'Action to perform: start, setup-model, cleanup, or full-setup (default)'
+    required: false
+    default: 'full-setup'
+  torchserve-version:
+    description: 'TorchServe Docker image version'
+    required: false
+    default: '0.9.0-cpu'
+  inference-port:
+    description: 'TorchServe inference port'
+    required: false
+    default: '8080'
+  management-port:
+    description: 'TorchServe management port'
+    required: false
+    default: '8081'
+  memory-limit:
+    description: 'Docker memory limit'
+    required: false
+    default: '2g'
+  cpu-limit:
+    description: 'Docker CPU limit'
+    required: false
+    default: '1'
   python-version:
-    description: 'Python version to use'
+    description: 'Python version for model archiver'
     required: false
     default: '3.9'
-  torchserve-endpoint:
-    description: 'TorchServe endpoint URL'
-    required: false
-    default: 'http://localhost:8080'
   handler-path:
     description: 'Path to the TorchServe handler file'
     required: false
@@ -18,27 +39,84 @@ inputs:
     required: false
     default: 'semantic_highlighter'
 
+outputs:
+  torchserve-endpoint:
+    description: 'TorchServe inference endpoint URL'
+    value: ${{ steps.set-outputs.outputs.torchserve-endpoint }}
+  management-endpoint:
+    description: 'TorchServe management endpoint URL'
+    value: ${{ steps.set-outputs.outputs.management-endpoint }}
+  model-endpoint:
+    description: 'Semantic highlighter model endpoint URL'
+    value: ${{ steps.set-outputs.outputs.model-endpoint }}
+
 runs:
   using: "composite"
   steps:
+    # Set outputs that are always available
+    - name: Set Outputs
+      id: set-outputs
+      shell: bash
+      run: |
+        echo "torchserve-endpoint=http://localhost:${{ inputs.inference-port }}" >> $GITHUB_OUTPUT
+        echo "management-endpoint=http://localhost:${{ inputs.management-port }}" >> $GITHUB_OUTPUT
+        echo "model-endpoint=http://localhost:${{ inputs.inference-port }}/predictions/${{ inputs.model-name }}" >> $GITHUB_OUTPUT
+
+    # Start TorchServe Container (for 'start' and 'full-setup' actions)
+    - name: Start TorchServe Container
+      if: inputs.action == 'start' || inputs.action == 'full-setup'
+      shell: bash
+      run: |
+        echo "Starting TorchServe container..."
+        docker run -d \
+          --name torchserve \
+          -p ${{ inputs.inference-port }}:8080 \
+          -p ${{ inputs.management-port }}:8081 \
+          --memory ${{ inputs.memory-limit }} \
+          --cpus ${{ inputs.cpu-limit }} \
+          pytorch/torchserve:${{ inputs.torchserve-version }} \
+          torchserve --start --model-store /home/model-server/model-store --ts-config /home/model-server/config.properties
+        
+        # Give container time to start
+        sleep 10
+        
+        echo "Container status:"
+        docker ps
+        
+        echo "Checking TorchServe health..."
+        for i in {1..10}; do
+          if curl -s http://localhost:${{ inputs.inference-port }}/ping | grep -q "Healthy"; then
+            echo "✓ TorchServe is ready!"
+            break
+          fi
+          echo "Waiting for TorchServe... ($i/10)"
+          [ $i -eq 10 ] && { echo "ERROR: TorchServe not responding"; exit 1; }
+          sleep 3
+        done
+
+    # Setup Model (for 'setup-model' and 'full-setup' actions)
     - name: Setup Python
+      if: inputs.action == 'setup-model' || inputs.action == 'full-setup'
       uses: actions/setup-python@v4
       with:
         python-version: ${{ inputs.python-version }}
 
     - name: Install torch-model-archiver
+      if: inputs.action == 'setup-model' || inputs.action == 'full-setup'
       shell: bash
       run: |
         echo "Installing torch-model-archiver..."
         pip install -q torch-model-archiver --no-cache-dir
 
-    - name: Wait for TorchServe
+    - name: Setup TorchServe Container Dependencies
+      if: inputs.action == 'setup-model' || inputs.action == 'full-setup'
       shell: bash
       run: |
+        # Wait for TorchServe
         echo "Waiting for TorchServe to be ready..."
         MAX_ATTEMPTS=30
         for i in $(seq 1 $MAX_ATTEMPTS); do
-          if curl -s ${{ inputs.torchserve-endpoint }}/ping | grep -q "Healthy"; then
+          if curl -s http://localhost:${{ inputs.inference-port }}/ping | grep -q "Healthy"; then
             echo "✓ TorchServe is ready!"
             break
           fi
@@ -47,11 +125,8 @@ runs:
           sleep 5
         done
 
-    - name: Setup TorchServe Container
-      shell: bash
-      run: |
         # Find TorchServe container
-        CONTAINER_ID=$(docker ps --format "{{.ID}}" --filter "publish=8080" | head -1)
+        CONTAINER_ID=$(docker ps --format "{{.ID}}" --filter "publish=${{ inputs.inference-port }}" | head -1)
         [ -z "$CONTAINER_ID" ] && { echo "ERROR: TorchServe container not found"; docker ps; exit 1; }
         echo "Found TorchServe container: $CONTAINER_ID"
 
@@ -76,11 +151,11 @@ runs:
 
     - name: Check Model Status
       id: check-model
+      if: inputs.action == 'setup-model' || inputs.action == 'full-setup'
       shell: bash
       run: |
         # Check if model is already loaded
-        # Construct management API URL (port 8081)
-        MGMT_URL="http://localhost:8081"
+        MGMT_URL="http://localhost:${{ inputs.management-port }}"
         MODEL_STATUS=$(curl -s "${MGMT_URL}/models" 2>/dev/null || echo "[]")
 
         if echo "$MODEL_STATUS" | grep -q "${{ inputs.model-name }}"; then
@@ -92,7 +167,7 @@ runs:
         fi
 
     - name: Deploy Model
-      if: steps.check-model.outputs.model_loaded == 'false'
+      if: (inputs.action == 'setup-model' || inputs.action == 'full-setup') && steps.check-model.outputs.model_loaded == 'false'
       shell: bash
       run: |
         set -e
@@ -134,7 +209,7 @@ runs:
           --force
 
         # Deploy to TorchServe container
-        CONTAINER_ID=$(docker ps --format "{{.ID}}" --filter "publish=8080" | head -1)
+        CONTAINER_ID=$(docker ps --format "{{.ID}}" --filter "publish=${{ inputs.inference-port }}" | head -1)
 
         echo "Deploying model to container..."
         docker cp "model_store/${{ inputs.model-name }}.mar" "$CONTAINER_ID:/home/model-server/model-store/"
@@ -177,12 +252,13 @@ runs:
         " 2>/dev/null
 
     - name: Verify Model Deployment
+      if: inputs.action == 'setup-model' || inputs.action == 'full-setup'
       shell: bash
       run: |
         # Wait for model to be ready
         echo "Waiting for model to be ready..."
         MAX_ATTEMPTS=20
-        MGMT_URL="http://localhost:8081"
+        MGMT_URL="http://localhost:${{ inputs.management-port }}"
 
         for i in $(seq 1 $MAX_ATTEMPTS); do
           MODEL_STATUS=$(curl -s "${MGMT_URL}/models" 2>/dev/null || echo "{}")
@@ -200,7 +276,7 @@ runs:
 
         # Test inference
         echo "Testing model inference..."
-        TEST_RESPONSE=$(curl -s -X POST "${{ inputs.torchserve-endpoint }}/predictions/${{ inputs.model-name }}" \
+        TEST_RESPONSE=$(curl -s -X POST "http://localhost:${{ inputs.inference-port }}/predictions/${{ inputs.model-name }}" \
           -H "Content-Type: application/json" \
           -d '{"question": "What is OpenSearch?", "context": "OpenSearch is a search engine that helps you find information."}')
 
@@ -212,9 +288,19 @@ runs:
           echo "Response: $TEST_RESPONSE"
 
           # Debug information
-          CONTAINER_ID=$(docker ps --format "{{.ID}}" --filter "publish=8080" | head -1)
+          CONTAINER_ID=$(docker ps --format "{{.ID}}" --filter "publish=${{ inputs.inference-port }}" | head -1)
           echo "=== Debug Information ==="
           echo "Container logs (last 50 lines):"
           docker logs $CONTAINER_ID --tail 50
           exit 1
         fi
+
+    # Cleanup (for 'cleanup' action only)
+    - name: Cleanup TorchServe
+      if: inputs.action == 'cleanup'
+      shell: bash
+      run: |
+        echo "Cleaning up TorchServe container..."
+        docker stop torchserve || true
+        docker rm torchserve || true
+        echo "✓ TorchServe container cleaned up"
