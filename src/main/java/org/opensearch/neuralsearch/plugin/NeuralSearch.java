@@ -4,9 +4,55 @@
  */
 package org.opensearch.neuralsearch.plugin;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
+
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Supplier;
+
+import org.opensearch.core.common.breaker.CircuitBreaker;
+import org.opensearch.core.common.unit.ByteSizeValue;
+import org.opensearch.index.IndexModule;
+import org.opensearch.index.IndexSettings;
+import org.opensearch.index.codec.CodecServiceFactory;
+import org.opensearch.index.mapper.Mapper;
+import org.opensearch.indices.breaker.BreakerSettings;
+import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import com.google.common.collect.ImmutableList;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.ActionRequest;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
+import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
+import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
+import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
+import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
+import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
+import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
+import org.opensearch.index.mapper.MappingTransformer;
+import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
+import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
+import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
+import org.opensearch.plugins.MapperPlugin;
+import org.opensearch.plugins.CircuitBreakerPlugin;
+import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.service.ClusterService;
@@ -16,26 +62,13 @@ import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.settings.SettingsFilter;
 import org.opensearch.core.action.ActionResponse;
-import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.codec.CodecServiceFactory;
-import org.opensearch.index.mapper.Mapper;
-import org.opensearch.index.mapper.MappingTransformer;
-import org.opensearch.indices.breaker.BreakerSettings;
+
 import org.opensearch.ingest.Processor;
-import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
-import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
-import org.opensearch.neuralsearch.highlight.SemanticHighlighterEngine;
-import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
-import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
-import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
@@ -53,37 +86,22 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
-import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
-import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
-import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
+import org.opensearch.neuralsearch.highlight.processor.SystemGeneratedSemanticHighlightingFactory;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
+import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.TextImageEmbeddingProcessorFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
-import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
-import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
-import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
-import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
-import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
-import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
-import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
-import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
-import org.opensearch.neuralsearch.stats.events.EventStatsManager;
-import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
 import org.opensearch.neuralsearch.transport.NeuralSparseClearCacheAction;
 import org.opensearch.neuralsearch.transport.NeuralSparseClearCacheTransportAction;
 import org.opensearch.neuralsearch.transport.NeuralSparseWarmupAction;
@@ -93,11 +111,9 @@ import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineServiceUtil;
 import org.opensearch.plugins.ActionPlugin;
-import org.opensearch.plugins.CircuitBreakerPlugin;
 import org.opensearch.plugins.EnginePlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
 import org.opensearch.plugins.IngestPlugin;
-import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.plugins.Plugin;
 import org.opensearch.plugins.SearchPipelinePlugin;
 import org.opensearch.plugins.SearchPlugin;
@@ -109,29 +125,16 @@ import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
-import org.opensearch.transport.client.Client;
 import org.opensearch.watcher.ResourceWatcherService;
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Supplier;
-
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_NAME;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
 
 /**
  * Neural Search plugin class
@@ -155,13 +158,8 @@ public class NeuralSearch extends Plugin
     private InfoStatsManager infoStatsManager;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
-    private final SemanticHighlighter semanticHighlighter;
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
     public static final String NEURAL_BASE_URI = "/_plugins/_neural";
-
-    public NeuralSearch() {
-        this.semanticHighlighter = new SemanticHighlighter();
-    }
 
     @Override
     public Collection<Object> createComponents(
@@ -180,12 +178,6 @@ public class NeuralSearch extends Plugin
         NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
-        QueryTextExtractorRegistry queryTextExtractorRegistry = new QueryTextExtractorRegistry();
-        SemanticHighlighterEngine semanticHighlighterEngine = SemanticHighlighterEngine.builder()
-            .mlCommonsClient(clientAccessor)
-            .queryTextExtractorRegistry(queryTextExtractorRegistry)
-            .build();
-        semanticHighlighter.initialize(semanticHighlighterEngine);
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         settingsAccessor = new NeuralSearchSettingsAccessor(clusterService, environment.settings());
@@ -337,6 +329,14 @@ public class NeuralSearch extends Plugin
     }
 
     @Override
+    public Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor>> getSystemGeneratedResponseProcessors(
+        Parameters parameters
+    ) {
+        // System-generated semantic highlighting processor that automatically applies when semantic highlighting is detected
+        return Map.of(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE, new SystemGeneratedSemanticHighlightingFactory(clientAccessor));
+    }
+
+    @Override
     public List<SearchPlugin.SearchExtSpec<?>> getSearchExts() {
         return List.of(
             new SearchExtSpec<>(
@@ -356,11 +356,12 @@ public class NeuralSearch extends Plugin
     }
 
     /**
-     * Register semantic highlighter
+     * Register minimal semantic highlighter for type validation
+     * Actual highlighting is done by SystemGeneratedSemanticHighlightingProcessor
      */
     @Override
     public Map<String, Highlighter> getHighlighters() {
-        return Collections.singletonMap(SemanticHighlighter.NAME, semanticHighlighter);
+        return Collections.singletonMap(SemanticHighlighter.NAME, new SemanticHighlighter());
     }
 
     @Override

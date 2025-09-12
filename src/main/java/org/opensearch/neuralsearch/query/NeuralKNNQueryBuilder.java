@@ -373,6 +373,15 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
     }
 
     /**
+     * Gets the original query text that was used to generate the vector.
+     *
+     * @return The original query text, or null if not set
+     */
+    public String getOriginalQueryText() {
+        return originalQueryText;
+    }
+
+    /**
      * Checks if this query is equal to another NeuralKNNQueryBuilder.
      *
      * @param other The other NeuralKNNQueryBuilder to compare with
