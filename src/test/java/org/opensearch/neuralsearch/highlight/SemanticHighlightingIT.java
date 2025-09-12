@@ -32,7 +32,6 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
 
     private static final String TEST_INDEX = "test-semantic-highlight-index";
     private static final String TEST_FIELD = "content";
-    private static final String PIPELINE_NAME = "semantic_highlighting_pipeline";
 
     private String modelIdBatchDisabled;
     private String modelIdBatchEnabled;
@@ -71,9 +70,9 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
                 modelIdBatchEnabled = deployRemoteSemanticHighlightingModel(connectorIdBatchEnabled, "semantic-highlighter-batch-enabled");
                 log.info("Deployed model with batch enabled, model ID: {}", modelIdBatchEnabled);
 
-                createIndexWithSemanticHighlightingPipeline(TEST_INDEX, PIPELINE_NAME);
+                // Create simple index
+                createSimpleIndex();
                 indexTestDocuments();
-                createSemanticHighlightingPipeline(PIPELINE_NAME, modelIdBatchDisabled, TEST_FIELD, false);
             } else {
                 log.info("TorchServe not available at {}, tests will be skipped", torchServeEndpoint);
             }
@@ -95,6 +94,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             cleanupSemanticHighlightingResources(connectorIdBatchDisabled, modelIdBatchDisabled);
             cleanupSemanticHighlightingResources(connectorIdBatchEnabled, modelIdBatchEnabled);
         }
+
         super.tearDown();
     }
 
@@ -112,6 +112,36 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
                 "^http://torchserve:.*"
             )
         );
+
+        // Enable all system-generated factories for testing
+        // Using "*" enables all system-generated factories including our semantic_highlighting_factory
+        updateClusterSettings("cluster.search.enabled_system_generated_factories", List.of("*"));
+    }
+
+    @SneakyThrows
+    private void createSimpleIndex() {
+        // Create index with simple mapping
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("properties")
+            .startObject(TEST_FIELD)
+            .field("type", "text")
+            .endObject()
+            .startObject("title")
+            .field("type", "text")
+            .endObject()
+            .startObject("category")
+            .field("type", "keyword")
+            .endObject()
+            .endObject()
+            .endObject();
+
+        String mappingJson = mapping.toString();
+        Request request = new Request("PUT", "/" + TEST_INDEX);
+        request.setJsonEntity("{\"mappings\": " + mappingJson + "}");
+
+        Response response = client().performRequest(request);
+        assertEquals(200, response.getStatusLine().getStatusCode());
     }
 
     @SneakyThrows
@@ -130,6 +160,10 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             "Machine Learning Basics",
             "technology"
         );
+
+        // Refresh to make documents searchable
+        Request refreshRequest = new Request("POST", "/" + TEST_INDEX + "/_refresh");
+        client().performRequest(refreshRequest);
     }
 
     public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithRemoteModel() throws Exception {
@@ -156,15 +190,13 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             .endObject()
             .endObject();
 
-        Map<String, Object> responseMap = performSemanticHighlightingSearch(TEST_INDEX, searchBody);
-        TestUtils.assertSemanticHighlighting(responseMap, TEST_FIELD, "OpenSearch");
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-        // Log the highlights for debugging
-        List<Map<String, Object>> hitsList = TestUtils.getNestedHits(responseMap);
-        Map<String, Object> firstHit = hitsList.get(0);
-        Map<String, Object> highlight = (Map<String, Object>) firstHit.get("highlight");
-        List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
-        log.info("Semantic highlights with batch disabled: {}", contentHighlights);
+        TestUtils.assertSemanticHighlighting(responseMap, TEST_FIELD, "OpenSearch");
     }
 
     public void testSemanticHighlightingWithQueryMatchWithBatchEnabledWithRemoteModel() throws Exception {
@@ -191,30 +223,13 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             .endObject()
             .endObject();
 
-        Map<String, Object> responseMap = performSemanticHighlightingSearch(TEST_INDEX, searchBody);
-
-        // Log the response for debugging
-        log.info("Search response: {}", responseMap);
-
-        // Check if highlights exist at all
-        List<Map<String, Object>> hitsList = TestUtils.getNestedHits(responseMap);
-        if (!hitsList.isEmpty()) {
-            Map<String, Object> firstHit = hitsList.get(0);
-            Map<String, Object> highlight = (Map<String, Object>) firstHit.get("highlight");
-            if (highlight != null) {
-                List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
-                log.info("Actual highlights: {}", contentHighlights);
-            }
-        }
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
         TestUtils.assertSemanticHighlighting(responseMap, TEST_FIELD, "machine learning");
-
-        // Log the highlights for debugging
-        for (Map<String, Object> hit : hitsList) {
-            Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
-            List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
-            log.info("Semantic highlights with batch enabled: {}", contentHighlights);
-        }
     }
 
     /**
@@ -222,43 +237,59 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
      * This tests backward compatibility with OpenSearch 3.1 local models
      */
     public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithLocalModel() throws Exception {
-        // Step 0: Set up ML Commons settings for local model
+        // Set up ML Commons settings for local model
         updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
         updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
 
-        // Step 1: Prepare local sentence highlighting model
-        // This uses the existing resource file at highlight/UploadSentenceHighlightingModelRequestBody.json
+        // Prepare local sentence highlighting model
         String localModelId = prepareSentenceHighlightingModel();
         log.info("Prepared local model with ID: {}", localModelId);
 
-        // Step 2: Create a separate index for local model testing
+        // Create a separate index for local model testing
         String localTestIndex = TEST_INDEX + "-local";
-        String localPipelineName = PIPELINE_NAME + "-local";
-
-        // Step 3: Create semantic highlighting pipeline (without model_id in config for flexibility)
-        createSemanticHighlightingPipeline(localPipelineName, null, TEST_FIELD, false);
-
-        // Step 4: Create index with the pipeline
-        createIndexWithSemanticHighlightingPipeline(localTestIndex, localPipelineName);
-
-        // Step 5: Index test documents
-        addSemanticHighlightingDocument(
-            localTestIndex,
-            "1",
-            "OpenSearch is a scalable, flexible, and extensible open-source software suite for search, analytics, and observability applications. It is licensed under Apache 2.0.",
-            "OpenSearch Overview",
-            "software"
-        );
-        addSemanticHighlightingDocument(
-            localTestIndex,
-            "2",
-            "Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data.",
-            "Machine Learning Basics",
-            "technology"
-        );
 
         try {
-            // Step 6: Create query with semantic highlighting and model_id in options
+            XContentBuilder mapping = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject("properties")
+                .startObject(TEST_FIELD)
+                .field("type", "text")
+                .endObject()
+                .startObject("title")
+                .field("type", "text")
+                .endObject()
+                .startObject("category")
+                .field("type", "keyword")
+                .endObject()
+                .endObject()
+                .endObject();
+
+            Request createIndexRequest = new Request("PUT", "/" + localTestIndex);
+            createIndexRequest.setJsonEntity("{\"mappings\": " + mapping.toString() + "}");
+            Response createIndexResponse = client().performRequest(createIndexRequest);
+            assertEquals(200, createIndexResponse.getStatusLine().getStatusCode());
+
+            // Index test documents
+            addSemanticHighlightingDocument(
+                localTestIndex,
+                "1",
+                "OpenSearch is a scalable, flexible, and extensible open-source software suite for search, analytics, and observability applications. It is licensed under Apache 2.0.",
+                "OpenSearch Overview",
+                "software"
+            );
+            addSemanticHighlightingDocument(
+                localTestIndex,
+                "2",
+                "Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data.",
+                "Machine Learning Basics",
+                "technology"
+            );
+
+            // Refresh index
+            Request refreshRequest = new Request("POST", "/" + localTestIndex + "/_refresh");
+            client().performRequest(refreshRequest);
+
+            // Create query with semantic highlighting and model_id in options
             XContentBuilder searchBody = XContentFactory.jsonBuilder()
                 .startObject()
                 .field("size", 2)
@@ -280,17 +311,18 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
                 .endObject()
                 .endObject();
 
-            // Step 7: Execute search and verify results with local pipeline
-            Request request = new Request("POST", "/" + localTestIndex + "/_search?search_pipeline=" + localPipelineName);
+            log.info("Sending search request with semantic highlighting: {}", searchBody.toString());
+            Request request = new Request("POST", "/" + localTestIndex + "/_search");
             request.setJsonEntity(searchBody.toString());
             Response response = client().performRequest(request);
             String responseBody = EntityUtils.toString(response.getEntity());
+            log.info("Got search response: {}", responseBody);
             Map<String, Object> searchResponse = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-            // Step 8: Verify semantic highlighting worked
+            // Verify semantic highlighting worked
             TestUtils.assertSemanticHighlighting(searchResponse, TEST_FIELD, "OpenSearch");
 
-            // Step 9: Log highlights for debugging
+            // Log highlights for debugging
             List<Map<String, Object>> hitsList = TestUtils.getNestedHits(searchResponse);
             if (!hitsList.isEmpty()) {
                 for (Map<String, Object> hit : hitsList) {
@@ -310,11 +342,6 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
                 deleteIndex(localTestIndex);
             } catch (Exception e) {
                 log.debug("Failed to delete local test index: {}", e.getMessage());
-            }
-            try {
-                deletePipeline("_search", localPipelineName);
-            } catch (Exception e) {
-                log.debug("Failed to delete local test pipeline: {}", e.getMessage());
             }
             try {
                 deleteModel(localModelId);
