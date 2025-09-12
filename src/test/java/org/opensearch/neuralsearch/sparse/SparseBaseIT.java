@@ -169,6 +169,38 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    protected void prepareSparseIndex(String TEST_INDEX_NAME, String TEST_SPARSE_FIELD_NAME, String TEST_TEXT_FIELD_NAME) {
+        int docCount = 100;
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, docCount);
+        List<Map<String, Float>> docs = new ArrayList<>();
+        for (int i = 0; i < docCount; ++i) {
+            Map<String, Float> tokens = new HashMap<>();
+            tokens.put("1000", randomFloat());
+            tokens.put("2000", randomFloat());
+            tokens.put("3000", randomFloat());
+            tokens.put("4000", randomFloat());
+            tokens.put("5000", randomFloat());
+            docs.add(tokens);
+        }
+        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs);
+    }
+
+    @SneakyThrows
+    protected void prepareNonSparseIndex(String TEST_INDEX_NAME) {
+        XContentBuilder settingBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("settings")
+            .field("number_of_shards", 1)
+            .field("number_of_replicas", 0)
+            .endObject()
+            .endObject();
+        Request createIndexRequest = new Request("PUT", "/" + TEST_INDEX_NAME);
+        createIndexRequest.setJsonEntity(settingBuilder.toString());
+        Response response = client().performRequest(createIndexRequest);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+    }
+
+    @SneakyThrows
     protected void prepareMultiShardReplicasIndex(String TEST_INDEX_NAME, String TEST_SPARSE_FIELD_NAME, String TEST_TEXT_FIELD_NAME) {
         int shards = 3;
         int docCount = 100;
