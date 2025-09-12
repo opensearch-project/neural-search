@@ -53,14 +53,8 @@ public class RemoteModelTestUtils {
      * Create a TorchServe connector for semantic highlighting
      */
     public static String createTorchServeConnector(RestClient client, String endpoint, boolean batchEnabled) throws IOException {
-        String connectorName = "torchserve-semantic-highlighter-" + (batchEnabled ? "batch-enabled" : "batch-disabled");
-        String requestBody;
-
-        if (batchEnabled) {
-            requestBody = createTorchServeBatchEnabledConnectorBody(connectorName, endpoint);
-        } else {
-            requestBody = createTorchServeBatchDisabledConnectorBody(connectorName, endpoint);
-        }
+        String connectorName = "torchserve-semantic-highlighter-unified";
+        String requestBody = createUnifiedTorchServeConnectorBody(connectorName, endpoint);
 
         Request request = new Request("POST", "/_plugins/_ml/connectors/_create");
         request.setJsonEntity(requestBody);
@@ -124,6 +118,36 @@ public class RemoteModelTestUtils {
         }
     }
 
+    private static String createUnifiedTorchServeConnectorBody(String name, String endpoint) {
+        // Unified connector that uses ${parameters.inputs} for both single and batch
+        // MLCommonsClientAccessor now always provides inputs parameter as an array
+        return String.format(Locale.ROOT, """
+            {
+                "name": "%s",
+                "description": "Unified TorchServe connector for semantic highlighter (supports both single and batch)",
+                "version": 1,
+                "protocol": "http",
+                "parameters": {},
+                "credential": {
+                    "key": "test"
+                },
+                "actions": [
+                    {
+                        "action_type": "predict",
+                        "method": "POST",
+                        "url": "%s/predictions/semantic_highlighter",
+                        "headers": {
+                            "Content-Type": "application/json"
+                        },
+                        "request_body": "${parameters.inputs}"
+                    }
+                ]
+            }
+            """, name, endpoint);
+    }
+
+    // Keep the old methods for reference but they're no longer used
+    @Deprecated
     private static String createTorchServeBatchEnabledConnectorBody(String name, String endpoint) {
         return String.format(Locale.ROOT, """
             {
@@ -150,6 +174,7 @@ public class RemoteModelTestUtils {
             """, name, endpoint);
     }
 
+    @Deprecated
     private static String createTorchServeBatchDisabledConnectorBody(String name, String endpoint) {
         return String.format(
             Locale.ROOT,
