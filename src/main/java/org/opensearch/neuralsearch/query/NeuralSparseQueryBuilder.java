@@ -560,9 +560,6 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             validateFieldType(ft);
         }
         Map<String, Float> queryTokens = getQueryTokens(context);
-        if (Objects.isNull(queryTokens)) {
-            throw new IllegalArgumentException("Query tokens cannot be null.");
-        }
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
