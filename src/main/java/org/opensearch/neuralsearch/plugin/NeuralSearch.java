@@ -398,6 +398,7 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
+            new ExplanationResponseProcessorFactory()
             new ExplanationResponseProcessorFactory(),
             AgenticContextResponseProcessor.TYPE,
             new AgenticContextResponseProcessor.Factory()
