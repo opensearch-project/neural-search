@@ -220,19 +220,18 @@ public class SparseIndexingIT extends SparseBaseIT {
      * Test creating an index with multiple seismic fields
      */
     public void testCreateIndexWithMultipleSeismicFields() throws IOException {
-        String indexName = TEST_INDEX_NAME + "_multiple_seismic";
         String field1 = "sparse_field_1";
         String field2 = "sparse_field_2";
         String field3 = "sparse_field_3";
 
-        createIndexWithMultipleSeismicFields(indexName, List.of(field1, field2, field3));
+        createIndexWithMultipleSeismicFields(TEST_INDEX_NAME, List.of(field1, field2, field3));
 
         // Verify index exists
-        assertTrue(indexExists(indexName));
+        assertTrue(indexExists(TEST_INDEX_NAME));
 
         // Verify index mapping contains all sparse fields
-        Map<String, Object> indexMapping = getIndexMapping(indexName);
-        Map<String, Object> mappings = (Map<String, Object>) indexMapping.get(indexName);
+        Map<String, Object> indexMapping = getIndexMapping(TEST_INDEX_NAME);
+        Map<String, Object> mappings = (Map<String, Object>) indexMapping.get(TEST_INDEX_NAME);
         Map<String, Object> mappingsProperties = (Map<String, Object>) mappings.get("mappings");
         Map<String, Object> properties = (Map<String, Object>) mappingsProperties.get("properties");
 

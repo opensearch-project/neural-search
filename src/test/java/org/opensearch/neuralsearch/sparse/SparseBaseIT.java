@@ -217,7 +217,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    protected void prepareNonSparseIndex(String TEST_INDEX_NAME) {
+    protected void prepareNonSparseIndex(String index) {
         XContentBuilder settingBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
@@ -225,7 +225,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
             .field("number_of_replicas", 0)
             .endObject()
             .endObject();
-        Request createIndexRequest = new Request("PUT", "/" + TEST_INDEX_NAME);
+        Request createIndexRequest = new Request("PUT", "/" + index);
         createIndexRequest.setJsonEntity(settingBuilder.toString());
         Response response = client().performRequest(createIndexRequest);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
