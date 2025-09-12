@@ -192,13 +192,13 @@ jobs:
       runs-on: ${{ matrix.os }}
       steps:
         - uses: actions/checkout@v4
-        
+
         - name: Set up JDK ${{ matrix.java }}
           uses: actions/setup-java@v4
           with:
             java-version: ${{ matrix.java }}
             distribution: temurin
-        
+
         - name: Setup TorchServe with Model
           id: torchserve
           uses: ./.github/actions/torchserve-setup
@@ -212,12 +212,12 @@ jobs:
             python-version: '3.9'
             handler-path: 'src/test/resources/remote-models/torchserve/handlers/semantic_highlighting_handler.py'
             model-name: 'semantic_highlighter'
-        
+
         - name: Verify Model Deployment
           run: |
             echo "Checking loaded models..."
             curl -s http://localhost:8081/models | jq . || echo "Models: $(curl -s http://localhost:8081/models)"
-            
+
             echo ""
             echo "Testing model inference..."
             TEST_RESPONSE=$(curl -s -X POST ${{ steps.torchserve.outputs.model-endpoint }} \
@@ -226,9 +226,9 @@ jobs:
                 "question": "What is OpenSearch?",
                 "context": "OpenSearch is a distributed, community-driven, Apache 2.0-licensed, 100% open-source search and analytics suite."
               }')
-            
+
             echo "Response: $TEST_RESPONSE"
-            
+
             if echo "$TEST_RESPONSE" | grep -q "highlights"; then
               echo "✓ Model inference working correctly!"
             else
@@ -236,7 +236,7 @@ jobs:
               docker logs torchserve --tail 50
               exit 1
             fi
-        
+
         - name: Build and Run Multi-Node Tests
           env:
             TORCHSERVE_ENDPOINT: ${{ steps.torchserve.outputs.torchserve-endpoint }}
@@ -245,7 +245,7 @@ jobs:
             echo "Using TorchServe endpoint: $TORCHSERVE_ENDPOINT"
             echo "Using Remote Model endpoint: $REMOTE_MODEL_ENDPOINT"
             ./gradlew integTest -PnumNodes=3 --info
-        
+
         - name: Cleanup TorchServe
           if: always()
           uses: ./.github/actions/torchserve-setup
