@@ -125,6 +125,7 @@ import java.util.Optional;
 import java.util.function.Supplier;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.DEFAULT_INDEX_THREAD_QTY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_NAME;
@@ -244,7 +245,14 @@ public class NeuralSearch extends Plugin
     public List<ExecutorBuilder<?>> getExecutorBuilders(Settings settings) {
         return List.of(
             HybridQueryExecutor.getExecutorBuilder(settings),
-            new FixedExecutorBuilder(settings, SparseConstants.THREAD_POOL_NAME, 1, -1, SparseConstants.THREAD_POOL_NAME, false)
+            new FixedExecutorBuilder(
+                settings,
+                SparseConstants.THREAD_POOL_NAME,
+                DEFAULT_INDEX_THREAD_QTY,
+                -1,
+                SparseConstants.THREAD_POOL_NAME,
+                false
+            )
         );
     }
 
