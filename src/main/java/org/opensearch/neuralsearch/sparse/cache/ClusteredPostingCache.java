@@ -16,7 +16,7 @@ public class ClusteredPostingCache extends MemMonitoredCache<ClusteredPostingCac
 
     private static volatile ClusteredPostingCache INSTANCE;
 
-    private ClusteredPostingCache() {
+    protected ClusteredPostingCache() {
         MemoryUsageManager.getInstance()
             .getMemoryUsageTracker()
             .recordWithoutValidation(RamUsageEstimator.shallowSizeOf(cacheMap), CircuitBreakerManager::addWithoutBreaking);

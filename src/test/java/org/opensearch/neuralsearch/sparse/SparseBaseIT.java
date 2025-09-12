@@ -44,6 +44,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     protected static final String ALGO_NAME = SparseConstants.SEISMIC;
     protected static final String SPARSE_MEMORY_USAGE_METRIC_NAME = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE.getNameString();
     protected static final String SPARSE_MEMORY_USAGE_METRIC_PATH = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE.getFullPath();
+    private static final float EPSILON = 1e-7f;
 
     @Before
     @Override
@@ -172,20 +173,47 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    protected void prepareSparseIndex(String TEST_INDEX_NAME, String TEST_SPARSE_FIELD_NAME, String TEST_TEXT_FIELD_NAME) {
-        int docCount = 100;
-        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, docCount);
+    protected List<Map<String, Float>> prepareIngestDocuments(int docCount) {
         List<Map<String, Float>> docs = new ArrayList<>();
         for (int i = 0; i < docCount; ++i) {
             Map<String, Float> tokens = new HashMap<>();
-            tokens.put("1000", randomFloat());
-            tokens.put("2000", randomFloat());
-            tokens.put("3000", randomFloat());
-            tokens.put("4000", randomFloat());
-            tokens.put("5000", randomFloat());
+            tokens.put("1000", randomFloat() + EPSILON);
+            tokens.put("2000", randomFloat() + EPSILON);
+            tokens.put("3000", randomFloat() + EPSILON);
+            tokens.put("4000", randomFloat() + EPSILON);
+            tokens.put("5000", randomFloat() + EPSILON);
             docs.add(tokens);
         }
-        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs);
+
+        return docs;
+    }
+
+    @SneakyThrows
+    protected void prepareSparseIndex(String index, String sparseField, String textField) {
+        int docCount = 100;
+        createSparseIndex(index, sparseField, 100, 0.4f, 0.1f, docCount);
+        List<Map<String, Float>> docs = prepareIngestDocuments(docCount);
+        ingestDocumentsAndForceMerge(index, textField, sparseField, docs);
+    }
+
+    @SneakyThrows
+    protected void prepareMultiShardReplicasIndex(String index, String sparseField, String textField, int shards, int replicas) {
+        int docCount = 100;
+        createSparseIndex(index, sparseField, 100, 0.4f, 0.1f, docCount, shards, replicas);
+        // Verify index exists
+        assertTrue(indexExists(index));
+        // Ingest documents
+        List<Map<String, Float>> docs = prepareIngestDocuments(docCount);
+
+        List<String> routingIds = generateUniqueRoutingIds(shards);
+        for (int i = 0; i < shards; ++i) {
+            ingestDocuments(index, textField, sparseField, docs, Collections.emptyList(), i * docCount + 1, routingIds.get(i));
+        }
+
+        forceMerge(index);
+        // wait until force merge complete
+        waitForSegmentMerge(index, shards, replicas);
+        assertEquals(shards * (replicas + 1), getSegmentCount(index));
     }
 
     @SneakyThrows
@@ -201,46 +229,6 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         createIndexRequest.setJsonEntity(settingBuilder.toString());
         Response response = client().performRequest(createIndexRequest);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
-    }
-
-    @SneakyThrows
-    protected void prepareMultiShardReplicasIndex(String TEST_INDEX_NAME, String TEST_SPARSE_FIELD_NAME, String TEST_TEXT_FIELD_NAME) {
-        int shards = 3;
-        int docCount = 100;
-        // effective number of replica is capped by the number of OpenSearch nodes minus 1
-        int replicas = Math.min(3, getNodeCount() - 1);
-        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, docCount, shards, replicas);
-        // Verify index exists
-        assertTrue(indexExists(TEST_INDEX_NAME));
-        // Ingest documents
-        List<Map<String, Float>> docs = new ArrayList<>();
-        for (int i = 0; i < docCount; ++i) {
-            Map<String, Float> tokens = new HashMap<>();
-            tokens.put("1000", randomFloat());
-            tokens.put("2000", randomFloat());
-            tokens.put("3000", randomFloat());
-            tokens.put("4000", randomFloat());
-            tokens.put("5000", randomFloat());
-            docs.add(tokens);
-        }
-
-        List<String> routingIds = generateUniqueRoutingIds(shards);
-        for (int i = 0; i < shards; ++i) {
-            ingestDocuments(
-                TEST_INDEX_NAME,
-                TEST_TEXT_FIELD_NAME,
-                TEST_SPARSE_FIELD_NAME,
-                docs,
-                Collections.emptyList(),
-                i * docCount + 1,
-                routingIds.get(i)
-            );
-        }
-
-        forceMerge(TEST_INDEX_NAME);
-        // wait until force merge complete
-        waitForSegmentMerge(TEST_INDEX_NAME, shards, replicas);
-        assertEquals(shards * (replicas + 1), getSegmentCount(TEST_INDEX_NAME));
     }
 
     @SneakyThrows
@@ -281,6 +269,41 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
             TEST_SPARSE_FIELD_NAME,
             List.of(Map.of("1000", 0.1f, "2000", 0.1f), Map.of("1000", 0.2f, "2000", 0.2f), Map.of("1000", 0.3f, "2000", 0.3f))
         );
+    }
+
+    @SneakyThrows
+    protected void createIndexWithMultipleSeismicFields(String indexName, List<String> fieldNames) {
+        String indexSettings = prepareIndexSettings();
+        XContentBuilder mappingBuilder = XContentFactory.jsonBuilder().startObject().startObject("properties");
+
+        // Add each sparse field to the mapping
+        for (String fieldName : fieldNames) {
+            mappingBuilder.startObject(fieldName)
+                .field("type", SparseTokensFieldMapper.CONTENT_TYPE)
+                .startObject("method")
+                .field("name", ALGO_NAME)
+                .startObject("parameters")
+                .field("n_postings", 100)
+                .field("summary_prune_ratio", 0.4f)
+                .field("cluster_ratio", 0.1f)
+                .field("approximate_threshold", 8)
+                .endObject()
+                .endObject()
+                .endObject();
+        }
+
+        mappingBuilder.endObject().endObject();
+
+        Request request = new Request("PUT", "/" + indexName);
+        String body = String.format(
+            Locale.ROOT,
+            "{\n" + "  \"settings\": %s,\n" + "  \"mappings\": %s\n" + "}",
+            indexSettings,
+            mappingBuilder.toString()
+        );
+        request.setJsonEntity(body);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
     }
 
     protected void waitForSegmentMerge(String index) throws InterruptedException {
@@ -463,5 +486,11 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
             .fieldName(field)
             .queryTokensMapSupplier(() -> query);
         return neuralSparseQueryBuilder;
+    }
+
+    @SneakyThrows
+    protected int getEffectiveReplicaCount(int replicas) {
+        // effective number of replica is capped by the number of OpenSearch nodes minus 1
+        return Math.min(replicas, getNodeCount() - 1);
     }
 }

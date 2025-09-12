@@ -287,5 +287,4 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             );
         }
     }
-
 }

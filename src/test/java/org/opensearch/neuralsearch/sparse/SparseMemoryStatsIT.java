@@ -22,6 +22,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 
+import static org.opensearch.neuralsearch.stats.metrics.MemoryStat.BYTES_PER_KILOBYTES;
+
 /**
  * Integration tests for memory stats related features for Seismic algorithm
  */
@@ -93,8 +95,11 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
         List<Long> originalCircuitBreakerMemoryStats = getNeuralCircuitBreakerMemoryStatsAcrossNodes();
         verityMemoryStatsAlign(originalSparseMemoryUsageStats, originalCircuitBreakerMemoryStats);
 
+        int shards = 3;
+        int replicas = getEffectiveReplicaCount(3);
+
         // Create Sparse Index
-        prepareMultiShardReplicasIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME);
+        prepareMultiShardReplicasIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME, shards, replicas);
 
         // Verify memory stats increase after ingesting documents
         List<Double> currentSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -183,7 +188,7 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
             .alignObjectSize((long) docCount * RamUsageEstimator.NUM_BYTES_OBJECT_REF);
         long emptyClusteredPostingSize = RamUsageEstimator.shallowSizeOf(new ConcurrentHashMap<>());
 
-        double expectedSize = (cacheKeySize * 2 + emptyClusteredPostingSize + emptyForwardIndexSize) / 1024.0d;
+        double expectedSize = (double) (cacheKeySize * 2 + emptyClusteredPostingSize + emptyForwardIndexSize) / BYTES_PER_KILOBYTES;
 
         assertEquals(expectedSize, currentSparseMemoryUsageSum - originalSparseMemoryUsageSum, DELTA_FOR_MEMORY_STATS_ASSERTION);
         verityMemoryStatsAlign(currentSparseMemoryUsageStats, currentCircuitBreakerMemoryStats);
@@ -220,7 +225,7 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
     private void verityMemoryStatsAlign(List<Double> memoryUsageStats, List<Long> circuitBreakerStats) {
         assertEquals(memoryUsageStats.size(), circuitBreakerStats.size());
         for (int i = 0; i < memoryUsageStats.size(); ++i) {
-            double circuitBreakerKbSize = circuitBreakerStats.get(i) / 1024.0d;
+            double circuitBreakerKbSize = (double) circuitBreakerStats.get(i) / BYTES_PER_KILOBYTES;
             assertEquals(memoryUsageStats.get(i), circuitBreakerKbSize, DELTA_FOR_MEMORY_STATS_ASSERTION);
         }
     }

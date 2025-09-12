@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomTokenWeightMap;
 
 /**
@@ -213,5 +214,86 @@ public class SparseIndexingIT extends SparseBaseIT {
         );
         request.setJsonEntity(body);
         expectThrows(IOException.class, () -> client().performRequest(request));
+    }
+
+    /**
+     * Test creating an index with multiple seismic fields
+     */
+    public void testCreateIndexWithMultipleSeismicFields() throws IOException {
+        String indexName = TEST_INDEX_NAME + "_multiple_seismic";
+        String field1 = "sparse_field_1";
+        String field2 = "sparse_field_2";
+        String field3 = "sparse_field_3";
+
+        createIndexWithMultipleSeismicFields(indexName, List.of(field1, field2, field3));
+
+        // Verify index exists
+        assertTrue(indexExists(indexName));
+
+        // Verify index mapping contains all sparse fields
+        Map<String, Object> indexMapping = getIndexMapping(indexName);
+        Map<String, Object> mappings = (Map<String, Object>) indexMapping.get(indexName);
+        Map<String, Object> mappingsProperties = (Map<String, Object>) mappings.get("mappings");
+        Map<String, Object> properties = (Map<String, Object>) mappingsProperties.get("properties");
+
+        // Check each sparse field exists in mapping
+        assertTrue(properties.containsKey(field1));
+        assertTrue(properties.containsKey(field2));
+        assertTrue(properties.containsKey(field3));
+
+        // Verify field types are sparse_tokens
+        Map<String, Object> field1Config = (Map<String, Object>) properties.get(field1);
+        Map<String, Object> field2Config = (Map<String, Object>) properties.get(field2);
+        Map<String, Object> field3Config = (Map<String, Object>) properties.get(field3);
+
+        assertEquals(SparseTokensFieldMapper.CONTENT_TYPE, field1Config.get("type"));
+        assertEquals(SparseTokensFieldMapper.CONTENT_TYPE, field2Config.get("type"));
+        assertEquals(SparseTokensFieldMapper.CONTENT_TYPE, field3Config.get("type"));
+    }
+
+    /**
+     * Test indexing documents with multiple seismic fields
+     */
+    public void testIndexDocumentsWithMultipleSeismicFields() {
+        String field1 = "sparse_field_1";
+        String field2 = "sparse_field_2";
+        String field3 = "sparse_field_3";
+
+        createIndexWithMultipleSeismicFields(TEST_INDEX_NAME, List.of(field1, field2, field3));
+
+        // Create documents with different sparse tokens for each field using integer tokens
+        Map<String, Float> tokens1 = Map.of("1000", 0.1f, "2000", 0.2f);
+        Map<String, Float> tokens2 = Map.of("3000", 0.3f, "4000", 0.4f);
+        Map<String, Float> tokens3 = Map.of("5000", 0.5f, "6000", 0.6f);
+
+        // Index document with multiple sparse fields
+        addSparseEncodingDoc(TEST_INDEX_NAME, "1", List.of(field1, field2, field3), List.of(tokens1, tokens2, tokens3));
+
+        // Verify document was indexed
+        assertEquals(1, getDocCount(TEST_INDEX_NAME));
+
+        // Get the document and verify its content
+        Map<String, Object> document = getDocById(TEST_INDEX_NAME, "1");
+        assertNotNull(document);
+
+        Map<String, Object> source = (Map<String, Object>) document.get("_source");
+        assertNotNull(source);
+
+        // Verify all sparse fields are present with correct tokens
+        Map<String, Object> sparseField1 = (Map<String, Object>) source.get(field1);
+        Map<String, Object> sparseField2 = (Map<String, Object>) source.get(field2);
+        Map<String, Object> sparseField3 = (Map<String, Object>) source.get(field3);
+
+        assertNotNull(sparseField1);
+        assertNotNull(sparseField2);
+        assertNotNull(sparseField3);
+
+        // Verify tokens in each field
+        assertEquals(0.1f, ((Number) sparseField1.get("1000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.2f, ((Number) sparseField1.get("2000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.3f, ((Number) sparseField2.get("3000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.4f, ((Number) sparseField2.get("4000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.5f, ((Number) sparseField3.get("5000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(0.6f, ((Number) sparseField3.get("6000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
     }
 }
