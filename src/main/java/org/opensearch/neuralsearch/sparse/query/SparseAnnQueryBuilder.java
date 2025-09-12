@@ -107,8 +107,9 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
     }
 
-    public void setQueryTokens(Map<String, Float> queryTokens) {
+    public SparseAnnQueryBuilder queryTokens(Map<String, Float> queryTokens) {
         this.queryTokens = preprocessQueryTokens(queryTokens);
+        return this;
     }
 
     public static SparseAnnQueryBuilder fromXContent(XContentParser parser) throws IOException {

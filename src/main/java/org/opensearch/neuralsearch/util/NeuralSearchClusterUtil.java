@@ -4,17 +4,16 @@
  */
 package org.opensearch.neuralsearch.util;
 
+import lombok.AccessLevel;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.NonNull;
+import lombok.extern.log4j.Log4j2;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
-
-import lombok.AccessLevel;
-import lombok.NoArgsConstructor;
-import lombok.extern.log4j.Log4j2;
 import org.opensearch.core.index.Index;
 
 import java.util.Arrays;
@@ -38,9 +37,13 @@ public class NeuralSearchClusterUtil {
      * Return instance of the cluster context, must be initialized first for proper usage
      * @return instance of cluster context
      */
-    public static synchronized NeuralSearchClusterUtil instance() {
+    public static NeuralSearchClusterUtil instance() {
         if (instance == null) {
-            instance = new NeuralSearchClusterUtil();
+            synchronized (NeuralSearchClusterUtil.class) {
+                if (instance == null) {
+                    instance = new NeuralSearchClusterUtil();
+                }
+            }
         }
         return instance;
     }

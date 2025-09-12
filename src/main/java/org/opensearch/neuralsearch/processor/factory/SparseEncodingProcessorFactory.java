@@ -4,31 +4,30 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
-import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
-import static org.opensearch.ingest.ConfigurationUtils.readMap;
-import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
-import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
-import static org.opensearch.ingest.ConfigurationUtils.readDoubleProperty;
-import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.DEFAULT_SKIP_EXISTING;
-import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
-import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
-import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
-import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.SKIP_EXISTING;
-
-import java.util.Locale;
-import java.util.Map;
-
+import lombok.extern.log4j.Log4j2;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.AbstractBatchingProcessor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
-
-import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
-import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.transport.client.OpenSearchClient;
+
+import java.util.Locale;
+import java.util.Map;
+
+import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
+import static org.opensearch.ingest.ConfigurationUtils.readDoubleProperty;
+import static org.opensearch.ingest.ConfigurationUtils.readMap;
+import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
+import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.DEFAULT_SKIP_EXISTING;
+import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.SKIP_EXISTING;
+import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
+import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.FIELD_MAP_FIELD;
+import static org.opensearch.neuralsearch.processor.TextEmbeddingProcessor.MODEL_ID_FIELD;
 
 /**
  * Factory for sparse encoding ingest processor for ingestion pipeline. Instantiates processor based on user provided input.

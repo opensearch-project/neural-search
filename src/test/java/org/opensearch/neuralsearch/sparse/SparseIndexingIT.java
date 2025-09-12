@@ -15,10 +15,11 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
+import static org.opensearch.neuralsearch.util.TestUtils.createRandomTokenWeightMap;
 
 /**
  * Integration tests for sparse index feature
@@ -29,6 +30,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     private static final String NON_SPARSE_TEST_INDEX_NAME = TEST_INDEX_NAME + "_non_sparse";
     private static final String INVALID_PARAM_TEST_INDEX_NAME = TEST_INDEX_NAME + "_invalid";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
+    private static final List<String> TEST_TOKENS = List.of("1000", "2000", "3000", "4000", "5000");
 
     @Before
     public void setUp() throws Exception {
@@ -56,6 +58,41 @@ public class SparseIndexingIT extends SparseBaseIT {
         Map<String, Object> indexSettingsMap = (Map<String, Object>) settingsMap.get("index");
 
         assertEquals("true", indexSettingsMap.get("sparse"));
+    }
+
+    /**
+     * Test indexing documents with sparse tokens field
+     */
+    public void testIndexDocumentsWithSparseTokensField() throws IOException {
+        // Create index with sparse index setting enabled
+        testCreateSparseIndex();
+
+        // Create a document with sparse tokens field
+        Map<String, Float> sparseTokens = createRandomTokenWeightMap(TEST_TOKENS);
+
+        // Index the document
+        addSparseEncodingDoc(TEST_INDEX_NAME, "1", List.of(TEST_SPARSE_FIELD_NAME), List.of(sparseTokens));
+
+        // Verify document was indexed
+        assertEquals(1, getDocCount(TEST_INDEX_NAME));
+
+        // Get the document and verify its content
+        Map<String, Object> document = getDocById(TEST_INDEX_NAME, "1");
+        assertNotNull(document);
+
+        Map<String, Object> source = (Map<String, Object>) document.get("_source");
+        assertNotNull(source);
+
+        Map<String, Object> sparseField = (Map<String, Object>) source.get(TEST_SPARSE_FIELD_NAME);
+        assertNotNull(sparseField);
+
+        // Verify the sparse tokens are present
+        for (String token : TEST_TOKENS) {
+            if (sparseTokens.containsKey(token)) {
+                assertTrue(sparseField.containsKey(token));
+                assertEquals(sparseTokens.get(token).doubleValue(), ((Number) sparseField.get(token)).doubleValue(), 0.001);
+            }
+        }
     }
 
     /**
@@ -176,17 +213,5 @@ public class SparseIndexingIT extends SparseBaseIT {
         );
         request.setJsonEntity(body);
         expectThrows(IOException.class, () -> client().performRequest(request));
-    }
-
-    private List<String> getDocIDs(Map<String, Object> searchResults) {
-        Map<String, Object> hits1map = (Map<String, Object>) searchResults.get("hits");
-        List<String> actualIds = new ArrayList<>();
-        List<Object> hits1List = (List<Object>) hits1map.get("hits");
-        for (Object hits1Object : hits1List) {
-            Map<String, Object> mapObject = (Map<String, Object>) hits1Object;
-            String id = mapObject.get("_id").toString();
-            actualIds.add(id);
-        }
-        return actualIds;
     }
 }

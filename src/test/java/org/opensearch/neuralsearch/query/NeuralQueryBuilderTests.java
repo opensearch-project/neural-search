@@ -4,6 +4,45 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import lombok.SneakyThrows;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Query;
+import org.junit.Before;
+import org.opensearch.Version;
+import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.core.ParseField;
+import org.opensearch.core.common.ParsingException;
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.io.stream.FilterStreamInput;
+import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.index.mapper.RankFeaturesFieldMapper;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchNoneQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.knn.index.query.rescore.RescoreContext;
+import org.opensearch.neuralsearch.query.dto.NeuralQueryBuildStage;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
+import org.opensearch.neuralsearch.util.prune.PruneType;
+import org.opensearch.test.OpenSearchTestCase;
+
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
@@ -17,56 +56,16 @@ import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_FIELD;
 import static org.opensearch.knn.index.query.KNNQueryBuilder.RESCORE_OVERSAMPLE_FIELD;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SEMANTIC_FIELD_SPARSE_TWO_PHASE;
-import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
-import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD;
-import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
-import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.NAME;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_IMAGE_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TOKENS_FIELD;
+import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEMANTIC_FIELD_SEARCH_ANALYZER_FIELD;
 import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
-
-import java.io.IOException;
-import java.util.List;
-import java.util.Map;
-import java.util.function.Supplier;
-
-import org.apache.commons.lang3.tuple.Pair;
-import org.apache.lucene.search.MatchNoDocsQuery;
-import org.apache.lucene.search.Query;
-import org.junit.Before;
-import org.opensearch.Version;
-import org.opensearch.index.mapper.MappedFieldType;
-import org.opensearch.index.mapper.RankFeaturesFieldMapper;
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.knn.index.query.KNNQueryBuilder;
-import org.opensearch.neuralsearch.query.dto.NeuralQueryBuildStage;
-import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
-import org.opensearch.common.io.stream.BytesStreamOutput;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.ParseField;
-import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.bytes.BytesReference;
-import org.opensearch.core.common.io.stream.FilterStreamInput;
-import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
-import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
-import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
-import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.MatchNoneQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.knn.index.query.rescore.RescoreContext;
-import org.opensearch.neuralsearch.util.TestUtils;
-import org.opensearch.neuralsearch.util.prune.PruneType;
-import org.opensearch.test.OpenSearchTestCase;
-
-import lombok.SneakyThrows;
+import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
+import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
 
 public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
@@ -107,6 +106,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
     @Before
     public void setup() throws Exception {
         // Initialize EventStatsManager for tests
+        setUpClusterService();
         TestUtils.initializeEventStatsManager();
     }
 
