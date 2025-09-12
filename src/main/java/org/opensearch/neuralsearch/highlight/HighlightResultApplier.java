@@ -157,11 +157,14 @@ public class HighlightResultApplier {
         Map<String, HighlightField> highlightFields = hit.getHighlightFields();
         if (highlightFields == null) {
             highlightFields = new HashMap<>();
-            hit.highlightFields(highlightFields);
+        } else if (!(highlightFields instanceof HashMap)) {
+            highlightFields = new HashMap<>(highlightFields);
         }
 
         HighlightField highlightField = new HighlightField(fieldName, new Text[] { new Text(highlightedText) });
         highlightFields.put(fieldName, highlightField);
+
+        hit.highlightFields(highlightFields);
     }
 
     /**
