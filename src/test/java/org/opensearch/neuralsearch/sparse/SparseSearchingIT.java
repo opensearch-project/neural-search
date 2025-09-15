@@ -508,7 +508,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         List<String> actualIds = getDocIDs(searchResults);
         assertEquals(List.of("8", "7"), actualIds);
     }
-    
+
     /**
      * Test searching across multiple seismic fields
      */
@@ -551,17 +551,5 @@ public class SparseSearchingIT extends SparseBaseIT {
         Map<String, Object> searchResults2 = search(TEST_INDEX_NAME, queryBuilder2, 10);
         assertNotNull(searchResults2);
         assertTrue(getHitCount(searchResults2) > 0);
-    }
-
-    private List<String> getDocIDs(Map<String, Object> searchResults) {
-        Map<String, Object> hits1map = (Map<String, Object>) searchResults.get("hits");
-        List<String> actualIds = new ArrayList<>();
-        List<Object> hits1List = (List<Object>) hits1map.get("hits");
-        for (Object hits1Object : hits1List) {
-            Map<String, Object> mapObject = (Map<String, Object>) hits1Object;
-            String id = mapObject.get("_id").toString();
-            actualIds.add(id);
-        }
-        return actualIds;
     }
 }

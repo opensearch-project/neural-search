@@ -23,7 +23,10 @@ public class PredicateUtilsTests extends AbstractSparseTestBase {
         super.setUp();
         segmentInfo = TestsPrepareUtils.prepareSegmentInfo(); // maxDoc = 10
         fieldInfo = TestsPrepareUtils.prepareKeyFieldInfo();
+    }
 
+    public void testShouldRunSeisPredicate_nullFieldInfo_returnsFalse() {
+        assertFalse(PredicateUtils.shouldRunSeisPredicate.test(segmentInfo, null));
     }
 
     public void testShouldRunSeisPredicate_withDocCountAboveThreshold_returnsTrue() {
