@@ -11,8 +11,6 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.util.Locale;
 
-import static org.opensearch.knn.common.KNNConstants.BYTES_PER_KILOBYTES;
-
 /**
  * Memory stat information class which gets memory stat data
  */

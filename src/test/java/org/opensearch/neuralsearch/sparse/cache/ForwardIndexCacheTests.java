@@ -26,7 +26,7 @@ public class ForwardIndexCacheTests extends AbstractSparseTestBase {
 
     private long emptyForwardIndexCacheSize;
     private long emptyForwardIndexCacheItemSize;
-    private ForwardIndexCache forwardIndexCache;
+    private TestForwardIndexCache forwardIndexCache;
 
     /**
      * Set up the test environment before each test.
@@ -37,11 +37,10 @@ public class ForwardIndexCacheTests extends AbstractSparseTestBase {
     @SneakyThrows
     public void setUp() {
         super.setUp();
-
-        forwardIndexCache = ForwardIndexCache.getInstance();
+        forwardIndexCache = new TestForwardIndexCache();
         emptyForwardIndexCacheSize = forwardIndexCache.ramBytesUsed();
         RamBytesRecorder mockGlobalRecorder = mock(RamBytesRecorder.class);
-        CacheKey cacheKey = new CacheKey(TestsPrepareUtils.prepareSegmentInfo(), TestsPrepareUtils.prepareKeyFieldInfo());
+        CacheKey cacheKey = prepareUniqueCacheKey(TestsPrepareUtils.prepareSegmentInfo());
         emptyForwardIndexCacheItemSize = new ForwardIndexCacheItem(cacheKey, TEST_DOC_COUNT, mockGlobalRecorder).ramBytesUsed();
     }
 
@@ -117,5 +116,11 @@ public class ForwardIndexCacheTests extends AbstractSparseTestBase {
         );
 
         assertEquals("key is marked non-null but is null", exception.getMessage());
+    }
+
+    private static class TestForwardIndexCache extends ForwardIndexCache {
+        TestForwardIndexCache() {
+            super();
+        }
     }
 }

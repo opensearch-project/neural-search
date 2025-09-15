@@ -148,8 +148,12 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
      */
     @SneakyThrows
     public void testWarmUpMultiShardReplicasCache() {
+        int shards = 3;
+        int replicas = getEffectiveReplicaCount(3);
+        int totalShards = shards * (replicas + 1);
+
         // Create Sparse Index
-        prepareMultiShardReplicasIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME);
+        prepareMultiShardReplicasIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME, shards, replicas);
 
         // First clear cache before warm up
         Request clearCacheRequest = new Request("POST", "/_plugins/_neural/clear_cache/" + TEST_INDEX_NAME);
@@ -168,8 +172,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        int replicas = Math.min(3, getNodeCount() - 1);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * (1 + replicas), "successful", 3 * (1 + replicas), "failed", 0));
+        assertEquals(responseMap.get("_shards"), Map.of("total", totalShards, "successful", totalShards, "failed", 0));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -186,8 +189,12 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
      */
     @SneakyThrows
     public void testClearMultiShardReplicasCache() {
+        int shards = 3;
+        int replicas = getEffectiveReplicaCount(3);
+        int totalShards = shards * (replicas + 1);
+
         // Create Sparse Index
-        prepareMultiShardReplicasIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME);
+        prepareMultiShardReplicasIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME, shards, replicas);
         List<Double> originalSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double originalSparseMemoryUsageSum = originalSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
 
@@ -201,8 +208,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        int replicas = Math.min(3, getNodeCount() - 1);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 3 * (1 + replicas), "successful", 3 * (1 + replicas), "failed", 0));
+        assertEquals(responseMap.get("_shards"), Map.of("total", totalShards, "successful", totalShards, "failed", 0));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();

@@ -496,7 +496,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
     Map<String, Float> getQueryTokens(QueryShardContext context) {
         // There can be certain cases that we can use the queryTokensSupplier directly:
         // 1. If the raw query tokens are provided through the query.
-        // 2. If we use a ML model to generate the query tokens based on the query text.
+        // 2. If we use an ML model to generate the query tokens based on the query text.
         if (Objects.nonNull(queryTokensMapSupplier) && Objects.nonNull(queryTokensMapSupplier.get())) {
             return queryTokensMapSupplier.get();
         }

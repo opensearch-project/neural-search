@@ -16,7 +16,7 @@ public class ForwardIndexCache extends MemMonitoredCache<ForwardIndexCacheItem> 
 
     private static volatile ForwardIndexCache INSTANCE;
 
-    private ForwardIndexCache() {
+    protected ForwardIndexCache() {
         MemoryUsageManager.getInstance()
             .getMemoryUsageTracker()
             .recordWithoutValidation(RamUsageEstimator.shallowSizeOf(cacheMap), CircuitBreakerManager::addWithoutBreaking);
