@@ -26,9 +26,9 @@ public final class NeuralSearchSettings {
 
     /**
      * Specifies the initial memory limit for the parent circuit breaker.
-     * Defaults to 50% of the JVM heap.
+     * Defaults to 10% of the JVM heap.
      */
-    private static final String DEFAULT_CIRCUIT_BREAKER_LIMIT = "50%";
+    private static final String DEFAULT_CIRCUIT_BREAKER_LIMIT = "10%";
     /**
      * A constant by which the neural data estimations are multiplied to determine the final estimation.
      * Default is 1.0 while minimum is 0.0.
@@ -114,7 +114,7 @@ public final class NeuralSearchSettings {
     );
 
     /**
-     * The memory limit for neural circuit breaker. Default is 50% of the JVM heap.
+     * The memory limit for neural circuit breaker. Default is 10% of the JVM heap.
      */
     public static final Setting<ByteSizeValue> NEURAL_CIRCUIT_BREAKER_LIMIT = Setting.memorySizeSetting(
         "plugins.neural_search.circuit_breaker.limit",
