@@ -4,11 +4,14 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import com.google.common.collect.ImmutableList;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.hc.core5.http.HttpHeaders;
 import org.apache.hc.core5.http.ParseException;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
@@ -35,6 +38,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 
 /**
  * Base Integration tests for seismic feature
@@ -492,5 +497,42 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     protected int getEffectiveReplicaCount(int replicas) {
         // effective number of replica is capped by the number of OpenSearch nodes minus 1
         return Math.min(replicas, getNodeCount() - 1);
+    }
+
+    @SuppressWarnings("unchecked")
+    protected List<String> getDocIDs(Map<String, Object> searchResults) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResults.get("hits");
+        List<String> actualIds = new ArrayList<>();
+        List<Object> hits1List = (List<Object>) hits1map.get("hits");
+        for (Object hits1Object : hits1List) {
+            Map<String, Object> mapObject = (Map<String, Object>) hits1Object;
+            String id = mapObject.get("_id").toString();
+            actualIds.add(id);
+        }
+        return actualIds;
+    }
+
+    protected void updateSparseVector(String index, String docId, String field, Map<String, Float> docTokens) throws IOException {
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("{");
+        stringBuilder.append("\"doc\": {");
+        stringBuilder.append("\"").append(field).append("\": {");
+        for (Map.Entry<String, Float> entry : docTokens.entrySet()) {
+            stringBuilder.append("\"").append(entry.getKey()).append("\": ").append(entry.getValue()).append(",");
+        }
+        stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+        stringBuilder.append("}");
+        stringBuilder.append("}");
+        stringBuilder.append("}");
+        String payload = stringBuilder.toString();
+        Response response = makeRequest(
+            client(),
+            "POST",
+            String.format(LOCALE, "/%s/_update/%s?refresh=true", index, docId),
+            null,
+            toHttpEntity(payload),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        assertOK(response);
     }
 }

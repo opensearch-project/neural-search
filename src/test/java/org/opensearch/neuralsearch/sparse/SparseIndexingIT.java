@@ -12,12 +12,15 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomTokenWeightMap;
@@ -294,5 +297,80 @@ public class SparseIndexingIT extends SparseBaseIT {
         assertEquals(0.4f, ((Number) sparseField2.get("4000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(0.5f, ((Number) sparseField3.get("5000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(0.6f, ((Number) sparseField3.get("6000")).floatValue(), DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testSeismicIndexWithDocDeletion() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMerge(
+            TEST_INDEX_NAME,
+            NON_SPARSE_TEST_INDEX_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            )
+        );
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 0.1f, "2000", 0.2f)
+        );
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertEquals(8, getHitCount(searchResults));
+
+        deleteDocById(TEST_INDEX_NAME, "1");
+
+        searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertEquals(7, getHitCount(searchResults));
+        Set<String> actualIds = new HashSet<>(getDocIDs(searchResults));
+        assertEquals(Set.of("2", "3", "4", "5", "6", "7", "8"), actualIds);
+    }
+
+    public void testSeismicIndexWithDocUpdate() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMerge(
+            TEST_INDEX_NAME,
+            NON_SPARSE_TEST_INDEX_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            )
+        );
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 0.1f, "2000", 0.2f)
+        );
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertEquals(8, getHitCount(searchResults));
+
+        updateSparseVector(TEST_INDEX_NAME, "1", TEST_SPARSE_FIELD_NAME, Map.of("3000", 0.1f, "4000", 0.2f));
+
+        searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertEquals(8, getHitCount(searchResults));
+
+        neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(TEST_SPARSE_FIELD_NAME, 2, 1.0f, 10, Map.of("3000", 0.1f));
+        searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        Set<String> actualIds = new HashSet<>(getDocIDs(searchResults));
+        assertEquals(Set.of("1"), actualIds);
     }
 }

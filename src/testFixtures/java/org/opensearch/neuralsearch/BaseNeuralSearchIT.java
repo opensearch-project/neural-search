@@ -2887,4 +2887,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         }
         assertEquals(failedIds.size(), failedDocCount);
     }
+
+    protected void deleteDocById(String index, String docId) throws IOException {
+        Response response = makeRequest(
+            client(),
+            "DELETE",
+            String.format(LOCALE, "/%s/_doc/%s?refresh=true", index, docId),
+            null,
+            null,
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        assertOK(response);
+    }
 }

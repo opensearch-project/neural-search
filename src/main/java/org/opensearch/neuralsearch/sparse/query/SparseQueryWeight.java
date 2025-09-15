@@ -70,7 +70,7 @@ public class SparseQueryWeight extends Weight {
         SegmentInfo info = Lucene.segmentReader(context.reader()).getSegmentInfo().info;
         FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(query.getFieldName());
         // fallback to plain neural sparse query
-        if (!PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
+        if (fieldInfo == null || !PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
             return fallbackQueryWeight.scorerSupplier(context);
         }
         final Scorer scorer = selectScorer(query, context, info);
