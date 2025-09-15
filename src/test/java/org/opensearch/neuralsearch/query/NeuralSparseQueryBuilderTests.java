@@ -7,10 +7,12 @@ package org.opensearch.neuralsearch.query;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.Tokenizer;
 import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
+import org.apache.lucene.analysis.tokenattributes.TypeAttribute;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
@@ -73,10 +75,12 @@ import java.util.function.Supplier;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
@@ -992,7 +996,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testDoToQuery_successfulDoToQuery() {
+    public void testDoToQuery_successful() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .maxTokenScore(MAX_TOKEN_SCORE)
             .queryText(QUERY_TEXT)
@@ -1008,6 +1012,84 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
 
         assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_seismicWithAnalyzer() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .searchAnalyzer(DEFAULT_ANALYZER);
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        IndexAnalyzers indexAnalyzers = mock(IndexAnalyzers.class);
+        when(mockedQueryShardContext.getIndexAnalyzers()).thenReturn(indexAnalyzers);
+        NamedAnalyzer namedAnalyzer = mock(NamedAnalyzer.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(mockedQueryShardContext.fieldMapper(anyString())).thenReturn(fieldType);
+        when(indexAnalyzers.getAnalyzers()).thenReturn(Map.of(DEFAULT_ANALYZER, namedAnalyzer));
+        TokenStream tokenStream = mock(TokenStream.class);
+        when(namedAnalyzer.tokenStream(anyString(), anyString())).thenReturn(tokenStream);
+        TypeAttribute typeAttr = mock(TypeAttribute.class);
+        when(tokenStream.addAttribute(eq(TypeAttribute.class))).thenReturn(typeAttr);
+
+        CharTermAttribute term = mock(CharTermAttribute.class);
+        when(tokenStream.addAttribute(eq(CharTermAttribute.class))).thenReturn(term);
+        PayloadAttribute payload = mock(PayloadAttribute.class);
+        when(tokenStream.addAttribute(eq(PayloadAttribute.class))).thenReturn(payload);
+        when(tokenStream.incrementToken()).thenReturn(true, true, false);
+        when(term.toString()).thenReturn("hello", "world");
+
+        when(payload.getPayload()).thenReturn(
+            new BytesRef(ByteBuffer.allocate(4).putFloat(1.0f).array()),
+            new BytesRef(ByteBuffer.allocate(4).putFloat(2.0f).array())
+        );
+
+        BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
+        Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
+        verify(typeAttr).setType(eq(SparseEmbeddingFormat.TOKEN_ID.toString()));
+        assertEquals(query, targetQueryBuilder.build());
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_nonSeismicWithAnalyzer() {
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .maxTokenScore(MAX_TOKEN_SCORE)
+            .queryText(QUERY_TEXT)
+            .searchAnalyzer(DEFAULT_ANALYZER);
+        QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
+        IndexAnalyzers indexAnalyzers = mock(IndexAnalyzers.class);
+        when(mockedQueryShardContext.getIndexAnalyzers()).thenReturn(indexAnalyzers);
+        NamedAnalyzer namedAnalyzer = mock(NamedAnalyzer.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn("rank_features");
+        when(mockedQueryShardContext.fieldMapper(anyString())).thenReturn(fieldType);
+        when(indexAnalyzers.getAnalyzers()).thenReturn(Map.of(DEFAULT_ANALYZER, namedAnalyzer));
+        TokenStream tokenStream = mock(TokenStream.class);
+        when(namedAnalyzer.tokenStream(anyString(), anyString())).thenReturn(tokenStream);
+        TypeAttribute typeAttr = mock(TypeAttribute.class);
+        when(tokenStream.addAttribute(eq(TypeAttribute.class))).thenReturn(typeAttr);
+
+        CharTermAttribute term = mock(CharTermAttribute.class);
+        when(tokenStream.addAttribute(eq(CharTermAttribute.class))).thenReturn(term);
+        PayloadAttribute payload = mock(PayloadAttribute.class);
+        when(tokenStream.addAttribute(eq(PayloadAttribute.class))).thenReturn(payload);
+        when(tokenStream.incrementToken()).thenReturn(true, true, false);
+        when(term.toString()).thenReturn("hello", "world");
+
+        when(payload.getPayload()).thenReturn(
+            new BytesRef(ByteBuffer.allocate(4).putFloat(1.0f).array()),
+            new BytesRef(ByteBuffer.allocate(4).putFloat(2.0f).array())
+        );
+
+        BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
+        Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
+        verify(typeAttr, never()).setType(eq(SparseEmbeddingFormat.TOKEN_ID.toString()));
+        assertEquals(query, targetQueryBuilder.build());
     }
 
     @SneakyThrows
