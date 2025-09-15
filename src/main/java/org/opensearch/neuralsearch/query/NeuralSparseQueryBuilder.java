@@ -18,10 +18,12 @@ import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.TokenStream;
 import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
 import org.apache.lucene.analysis.tokenattributes.PayloadAttribute;
+import org.apache.lucene.analysis.tokenattributes.TypeAttribute;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
@@ -452,7 +454,10 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                 }
             }
         }
-        final QueryShardContext queryShardContext = queryRewriteContext.convertToShardContext();
+        return shouldInferenceWithTokenIdResponse(queryRewriteContext.convertToShardContext());
+    }
+
+    private boolean shouldInferenceWithTokenIdResponse(QueryShardContext queryShardContext) {
         if (queryShardContext == null) {
             return false;
         }
@@ -504,14 +509,20 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                     String.format(Locale.ROOT, "Analyzer [%s] not found in shard context. ", this.searchAnalyzer)
                 );
             }
+            boolean shouldUserQueryTokenId = shouldInferenceWithTokenIdResponse(context);
             try (TokenStream stream = luceneAnalyzer.tokenStream(fieldName, queryText)) {
                 stream.reset();
+                if (shouldUserQueryTokenId) {
+                    TypeAttribute typeAttr = stream.addAttribute(TypeAttribute.class);
+                    typeAttr.setType(SparseEmbeddingFormat.TOKEN_ID.toString());
+                }
                 CharTermAttribute term = stream.addAttribute(CharTermAttribute.class);
                 PayloadAttribute payload = stream.addAttribute(PayloadAttribute.class);
 
                 while (stream.incrementToken()) {
                     String token = term.toString();
-                    float weight = Objects.isNull(payload.getPayload()) ? 1.0f : bytesToFloat(payload.getPayload().bytes);
+                    BytesRef bytesRefPayload = payload.getPayload();
+                    float weight = Objects.isNull(bytesRefPayload) ? 1.0f : bytesToFloat(bytesRefPayload.bytes);
                     if (weight > 0) {
                         queryTokens.put(token, weight);
                     }

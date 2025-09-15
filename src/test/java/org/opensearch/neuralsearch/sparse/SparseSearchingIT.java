@@ -492,6 +492,41 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(Set.of("1", "2"), actualIds);
     }
 
+    public void testQuerySeismicWithAnalyzer() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 1.0f, 0.5f, 8);
+
+        ingestDocumentsAndForceMerge(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "7592", 0.7f),// "7592" is token id of "world"
+                Map.of("2088", 0.8f, "2000", 0.8f) // "2088" is token id of "hello"
+            )
+        );
+        SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2)
+            .fieldName(TEST_SPARSE_FIELD_NAME)
+            .heapFactor(1.0f)
+            .k(10);
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
+            .fieldName(TEST_SPARSE_FIELD_NAME)
+            .queryText("hello world")
+            .searchAnalyzer("bert-uncased");
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertNotNull(searchResults);
+        assertEquals(2, getHitCount(searchResults));
+        List<String> actualIds = getDocIDs(searchResults);
+        assertEquals(List.of("8", "7"), actualIds);
+    }
+
     private List<String> getDocIDs(Map<String, Object> searchResults) {
         Map<String, Object> hits1map = (Map<String, Object>) searchResults.get("hits");
         List<String> actualIds = new ArrayList<>();
