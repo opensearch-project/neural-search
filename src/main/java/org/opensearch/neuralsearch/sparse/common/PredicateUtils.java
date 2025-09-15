@@ -30,6 +30,9 @@ public class PredicateUtils {
          */
         @Override
         public boolean test(SegmentInfo segmentInfo, FieldInfo fieldInfo) {
+            if (null == fieldInfo) {
+                return false;
+            }
             int clusterUntilDocCountReach = Integer.parseInt(fieldInfo.attributes().get(APPROXIMATE_THRESHOLD_FIELD));
             return segmentInfo.maxDoc() >= clusterUntilDocCountReach;
         }
