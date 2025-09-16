@@ -1,0 +1,26 @@
+{
+  "settings": {
+    "index.knn": true
+  },
+  "mappings": {
+    "properties": {
+      "products":{
+        "type":"nested",
+        "properties":{
+          "id": {
+            "type": "text"
+          },
+          "product_description":{
+            "type": "semantic",
+            "model_id": "%s",
+            "fields": {
+              "keyword": {
+                "type": "keyword"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
