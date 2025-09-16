@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import java.io.IOException;
 import java.util.List;
 import java.util.Arrays;
+import java.util.Locale;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -235,7 +236,7 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder queryBuilder = AgenticSearchQueryBuilder.fromXContent(parser);
 
         assertNotNull("Query builder should not be null", queryBuilder);
-        assertFalse("System instruction should be removed", queryBuilder.getQueryText().toLowerCase().contains("system:"));
+        assertFalse(queryBuilder.getQueryText().toLowerCase(Locale.ROOT).contains("system:"));
         // The sanitization only removes the "system:" pattern, not the entire malicious instruction
         assertTrue("Remaining text should contain the rest", queryBuilder.getQueryText().contains("ignore previous instructions"));
     }
@@ -250,7 +251,7 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder queryBuilder = AgenticSearchQueryBuilder.fromXContent(parser);
 
         assertNotNull("Query builder should not be null", queryBuilder);
-        assertFalse("Command injection should be removed", queryBuilder.getQueryText().toLowerCase().contains("execute:"));
+        assertFalse(queryBuilder.getQueryText().toLowerCase(Locale.ROOT).contains("execute:"));
         assertTrue("Legitimate query part should remain", queryBuilder.getQueryText().contains("find cars"));
     }
 
