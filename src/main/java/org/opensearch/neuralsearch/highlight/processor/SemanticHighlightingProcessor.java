@@ -60,17 +60,14 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
         long startTime = System.currentTimeMillis();
 
         try {
-            // Step 1: Pure extraction (no validation)
             HighlightConfig config = configExtractor.extract(request, response);
 
-            // Step 2: Check if extraction failed completely
             if (config.getValidationError() != null) {
                 log.debug("Configuration extraction failed: {}", config.getValidationError());
                 responseListener.onResponse(response);
                 return;
             }
 
-            // Step 3: Validate extracted config
             config = validator.validate(config, response);
             if (!config.isValid()) {
                 log.debug("Validation failed: {}", config.getValidationError());
@@ -78,7 +75,6 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
                 return;
             }
 
-            // Step 4: Build context (config is now guaranteed valid)
             HighlightContext context = contextBuilder.build(config, response, startTime);
             if (context.isEmpty()) {
                 log.debug("No valid documents to highlight");

@@ -331,7 +331,6 @@ def handle(data, context):
 
     # Process requests
     results = []
-
     # Log raw data for debugging
     logger.info(f"Raw data received: type={type(data)}, len={len(data) if data else 0}")
     if data and len(data) > 0:
