@@ -8,10 +8,12 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.neuralsearch.highlight.HighlightConfig;
+import org.opensearch.neuralsearch.highlight.HighlightConfigExtractor;
 import org.opensearch.neuralsearch.highlight.HighlightContext;
-import org.opensearch.neuralsearch.highlight.HighlightRequestPreparer;
-import org.opensearch.neuralsearch.highlight.HighlightRequestValidator;
+import org.opensearch.neuralsearch.highlight.HighlightContextBuilder;
 import org.opensearch.neuralsearch.highlight.HighlightResultApplier;
+import org.opensearch.neuralsearch.highlight.HighlightValidator;
 import org.opensearch.neuralsearch.highlight.HighlightingStrategy;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.strategies.BatchHighlighter;
@@ -28,27 +30,24 @@ import org.opensearch.search.pipeline.SystemGeneratedProcessor;
  * storing configuration at pipeline creation time.
  */
 @Log4j2
-public class SystemGeneratedSemanticHighlightingProcessor implements SearchResponseProcessor, SystemGeneratedProcessor {
+public class SemanticHighlightingProcessor implements SearchResponseProcessor, SystemGeneratedProcessor {
 
-    private final String tag;
-    private final String description;
     private final boolean ignoreFailure;
     private final MLCommonsClientAccessor mlClientAccessor;
-    private final HighlightRequestValidator validator;
-    private final HighlightRequestPreparer preparer;
+    private final HighlightConfigExtractor configExtractor;
+    private final HighlightValidator validator;
+    private final HighlightContextBuilder contextBuilder;
+    private final String tag;
+    private final String description;
 
-    public SystemGeneratedSemanticHighlightingProcessor(
-        String tag,
-        String description,
-        boolean ignoreFailure,
-        MLCommonsClientAccessor mlClientAccessor
-    ) {
-        this.tag = tag;
-        this.description = description;
+    public SemanticHighlightingProcessor(boolean ignoreFailure, MLCommonsClientAccessor mlClientAccessor, String tag, String description) {
         this.ignoreFailure = ignoreFailure;
         this.mlClientAccessor = mlClientAccessor;
-        this.validator = new HighlightRequestValidator();
-        this.preparer = new HighlightRequestPreparer();
+        this.configExtractor = new HighlightConfigExtractor();
+        this.validator = new HighlightValidator();
+        this.contextBuilder = new HighlightContextBuilder();
+        this.tag = tag;
+        this.description = description;
     }
 
     @Override
@@ -61,56 +60,39 @@ public class SystemGeneratedSemanticHighlightingProcessor implements SearchRespo
         long startTime = System.currentTimeMillis();
 
         try {
-            // Extract model_id and configuration from query-level options
-            HighlightRequestValidator.ValidationResult validation = validator.validate(
-                request,
-                response,
-                null,
-                SemanticHighlightingConstants.DEFAULT_PRE_TAG,
-                SemanticHighlightingConstants.DEFAULT_POST_TAG
-            );
+            // Step 1: Pure extraction (no validation)
+            HighlightConfig config = configExtractor.extract(request, response);
 
-            if (!validation.isValid()) {
-                log.debug("Semantic highlighting validation failed: {}", validation.getErrorMessage());
+            // Step 2: Check if extraction failed completely
+            if (config.getValidationError() != null) {
+                log.debug("Configuration extraction failed: {}", config.getValidationError());
                 responseListener.onResponse(response);
                 return;
             }
 
-            // Get query-level configuration
-            String modelId = validation.getModelId();
-            boolean batchInference = validation.isBatchInference();
-            int maxBatchSize = validation.getMaxBatchSize();
-            String preTag = validation.getPreTag();
-            String postTag = validation.getPostTag();
+            // Step 3: Validate extracted config
+            config = validator.validate(config, response);
+            if (!config.isValid()) {
+                log.debug("Validation failed: {}", config.getValidationError());
+                responseListener.onResponse(response);
+                return;
+            }
 
-            // Prepare highlighting context
-            HighlightContext context = preparer.prepare(
-                response,
-                validation.getQueryText(),
-                validation.getSemanticField(),
-                modelId,
-                startTime,
-                preTag,
-                postTag
-            );
-
+            // Step 4: Build context (config is now guaranteed valid)
+            HighlightContext context = contextBuilder.build(config, response, startTime);
             if (context.isEmpty()) {
                 log.debug("No valid documents to highlight");
                 responseListener.onResponse(response);
                 return;
             }
 
-            // Create appropriate strategy based on query configuration
-            HighlightResultApplier applier = new HighlightResultApplier(preTag, postTag);
-            HighlightingStrategy strategy;
-
-            if (batchInference) {
-                strategy = new BatchHighlighter(modelId, mlClientAccessor, maxBatchSize, applier, ignoreFailure);
-                log.debug("Using BatchHighlighter with max batch size: {}", maxBatchSize);
-            } else {
-                strategy = new SingleHighlighter(mlClientAccessor, applier, ignoreFailure);
-                log.debug("Using SingleHighlighter for backward compatibility");
-            }
+            // Select and create appropriate strategy
+            HighlightingStrategy strategy = createStrategy(config);
+            log.debug(
+                "Using {} for highlighting with model: {}",
+                config.isBatchInference() ? "BatchHighlighter" : "SingleHighlighter",
+                config.getModelId()
+            );
 
             // Execute highlighting
             strategy.process(context, new ActionListener<SearchResponse>() {
@@ -121,22 +103,32 @@ public class SystemGeneratedSemanticHighlightingProcessor implements SearchRespo
 
                 @Override
                 public void onFailure(Exception e) {
-                    if (ignoreFailure) {
-                        log.warn("Semantic highlighting failed, returning original response", e);
-                        responseListener.onResponse(response);
-                    } else {
-                        responseListener.onFailure(e);
-                    }
+                    handleError(e, response, responseListener);
                 }
             });
 
         } catch (Exception e) {
             log.error("Error in semantic highlighting processor", e);
-            if (ignoreFailure) {
-                responseListener.onResponse(response);
-            } else {
-                responseListener.onFailure(e);
-            }
+            handleError(e, response, responseListener);
+        }
+    }
+
+    private HighlightingStrategy createStrategy(HighlightConfig config) {
+        HighlightResultApplier applier = new HighlightResultApplier(config.getPreTag(), config.getPostTag());
+
+        if (config.isBatchInference()) {
+            return new BatchHighlighter(config.getModelId(), mlClientAccessor, config.getMaxBatchSize(), applier, ignoreFailure);
+        }
+
+        return new SingleHighlighter(mlClientAccessor, applier, ignoreFailure);
+    }
+
+    private void handleError(Exception e, SearchResponse response, ActionListener<SearchResponse> responseListener) {
+        if (ignoreFailure) {
+            log.warn("Semantic highlighting failed, returning original response", e);
+            responseListener.onResponse(response);
+        } else {
+            responseListener.onFailure(e);
         }
     }
 

@@ -26,7 +26,7 @@ import java.util.Map;
 
 /**
  * Minimal semantic highlighter that validates "semantic" highlighter type
- * but delegates actual highlighting to SystemGeneratedSemanticHighlightingProcessor
+ * but delegates actual highlighting to SemanticHighlightingProcessor
  */
 public class SemanticHighlighter implements Highlighter {
     private SemanticHighlighterEngine semanticHighlighterEngine;
