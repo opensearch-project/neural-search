@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.util;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
@@ -300,7 +301,8 @@ public class ProcessorDocumentUtils {
         sourceAndMetadataMap.keySet().removeIf(key -> key.contains("."));
     }
 
-    private static List<Object> handleList(List<Object> list) {
+    @VisibleForTesting
+    protected static List<Object> handleList(List<Object> list) {
         List<Object> result = new ArrayList<>();
         Stack<ProcessJsonListItem> stack = new Stack<>();
 
@@ -324,8 +326,9 @@ public class ProcessorDocumentUtils {
                 targetList.add(nestedMap);
             } else if (value instanceof List) {
                 List<Object> nestedList = new ArrayList<>();
-                for (Object listItem : (List<Object>) value) {
-                    stack.push(new ProcessJsonListItem(listItem, nestedList));
+                List<Object> listValue = (List<Object>) value;
+                for (int i = listValue.size() - 1; i >= 0; i--) {
+                    stack.push(new ProcessJsonListItem(listValue.get(i), nestedList));
                 }
                 targetList.add(nestedList);
             } else if (value instanceof ProcessJsonObjectItem) {
