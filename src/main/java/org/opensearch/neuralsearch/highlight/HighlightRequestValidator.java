@@ -27,13 +27,7 @@ public class HighlightRequestValidator {
     /**
      * Validate the search request and extract necessary information
      */
-    public ValidationResult validate(
-        SearchRequest request,
-        SearchResponse response,
-        String defaultModelId,
-        String defaultPreTag,
-        String defaultPostTag
-    ) {
+    public ValidationResult validate(SearchRequest request, SearchResponse response) {
         try {
             // Basic validation
             if (request == null) {
@@ -44,8 +38,8 @@ public class HighlightRequestValidator {
             }
 
             // Extract semantic highlight field
-            String semanticField = extractSemanticHighlightField(request);
-            if (semanticField == null) {
+            String highlightField = extractSemanticHighlightField(request);
+            if (highlightField == null) {
                 return ValidationResult.invalid("No semantic highlight field found");
             }
 
@@ -55,28 +49,32 @@ public class HighlightRequestValidator {
                 return ValidationResult.invalid("Query text is required for semantic highlighting");
             }
 
+            HighlightBuilder highlightBuilder = request.source().highlighter();
+
             // Extract model ID
-            String modelId = extractModelId(request, defaultModelId);
+            String modelId = extractModelId(highlightBuilder);
 
             // Model ID must be provided either in pipeline or query
             if (modelId == null || modelId.isEmpty()) {
-                return ValidationResult.invalid("Model ID is required either in pipeline configuration or query options");
+                return ValidationResult.invalid("Model ID is required in query highlight options");
             }
 
-            // Extract tags (query-level overrides pipeline-level)
-            String preTag = extractPreTag(request, defaultPreTag);
-            String postTag = extractPostTag(request, defaultPostTag);
+            // Extract tags
+            String preTag = extractPreTag(highlightBuilder);
+            String postTag = extractPostTag(highlightBuilder);
+
+            Map<String, Object> highlightBuilderOptions = highlightBuilder.options();
 
             // Extract batch configuration from query options
-            boolean batchInference = extractBatchInference(request);
-            int maxBatchSize = extractMaxBatchSize(request);
+            boolean batchInference = extractBatchInferenceBoolean(highlightBuilderOptions);
+            int maxBatchSize = extractMaxBatchSize(highlightBuilderOptions);
 
             // Check if response has hits
             if (response.getHits() == null || response.getHits().getHits().length == 0) {
                 return ValidationResult.invalid("No search hits to highlight");
             }
 
-            return ValidationResult.valid(semanticField, modelId, queryText, preTag, postTag, batchInference, maxBatchSize);
+            return ValidationResult.valid(highlightField, modelId, queryText, preTag, postTag, batchInference, maxBatchSize);
 
         } catch (Exception e) {
             log.error("Validation failed", e);
@@ -103,13 +101,7 @@ public class HighlightRequestValidator {
     /**
      * Extract model ID from highlight options or use default
      */
-    public String extractModelId(SearchRequest request, String defaultModelId) {
-        if (request.source() == null || request.source().highlighter() == null) {
-            return defaultModelId;
-        }
-
-        HighlightBuilder highlighter = request.source().highlighter();
-
+    public String extractModelId(HighlightBuilder highlighter) {
         // Check global highlighter options first
         Map<String, Object> options = highlighter.options();
         if (options != null && options.containsKey(SemanticHighlightingConstants.MODEL_ID)) {
@@ -132,7 +124,7 @@ public class HighlightRequestValidator {
             }
         }
 
-        return defaultModelId;
+        throw new IllegalArgumentException("Invalid semantic highlight field: " + SemanticHighlightingConstants.MODEL_ID);
     }
 
     /**
@@ -145,70 +137,58 @@ public class HighlightRequestValidator {
             .orElse(null);
     }
 
-    /**
-     * Extract pre_tag from highlight options or use default
-     */
-    public String extractPreTag(SearchRequest request, String defaultPreTag) {
-        // First check for standard OpenSearch pre_tags array
-        if (request.source() != null && request.source().highlighter() != null) {
-            String[] preTags = request.source().highlighter().preTags();
-            if (preTags != null && preTags.length > 0) {
-                return preTags[0];  // Use first tag
-            }
+    private enum TagType {
+        PRE_TAG(SemanticHighlightingConstants.PRE_TAG, SemanticHighlightingConstants.DEFAULT_PRE_TAG),
+        POST_TAG(SemanticHighlightingConstants.POST_TAG, SemanticHighlightingConstants.DEFAULT_POST_TAG);
+
+        final String optionKey;
+        final String defaultValue;
+
+        TagType(String optionKey, String defaultValue) {
+            this.optionKey = optionKey;
+            this.defaultValue = defaultValue;
         }
-        // Fall back to checking options for backward compatibility
-        return extractHighlightOption(request, SemanticHighlightingConstants.PRE_TAG, defaultPreTag);
     }
 
-    /**
-     * Extract post_tag from highlight options or use default
-     */
-    public String extractPostTag(SearchRequest request, String defaultPostTag) {
-        // First check for standard OpenSearch post_tags array
-        if (request.source() != null && request.source().highlighter() != null) {
-            String[] postTags = request.source().highlighter().postTags();
-            if (postTags != null && postTags.length > 0) {
-                return postTags[0];  // Use first tag
-            }
+    public String extractPreTag(HighlightBuilder highlighter) {
+        return extractTag(highlighter, TagType.PRE_TAG);
+    }
+
+    public String extractPostTag(HighlightBuilder highlighter) {
+        return extractTag(highlighter, TagType.POST_TAG);
+    }
+
+    private String extractTag(HighlightBuilder highlighter, TagType tagType) {
+        String[] tags = (tagType == TagType.PRE_TAG) ? highlighter.preTags() : highlighter.postTags();
+
+        if (tags != null && tags.length > 0) {
+            return tags[0];
         }
-        // Fall back to checking options for backward compatibility
-        return extractHighlightOption(request, SemanticHighlightingConstants.POST_TAG, defaultPostTag);
+
+        return extractHighlightOption(highlighter, tagType.optionKey, tagType.defaultValue);
     }
 
     /**
      * Extract batch_inference from highlight options
      */
-    public boolean extractBatchInference(SearchRequest request) {
-        if (request.source() == null || request.source().highlighter() == null) {
-            return false;
-        }
-
-        HighlightBuilder highlighter = request.source().highlighter();
-        Map<String, Object> options = highlighter.options();
-
-        if (options != null && options.containsKey(SemanticHighlightingConstants.BATCH_INFERENCE)) {
-            Object value = options.get(SemanticHighlightingConstants.BATCH_INFERENCE);
+    public boolean extractBatchInferenceBoolean(Map<String, Object> highlightBuilderOptions) {
+        if (highlightBuilderOptions != null && highlightBuilderOptions.containsKey(SemanticHighlightingConstants.BATCH_INFERENCE)) {
+            Object value = highlightBuilderOptions.get(SemanticHighlightingConstants.BATCH_INFERENCE);
             if (value instanceof Boolean) {
                 return (Boolean) value;
             }
         }
 
-        return false;  // Default to false for backward compatibility
+        return false; // Default to false if not specified
     }
 
     /**
      * Extract max_inference_batch_size from highlight options
      */
-    public int extractMaxBatchSize(SearchRequest request) {
-        if (request.source() == null || request.source().highlighter() == null) {
-            return SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE;
-        }
-
-        HighlightBuilder highlighter = request.source().highlighter();
-        Map<String, Object> options = highlighter.options();
-
-        if (options != null && options.containsKey(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE)) {
-            Object value = options.get(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE);
+    public int extractMaxBatchSize(Map<String, Object> highlightBuilderOptions) {
+        if (highlightBuilderOptions != null
+            && highlightBuilderOptions.containsKey(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE)) {
+            Object value = highlightBuilderOptions.get(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE);
             if (value instanceof Number) {
                 return ((Number) value).intValue();
             }
@@ -220,13 +200,7 @@ public class HighlightRequestValidator {
     /**
      * Generic method to extract highlight options
      */
-    private String extractHighlightOption(SearchRequest request, String optionKey, String defaultValue) {
-        if (request.source() == null || request.source().highlighter() == null) {
-            return defaultValue;
-        }
-
-        HighlightBuilder highlighter = request.source().highlighter();
-
+    private String extractHighlightOption(HighlightBuilder highlighter, String optionKey, String defaultValue) {
         // Check global highlighter options first
         Map<String, Object> options = highlighter.options();
         if (options != null && options.containsKey(optionKey)) {

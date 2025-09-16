@@ -2934,8 +2934,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return pipelineName;
     }
 
-    protected String createRemoteModelConnector(String endpoint, boolean batchEnabled) throws Exception {
-        return RemoteModelTestUtils.createTorchServeConnector(client(), endpoint, batchEnabled);
+    protected String createRemoteModelConnector(String endpoint) throws Exception {
+        return RemoteModelTestUtils.createTorchServeConnector(client(), endpoint);
     }
 
     protected String deployRemoteSemanticHighlightingModel(String connectorId, String modelName) throws Exception {

@@ -52,7 +52,7 @@ public class RemoteModelTestUtils {
     /**
      * Create a TorchServe connector for semantic highlighting
      */
-    public static String createTorchServeConnector(RestClient client, String endpoint, boolean batchEnabled) throws IOException {
+    public static String createTorchServeConnector(RestClient client, String endpoint) throws IOException {
         String connectorName = "torchserve-semantic-highlighter-unified";
         String requestBody = createUnifiedTorchServeConnectorBody(connectorName, endpoint);
 
