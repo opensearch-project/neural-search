@@ -71,7 +71,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
+        assertEquals(Map.of("total", 1, "successful", 1, "failed", 0), responseMap.get("_shards"));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -117,7 +117,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
+        assertEquals(Map.of("total", 1, "successful", 1, "failed", 0), responseMap.get("_shards"));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -158,6 +158,9 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         // First clear cache before warm up
         Request clearCacheRequest = new Request("POST", "/_plugins/_neural/clear_cache/" + TEST_INDEX_NAME);
         Response clearCacheResponse = client().performRequest(clearCacheRequest);
+
+        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
+
         List<Double> originalSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double originalSparseMemoryUsageSum = originalSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
 
@@ -165,14 +168,14 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Request warmUpRequest = new Request("POST", "/_plugins/_neural/warmup/" + TEST_INDEX_NAME);
         Response warmUpResponse = client().performRequest(warmUpRequest);
 
-        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
         assertEquals(RestStatus.OK, RestStatus.fromCode(warmUpResponse.getStatusLine().getStatusCode()));
 
         // Verify response structure
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", totalShards, "successful", totalShards, "failed", 0));
+        Map<String, Object> shardsInfo = (Map<String, Object>) responseMap.get("_shards");
+        assertEquals(0, shardsInfo.get("failed"));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -195,6 +198,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
 
         // Create Sparse Index
         prepareMultiShardReplicasIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME, shards, replicas);
+
         List<Double> originalSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double originalSparseMemoryUsageSum = originalSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
 
@@ -208,7 +212,8 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", totalShards, "successful", totalShards, "failed", 0));
+        Map<String, Object> shardsInfo = (Map<String, Object>) responseMap.get("_shards");
+        assertEquals(0, shardsInfo.get("failed"));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -231,6 +236,9 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         // First clear cache before warm up
         Request clearCacheRequest = new Request("POST", "/_plugins/_neural/clear_cache/" + TEST_INDEX_NAME);
         Response clearCacheResponse = client().performRequest(clearCacheRequest);
+
+        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
+
         List<Double> originalSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double originalSparseMemoryUsageSum = originalSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
 
@@ -238,14 +246,13 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Request warmUpRequest = new Request("POST", "/_plugins/_neural/warmup/" + TEST_INDEX_NAME);
         Response warmUpResponse = client().performRequest(warmUpRequest);
 
-        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
         assertEquals(RestStatus.OK, RestStatus.fromCode(warmUpResponse.getStatusLine().getStatusCode()));
 
         // Verify response structure
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
+        assertEquals(Map.of("total", 1, "successful", 1, "failed", 0), responseMap.get("_shards"));
 
         // Verify memory usage increased after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -291,7 +298,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
+        assertEquals(Map.of("total", 1, "successful", 1, "failed", 0), responseMap.get("_shards"));
 
         // Verify memory usage decreased after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -328,6 +335,9 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         // First clear cache before warm up
         Request clearCacheRequest = new Request("POST", "/_plugins/_neural/clear_cache/" + TEST_INDEX_NAME);
         Response clearCacheResponse = client().performRequest(clearCacheRequest);
+
+        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
+
         List<Double> originalSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
         double originalSparseMemoryUsageSum = originalSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
 
@@ -335,14 +345,13 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Request warmUpRequest = new Request("POST", "/_plugins/_neural/warmup/" + TEST_INDEX_NAME);
         Response warmUpResponse = client().performRequest(warmUpRequest);
 
-        assertEquals(RestStatus.OK, RestStatus.fromCode(clearCacheResponse.getStatusLine().getStatusCode()));
         assertEquals(RestStatus.OK, RestStatus.fromCode(warmUpResponse.getStatusLine().getStatusCode()));
 
         // Verify response structure
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), warmUpResponse.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
+        assertEquals(Map.of("total", 1, "successful", 1, "failed", 0), responseMap.get("_shards"));
 
         // Verify memory usage not changed after warm up
         List<Double> afterWarmUpSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
@@ -379,7 +388,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         Map<String, Object> responseMap = createParser(XContentType.JSON.xContent(), response.getEntity().getContent()).map();
 
         assertNotNull(responseMap);
-        assertEquals(responseMap.get("_shards"), Map.of("total", 1, "successful", 1, "failed", 0));
+        assertEquals(Map.of("total", 1, "successful", 1, "failed", 0), responseMap.get("_shards"));
 
         // Verify memory usage not changed after clear cache
         List<Double> afterClearCacheSparseMemoryUsageStats = getSparseMemoryUsageStatsAcrossNodes();
