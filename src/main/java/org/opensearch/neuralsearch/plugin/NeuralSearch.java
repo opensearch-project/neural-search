@@ -116,7 +116,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
-import org.opensearch.neuralsearch.highlight.processor.SystemGeneratedSemanticHighlightingFactory;
+import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingFactory;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
@@ -379,7 +379,7 @@ public class NeuralSearch extends Plugin
         Parameters parameters
     ) {
         // System-generated semantic highlighting processor that automatically applies when semantic highlighting is detected
-        return Map.of(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE, new SystemGeneratedSemanticHighlightingFactory(clientAccessor));
+        return Map.of(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE, new SemanticHighlightingFactory(clientAccessor));
     }
 
     @Override
@@ -406,7 +406,7 @@ public class NeuralSearch extends Plugin
 
     /**
      * Register minimal semantic highlighter for type validation
-     * Actual highlighting is done by SystemGeneratedSemanticHighlightingProcessor
+     * Actual highlighting is done by SemanticHighlightingProcessor
      */
     @Override
     public Map<String, Highlighter> getHighlighters() {
