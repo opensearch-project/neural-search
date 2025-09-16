@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import com.google.gson.Gson;
+import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.xcontent.XContentType;
@@ -20,7 +21,8 @@ import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.pipeline.AbstractProcessor;
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
+import org.opensearch.search.pipeline.ProcessorGenerationContext;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -31,29 +33,29 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 
-import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
-
 @Log4j2
-public class AgenticQueryTranslatorProcessor extends AbstractProcessor implements SearchRequestProcessor {
+public class AgenticQueryTranslatorProcessor implements SearchRequestProcessor, SystemGeneratedProcessor {
 
     public static final String TYPE = "agentic_query_translator";
     private static final int MAX_AGENT_RESPONSE_SIZE = 10_000;
     private final MLCommonsClientAccessor mlClient;
-    private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
-    private static final Gson gson = new Gson();;
+    private final String tag;
+    private final String description;
+    private final boolean ignoreFailure;
+    private static final Gson gson = new Gson();
 
     AgenticQueryTranslatorProcessor(
         String tag,
         String description,
         boolean ignoreFailure,
         MLCommonsClientAccessor mlClient,
-        String agentId,
         NamedXContentRegistry xContentRegistry
     ) {
-        super(tag, description, ignoreFailure);
+        this.tag = tag;
+        this.description = description;
+        this.ignoreFailure = ignoreFailure;
         this.mlClient = mlClient;
-        this.agentId = agentId;
         this.xContentRegistry = xContentRegistry;
     }
 
@@ -80,12 +82,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
         // Validate that agentic query is used alone without other search features
         if (hasOtherSearchFeatures(sourceBuilder)) {
-            String errorMessage = String.format(
-                Locale.ROOT,
-                "Agentic search blocked - Invalid usage with other search features - Agent ID: [%s], Query: [%s]",
-                agentId,
-                agenticQuery.getQueryText()
-            );
+            String errorMessage = "Agentic search blocked - Invalid usage with other search features";
             requestListener.onFailure(new IllegalArgumentException(errorMessage));
             return;
         }
@@ -109,6 +106,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         ActionListener<SearchRequest> requestListener
     ) {
         Map<String, String> parameters = new HashMap<>();
+        String agentId = agenticQuery.getAgentId();
         parameters.put("query_text", agenticQuery.getQueryText());
 
         // Get index mapping from the search request
@@ -131,22 +129,14 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
                 // Validate response size to prevent memory exhaustion
                 if (agentResponse == null) {
-                    String errorMessage = String.format(
-                        Locale.ROOT,
-                        "Agentic search failed - Null response from agent - Agent ID: [%s], Query: [%s]",
-                        agentId,
-                        agenticQuery.getQueryText()
-                    );
-                    throw new IllegalArgumentException(errorMessage);
+                    throw new IllegalArgumentException("Agentic search failed - Null response from agent");
                 }
 
                 if (agentResponse.length() > MAX_AGENT_RESPONSE_SIZE) {
                     String errorMessage = String.format(
                         Locale.ROOT,
-                        "Agentic search blocked - Response size exceeded limit - Agent ID: [%s], Size: [%d], Query: [%s]. Maximum allowed size is %d characters.",
-                        agentId,
+                        "Agentic search blocked - Response size exceeded limit. Size: [%d], Maximum allowed size is %d characters.",
                         agentResponse.length(),
-                        agenticQuery.getQueryText(),
                         MAX_AGENT_RESPONSE_SIZE
                     );
                     throw new IllegalArgumentException(errorMessage);
@@ -161,22 +151,11 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
                 requestListener.onResponse(request);
             } catch (IOException e) {
-                String errorMessage = String.format(
-                    Locale.ROOT,
-                    "Agentic search failed - Parse error - Agent ID: [%s], Error: [%s]",
-                    agentId,
-                    e.getMessage()
-                );
+                String errorMessage = String.format(Locale.ROOT, "Agentic search failed - Parse error: [%s]", e.getMessage());
                 requestListener.onFailure(new IOException(errorMessage, e));
             }
         }, e -> {
-            String errorMessage = String.format(
-                Locale.ROOT,
-                "Agentic search failed - Agent execution error - Agent ID: [%s], Query: [%s], Error: [%s]",
-                agentId,
-                agenticQuery.getQueryText(),
-                e.getMessage()
-            );
+            String errorMessage = String.format(Locale.ROOT, "Agentic search failed - Agent execution error: [%s]", e.getMessage());
             requestListener.onFailure(new RuntimeException(errorMessage, e));
         }));
     }
@@ -191,19 +170,44 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         return TYPE;
     }
 
-    public static class Factory implements Processor.Factory<SearchRequestProcessor> {
+    @Override
+    public String getTag() {
+        return this.tag;
+    }
+
+    @Override
+    public String getDescription() {
+        return this.description;
+    }
+
+    @Override
+    public boolean isIgnoreFailure() {
+        return this.ignoreFailure;
+    }
+
+    @Override
+    public ExecutionStage getExecutionStage() {
+        // Execute before user-defined processors as agentic query would be replaced by the new DSL
+        return ExecutionStage.PRE_USER_DEFINED;
+    }
+
+    @AllArgsConstructor
+    public static class Factory implements SystemGeneratedProcessor.SystemGeneratedFactory<SearchRequestProcessor> {
         private final MLCommonsClientAccessor mlClient;
         private final NamedXContentRegistry xContentRegistry;
         private final NeuralSearchSettingsAccessor settingsAccessor;
 
-        public Factory(
-            MLCommonsClientAccessor mlClient,
-            NamedXContentRegistry xContentRegistry,
-            NeuralSearchSettingsAccessor settingsAccessor
-        ) {
-            this.mlClient = mlClient;
-            this.xContentRegistry = xContentRegistry;
-            this.settingsAccessor = settingsAccessor;
+        @Override
+        public boolean shouldGenerate(ProcessorGenerationContext context) {
+            SearchRequest searchRequest = context.searchRequest();
+            if (searchRequest == null || searchRequest.source() == null) {
+                return false;
+            }
+
+            boolean hasAgenticQuery = searchRequest.source().query() instanceof AgenticSearchQueryBuilder;
+            log.debug("Query type: {}, hasAgenticQuery: {}", searchRequest.source().query().getClass().getSimpleName(), hasAgenticQuery);
+
+            return hasAgenticQuery;
         }
 
         @Override
@@ -221,11 +225,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
                 );
             }
-            String agentId = readStringProperty(TYPE, tag, config, "agent_id");
-            if (agentId == null || agentId.trim().isEmpty()) {
-                throw new IllegalArgumentException("agent_id is required for agentic_query_translator processor");
-            }
-            return new AgenticQueryTranslatorProcessor(tag, description, ignoreFailure, mlClient, agentId, xContentRegistry);
+            return new AgenticQueryTranslatorProcessor(tag, description, ignoreFailure, mlClient, xContentRegistry);
         }
     }
 }

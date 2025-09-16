@@ -49,6 +49,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     public static final String NAME = "agentic";
     public static final ParseField QUERY_TEXT_FIELD = new ParseField("query_text");
     public static final ParseField QUERY_FIELDS = new ParseField("query_fields");
+    public static final ParseField AGENT_ID_FIELD = new ParseField("agent_id");
 
     // Regex patterns for sanitizing query text
     private static final String SYSTEM_INSTRUCTION_PATTERN = "(?i)\\b(system|instruction|prompt)\\s*:";
@@ -57,6 +58,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     private static final int MAX_QUERY_LENGTH = 1000;
     public String queryText;
     public List<String> queryFields;
+    public String agentId;
 
     // setting accessor to retrieve agentic search feature flag
     private static NeuralSearchSettingsAccessor SETTINGS_ACCESSOR;
@@ -69,6 +71,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         super(in);
         this.queryText = in.readString();
         this.queryFields = in.readOptionalStringList();
+        this.agentId = in.readOptionalString();
     }
 
     public String getQueryText() {
@@ -77,6 +80,10 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     public List<String> getQueryFields() {
         return queryFields;
+    }
+
+    public String getAgentId() {
+        return agentId;
     }
 
     @Override
@@ -89,6 +96,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         }
         out.writeString(this.queryText);
         out.writeOptionalStringCollection(this.queryFields);
+        out.writeOptionalString(this.agentId);
     }
 
     @Override
@@ -106,6 +114,9 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         if (Objects.nonNull(queryFields) && !queryFields.isEmpty()) {
             xContentBuilder.field(QUERY_FIELDS.getPreferredName(), queryFields);
         }
+        if (Objects.nonNull(agentId)) {
+            xContentBuilder.field(AGENT_ID_FIELD.getPreferredName(), agentId);
+        }
         xContentBuilder.endObject();
     }
 
@@ -115,6 +126,7 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
      * {
      *  "agentic": {
      *    "query_text": "string",
+     *    "agent_id": "string"
      *    "query_fields": ["string", "string"..]
      *    }
      * }
@@ -133,6 +145,8 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             } else if (token.isValue()) {
                 if (QUERY_TEXT_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     agenticSearchQueryBuilder.queryText = parser.text();
+                } else if (AGENT_ID_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    agenticSearchQueryBuilder.agentId = parser.text();
                 } else {
                     throw new ParsingException(parser.getTokenLocation(), "Unknown field [" + currentFieldName + "]");
                 }
@@ -157,6 +171,9 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
             throw new ParsingException(parser.getTokenLocation(), "[" + QUERY_TEXT_FIELD.getPreferredName() + "] is required");
         }
 
+        if (agenticSearchQueryBuilder.agentId == null || agenticSearchQueryBuilder.agentId.trim().isEmpty()) {
+            throw new ParsingException(parser.getTokenLocation(), "[" + AGENT_ID_FIELD.getPreferredName() + "] is required");
+        }
         // Sanitize query text to prevent prompt injection
         agenticSearchQueryBuilder.queryText = sanitizeQueryText(agenticSearchQueryBuilder.queryText);
 
@@ -171,8 +188,15 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
+        // This should not be reached if the system-generated processor is working correctly
+        if (agentId == null || agentId.trim().isEmpty()) {
+            throw new IllegalStateException(
+                "Agentic search query requires an agent_id. Provide agent_id in the query or ensure the agentic_query_translator processor is configured."
+            );
+        }
         throw new IllegalStateException(
-            "Agentic search query must be used as top-level query, not nested inside other queries. Should be used with agentic_query_translator search processor"
+            "Agentic search query must be processed by the agentic_query_translator system processor before query execution. "
+                + "Ensure the neural search plugin is properly installed and the agentic search feature is enabled."
         );
     }
 
@@ -183,12 +207,13 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(queryText, obj.queryText);
         equalsBuilder.append(queryFields, obj.queryFields);
+        equalsBuilder.append(agentId, obj.agentId);
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        return new HashCodeBuilder().append(queryText).append(queryFields).toHashCode();
+        return new HashCodeBuilder().append(queryText).append(queryFields).append(agentId).toHashCode();
     }
 
     @Override
