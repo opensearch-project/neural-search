@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Agentic Search] Adds validations and logging for agentic query
 
 ### Bug Fixes
+- Fix reversed order of values in nested list with embedding processor [#1570](https://github.com/opensearch-project/neural-search/pull/1570)
 
 ### Infrastructure
 

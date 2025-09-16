@@ -290,4 +290,13 @@ public class ProcessorDocumentUtilsTests extends OpenSearchQueryTestCase {
         Map<String, String> actual = ProcessorDocumentUtils.flattenAndFlip(nestedMap);
         assertEquals(expected, actual);
     }
+
+    public void testHandleList_withDeeplyNestedFloatList_thenOrderUnchanged() {
+        List<Object> original = Arrays.asList(
+            Arrays.asList(Arrays.asList(1, 2, 3), Arrays.asList(4, 5, 6)),
+            Arrays.asList(Arrays.asList(7, 8, 9), Arrays.asList(10, 11, 12))
+        );
+        Object result = ProcessorDocumentUtils.handleList(original);
+        assertEquals(original, result);
+    }
 }
