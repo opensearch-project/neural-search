@@ -10,6 +10,13 @@
   - [Run OpenSearch neural-search](#run-opensearch-neural-search)
     - [Run Single-node Cluster Locally](#run-single-node-cluster-locally)
     - [Run Multi-node Cluster Locally](#run-multi-node-cluster-locally)
+  - [Running Tests with Remote Models](#running-tests-with-remote-models)
+    - [Running Remote Model Integration Tests](#running-remote-model-integration-tests)
+      - [Prerequisites](#prerequisites-1)
+      - [Helper Tasks](#helper-tasks)
+      - [Adding New Models](#adding-new-models)
+      - [Adding New Tests](#adding-new-tests)
+      - [Troubleshooting](#troubleshooting-1)
   - [Debugging](#debugging)
     - [Major Dependencies](#major-dependencies)
   - [Backwards Compatibility Testing](#backwards-compatibility-testing)
@@ -217,6 +224,96 @@ In case remote cluster is secured it's possible to pass username and password wi
 ```
 ./gradlew :integTestRemote -Dtests.rest.cluster=localhost:9200 -Dtests.cluster=localhost:9200 -Dtests.clustername="integTest-0" -Dhttps=true -Duser=admin -Dpassword=<admin-password>
 ```
+
+## Running Tests with Remote Models
+
+Some tests require remote model servers (e.g., TorchServe for semantic highlighting). These tests use remote models and are separated from regular integration tests for efficiency.
+
+### Running Remote Model Integration Tests
+
+```bash
+./gradlew remoteModelIntegTest
+```
+
+This command will automatically:
+1. Start an OpenSearch cluster with required plugins (k-NN, ML Commons, Neural Search)
+2. Auto-discover all models from handler files in `src/test/resources/remote-models/torchserve/handlers/`
+3. Start TorchServe Docker container and deploy all discovered models
+4. Run tests that require remote models
+5. Display memory usage statistics at key checkpoints
+6. Clean up all resources after completion
+
+#### Prerequisites
+
+- **Docker**: Must be installed and running
+- **Ports**: 8080 (inference) and 8081 (management) must be available
+
+#### Helper Tasks
+
+```bash
+# List all discovered models
+./gradlew listRemoteModels
+
+# Start TorchServe container
+./gradlew startTorchServe
+
+# Check TorchServe status (includes memory usage)
+./gradlew torchServeStatus
+
+# Stop TorchServe container
+./gradlew stopTorchServe
+```
+
+#### Adding New Models
+
+To add a new model for testing:
+
+1. Create a handler file in `src/test/resources/remote-models/torchserve/handlers/`:
+   - Name format: `<model_name>_handler.py`
+   - Example: `text_embedding_handler.py`
+
+2. The model will be automatically discovered and deployed when running `remoteModelIntegTest`
+
+#### Adding New Tests
+
+To create tests that use remote models:
+
+```java
+public class MyIntegrationTest extends BaseNeuralSearchIT {
+    @Test
+    public void testWithRemoteModel() {
+        String endpoint = System.getenv("SEMANTIC_HIGHLIGHTER_ENDPOINT");
+        // Your test code using the endpoint
+    }
+}
+```
+
+#### Troubleshooting
+
+The remote model infrastructure uses a unified script at:
+```
+src/test/resources/remote-models/torchserve/scripts/run.sh
+```
+
+You can use it directly for debugging:
+
+```bash
+# Check status
+./src/test/resources/remote-models/torchserve/scripts/run.sh status
+
+# Start and setup everything
+./src/test/resources/remote-models/torchserve/scripts/run.sh lifecycle setup
+
+# Stop everything
+./src/test/resources/remote-models/torchserve/scripts/run.sh lifecycle teardown
+```
+
+#### Troubleshooting
+
+If tests fail with connection errors:
+- Verify Docker is running: `docker version`
+- Check if ports are available: `lsof -i :8080`
+- Review container logs: `docker logs torchserve-integ-test`
 
 ### Debugging
 

@@ -119,68 +119,16 @@ jobs:
         os: [ ubuntu-latest ]
     name: Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
-
       - name: Set up JDK ${{ matrix.java }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
           distribution: temurin
-
-      - name: Setup TorchServe with Model
-        id: torchserve
-        uses: ./.github/actions/torchserve-setup
-        with:
-          action: 'full-setup'
-          torchserve-version: '0.9.0-cpu'
-          inference-port: '8080'
-          management-port: '8081'
-          memory-limit: '2g'
-          cpu-limit: '1'
-          python-version: '3.9'
-          handler-path: 'src/test/resources/remote-models/torchserve/handlers/semantic_highlighting_handler.py'
-          model-name: 'semantic_highlighter'
-
-      - name: Verify Model Deployment
+      - name: Build and Run Tests
         run: |
-          echo "Checking loaded models..."
-          curl -s http://localhost:8081/models | jq . || echo "Models: $(curl -s http://localhost:8081/models)"
-
-          echo ""
-          echo "Testing model inference..."
-          TEST_RESPONSE=$(curl -s -X POST http://localhost:8080/predictions/semantic_highlighter \
-            -H "Content-Type: application/json" \
-            -d '{
-              "question": "What is OpenSearch?",
-              "context": "OpenSearch is a distributed, community-driven, Apache 2.0-licensed, 100% open-source search and analytics suite."
-            }')
-
-          echo "Response: $TEST_RESPONSE"
-
-          if echo "$TEST_RESPONSE" | grep -q "highlights"; then
-            echo "✓ Model inference working correctly!"
-          else
-            echo "✗ Model inference failed"
-            docker logs torchserve --tail 50
-            exit 1
-          fi
-
-      - name: Build and Run Integration Tests
-        env:
-          TORCHSERVE_ENDPOINT: ${{ steps.torchserve.outputs.torchserve-endpoint }}
-          REMOTE_MODEL_ENDPOINT: ${{ steps.torchserve.outputs.model-endpoint }}
-        run: |
-          echo "Using TorchServe endpoint: $TORCHSERVE_ENDPOINT"
-          echo "Using Remote Model endpoint: $REMOTE_MODEL_ENDPOINT"
-          ./gradlew integTest --info
-
-      - name: Cleanup TorchServe
-        if: always()
-        uses: ./.github/actions/torchserve-setup
-        with:
-          action: 'cleanup'
+          ./gradlew integTest
 
   integMultiNodeTest:
       needs: Precommit-neural-search-linux
@@ -192,62 +140,11 @@ jobs:
       runs-on: ${{ matrix.os }}
       steps:
         - uses: actions/checkout@v4
-
         - name: Set up JDK ${{ matrix.java }}
           uses: actions/setup-java@v4
           with:
             java-version: ${{ matrix.java }}
             distribution: temurin
-
-        - name: Setup TorchServe with Model
-          id: torchserve
-          uses: ./.github/actions/torchserve-setup
-          with:
-            action: 'full-setup'
-            torchserve-version: '0.9.0-cpu'
-            inference-port: '8080'
-            management-port: '8081'
-            memory-limit: '2g'
-            cpu-limit: '1'
-            python-version: '3.9'
-            handler-path: 'src/test/resources/remote-models/torchserve/handlers/semantic_highlighting_handler.py'
-            model-name: 'semantic_highlighter'
-
-        - name: Verify Model Deployment
+        - name: Build and Run Tests
           run: |
-            echo "Checking loaded models..."
-            curl -s http://localhost:8081/models | jq . || echo "Models: $(curl -s http://localhost:8081/models)"
-
-            echo ""
-            echo "Testing model inference..."
-            TEST_RESPONSE=$(curl -s -X POST ${{ steps.torchserve.outputs.model-endpoint }} \
-              -H "Content-Type: application/json" \
-              -d '{
-                "question": "What is OpenSearch?",
-                "context": "OpenSearch is a distributed, community-driven, Apache 2.0-licensed, 100% open-source search and analytics suite."
-              }')
-
-            echo "Response: $TEST_RESPONSE"
-
-            if echo "$TEST_RESPONSE" | grep -q "highlights"; then
-              echo "✓ Model inference working correctly!"
-            else
-              echo "✗ Model inference failed"
-              docker logs torchserve --tail 50
-              exit 1
-            fi
-
-        - name: Build and Run Multi-Node Tests
-          env:
-            TORCHSERVE_ENDPOINT: ${{ steps.torchserve.outputs.torchserve-endpoint }}
-            REMOTE_MODEL_ENDPOINT: ${{ steps.torchserve.outputs.model-endpoint }}
-          run: |
-            echo "Using TorchServe endpoint: $TORCHSERVE_ENDPOINT"
-            echo "Using Remote Model endpoint: $REMOTE_MODEL_ENDPOINT"
-            ./gradlew integTest -PnumNodes=3 --info
-
-        - name: Cleanup TorchServe
-          if: always()
-          uses: ./.github/actions/torchserve-setup
-          with:
-            action: 'cleanup'
+            ./gradlew integTest -PnumNodes=3

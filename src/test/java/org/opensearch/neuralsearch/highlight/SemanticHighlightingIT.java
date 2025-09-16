@@ -18,6 +18,7 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.annotations.RequiresRemoteModel;
 import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 import org.opensearch.neuralsearch.util.TestUtils;
 
@@ -155,6 +156,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
         client().performRequest(refreshRequest);
     }
 
+    @RequiresRemoteModel(value = "torchserve", model = "semantic_highlighter")
     public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithRemoteModel() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
 
@@ -188,6 +190,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
         TestUtils.assertSemanticHighlighting(responseMap, TEST_FIELD, "OpenSearch");
     }
 
+    @RequiresRemoteModel(value = "torchserve", model = "semantic_highlighter")
     public void testSemanticHighlightingWithQueryMatchWithBatchEnabledWithRemoteModel() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
 
