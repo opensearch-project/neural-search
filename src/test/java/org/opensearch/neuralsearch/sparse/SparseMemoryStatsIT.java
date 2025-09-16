@@ -48,7 +48,7 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
     @SneakyThrows
     public void tearDown() {
         disableStats();
-        updateClusterSettings(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT.getKey(), "50%");
+        updateClusterSettings(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT.getKey(), "10%");
         super.tearDown();
     }
 
