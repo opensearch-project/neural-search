@@ -190,10 +190,16 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     protected Query doToQuery(QueryShardContext context) throws IOException {
         // This should not be reached if the system-generated processor is working correctly
         if (agentId == null || agentId.trim().isEmpty()) {
+            throw new IllegalStateException("Agentic search query requires an agent_id. Provide agent_id in the query.");
+        }
+        // Check if the system-generated processor is enabled
+        if (!SETTINGS_ACCESSOR.isSystemGenerateProcessorEnabled("agentic_query_translator")) {
             throw new IllegalStateException(
-                "Agentic search query requires an agent_id. Provide agent_id in the query or ensure the agentic_query_translator processor is configured."
+                "Agentic search requires the agentic_query_translator system processor to be enabled. "
+                    + "Add 'agentic_query_translator' to the 'cluster.search.enabled_system_generated_factories' setting."
             );
         }
+
         throw new IllegalStateException(
             "Agentic search query must be processed by the agentic_query_translator system processor before query execution. "
                 + "Ensure the neural search plugin is properly installed and the agentic search feature is enabled."

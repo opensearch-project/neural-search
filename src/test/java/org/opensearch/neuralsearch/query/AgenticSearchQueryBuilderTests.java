@@ -347,4 +347,21 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
 
         assertEquals(validQuery, queryBuilder.getQueryText());
     }
+
+    public void testDoToQuery_systemProcessorNotEnabled() {
+        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isAgenticSearchEnabled()).thenReturn(true);
+        when(mockSettingsAccessor.isSystemGenerateProcessorEnabled("agentic_query_translator")).thenReturn(false);
+        AgenticSearchQueryBuilder.initialize(mockSettingsAccessor);
+
+        AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId("test-agent");
+        QueryShardContext mockContext = mock(QueryShardContext.class);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> queryBuilder.doToQuery(mockContext));
+        assertTrue(
+            "Should mention system processor requirement",
+            exception.getMessage().contains("agentic_query_translator system processor")
+        );
+        assertTrue("Should mention cluster setting", exception.getMessage().contains("cluster.search.enabled_system_generated_factories"));
+    }
 }

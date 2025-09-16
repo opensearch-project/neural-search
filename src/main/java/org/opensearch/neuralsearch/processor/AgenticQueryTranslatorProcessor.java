@@ -41,19 +41,18 @@ public class AgenticQueryTranslatorProcessor implements SearchRequestProcessor, 
     private final MLCommonsClientAccessor mlClient;
     private final NamedXContentRegistry xContentRegistry;
     private final String tag;
-    private final String description;
     private final boolean ignoreFailure;
+    private static final String DESCRIPTION =
+        "This is a system generated search request processor which will be executed before agentic search request to execute an agent";
     private static final Gson gson = new Gson();
 
     AgenticQueryTranslatorProcessor(
         String tag,
-        String description,
         boolean ignoreFailure,
         MLCommonsClientAccessor mlClient,
         NamedXContentRegistry xContentRegistry
     ) {
         this.tag = tag;
-        this.description = description;
         this.ignoreFailure = ignoreFailure;
         this.mlClient = mlClient;
         this.xContentRegistry = xContentRegistry;
@@ -82,7 +81,8 @@ public class AgenticQueryTranslatorProcessor implements SearchRequestProcessor, 
 
         // Validate that agentic query is used alone without other search features
         if (hasOtherSearchFeatures(sourceBuilder)) {
-            String errorMessage = "Agentic search blocked - Invalid usage with other search features";
+            String errorMessage =
+                "Agentic search blocked - Invalid usage with other search features like aggregation, sort, filters, collapse";
             requestListener.onFailure(new IllegalArgumentException(errorMessage));
             return;
         }
@@ -177,7 +177,7 @@ public class AgenticQueryTranslatorProcessor implements SearchRequestProcessor, 
 
     @Override
     public String getDescription() {
-        return this.description;
+        return DESCRIPTION;
     }
 
     @Override
@@ -225,7 +225,7 @@ public class AgenticQueryTranslatorProcessor implements SearchRequestProcessor, 
                     "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
                 );
             }
-            return new AgenticQueryTranslatorProcessor(tag, description, ignoreFailure, mlClient, xContentRegistry);
+            return new AgenticQueryTranslatorProcessor(tag, ignoreFailure, mlClient, xContentRegistry);
         }
     }
 }
