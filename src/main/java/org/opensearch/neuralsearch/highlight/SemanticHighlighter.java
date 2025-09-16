@@ -11,7 +11,7 @@ import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 
 /**
  * Minimal semantic highlighter that validates "semantic" highlighter type
- * but delegates actual highlighting to SystemGeneratedSemanticHighlightingProcessor
+ * but delegates actual highlighting to SemanticHighlightingProcessor
  */
 public class SemanticHighlighter implements Highlighter {
 
@@ -24,7 +24,7 @@ public class SemanticHighlighter implements Highlighter {
 
     @Override
     public HighlightField highlight(FieldHighlightContext fieldContext) {
-        // Return null - actual highlighting is done by SystemGeneratedSemanticHighlightingProcessor
+        // Return null - actual highlighting is done by SemanticHighlightingProcessor
         // This highlighter only serves to validate the "semantic" type highlight
         return null;
     }

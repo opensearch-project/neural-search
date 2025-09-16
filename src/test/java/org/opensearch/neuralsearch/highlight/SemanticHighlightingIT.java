@@ -33,10 +33,8 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
     private static final String TEST_INDEX = "test-semantic-highlight-index";
     private static final String TEST_FIELD = "content";
 
-    private String modelIdBatchDisabled;
-    private String modelIdBatchEnabled;
-    private String connectorIdBatchDisabled;
-    private String connectorIdBatchEnabled;
+    private String remoteHighlightModelId;
+    private String remoteHighlightConnectorId;
     private boolean isTorchServeAvailable = false;
     private String torchServeEndpoint;
 
@@ -57,18 +55,10 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             if (isTorchServeAvailable) {
                 log.info("TorchServe is available at: {}", torchServeEndpoint);
 
-                // Create connectors for both batch disabled and enabled
-                connectorIdBatchDisabled = createRemoteModelConnector(torchServeEndpoint, false);
-                connectorIdBatchEnabled = createRemoteModelConnector(torchServeEndpoint, true);
-
-                // Deploy models
-                modelIdBatchDisabled = deployRemoteSemanticHighlightingModel(
-                    connectorIdBatchDisabled,
-                    "semantic-highlighter-batch-disabled"
-                );
-                log.info("Deployed model with batch disabled, model ID: {}", modelIdBatchDisabled);
-                modelIdBatchEnabled = deployRemoteSemanticHighlightingModel(connectorIdBatchEnabled, "semantic-highlighter-batch-enabled");
-                log.info("Deployed model with batch enabled, model ID: {}", modelIdBatchEnabled);
+                // Create connector and deploy single remote model
+                remoteHighlightConnectorId = createRemoteModelConnector(torchServeEndpoint);
+                remoteHighlightModelId = deployRemoteSemanticHighlightingModel(remoteHighlightConnectorId, "semantic-highlighter-remote");
+                log.info("Deployed remote semantic highlighting model, model ID: {}", remoteHighlightModelId);
 
                 // Create simple index
                 createSimpleIndex();
@@ -91,8 +81,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
                 log.debug("Failed to delete index: {}", e.getMessage());
             }
 
-            cleanupSemanticHighlightingResources(connectorIdBatchDisabled, modelIdBatchDisabled);
-            cleanupSemanticHighlightingResources(connectorIdBatchEnabled, modelIdBatchEnabled);
+            cleanupSemanticHighlightingResources(remoteHighlightConnectorId, remoteHighlightModelId);
         }
 
         super.tearDown();
@@ -184,7 +173,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             .endObject()
             .endObject()
             .startObject("options")
-            .field("model_id", modelIdBatchDisabled)
+            .field("model_id", remoteHighlightModelId)
             .field("batch_inference", false)
             .endObject()
             .endObject()
@@ -217,7 +206,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             .endObject()
             .endObject()
             .startObject("options")
-            .field("model_id", modelIdBatchEnabled)
+            .field("model_id", remoteHighlightModelId)
             .field("batch_inference", true)
             .endObject()
             .endObject()

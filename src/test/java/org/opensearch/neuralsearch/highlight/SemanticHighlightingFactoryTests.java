@@ -8,7 +8,7 @@ import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.neuralsearch.highlight.processor.SystemGeneratedSemanticHighlightingFactory;
+import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingFactory;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
@@ -20,7 +20,7 @@ import org.opensearch.test.OpenSearchTestCase;
 import java.util.HashMap;
 import java.util.Map;
 
-public class SystemGeneratedSemanticHighlightingFactoryTests extends OpenSearchTestCase {
+public class SemanticHighlightingFactoryTests extends OpenSearchTestCase {
 
     @Mock
     private MLCommonsClientAccessor mlClientAccessor;
@@ -28,13 +28,13 @@ public class SystemGeneratedSemanticHighlightingFactoryTests extends OpenSearchT
     @Mock
     private Processor.PipelineContext pipelineContext;
 
-    private SystemGeneratedSemanticHighlightingFactory factory;
+    private SemanticHighlightingFactory factory;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         MockitoAnnotations.openMocks(this);
-        factory = new SystemGeneratedSemanticHighlightingFactory(mlClientAccessor);
+        factory = new SemanticHighlightingFactory(mlClientAccessor);
     }
 
     public void testShouldGenerateReturnsTrueForSemanticHighlighting() {

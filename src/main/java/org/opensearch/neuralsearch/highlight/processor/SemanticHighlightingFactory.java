@@ -23,13 +23,11 @@ import java.util.Map;
  * Users cannot manually configure this processor - it only works through automatic detection.
  */
 @Log4j2
-public class SystemGeneratedSemanticHighlightingFactory
-    implements
-        SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor> {
+public class SemanticHighlightingFactory implements SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor> {
 
     private final MLCommonsClientAccessor mlClientAccessor;
 
-    public SystemGeneratedSemanticHighlightingFactory(MLCommonsClientAccessor mlClientAccessor) {
+    public SemanticHighlightingFactory(MLCommonsClientAccessor mlClientAccessor) {
         this.mlClientAccessor = mlClientAccessor;
     }
 
@@ -67,13 +65,6 @@ public class SystemGeneratedSemanticHighlightingFactory
         Map<String, Object> config,
         Processor.PipelineContext pipelineContext
     ) {
-        // Create a stateless processor with no stored configuration
-        // All configuration comes from the query-level options
-        return new SystemGeneratedSemanticHighlightingProcessor(
-            processorTag != null ? processorTag : SemanticHighlightingConstants.DEFAULT_PROCESSOR_TAG,
-            description != null ? description : SemanticHighlightingConstants.DEFAULT_PROCESSOR_DESCRIPTION,
-            ignoreFailure,
-            mlClientAccessor
-        );
+        return new SemanticHighlightingProcessor(ignoreFailure, mlClientAccessor, processorTag, description);
     }
 }

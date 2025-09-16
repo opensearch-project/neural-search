@@ -92,8 +92,6 @@ public class BatchHighlighter implements HighlightingStrategy {
         long totalTime = System.currentTimeMillis() - context.getStartTime();
         SearchResponse finalResponse = ProcessorUtils.updateResponseTookTime(context.getOriginalResponse(), totalTime);
 
-        log.info("Batch semantic highlighting completed: {} documents in {}ms", context.size(), totalTime);
-
         responseListener.onResponse(finalResponse);
     }
 
