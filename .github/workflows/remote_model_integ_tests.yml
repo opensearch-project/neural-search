@@ -12,31 +12,9 @@ on:
       - "*"
       - "feature/**"
 
-
 jobs:
-  Get-CI-Image-Tag:
+  remote-model-single-node-integration-tests:
     runs-on: ubuntu-latest
-    outputs:
-      ci-image-version-linux: ${{ steps.step-ci-image-version-linux.outputs.ci-image-version-linux }}
-    steps:
-      - name: Install crane
-        uses: iarekylew00t/crane-installer@v1
-        with:
-          crane-release: v0.15.2
-      - name: Checkout neural-search
-        uses: actions/checkout@v4
-      - id: step-ci-image-version-linux
-        name: Check CI image version
-        run: |
-          TAG=`crane ls opensearchstaging/ci-runner | grep ".*v[0-9]*" | tail -1`
-          echo "ci-image-version-linux=$TAG" >> $GITHUB_OUTPUT
-
-  single-node-tests:
-    needs: Get-CI-Image-Tag
-    runs-on: ubuntu-latest
-    container:
-      image: opensearchstaging/ci-runner:${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
-      options: --user 1001
     strategy:
       matrix:
         java: [21, 24]
@@ -51,25 +29,13 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Run single-node remote model tests
+        env:
+          CI: true
         run: |
-          ./gradlew remoteModelIntegTest --console=plain
+          ./gradlew remoteModelIntegTest --info
 
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports-single-node-java${{ matrix.java }}
-          path: |
-            build/reports/tests/remoteModelIntegTest
-            build/reports/remote-model-tests
-          retention-days: 7
-
-  multi-node-tests:
-    needs: Get-CI-Image-Tag
+  remote-model-multi-node-integration-tests:
     runs-on: ubuntu-latest
-    container:
-      image: opensearchstaging/ci-runner:${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
-      options: --user 1001
     strategy:
       matrix:
         nodes: [3]
@@ -85,45 +51,7 @@ jobs:
           java-version: ${{ matrix.java }}
 
       - name: Run multi-node remote model tests
+        env:
+          CI: true
         run: |
-          ./gradlew remoteModelIntegTest \
-            -PnumNodes=${{ matrix.nodes }} \
-            --console=plain
-
-      - name: Upload test reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-reports-multi-${{ matrix.nodes }}-nodes-java${{ matrix.java }}
-          path: |
-            build/reports/tests/remoteModelIntegTest
-            build/reports/remote-model-tests
-          retention-days: 7
-
-  test-summary:
-    needs: [single-node-tests, multi-node-tests]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download all test reports
-        uses: actions/download-artifact@v4
-        with:
-          pattern: test-reports-*
-          merge-multiple: true
-
-      - name: Generate test summary
-        run: |
-          echo "## Remote Model Integration Test Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          # Check for test results
-          if [ -f "build/reports/remote-model-tests/index.html" ]; then
-            echo "✅ Tests completed. Check artifacts for detailed reports." >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ Test reports not found. Check logs for details." >> $GITHUB_STEP_SUMMARY
-          fi
-
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Test Configurations" >> $GITHUB_STEP_SUMMARY
-          echo "- Single-node: Java 21, 24" >> $GITHUB_STEP_SUMMARY
-          echo "- Multi-node (3 nodes): Java 21" >> $GITHUB_STEP_SUMMARY
+          ./gradlew remoteModelIntegTest -PnumNodes=${{ matrix.nodes }} --info
