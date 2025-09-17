@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class HighlightConfigTest extends OpenSearchTestCase {
@@ -102,5 +103,114 @@ public class HighlightConfigTest extends OpenSearchTestCase {
 
     public void testRequiredQueryText() {
         expectThrows(NullPointerException.class, () -> { HighlightConfig.builder().fieldName("field").modelId("model-id").build(); });
+    }
+
+    public void testWithModelType() {
+        HighlightConfig config = HighlightConfig.builder().fieldName("content").modelId("test-model").queryText("test query").build();
+
+        assertNull(config.getModelType());
+
+        HighlightConfig configWithType = config.withModelType(FunctionName.REMOTE);
+        assertEquals(FunctionName.REMOTE, configWithType.getModelType());
+        // Other fields should remain the same
+        assertEquals("content", configWithType.getFieldName());
+        assertEquals("test-model", configWithType.getModelId());
+    }
+
+    public void testModelSupportsBatchInference() {
+        // Test with REMOTE model
+        HighlightConfig remoteConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("remote-model")
+            .queryText("query")
+            .build()
+            .withModelType(FunctionName.REMOTE);
+
+        assertTrue(remoteConfig.modelSupportsBatchInference());
+
+        // Test with QUESTION_ANSWERING model
+        HighlightConfig qaConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("qa-model")
+            .queryText("query")
+            .build()
+            .withModelType(FunctionName.QUESTION_ANSWERING);
+
+        assertFalse(qaConfig.modelSupportsBatchInference());
+
+        // Test with TEXT_EMBEDDING model
+        HighlightConfig embeddingConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("embed-model")
+            .queryText("query")
+            .build()
+            .withModelType(FunctionName.TEXT_EMBEDDING);
+
+        assertFalse(embeddingConfig.modelSupportsBatchInference());
+    }
+
+    public void testValidateBatchInferenceWithRemoteModel() {
+        HighlightConfig config = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("remote-model")
+            .queryText("query")
+            .batchInference(true)
+            .build()
+            .withModelType(FunctionName.REMOTE);
+
+        String validationError = config.validateBatchInference();
+        assertNull(validationError);
+    }
+
+    public void testValidateBatchInferenceWithLocalModel() {
+        HighlightConfig config = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("local-model")
+            .queryText("query")
+            .batchInference(true)
+            .build()
+            .withModelType(FunctionName.QUESTION_ANSWERING);
+
+        String validationError = config.validateBatchInference();
+        assertNotNull(validationError);
+        assertTrue(validationError.contains("does not support batch inference"));
+        assertTrue(validationError.contains("QUESTION_ANSWERING"));
+        assertTrue(validationError.contains("local-model"));
+    }
+
+    public void testValidateBatchInferenceWithBatchDisabled() {
+        // Batch inference disabled should work with any model type
+        HighlightConfig qaConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("qa-model")
+            .queryText("query")
+            .batchInference(false)
+            .build()
+            .withModelType(FunctionName.QUESTION_ANSWERING);
+
+        assertNull(qaConfig.validateBatchInference());
+
+        HighlightConfig remoteConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("remote-model")
+            .queryText("query")
+            .batchInference(false)
+            .build()
+            .withModelType(FunctionName.REMOTE);
+
+        assertNull(remoteConfig.validateBatchInference());
+    }
+
+    public void testValidateBatchInferenceWithNullModelType() {
+        // If model type is not set yet, validation should pass
+        HighlightConfig config = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("model")
+            .queryText("query")
+            .batchInference(true)
+            .build();
+
+        assertNull(config.getModelType());
+        assertNull(config.validateBatchInference());
     }
 }

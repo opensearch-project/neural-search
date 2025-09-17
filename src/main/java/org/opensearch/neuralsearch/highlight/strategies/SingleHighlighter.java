@@ -71,7 +71,7 @@ public class SingleHighlighter implements HighlightingStrategy {
 
             log.debug("Processing document {}/{}", currentIndex + 1, requests.size());
 
-            mlClient.inferenceSentenceHighlighting(request, ActionListener.wrap(highlightResults -> {
+            mlClient.inferenceSentenceHighlighting(request, context.getModelType(), ActionListener.wrap(highlightResults -> {
                 try {
                     resultApplier.applySingleResult(
                         hit,

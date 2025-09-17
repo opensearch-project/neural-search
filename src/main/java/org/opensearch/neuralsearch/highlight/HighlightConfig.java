@@ -4,9 +4,12 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
+import java.util.Locale;
+
 import lombok.Builder;
 import lombok.Getter;
 import lombok.With;
+import org.opensearch.ml.common.FunctionName;
 
 /**
  * Immutable configuration for semantic highlighting.
@@ -38,12 +41,57 @@ public class HighlightConfig {
     @With
     private final String validationError;
 
+    @With
+    private final FunctionName modelType;
+
     /**
      * Check if the configuration is valid
      * @return true if no validation error exists and all required fields are present
      */
     public boolean isValid() {
-        return validationError == null && fieldName != null && modelId != null && queryText != null;
+        return validationError == null && fieldName != null && modelId != null && queryText != null && validateBatchInference() == null;
+    }
+
+    /**
+     * Check if configuration has required fields (before model type enrichment)
+     * @return true if required fields are present
+     */
+    public boolean hasRequiredFields() {
+        return fieldName != null && modelId != null && queryText != null;
+    }
+
+    /**
+     * Check if the model supports batch inference
+     * @return true if the model type is REMOTE, false otherwise
+     */
+    public boolean modelSupportsBatchInference() {
+        return modelType == FunctionName.REMOTE;
+    }
+
+    /**
+     * Validate batch inference configuration against model capabilities
+     * @return validation error message if invalid, null if valid
+     */
+    public String validateBatchInference() {
+        if (batchInference && modelType != null && !modelSupportsBatchInference()) {
+            return String.format(
+                Locale.ROOT,
+                "Model [%s] with type [%s] does not support batch inference. "
+                    + "Batch inference is only supported for REMOTE models. "
+                    + "Please set 'batch_inference' to false or use a remote model.",
+                modelId,
+                modelType
+            );
+        }
+        return null;
+    }
+
+    /**
+     * Check if the configuration is invalid
+     * @return true if validation error exists
+     */
+    public boolean isInvalid() {
+        return validationError != null;
     }
 
     /**

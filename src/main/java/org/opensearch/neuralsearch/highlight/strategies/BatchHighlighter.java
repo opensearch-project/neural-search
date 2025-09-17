@@ -60,27 +60,32 @@ public class BatchHighlighter implements HighlightingStrategy {
     private void processSingleBatch(HighlightContext context, ActionListener<SearchResponse> responseListener) {
         long batchStartTime = System.currentTimeMillis();
 
-        mlClient.batchInferenceSentenceHighlighting(modelId, context.getRequests(), ActionListener.wrap(batchResults -> {
-            try {
-                log.debug(
-                    "Single batch inference completed: {} documents in {}ms",
-                    context.size(),
-                    System.currentTimeMillis() - batchStartTime
-                );
+        mlClient.batchInferenceSentenceHighlighting(
+            modelId,
+            context.getRequests(),
+            context.getModelType(),
+            ActionListener.wrap(batchResults -> {
+                try {
+                    log.debug(
+                        "Single batch inference completed: {} documents in {}ms",
+                        context.size(),
+                        System.currentTimeMillis() - batchStartTime
+                    );
 
-                resultApplier.applyBatchResults(
-                    context.getValidHits(),
-                    batchResults,
-                    context.getFieldName(),
-                    context.getPreTag(),
-                    context.getPostTag()
-                );
+                    resultApplier.applyBatchResults(
+                        context.getValidHits(),
+                        batchResults,
+                        context.getFieldName(),
+                        context.getPreTag(),
+                        context.getPostTag()
+                    );
 
-                completeProcessing(context, responseListener);
-            } catch (Exception e) {
-                handleError(e, context, responseListener);
-            }
-        }, error -> handleError(error, context, responseListener)));
+                    completeProcessing(context, responseListener);
+                } catch (Exception e) {
+                    handleError(e, context, responseListener);
+                }
+            }, error -> handleError(error, context, responseListener))
+        );
     }
 
     private void processMultipleBatches(HighlightContext context, ActionListener<SearchResponse> responseListener) {
@@ -142,32 +147,37 @@ public class BatchHighlighter implements HighlightingStrategy {
 
             long batchStartTime = System.currentTimeMillis();
 
-            mlClient.batchInferenceSentenceHighlighting(modelId, batchRequests, ActionListener.wrap(batchResults -> {
-                try {
-                    log.debug(
-                        "Batch {}/{} completed: {} documents in {}ms",
-                        batchNumber,
-                        totalBatches,
-                        batchRequests.size(),
-                        System.currentTimeMillis() - batchStartTime
-                    );
+            mlClient.batchInferenceSentenceHighlighting(
+                modelId,
+                batchRequests,
+                context.getModelType(),
+                ActionListener.wrap(batchResults -> {
+                    try {
+                        log.debug(
+                            "Batch {}/{} completed: {} documents in {}ms",
+                            batchNumber,
+                            totalBatches,
+                            batchRequests.size(),
+                            System.currentTimeMillis() - batchStartTime
+                        );
 
-                    resultApplier.applyBatchResultsWithIndices(
-                        allValidHits,
-                        batchResults,
-                        startIdx,
-                        endIdx,
-                        context.getFieldName(),
-                        context.getPreTag(),
-                        context.getPostTag()
-                    );
+                        resultApplier.applyBatchResultsWithIndices(
+                            allValidHits,
+                            batchResults,
+                            startIdx,
+                            endIdx,
+                            context.getFieldName(),
+                            context.getPreTag(),
+                            context.getPostTag()
+                        );
 
-                    currentIndex = endIdx;
-                    processNextBatch();
-                } catch (Exception e) {
-                    handleError(e, context, responseListener);
-                }
-            }, error -> handleError(error, context, responseListener)));
+                        currentIndex = endIdx;
+                        processNextBatch();
+                    } catch (Exception e) {
+                        handleError(e, context, responseListener);
+                    }
+                }, error -> handleError(error, context, responseListener))
+            );
         }
     }
 }

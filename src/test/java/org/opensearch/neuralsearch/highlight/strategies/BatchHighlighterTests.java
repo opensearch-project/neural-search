@@ -68,10 +68,10 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         // Mock ML client to capture the batch request
         ArgumentCaptor<List<SentenceHighlightingRequest>> requestCaptor = ArgumentCaptor.forClass(List.class);
         doAnswer(invocation -> {
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onResponse(mockResults);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(eq("test-model"), requestCaptor.capture(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(eq("test-model"), requestCaptor.capture(), any(), any());
 
         // Execute
         batchHighlighter.process(context, responseListener);
@@ -96,10 +96,10 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         List<List<Map<String, Object>>> mockResults = createResults(3);
 
         doAnswer(invocation -> {
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onResponse(mockResults);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         // Execute
         batchHighlighter.process(context, responseListener);
@@ -134,10 +134,10 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
             // Create results for this batch
             List<List<Map<String, Object>>> results = createResults(batchRequests.size());
 
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onResponse(results);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         // Execute
         batchHighlighter.process(context, responseListener);
@@ -149,7 +149,7 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         assertEquals(1, batchSizes.get(2).intValue());
 
         // Verify ML client was called 3 times
-        verify(mlClient, times(3)).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        verify(mlClient, times(3)).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
     }
 
     public void testPartialBatchHandling() {
@@ -163,16 +163,16 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         ArgumentCaptor<List<SentenceHighlightingRequest>> requestCaptor = ArgumentCaptor.forClass(List.class);
         doAnswer(invocation -> {
             List<List<Map<String, Object>>> results = createResults(3);
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onResponse(results);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(eq("test-model"), requestCaptor.capture(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(eq("test-model"), requestCaptor.capture(), any(), any());
 
         // Execute
         batchHighlighter.process(context, responseListener);
 
         // Verify only one batch with 3 items
-        verify(mlClient, times(1)).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        verify(mlClient, times(1)).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
         assertEquals(3, requestCaptor.getValue().size());
     }
 
@@ -186,7 +186,7 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         batchHighlighter.process(context, responseListener);
 
         // Verify ML client was never called
-        verify(mlClient, times(0)).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        verify(mlClient, times(0)).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         // Verify original response was returned
         verify(responseListener).onResponse(context.getOriginalResponse());
@@ -203,10 +203,10 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         RuntimeException testError = new RuntimeException("ML service error");
 
         doAnswer(invocation -> {
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onFailure(testError);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         // Execute
         batchHighlighter.process(context, responseListener);
@@ -227,10 +227,10 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         RuntimeException testError = new RuntimeException("ML service error");
 
         doAnswer(invocation -> {
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onFailure(testError);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         // Execute
         batchHighlighter.process(context, responseListener);
@@ -256,10 +256,10 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         doAnswer(invocation -> {
             List<SentenceHighlightingRequest> batchRequests = invocation.getArgument(1);
             List<List<Map<String, Object>>> results = createResults(batchRequests.size());
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onResponse(results);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         doAnswer(invocation -> {
             startIndices.add(invocation.getArgument(2));
@@ -272,7 +272,7 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         batchHighlighter.process(context, responseListener);
 
         // Verify correct number of batches
-        verify(mlClient, times(3)).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        verify(mlClient, times(3)).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         // Verify indices for each batch
         assertEquals(3, startIndices.size());
@@ -296,10 +296,10 @@ public class BatchHighlighterTests extends OpenSearchTestCase {
         List<List<Map<String, Object>>> mockResults = createResults(5);
 
         doAnswer(invocation -> {
-            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(2);
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
             listener.onResponse(mockResults);
             return null;
-        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any());
+        }).when(mlClient).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
 
         // Execute
         batchHighlighter.process(context, responseListener);

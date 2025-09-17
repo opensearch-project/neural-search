@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.highlight;
 
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -258,6 +259,56 @@ public class HighlightContextTests extends OpenSearchTestCase {
         SearchHit hit = new SearchHit(id, "doc" + id, Collections.emptyMap(), Collections.emptyMap());
         hit.sourceRef(new BytesArray("{\"content\":\"content" + id + "\"}"));
         return hit;
+    }
+
+    public void testModelTypeAndModelId() {
+        // Test with REMOTE model type
+        HighlightContext remoteContext = HighlightContext.builder()
+            .requests(new ArrayList<>())
+            .validHits(new ArrayList<>())
+            .fieldName("content")
+            .originalResponse(createSearchResponse())
+            .startTime(System.currentTimeMillis())
+            .preTag("<em>")
+            .postTag("</em>")
+            .modelId("remote-model-123")
+            .modelType(FunctionName.REMOTE)
+            .build();
+
+        assertEquals("remote-model-123", remoteContext.getModelId());
+        assertEquals(FunctionName.REMOTE, remoteContext.getModelType());
+
+        // Test with QUESTION_ANSWERING model type
+        HighlightContext localContext = HighlightContext.builder()
+            .requests(new ArrayList<>())
+            .validHits(new ArrayList<>())
+            .fieldName("content")
+            .originalResponse(createSearchResponse())
+            .startTime(System.currentTimeMillis())
+            .preTag("<em>")
+            .postTag("</em>")
+            .modelId("local-model-456")
+            .modelType(FunctionName.QUESTION_ANSWERING)
+            .build();
+
+        assertEquals("local-model-456", localContext.getModelId());
+        assertEquals(FunctionName.QUESTION_ANSWERING, localContext.getModelType());
+
+        // Test with null model type
+        HighlightContext nullTypeContext = HighlightContext.builder()
+            .requests(new ArrayList<>())
+            .validHits(new ArrayList<>())
+            .fieldName("content")
+            .originalResponse(createSearchResponse())
+            .startTime(System.currentTimeMillis())
+            .preTag("<em>")
+            .postTag("</em>")
+            .modelId("model-789")
+            .modelType(null)
+            .build();
+
+        assertEquals("model-789", nullTypeContext.getModelId());
+        assertNull(nullTypeContext.getModelType());
     }
 
     private SearchResponse createSearchResponse() {
