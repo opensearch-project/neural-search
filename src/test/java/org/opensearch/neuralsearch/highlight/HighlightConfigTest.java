@@ -4,17 +4,10 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
-import org.junit.Test;
+import org.opensearch.test.OpenSearchTestCase;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+public class HighlightConfigTest extends OpenSearchTestCase {
 
-public class HighlightConfigTest {
-
-    @Test
     public void testBuilderWithAllFields() {
         HighlightConfig config = HighlightConfig.builder()
             .fieldName("content")
@@ -37,7 +30,6 @@ public class HighlightConfigTest {
         assertNull(config.getValidationError());
     }
 
-    @Test
     public void testBuilderWithDefaults() {
         HighlightConfig config = HighlightConfig.builder().fieldName("title").modelId("model-123").queryText("search text").build();
 
@@ -51,7 +43,6 @@ public class HighlightConfigTest {
         assertTrue(config.isValid());
     }
 
-    @Test
     public void testInvalidConfiguration() {
         HighlightConfig config = HighlightConfig.invalid("Test error message");
 
@@ -62,7 +53,6 @@ public class HighlightConfigTest {
         assertNotNull(config.getQueryText());
     }
 
-    @Test
     public void testWithValidationError() {
         HighlightConfig validConfig = HighlightConfig.builder().fieldName("content").modelId("model-id").queryText("query").build();
 
@@ -78,7 +68,6 @@ public class HighlightConfigTest {
         assertEquals("query", invalidConfig.getQueryText());
     }
 
-    @Test
     public void testToBuilder() {
         HighlightConfig original = HighlightConfig.builder()
             .fieldName("content")
@@ -103,18 +92,15 @@ public class HighlightConfigTest {
         assertTrue(modified.isBatchInference());
     }
 
-    @Test(expected = NullPointerException.class)
     public void testRequiredFieldName() {
-        HighlightConfig.builder().modelId("model-id").queryText("query").build();
+        expectThrows(NullPointerException.class, () -> { HighlightConfig.builder().modelId("model-id").queryText("query").build(); });
     }
 
-    @Test(expected = NullPointerException.class)
     public void testRequiredModelId() {
-        HighlightConfig.builder().fieldName("field").queryText("query").build();
+        expectThrows(NullPointerException.class, () -> { HighlightConfig.builder().fieldName("field").queryText("query").build(); });
     }
 
-    @Test(expected = NullPointerException.class)
     public void testRequiredQueryText() {
-        HighlightConfig.builder().fieldName("field").modelId("model-id").build();
+        expectThrows(NullPointerException.class, () -> { HighlightConfig.builder().fieldName("field").modelId("model-id").build(); });
     }
 }
