@@ -513,6 +513,7 @@ public class MLCommonsClientAccessor {
      */
     public void inferenceSentenceHighlighting(
         @NonNull final SentenceHighlightingRequest inferenceRequest,
+        @NonNull final FunctionName modelType,
         @NonNull final ActionListener<List<Map<String, Object>>> listener
     ) {
         // For non-batch single document inference, use QUESTION_ANSWERING model type

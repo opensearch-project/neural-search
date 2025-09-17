@@ -68,10 +68,10 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
         // Mock ML client to capture the request
         ArgumentCaptor<SentenceHighlightingRequest> requestCaptor = ArgumentCaptor.forClass(SentenceHighlightingRequest.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(1);
+            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(2);
             listener.onResponse(mockResult);
             return null;
-        }).when(mlClient).inferenceSentenceHighlighting(requestCaptor.capture(), any());
+        }).when(mlClient).inferenceSentenceHighlighting(requestCaptor.capture(), any(), any());
 
         // Execute
         singleHighlighter.process(context, responseListener);
@@ -95,10 +95,10 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
         List<Map<String, Object>> mockResult = createSingleResult();
 
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(1);
+            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(2);
             listener.onResponse(mockResult);
             return null;
-        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Execute
         singleHighlighter.process(context, responseListener);
@@ -131,10 +131,10 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
             SentenceHighlightingRequest request = invocation.getArgument(0);
             processedContexts.add(request.getContext());
 
-            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(1);
+            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(2);
             listener.onResponse(createSingleResult());
             return null;
-        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Execute
         singleHighlighter.process(context, responseListener);
@@ -146,7 +146,7 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
         assertEquals("context2", processedContexts.get(2));
 
         // Verify ML client was called 3 times
-        verify(mlClient, times(3)).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        verify(mlClient, times(3)).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Verify result applier was called 3 times
         verify(resultApplier, times(3)).applySingleResult(any(SearchHit.class), anyList(), anyString(), anyString(), anyString());
@@ -163,7 +163,7 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
         // First request succeeds, second request fails
         doAnswer((Answer<Void>) invocation -> {
             SentenceHighlightingRequest request = invocation.getArgument(0);
-            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(1);
+            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(2);
 
             if ("context0".equals(request.getContext())) {
                 // First request succeeds
@@ -173,7 +173,7 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
                 listener.onFailure(new RuntimeException("ML service error"));
             }
             return null;
-        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Execute
         singleHighlighter.process(context, responseListener);
@@ -198,10 +198,10 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
         RuntimeException testError = new RuntimeException("ML service error");
 
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(1);
+            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(2);
             listener.onFailure(testError);
             return null;
-        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Execute
         singleHighlighter.process(context, responseListener);
@@ -221,7 +221,7 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
         singleHighlighter.process(context, responseListener);
 
         // Verify ML client was never called
-        verify(mlClient, times(0)).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        verify(mlClient, times(0)).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Verify original response was returned
         verify(responseListener).onResponse(context.getOriginalResponse());
@@ -247,10 +247,10 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
         }
 
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(1);
+            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(2);
             listener.onResponse(multipleHighlights);
             return null;
-        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Execute
         singleHighlighter.process(context, responseListener);
@@ -279,11 +279,11 @@ public class SingleHighlighterTests extends OpenSearchTestCase {
 
         // Mock ML client with delayed responses
         doAnswer((Answer<Void>) invocation -> {
-            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(1);
+            ActionListener<List<Map<String, Object>>> listener = invocation.getArgument(2);
             // Simulate processing time
             listener.onResponse(createSingleResult());
             return null;
-        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any());
+        }).when(mlClient).inferenceSentenceHighlighting(any(SentenceHighlightingRequest.class), any(), any());
 
         // Execute
         singleHighlighter.process(context, responseListener);

@@ -65,6 +65,8 @@ public class HighlightContextBuilder {
             .startTime(startTime)
             .preTag(config.getPreTag())
             .postTag(config.getPostTag())
+            .modelId(config.getModelId())
+            .modelType(config.getModelType())
             .build();
     }
 
@@ -115,6 +117,8 @@ public class HighlightContextBuilder {
             .fieldName(config.getFieldName())
             .originalResponse(response)
             .startTime(startTime)
+            .modelId(config.getModelId())
+            .modelType(config.getModelType())
             .preTag(config.getPreTag())
             .postTag(config.getPostTag())
             .build();
