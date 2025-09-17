@@ -40,14 +40,14 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
     private final String tag;
     private final String description;
 
-    public SemanticHighlightingProcessor(boolean ignoreFailure, MLCommonsClientAccessor mlClientAccessor, String tag, String description) {
+    public SemanticHighlightingProcessor(boolean ignoreFailure, MLCommonsClientAccessor mlClientAccessor) {
         this.ignoreFailure = ignoreFailure;
         this.mlClientAccessor = mlClientAccessor;
         this.configExtractor = new HighlightConfigExtractor();
         this.validator = new HighlightValidator();
         this.contextBuilder = new HighlightContextBuilder();
-        this.tag = tag;
-        this.description = description;
+        this.tag = SemanticHighlightingConstants.DEFAULT_PROCESSOR_TAG;
+        this.description = SemanticHighlightingConstants.DEFAULT_PROCESSOR_DESCRIPTION;
     }
 
     @Override

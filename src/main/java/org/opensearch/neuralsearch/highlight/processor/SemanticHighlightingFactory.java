@@ -65,6 +65,6 @@ public class SemanticHighlightingFactory implements SystemGeneratedProcessor.Sys
         Map<String, Object> config,
         Processor.PipelineContext pipelineContext
     ) {
-        return new SemanticHighlightingProcessor(ignoreFailure, mlClientAccessor, processorTag, description);
+        return new SemanticHighlightingProcessor(ignoreFailure, mlClientAccessor);
     }
 }

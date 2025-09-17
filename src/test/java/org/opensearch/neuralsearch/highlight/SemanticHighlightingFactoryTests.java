@@ -141,8 +141,9 @@ public class SemanticHighlightingFactoryTests extends OpenSearchTestCase {
         );
 
         assertNotNull(processor);
-        assertEquals("custom-tag", processor.getTag());
-        assertEquals("custom-description", processor.getDescription());
+        // Always uses semantic-specific defaults, ignoring the provided tag and description
+        assertEquals(SemanticHighlightingConstants.DEFAULT_PROCESSOR_TAG, processor.getTag());
+        assertEquals(SemanticHighlightingConstants.DEFAULT_PROCESSOR_DESCRIPTION, processor.getDescription());
         assertTrue(processor.isIgnoreFailure());
     }
 
