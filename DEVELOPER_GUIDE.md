@@ -14,8 +14,11 @@
     - [Running Remote Model Integration Tests](#running-remote-model-integration-tests)
       - [Prerequisites](#prerequisites-1)
       - [Helper Tasks](#helper-tasks)
+      - [Test Organization](#test-organization)
       - [Adding New Models](#adding-new-models)
       - [Adding New Tests](#adding-new-tests)
+      - [Batch Inference Testing](#batch-inference-testing)
+      - [Remote Model Infrastructure](#remote-model-infrastructure)
       - [Troubleshooting](#troubleshooting-1)
   - [Debugging](#debugging)
     - [Major Dependencies](#major-dependencies)
@@ -231,6 +234,8 @@ Some tests require remote model servers (e.g., TorchServe for semantic highlight
 
 ### Running Remote Model Integration Tests
 
+Remote model integration tests are separated from regular integration tests to optimize resource usage and test execution time. Tests requiring remote models (e.g., TorchServe) are placed in classes ending with `RemoteModelIT.java`.
+
 ```bash
 ./gradlew remoteModelIntegTest
 ```
@@ -239,9 +244,11 @@ This command will automatically:
 1. Start an OpenSearch cluster with required plugins (k-NN, ML Commons, Neural Search)
 2. Auto-discover all models from handler files in `src/test/resources/remote-models/torchserve/handlers/`
 3. Start TorchServe Docker container and deploy all discovered models
-4. Run tests that require remote models
+4. Run tests that require remote models (classes ending with `RemoteModelIT`)
 5. Display memory usage statistics at key checkpoints
 6. Clean up all resources after completion
+
+**Note**: Local model tests remain in regular integration test classes (ending with `IT.java`) and are run with the standard `./gradlew integTest` command.
 
 #### Prerequisites
 
@@ -279,16 +286,36 @@ To add a new model for testing:
 To create tests that use remote models:
 
 ```java
-public class MyIntegrationTest extends BaseNeuralSearchIT {
+// For remote model tests - place in a file ending with RemoteModelIT.java
+public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
+
+    private String remoteModelId;
+    private boolean isTorchServeAvailable = false;
+
+    @Before
+    public void setUp() {
+        // Check for TorchServe endpoint availability
+        String endpoint = System.getenv("TORCHSERVE_ENDPOINT");
+        if (endpoint == null) {
+            endpoint = System.getProperty("tests.torchserve.endpoint");
+        }
+
+        if (endpoint != null && RemoteModelTestUtils.isRemoteEndpointAvailable(endpoint)) {
+            isTorchServeAvailable = true;
+            // Deploy remote model
+            remoteModelId = deployRemoteSemanticHighlightingModel(connectorId, "model-name");
+        }
+    }
+
     @Test
     public void testWithRemoteModel() {
-        String endpoint = System.getenv("SEMANTIC_HIGHLIGHTER_ENDPOINT");
-        // Your test code using the endpoint
+        Assume.assumeTrue("TorchServe is not available", isTorchServeAvailable);
+        // Your test code using remote model
     }
 }
 ```
 
-#### Troubleshooting
+#### Remote Model Infrastructure
 
 The remote model infrastructure uses a unified script at:
 ```

@@ -68,45 +68,99 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
                 return;
             }
 
-            config = validator.validate(config, response);
-            if (!config.isValid()) {
-                log.debug("Validation failed: {}", config.getValidationError());
+            // Check if basic fields are present
+            if (!config.hasRequiredFields()) {
+                log.debug("Missing required fields for semantic highlighting");
                 responseListener.onResponse(response);
                 return;
             }
 
-            HighlightContext context = contextBuilder.build(config, response, startTime);
-            if (context.isEmpty()) {
-                log.debug("No valid documents to highlight");
-                responseListener.onResponse(response);
-                return;
-            }
-
-            // Select and create appropriate strategy
-            HighlightingStrategy strategy = createStrategy(config);
-            log.debug(
-                "Using {} for highlighting with model: {}",
-                config.isBatchInference() ? "BatchHighlighter" : "SingleHighlighter",
-                config.getModelId()
-            );
-
-            // Execute highlighting
-            strategy.process(context, new ActionListener<SearchResponse>() {
-                @Override
-                public void onResponse(SearchResponse highlightedResponse) {
-                    responseListener.onResponse(highlightedResponse);
-                }
-
-                @Override
-                public void onFailure(Exception e) {
-                    handleError(e, response, responseListener);
-                }
-            });
+            // Fetch model type and enrich config
+            enrichConfigWithModelType(config, response, startTime, responseListener);
 
         } catch (Exception e) {
             log.error("Error in semantic highlighting processor", e);
             handleError(e, response, responseListener);
         }
+    }
+
+    private void enrichConfigWithModelType(
+        HighlightConfig config,
+        SearchResponse response,
+        long startTime,
+        ActionListener<SearchResponse> responseListener
+    ) {
+        mlClientAccessor.getModel(config.getModelId(), ActionListener.wrap(model -> {
+            // Add model type to config
+            HighlightConfig enrichedConfig = config.withModelType(model.getAlgorithm());
+
+            // Validate batch inference if enabled
+            String batchValidationError = enrichedConfig.validateBatchInference();
+            if (batchValidationError != null) {
+                enrichedConfig = enrichedConfig.withValidationError(batchValidationError);
+            }
+
+            // Additional validation with model type
+            enrichedConfig = validator.validate(enrichedConfig, response);
+
+            if (!enrichedConfig.isValid()) {
+                if (ignoreFailure) {
+                    log.warn("Semantic highlighting validation failed: {}", enrichedConfig.getValidationError());
+                    responseListener.onResponse(response);
+                } else {
+                    responseListener.onFailure(new IllegalArgumentException(enrichedConfig.getValidationError()));
+                }
+                return;
+            }
+
+            // Build context and execute highlighting
+            executeHighlighting(enrichedConfig, response, startTime, responseListener);
+
+        }, error -> {
+            String errorMsg = "Failed to fetch model information: " + error.getMessage();
+            if (ignoreFailure) {
+                log.warn(errorMsg);
+                responseListener.onResponse(response);
+            } else {
+                responseListener.onFailure(new RuntimeException(errorMsg, error));
+            }
+        }));
+    }
+
+    private void executeHighlighting(
+        HighlightConfig config,
+        SearchResponse response,
+        long startTime,
+        ActionListener<SearchResponse> responseListener
+    ) {
+        HighlightContext context = contextBuilder.build(config, response, startTime);
+        if (context.isEmpty()) {
+            log.debug("No valid documents to highlight");
+            responseListener.onResponse(response);
+            return;
+        }
+
+        // Select and create appropriate strategy
+        HighlightingStrategy strategy = createStrategy(config);
+        log.debug(
+            "Using {} for model [{}] of type [{}]",
+            config.isBatchInference() ? "BatchHighlighter" : "SingleHighlighter",
+            config.getModelId(),
+            config.getModelType()
+        );
+
+        // Execute highlighting
+        strategy.process(context, new ActionListener<SearchResponse>() {
+            @Override
+            public void onResponse(SearchResponse highlightedResponse) {
+                responseListener.onResponse(highlightedResponse);
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                handleError(e, response, responseListener);
+            }
+        });
     }
 
     private HighlightingStrategy createStrategy(HighlightConfig config) {

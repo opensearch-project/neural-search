@@ -11,6 +11,7 @@ import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.Arrays;
@@ -434,8 +435,26 @@ public class MLCommonsClientAccessor {
     public void batchInferenceSentenceHighlighting(
         @NonNull final String modelId,
         @NonNull final List<SentenceHighlightingRequest> batchRequests,
+        @NonNull final FunctionName modelType,
         @NonNull final ActionListener<List<List<Map<String, Object>>>> listener
     ) {
+        // Verify model type supports batch (defensive check)
+        if (modelType != FunctionName.REMOTE) {
+            listener.onFailure(
+                new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Model [%s] with type [%s] does not support batch inference. "
+                            + "Batch inference is only supported for REMOTE models. "
+                            + "Please set 'batch_inference' to false or use a remote model.",
+                        modelId,
+                        modelType
+                    )
+                )
+            );
+            return;
+        }
+
         // Create a simple InferenceRequest wrapper since batch method accepts modelId separately
         // This is different from single inference where the request object contains the modelId
         InferenceRequest inferenceRequest = new InferenceRequest() {
@@ -482,42 +501,39 @@ public class MLCommonsClientAccessor {
     /**
      * Performs sentence highlighting inference using the provided model.
      * This method will highlight relevant sentences in the context based on the question.
-     * It automatically detects whether the model is local (QUESTION_ANSWERING) or remote (REMOTE)
-     * and uses the appropriate input format.
+     * Uses the provided model type to determine the appropriate input format.
      *
      * @param inferenceRequest the request containing the question and context for highlighting
+     * @param modelType the type of model (QUESTION_ANSWERING for local, REMOTE for remote)
      * @param listener the listener to be called with the highlighting results
      */
     public void inferenceSentenceHighlighting(
         @NonNull final SentenceHighlightingRequest inferenceRequest,
+        @NonNull final FunctionName modelType,
         @NonNull final ActionListener<List<Map<String, Object>>> listener
     ) {
-        // First get the model to determine its type
-        getModel(inferenceRequest.getModelId(), ActionListener.wrap(model -> {
-            FunctionName functionName = model.getAlgorithm();
-
-            if (functionName == FunctionName.QUESTION_ANSWERING) {
-                // Local model - use QuestionAnsweringInputDataSet
-                retryableInference(
-                    inferenceRequest,
-                    0,
-                    () -> createLocalHighlightingMLInput(inferenceRequest),
-                    mlOutput -> parseSingleHighlightingOutput(mlOutput),
-                    listener
-                );
-            } else if (functionName == FunctionName.REMOTE) {
-                // Remote model - use RemoteInferenceInputDataSet with inputs array
-                retryableInference(
-                    inferenceRequest,
-                    0,
-                    () -> createRemoteHighlightingMLInput(inferenceRequest),
-                    mlOutput -> parseSingleHighlightingOutput(mlOutput),
-                    listener
-                );
-            } else {
-                listener.onFailure(new IllegalArgumentException("Unsupported model type for highlighting: " + functionName));
-            }
-        }, listener::onFailure));
+        // Use the provided model type instead of fetching it
+        if (modelType == FunctionName.QUESTION_ANSWERING) {
+            // Local model - use QuestionAnsweringInputDataSet
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> createLocalHighlightingMLInput(inferenceRequest),
+                mlOutput -> parseSingleHighlightingOutput(mlOutput),
+                listener
+            );
+        } else if (modelType == FunctionName.REMOTE) {
+            // Remote model - use RemoteInferenceInputDataSet with inputs array
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> createRemoteHighlightingMLInput(inferenceRequest),
+                mlOutput -> parseSingleHighlightingOutput(mlOutput),
+                listener
+            );
+        } else {
+            listener.onFailure(new IllegalArgumentException("Unsupported model type for highlighting: " + modelType));
+        }
     }
 
     /**

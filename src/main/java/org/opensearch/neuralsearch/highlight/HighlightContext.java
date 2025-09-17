@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.highlight;
 import lombok.Builder;
 import lombok.Getter;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.SearchHit;
 
@@ -25,6 +26,8 @@ public class HighlightContext {
     private final long startTime;
     private final String preTag;
     private final String postTag;
+    private final String modelId;
+    private final FunctionName modelType;
 
     /**
      * Check if there are any requests to process
