@@ -4,26 +4,20 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
-import org.junit.Test;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.internal.InternalSearchResponse;
+import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+public class HighlightContextTests extends OpenSearchTestCase {
 
-public class HighlightContextTests {
-
-    @Test
     public void testIsEmpty() {
         // Test with empty requests
         HighlightContext emptyContext = HighlightContext.builder()
@@ -71,7 +65,6 @@ public class HighlightContextTests {
         assertEquals(1, nonEmptyContext.size());
     }
 
-    @Test
     public void testDocumentManagement() {
         // Create context with multiple documents
         List<SentenceHighlightingRequest> requests = new ArrayList<>();
@@ -106,7 +99,6 @@ public class HighlightContextTests {
         }
     }
 
-    @Test
     public void testFieldExtraction() {
         // Test field name storage
         String fieldName = "description";
@@ -124,7 +116,6 @@ public class HighlightContextTests {
         assertEquals(fieldName, context.getFieldName());
     }
 
-    @Test
     public void testMetricsTracking() {
         // Test start time tracking
         long startTime = 1234567890L;
@@ -147,7 +138,6 @@ public class HighlightContextTests {
         assertTrue(elapsed >= 0);
     }
 
-    @Test
     public void testTagManagement() {
         // Test custom tags
         String customPreTag = "{{";
@@ -167,7 +157,6 @@ public class HighlightContextTests {
         assertEquals(customPostTag, context.getPostTag());
     }
 
-    @Test
     public void testOriginalResponsePreservation() {
         // Create a specific search response
         SearchHit hit1 = createHit(1);
@@ -194,7 +183,6 @@ public class HighlightContextTests {
         assertEquals(2, context.getOriginalResponse().getHits().getHits().length);
     }
 
-    @Test
     public void testBuilderWithAllFields() {
         // Test builder with all fields populated
         List<SentenceHighlightingRequest> requests = new ArrayList<>();
@@ -233,7 +221,6 @@ public class HighlightContextTests {
         assertFalse(context.isEmpty());
     }
 
-    @Test
     public void testImmutability() {
         // Create context
         List<SentenceHighlightingRequest> originalRequests = new ArrayList<>();

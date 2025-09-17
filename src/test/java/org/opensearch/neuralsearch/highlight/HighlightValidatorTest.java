@@ -4,31 +4,26 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
-import org.junit.Before;
-import org.junit.Test;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
+import org.opensearch.test.OpenSearchTestCase;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class HighlightValidatorTest {
+public class HighlightValidatorTest extends OpenSearchTestCase {
 
     private HighlightValidator validator;
     private SearchResponse mockResponse;
 
-    @Before
-    public void setUp() {
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
         validator = new HighlightValidator();
         mockResponse = mock(SearchResponse.class);
     }
 
-    @Test
     public void testValidConfiguration() {
         HighlightConfig config = HighlightConfig.builder().fieldName("content").modelId("test-model").queryText("test query").build();
 
@@ -42,7 +37,6 @@ public class HighlightValidatorTest {
         assertNull(validated.getValidationError());
     }
 
-    @Test
     public void testAlreadyInvalidConfig() {
         HighlightConfig invalidConfig = HighlightConfig.invalid("Already invalid");
 
@@ -52,7 +46,6 @@ public class HighlightValidatorTest {
         assertEquals("Already invalid", validated.getValidationError());
     }
 
-    @Test
     public void testMissingFieldName() {
         HighlightConfig config = HighlightConfig.builder().fieldName("").modelId("test-model").queryText("test query").build();
 
@@ -66,7 +59,6 @@ public class HighlightValidatorTest {
         assertEquals("No semantic highlight field found", validated.getValidationError());
     }
 
-    @Test
     public void testMissingModelId() {
         HighlightConfig config = HighlightConfig.builder().fieldName("content").modelId("").queryText("test query").build();
 
@@ -80,7 +72,6 @@ public class HighlightValidatorTest {
         assertEquals("Model ID is required for semantic highlighting", validated.getValidationError());
     }
 
-    @Test
     public void testMissingQueryText() {
         HighlightConfig config = HighlightConfig.builder().fieldName("content").modelId("test-model").queryText("").build();
 
@@ -94,7 +85,6 @@ public class HighlightValidatorTest {
         assertEquals("Query text is required for semantic highlighting", validated.getValidationError());
     }
 
-    @Test
     public void testNoSearchHits() {
         HighlightConfig config = HighlightConfig.builder().fieldName("content").modelId("test-model").queryText("test query").build();
 
@@ -108,7 +98,6 @@ public class HighlightValidatorTest {
         assertEquals("No search hits to highlight", validated.getValidationError());
     }
 
-    @Test
     public void testNullResponse() {
         HighlightConfig config = HighlightConfig.builder().fieldName("content").modelId("test-model").queryText("test query").build();
 
@@ -118,7 +107,6 @@ public class HighlightValidatorTest {
         assertEquals("No search hits to highlight", validated.getValidationError());
     }
 
-    @Test
     public void testInvalidBatchSize() {
         HighlightConfig config = HighlightConfig.builder()
             .fieldName("content")
@@ -138,7 +126,6 @@ public class HighlightValidatorTest {
         assertEquals("Invalid max batch size: 0", validated.getValidationError());
     }
 
-    @Test
     public void testExceededBatchSize() {
         HighlightConfig config = HighlightConfig.builder()
             .fieldName("content")
@@ -158,7 +145,6 @@ public class HighlightValidatorTest {
         assertTrue(validated.getValidationError().startsWith("Max batch size exceeds limit:"));
     }
 
-    @Test
     public void testValidBatchConfiguration() {
         HighlightConfig config = HighlightConfig.builder()
             .fieldName("content")
