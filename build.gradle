@@ -496,9 +496,9 @@ task remoteModelIntegTest(type: RestIntegTestTask) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
 
-    // Filter to only run tests with @RequiresRemoteModel annotation
+    // Filter to only run remote model tests
     filter {
-        includeTestsMatching "org.opensearch.neuralsearch.highlight.SemanticHighlightingIT.testSemanticHighlightingWithQueryMatchWithBatch*WithRemoteModel"
+        includeTestsMatching "*RemoteModelIT*"
     }
 
     // Path to handlers directory for auto-discovery
