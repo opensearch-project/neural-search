@@ -13,7 +13,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 
 public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
@@ -77,6 +80,23 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
             "Embedding without prune should have more tokens than the embedding with the default max_ratio 0.1 prune.",
             ((Map) embeddings1.get(0)).size() > ((Map) embeddings.get(0)).size()
         );
+    }
+
+    public void testSemanticFieldProcessor_withMultiFields() throws Exception {
+        String modelId = prepareSparseEncodingModel();
+        loadAndWaitForModelToBeReady(modelId);
+        createIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/SemanticIndexMappingsWithMultiFields.json", modelId);
+
+        ingestDocument(INDEX_WITH_SPARSE_MODEL, INGEST_DOC2, "1");
+
+        QueryBuilder queryBuilder = QueryBuilders.nestedQuery(
+            "products",
+            QueryBuilders.matchQuery("products.product_description", "dummy_product_description"),
+            ScoreMode.Max
+        );
+        Map<String, Object> response = search(INDEX_WITH_SPARSE_MODEL, queryBuilder, 10);
+        // Verify we index the multiFields successfully by search against it
+        assertEquals(1, ((List<Object>) ((Map<String, Object>) response.get("hits")).get("hits")).size());
     }
 
     public void testSemanticFieldProcessor_withDenseModel() throws Exception {

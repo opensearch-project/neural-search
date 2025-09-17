@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 - Fix reversed order of values in nested list with embedding processor [#1570](https://github.com/opensearch-project/neural-search/pull/1570)
+- [Semantic Field] Fix not able to index the multiFields for the rawFieldType [#1572](https://github.com/opensearch-project/neural-search/pull/1572).
 
 ### Infrastructure
 

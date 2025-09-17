@@ -28,6 +28,7 @@ import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -76,6 +77,11 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
         ParametrizedFieldMapper.Builder delegateBuilder = delegateFieldMapper.getMergeBuilder();
         semanticFieldMapperBuilder.setDelegateBuilder(delegateBuilder);
         return semanticFieldMapperBuilder;
+    }
+
+    @Override
+    public Iterator<Mapper> iterator() {
+        return delegateFieldMapper.iterator();
     }
 
     @Override
