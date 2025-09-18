@@ -32,7 +32,6 @@ public class HighlightConfigExtractor {
      */
     public HighlightConfig extract(SearchRequest request, SearchResponse response) {
         try {
-            // Only null check for request - this is extraction failure, not validation
             if (request == null || request.source() == null) {
                 log.debug("No search request source to extract from");
                 return HighlightConfig.empty();
@@ -44,20 +43,16 @@ public class HighlightConfigExtractor {
                 return HighlightConfig.empty();
             }
 
-            // Pure extraction - no validation of values
             String fieldName = extractSemanticField(highlighter);
             String modelId = extractModelId(highlighter);
             String queryText = extractQueryText(request);
 
-            // Build config with whatever we found (nulls are OK)
             return HighlightConfig.builder()
                 .fieldName(fieldName)      // Can be null
                 .modelId(modelId)          // Can be null
                 .queryText(queryText)      // Can be null
                 .preTag(extractPreTag(highlighter))
                 .postTag(extractPostTag(highlighter))
-                .batchInference(extractBatchInference(highlighter))
-                .maxBatchSize(extractMaxBatchSize(highlighter))
                 .build();
 
         } catch (Exception e) {
@@ -125,28 +120,6 @@ public class HighlightConfigExtractor {
         }
 
         return extractHighlightOption(highlighter, SemanticHighlightingConstants.POST_TAG, SemanticHighlightingConstants.DEFAULT_POST_TAG);
-    }
-
-    private boolean extractBatchInference(HighlightBuilder highlighter) {
-        Map<String, Object> options = highlighter.options();
-        if (options != null && options.containsKey(SemanticHighlightingConstants.BATCH_INFERENCE)) {
-            Object value = options.get(SemanticHighlightingConstants.BATCH_INFERENCE);
-            if (value instanceof Boolean) {
-                return (Boolean) value;
-            }
-        }
-        return false;
-    }
-
-    private int extractMaxBatchSize(HighlightBuilder highlighter) {
-        Map<String, Object> options = highlighter.options();
-        if (options != null && options.containsKey(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE)) {
-            Object value = options.get(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE);
-            if (value instanceof Number) {
-                return ((Number) value).intValue();
-            }
-        }
-        return SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE;
     }
 
     private String extractHighlightOption(HighlightBuilder highlighter, String optionKey, String defaultValue) {
