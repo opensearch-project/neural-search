@@ -49,9 +49,6 @@ public class HighlightValidator {
             if (config.getMaxBatchSize() <= 0) {
                 return config.toBuilder().validationError("Invalid batch size: " + config.getMaxBatchSize()).build();
             }
-            if (config.getMaxBatchSize() > SemanticHighlightingConstants.ABSOLUTE_MAX_BATCH_SIZE) {
-                return config.toBuilder().validationError("Max batch size exceeds limit: " + config.getMaxBatchSize()).build();
-            }
         }
 
         log.debug("Validation successful for field: {}, modelId: {}", config.getFieldName(), config.getModelId());

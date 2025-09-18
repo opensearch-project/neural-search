@@ -4,10 +4,14 @@
  */
 package org.opensearch.neuralsearch.highlight.processor;
 
+import java.util.Map;
+
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.ml.common.FunctionName;
+import org.opensearch.ml.common.MLModel;
 import org.opensearch.neuralsearch.highlight.HighlightConfig;
 import org.opensearch.neuralsearch.highlight.HighlightConfigExtractor;
 import org.opensearch.neuralsearch.highlight.HighlightContext;
@@ -94,6 +98,9 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
             // Add model type to config
             HighlightConfig enrichedConfig = config.withModelType(model.getAlgorithm());
 
+            // Enrich config with batch settings from connector (if available)
+            enrichedConfig = enrichConfigFromConnector(enrichedConfig, model);
+
             // Validate batch inference if enabled
             String batchValidationError = enrichedConfig.validateBatchInference();
             if (batchValidationError != null) {
@@ -179,6 +186,65 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
             responseListener.onResponse(response);
         } else {
             responseListener.onFailure(e);
+        }
+    }
+
+    /**
+     * Enrich the highlight configuration with batch settings from the model's connector.
+     * If the model has a connector with batch configuration parameters, use them to
+     * configure batch inference settings.
+     *
+     * @param config The current highlight configuration
+     * @param model The ML model containing potential connector information
+     * @return The enriched configuration with batch settings from connector
+     */
+    private HighlightConfig enrichConfigFromConnector(HighlightConfig config, MLModel model) {
+        // Only process remote models with connectors
+        if (model.getAlgorithm() != FunctionName.REMOTE) {
+            return config;
+        }
+
+        // Check if model has connector with parameters
+        if (model.getConnector() == null || model.getConnector().getParameters() == null) {
+            return config;
+        }
+
+        Map<String, String> params = model.getConnector().getParameters();
+
+        // Check for batch inference support in connector
+        String supportsBatch = params.get(SemanticHighlightingConstants.CONNECTOR_SUPPORTS_BATCH_INFERENCE);
+        if (supportsBatch == null) {
+            // No batch configuration in connector, use defaults
+            return config;
+        }
+
+        // Parse batch configuration
+        boolean batchInferenceEnabled = Boolean.parseBoolean(supportsBatch);
+
+        if (batchInferenceEnabled) {
+            // Get max batch size from connector
+            String maxBatchSizeStr = params.get(SemanticHighlightingConstants.CONNECTOR_MAX_BATCH_SIZE);
+            int maxBatchSize = SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE;
+
+            if (maxBatchSizeStr != null) {
+                try {
+                    maxBatchSize = Integer.parseInt(maxBatchSizeStr);
+                    // Validate batch size is positive
+                    if (maxBatchSize <= 0) {
+                        maxBatchSize = SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE;
+                    }
+                    // No upper limit - trust the connector configuration
+                } catch (NumberFormatException e) {
+                    log.warn("Invalid max_batch_size in connector: {}, using default", maxBatchSizeStr);
+                }
+            }
+
+            log.debug("Configuring batch inference from connector: enabled={}, maxBatchSize={}", true, maxBatchSize);
+            return config.toBuilder().batchInference(true).maxBatchSize(maxBatchSize).build();
+        } else {
+            // Connector explicitly disables batch inference
+            log.debug("Connector disables batch inference");
+            return config.toBuilder().batchInference(false).maxBatchSize(1).build();
         }
     }
 

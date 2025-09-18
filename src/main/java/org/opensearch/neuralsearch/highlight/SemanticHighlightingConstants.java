@@ -24,11 +24,14 @@ public final class SemanticHighlightingConstants {
     public static final String PRE_TAG = "pre_tag";
     public static final String POST_TAG = "post_tag";
 
+    // Connector parameter keys for batch configuration
+    public static final String CONNECTOR_SUPPORTS_BATCH_INFERENCE = "supports_batch_inference";
+    public static final String CONNECTOR_MAX_BATCH_SIZE = "max_batch_size";
+
     // Default values
     public static final String DEFAULT_PRE_TAG = "<em>";
     public static final String DEFAULT_POST_TAG = "</em>";
     public static final int DEFAULT_MAX_INFERENCE_BATCH_SIZE = 100;
-    public static final int ABSOLUTE_MAX_BATCH_SIZE = 1000;
 
     // ML inference keys
     public static final String HIGHLIGHTS_KEY = "highlights";

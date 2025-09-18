@@ -13,7 +13,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
-import org.opensearch.client.ResponseException;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -229,8 +228,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             .endObject()
             .endObject()
             .startObject("options")
-            .field("model_id", localHighlightModelId)  // Local model ID specified here
-            .field("batch_inference", false)  // Local models don't support batch
+            .field("model_id", localHighlightModelId)
             .endObject()
             .endObject()
             .endObject();
@@ -252,7 +250,7 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
     /**
      * Test semantic highlighting with Neural query using batch inference disabled with local model
      */
-    public void testSemanticHighlightingWithNeuralQueryWithBatchDisabledWithLocalModel() throws Exception {
+    public void testSemanticHighlightingWithNeuralQueryWithLocalModel() throws Exception {
         // Create neural query
         NeuralQueryBuilder neuralQuery = NeuralQueryBuilder.builder()
             .fieldName(TEST_KNN_VECTOR_FIELD)
@@ -274,7 +272,6 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
             .endObject()
             .startObject("options")
             .field("model_id", localHighlightModelId)  // Use local model
-            .field("batch_inference", false)  // Local models don't support batch
             .endObject()
             .endObject()
             .endObject();
@@ -284,63 +281,9 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
         request.setJsonEntity(searchBody.toString());
         Response response = client().performRequest(request);
         String responseBody = EntityUtils.toString(response.getEntity());
-        log.info("Neural query local model response: {}", responseBody);
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
         // Verify semantic highlighting worked
         TestUtils.assertSemanticHighlighting(responseMap, TEST_FIELD, "natural language processing");
-    }
-
-    /**
-     * Test that batch inference fails with appropriate error for local models
-     * Local models (QUESTION_ANSWERING) do not support batch inference
-     */
-    public void testBatchInferenceFailsWithLocalModel() throws Exception {
-        // Skip if local model not available
-        assumeTrue("Local highlight model not available", localHighlightModelId != null);
-
-        // Create match query with batch inference enabled for local model
-        XContentBuilder searchBody = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("size", 2)
-            .startObject("query")
-            .startObject("match")
-            .field(TEST_FIELD, "What is OpenSearch?")
-            .endObject()
-            .endObject()
-            .startObject("highlight")
-            .startObject("fields")
-            .startObject(TEST_FIELD)
-            .field("type", "semantic")
-            .endObject()
-            .endObject()
-            .startObject("options")
-            .field("model_id", localHighlightModelId)  // Local QUESTION_ANSWERING model
-            .field("batch_inference", true)  // Should fail with clear error
-            .endObject()
-            .endObject()
-            .endObject();
-
-        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
-        request.setJsonEntity(searchBody.toString());
-
-        // Expect a 400 Bad Request with specific error message
-        ResponseException exception = expectThrows(ResponseException.class, () -> { client().performRequest(request); });
-
-        assertEquals(400, exception.getResponse().getStatusLine().getStatusCode());
-        String responseBody = EntityUtils.toString(exception.getResponse().getEntity());
-
-        // Verify error message contains expected information about batch inference not supported
-        assertTrue(
-            "Error should mention batch inference not supported",
-            responseBody.contains("does not support batch inference")
-                || responseBody.contains("Batch inference is only supported for REMOTE models")
-        );
-        assertTrue(
-            "Error should mention model type or provide guidance",
-            responseBody.contains("QUESTION_ANSWERING") || responseBody.contains("batch_inference") && responseBody.contains("false")
-        );
-
-        log.info("Batch inference correctly rejected for local model with error: {}", responseBody);
     }
 }

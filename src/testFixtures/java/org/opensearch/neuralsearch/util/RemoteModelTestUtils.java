@@ -127,7 +127,10 @@ public class RemoteModelTestUtils {
                 "description": "Unified TorchServe connector for semantic highlighter (supports both single and batch)",
                 "version": 1,
                 "protocol": "http",
-                "parameters": {},
+                "parameters": {
+                    "supports_batch_inference": "true",
+                    "max_batch_size": "100"
+                },
                 "credential": {
                     "key": "test"
                 },

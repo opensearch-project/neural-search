@@ -28,8 +28,16 @@ import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -374,5 +382,171 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
                 }
             }
         }
+    }
+
+    public void testEnrichConfigFromConnector() {
+        // Setup mocks
+        MLCommonsClientAccessor mlAccessor = mock(MLCommonsClientAccessor.class);
+        org.opensearch.ml.common.MLModel remoteModel = mock(org.opensearch.ml.common.MLModel.class);
+        org.opensearch.ml.common.connector.HttpConnector connector = mock(org.opensearch.ml.common.connector.HttpConnector.class);
+
+        // Setup connector with batch parameters
+        Map<String, String> params = new HashMap<>();
+        params.put(SemanticHighlightingConstants.CONNECTOR_SUPPORTS_BATCH_INFERENCE, "true");
+        params.put(SemanticHighlightingConstants.CONNECTOR_MAX_BATCH_SIZE, "75");
+        when(connector.getParameters()).thenReturn(params);
+
+        // Setup remote model with connector
+        when(remoteModel.getAlgorithm()).thenReturn(org.opensearch.ml.common.FunctionName.REMOTE);
+        when(remoteModel.getConnector()).thenReturn(connector);
+
+        // Create processor
+        SemanticHighlightingProcessor processor = new SemanticHighlightingProcessor(false, mlAccessor);
+
+        // Create initial config
+        HighlightConfig initialConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("test-model")
+            .queryText("test query")
+            .build();
+
+        // Test enrichment
+        doAnswer(invocation -> {
+            ActionListener<org.opensearch.ml.common.MLModel> listener = invocation.getArgument(1);
+            listener.onResponse(remoteModel);
+            return null;
+        }).when(mlAccessor).getModel(eq("test-model"), any());
+
+        // Mock the batch inference call that will be triggered
+        doAnswer(invocation -> {
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
+            // Return one empty result for the one document
+            // Each document gets a List<Map<String, Object>> for its highlights
+            List<Map<String, Object>> documentHighlights = Collections.emptyList();
+            listener.onResponse(Collections.singletonList(documentHighlights));
+            return null;
+        }).when(mlAccessor).batchInferenceSentenceHighlighting(anyString(), any(), any(), any());
+
+        // Create search request with semantic highlight configuration
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+
+        // Add a simple query to extract query text from
+        sourceBuilder.query(org.opensearch.index.query.QueryBuilders.matchQuery("content", "test query"));
+
+        HighlightBuilder highlightBuilder = new HighlightBuilder();
+        HighlightBuilder.Field field = new HighlightBuilder.Field("content");
+        field.highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
+        highlightBuilder.field(field);
+
+        Map<String, Object> options = new HashMap<>();
+        options.put(SemanticHighlightingConstants.MODEL_ID, "test-model");
+        options.put("query_text", "test query");  // Add explicit query text
+        highlightBuilder.options(options);
+        sourceBuilder.highlighter(highlightBuilder);
+        request.source(sourceBuilder);
+
+        SearchResponse response = createSearchResponse();
+
+        // Execute processor
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<SearchResponse> result = new AtomicReference<>();
+        AtomicReference<Exception> error = new AtomicReference<>();
+
+        processor.processResponseAsync(request, response, null, new ActionListener<SearchResponse>() {
+            @Override
+            public void onResponse(SearchResponse searchResponse) {
+                result.set(searchResponse);
+                latch.countDown();
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                error.set(e);
+                latch.countDown();
+            }
+        });
+
+        // Wait for async completion
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            fail("Test interrupted");
+        }
+
+        // Verify that getModel was called
+        verify(mlAccessor).getModel(eq("test-model"), any());
+
+        // Check if there was an error
+        if (error.get() != null) {
+            fail("Processor failed with error: " + error.get().getMessage());
+        }
+
+        // Result should be returned (even if just passed through in test)
+        assertNotNull("Response should not be null", result.get());
+    }
+
+    public void testEnrichConfigFromConnectorLocalModel() {
+        // Setup for local model (no connector)
+        MLCommonsClientAccessor mlAccessor = mock(MLCommonsClientAccessor.class);
+        org.opensearch.ml.common.MLModel localModel = mock(org.opensearch.ml.common.MLModel.class);
+
+        // Setup local model without connector
+        when(localModel.getAlgorithm()).thenReturn(org.opensearch.ml.common.FunctionName.QUESTION_ANSWERING);
+        when(localModel.getConnector()).thenReturn(null);
+
+        // Test that local models don't get batch config from connector
+        doAnswer(invocation -> {
+            ActionListener<org.opensearch.ml.common.MLModel> listener = invocation.getArgument(1);
+            listener.onResponse(localModel);
+            return null;
+        }).when(mlAccessor).getModel(eq("local-model"), any());
+
+        SemanticHighlightingProcessor processor = new SemanticHighlightingProcessor(false, mlAccessor);
+
+        // Create search request with semantic highlight configuration
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+
+        // Add a simple query to extract query text from
+        sourceBuilder.query(org.opensearch.index.query.QueryBuilders.matchQuery("content", "test query"));
+
+        HighlightBuilder highlightBuilder = new HighlightBuilder();
+        HighlightBuilder.Field field = new HighlightBuilder.Field("content");
+        field.highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
+        highlightBuilder.field(field);
+
+        Map<String, Object> options = new HashMap<>();
+        options.put(SemanticHighlightingConstants.MODEL_ID, "local-model");
+        options.put("query_text", "test query");  // Add explicit query text
+        highlightBuilder.options(options);
+        sourceBuilder.highlighter(highlightBuilder);
+        request.source(sourceBuilder);
+
+        SearchResponse response = createSearchResponse();
+
+        // Execute processor
+        CountDownLatch latch = new CountDownLatch(1);
+        processor.processResponseAsync(request, response, null, new ActionListener<SearchResponse>() {
+            @Override
+            public void onResponse(SearchResponse searchResponse) {
+                latch.countDown();
+            }
+
+            @Override
+            public void onFailure(Exception e) {
+                latch.countDown();
+            }
+        });
+
+        // Wait for async completion
+        try {
+            latch.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            fail("Test interrupted");
+        }
+
+        // Verify model was fetched
+        verify(mlAccessor).getModel(anyString(), any());
     }
 }

@@ -162,59 +162,6 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         assertNull(config.getQueryText());  // No query text extracted
     }
 
-    public void testExtractBatchInferenceOption() {
-        // Setup
-        SearchRequest request = new SearchRequest();
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-
-        HighlightBuilder highlightBuilder = new HighlightBuilder();
-        HighlightBuilder.Field field = new HighlightBuilder.Field("content");
-        field.highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
-
-        Map<String, Object> options = new HashMap<>();
-        options.put(SemanticHighlightingConstants.MODEL_ID, "batch-model");
-        options.put(SemanticHighlightingConstants.BATCH_INFERENCE, true);
-        highlightBuilder.options(options);
-        highlightBuilder.field(field);
-
-        sourceBuilder.highlighter(highlightBuilder);
-        request.source(sourceBuilder);
-
-        // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
-
-        // Verify
-        assertNotNull(config);
-        assertTrue(config.isBatchInference());
-        assertEquals("batch-model", config.getModelId());
-    }
-
-    public void testExtractMaxBatchSize() {
-        // Setup
-        SearchRequest request = new SearchRequest();
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
-
-        HighlightBuilder highlightBuilder = new HighlightBuilder();
-        HighlightBuilder.Field field = new HighlightBuilder.Field("content");
-        field.highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
-
-        Map<String, Object> options = new HashMap<>();
-        options.put(SemanticHighlightingConstants.MODEL_ID, "model");
-        options.put(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE, 50);
-        highlightBuilder.options(options);
-        highlightBuilder.field(field);
-
-        sourceBuilder.highlighter(highlightBuilder);
-        request.source(sourceBuilder);
-
-        // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
-
-        // Verify
-        assertNotNull(config);
-        assertEquals(50, config.getMaxBatchSize());
-    }
-
     public void testExtractCustomTags() {
         // Setup
         SearchRequest request = new SearchRequest();

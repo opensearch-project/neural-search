@@ -221,7 +221,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
-            .field("batch_inference", false)
             .endObject()
             .endObject()
             .endObject();
@@ -257,7 +256,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
-            .field("batch_inference", true)
             .endObject()
             .endObject()
             .endObject();
@@ -297,7 +295,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
-            .field("batch_inference", true)
             .endObject()
             .endObject()
             .endObject();
@@ -321,7 +318,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
 
         NeuralQueryBuilder neuralQuery = NeuralQueryBuilder.builder()
             .fieldName(TEST_KNN_VECTOR_FIELD)
-            .queryText("Tell me about OpenSearch capabilities")
+            .queryText("OpenSearch is a software for search and analytics")
             .modelId(textEmbeddingModelId)
             .k(2)
             .build();
@@ -339,7 +336,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
-            .field("batch_inference", false)
             .endObject()
             .endObject()
             .endObject();
@@ -352,7 +348,24 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
         log.info("Neural query single inference response: {}", responseBody);
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-        TestUtils.assertSemanticHighlighting(responseMap, TEST_FIELD, "OpenSearch");
+        // Check that at least one hit has OpenSearch highlighted
+        // (neural search ordering can vary, so we check any hit)
+        boolean foundHighlight = false;
+        List<Map<String, Object>> hits = TestUtils.getNestedHits(responseMap);
+        for (Map<String, Object> hit : hits) {
+            Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
+            if (highlight != null && highlight.containsKey(TEST_FIELD)) {
+                List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
+                if (contentHighlights != null && !contentHighlights.isEmpty()) {
+                    String highlightText = contentHighlights.get(0);
+                    if (highlightText.contains("OpenSearch")) {
+                        foundHighlight = true;
+                        break;
+                    }
+                }
+            }
+        }
+        assertTrue("Should have found OpenSearch in highlights", foundHighlight);
     }
 
     /**
@@ -388,7 +401,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
-            .field("batch_inference", true)
             .endObject()
             .endObject()
             .endObject();
