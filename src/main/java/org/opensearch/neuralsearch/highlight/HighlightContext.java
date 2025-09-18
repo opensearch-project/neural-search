@@ -14,7 +14,7 @@ import org.opensearch.search.SearchHit;
 import java.util.List;
 
 /**
- * Context containing prepared highlighting requests and associated search hits
+ * Runtime execution context containing search results and inference requests to be processed for highlighting.
  */
 @Getter
 @Builder
