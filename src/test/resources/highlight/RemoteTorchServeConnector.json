@@ -1,0 +1,24 @@
+{
+    "name": "%s",
+    "description": "Unified TorchServe connector for semantic highlighter (supports both single and batch)",
+    "version": 1,
+    "protocol": "http",
+    "parameters": {
+        "supports_batch_inference": "true",
+        "max_batch_size": "100"
+    },
+    "credential": {
+        "key": "test"
+    },
+    "actions": [
+        {
+            "action_type": "predict",
+            "method": "POST",
+            "url": "%s/predictions/semantic_highlighter",
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "request_body": "${parameters.inputs}"
+        }
+    ]
+}
