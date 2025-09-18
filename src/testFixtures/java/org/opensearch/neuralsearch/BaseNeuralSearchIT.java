@@ -407,7 +407,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String prepareSentenceHighlightingModel() {
         String requestBody = Files.readString(
-            Path.of(Objects.requireNonNull(classLoader.getResource("highlight/UploadSentenceHighlightingModelRequestBody.json")).toURI())
+            Path.of(Objects.requireNonNull(classLoader.getResource("highlight/LocalQuestionAnsweringModel.json")).toURI())
         );
         String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
