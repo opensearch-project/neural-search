@@ -12,9 +12,7 @@ import lombok.With;
 import org.opensearch.ml.common.FunctionName;
 
 /**
- * Immutable configuration for semantic highlighting.
- * Replaces ValidationResult with a cleaner builder-based approach.
- * Fields can be null when configuration is invalid or incomplete.
+ * Immutable configuration for semantic highlighting extracted and validated from search request options.
  */
 @Getter
 @Builder(toBuilder = true)
