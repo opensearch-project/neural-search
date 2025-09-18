@@ -5,8 +5,11 @@
 package org.opensearch.neuralsearch.util;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 import org.apache.hc.client5.http.classic.methods.HttpGet;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
@@ -119,75 +122,27 @@ public class RemoteModelTestUtils {
     }
 
     private static String createUnifiedTorchServeConnectorBody(String name, String endpoint) {
-        // Unified connector that uses ${parameters.inputs} for both single and batch
-        // MLCommonsClientAccessor now always provides inputs parameter as an array
-        return String.format(Locale.ROOT, """
-            {
-                "name": "%s",
-                "description": "Unified TorchServe connector for semantic highlighter (supports both single and batch)",
-                "version": 1,
-                "protocol": "http",
-                "parameters": {
-                    "supports_batch_inference": "true",
-                    "max_batch_size": "100"
-                },
-                "credential": {
-                    "key": "test"
-                },
-                "actions": [
-                    {
-                        "action_type": "predict",
-                        "method": "POST",
-                        "url": "%s/predictions/semantic_highlighter",
-                        "headers": {
-                            "Content-Type": "application/json"
-                        },
-                        "request_body": "${parameters.inputs}"
-                    }
-                ]
-            }
-            """, name, endpoint);
-    }
-
-    // Keep the old methods for reference but they're no longer used
-    @Deprecated
-    private static String createTorchServeBatchEnabledConnectorBody(String name, String endpoint) {
-        return String.format(Locale.ROOT, """
-            {
-                "name": "%s",
-                "description": "TorchServe connector for semantic highlighter with batch enabled",
-                "version": 1,
-                "protocol": "http",
-                "parameters": {},
-                "credential": {
-                    "key": "test"
-                },
-                "actions": [
-                    {
-                        "action_type": "predict",
-                        "method": "POST",
-                        "url": "%s/predictions/semantic_highlighter",
-                        "headers": {
-                            "Content-Type": "application/json"
-                        },
-                        "request_body": "${parameters.inputs}"
-                    }
-                ]
-            }
-            """, name, endpoint);
-    }
-
-    @Deprecated
-    private static String createTorchServeBatchDisabledConnectorBody(String name, String endpoint) {
-        return String.format(
-            Locale.ROOT,
-            """
+        try {
+            // Load connector template from resources
+            ClassLoader classLoader = RemoteModelTestUtils.class.getClassLoader();
+            String template = Files.readString(
+                Path.of(Objects.requireNonNull(classLoader.getResource("highlight/RemoteTorchServeConnector.json")).toURI())
+            );
+            // Replace placeholders with actual values
+            return String.format(Locale.ROOT, template, name, endpoint);
+        } catch (Exception e) {
+            // Fallback to inline configuration if resource loading fails
+            log.warn("Failed to load connector template from resources, using inline configuration: {}", e.getMessage());
+            return String.format(Locale.ROOT, """
                 {
                     "name": "%s",
-                    "description": "TorchServe connector for semantic highlighter with batch disabled",
+                    "description": "Unified TorchServe connector for semantic highlighter (supports both single and batch)",
                     "version": 1,
                     "protocol": "http",
-                    "parameters": {},
+                    "parameters": {
+                        "supports_batch_inference": "true",
+                        "max_batch_size": "100"
+                    },
                     "credential": {
                         "key": "test"
                     },
@@ -199,14 +154,11 @@ public class RemoteModelTestUtils {
                             "headers": {
                                 "Content-Type": "application/json"
                             },
-                            "request_body": "{ \\"question\\": \\"${parameters.question}\\", \\"context\\": \\"${parameters.context}\\" }",
-                            "pre_process_function": "// Extract question and context directly from params\\nif (params.question != null && params.context != null) {\\n    return '{\\\"parameters\\\":{\\\"question\\\":\\\"' + params.question + '\\\",\\\"context\\\":\\\"' + params.context + '\\\"}}'; \\n} \\nelse {\\n    throw new IllegalArgumentException(\\\"Missing required parameters: question and context\\\");\\n}"
+                            "request_body": "${parameters.inputs}"
                         }
                     ]
                 }
-                """,
-            name,
-            endpoint
-        );
+                """, name, endpoint);
+        }
     }
 }
