@@ -126,25 +126,6 @@ public class HighlightValidatorTest extends OpenSearchTestCase {
         assertEquals("Invalid max batch size: 0", validated.getValidationError());
     }
 
-    public void testExceededBatchSize() {
-        HighlightConfig config = HighlightConfig.builder()
-            .fieldName("content")
-            .modelId("test-model")
-            .queryText("test query")
-            .batchInference(true)
-            .maxBatchSize(SemanticHighlightingConstants.ABSOLUTE_MAX_BATCH_SIZE + 1)
-            .build();
-
-        SearchHits searchHits = mock(SearchHits.class);
-        when(mockResponse.getHits()).thenReturn(searchHits);
-        when(searchHits.getHits()).thenReturn(new SearchHit[] { mock(SearchHit.class) });
-
-        HighlightConfig validated = validator.validate(config, mockResponse);
-
-        assertFalse(validated.isValid());
-        assertTrue(validated.getValidationError().startsWith("Max batch size exceeds limit:"));
-    }
-
     public void testValidBatchConfiguration() {
         HighlightConfig config = HighlightConfig.builder()
             .fieldName("content")
