@@ -165,6 +165,12 @@ allprojects {
         sourceCompatibility = targetCompatibility = JavaVersion.VERSION_21
     }
 
+    configurations.all {
+        resolutionStrategy {
+            force("com.google.errorprone:error_prone_annotations:2.21.1")
+        }
+    }
+
     afterEvaluate {
         project.dependencyLicenses.enabled = false
         project.thirdPartyAudit.enabled = false
