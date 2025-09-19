@@ -17,6 +17,7 @@ buildscript {
         opensearch_version = System.getProperty("opensearch.version", "3.3.0-SNAPSHOT")
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
+        isJVectorEngine = "true" == System.getProperty("opensearch.knn.isJVectorEngine", "true")
         version_tokens = opensearch_version.tokenize('-')
         opensearch_build = version_tokens[0] + '.0'
         plugin_no_snapshot = opensearch_build
@@ -246,6 +247,9 @@ opensearchplugin {
     licenseFile rootProject.file('LICENSE')
     noticeFile rootProject.file('NOTICE')
     extendedPlugins = ['opensearch-knn']
+
+    if (isJVectorEngine)
+        extendedPlugins.add('opensearch-jvector-plugin')
 }
 
 dependencyLicenses.enabled = false
@@ -255,15 +259,20 @@ loggerUsageCheck.enabled = false
 validateNebulaPom.enabled = false
 
 def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
+def jvectorJarDirectory = "$buildDir/dependencies/opensearch-jvector-plugin"
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     implementation group: 'org.opensearch.plugin', name:'mapper-extras-client', version: "${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-job-scheduler', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
+    if (isJVectorEngine)
+        zipArchive group: 'org.opensearch.plugin', name:'opensearch-jvector-plugin', version: "${opensearch_build}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
+    if (isJVectorEngine)
+        compileOnly fileTree(dir: jvectorJarDirectory, include: ["opensearch-jvector-plugin-${opensearch_build}.jar"])
     compileOnly (group: 'com.google.guava', name: 'guava', version:'32.1.3-jre') {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
