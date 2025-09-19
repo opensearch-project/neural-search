@@ -136,9 +136,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
                 "^http://torchserve:.*"
             )
         );
-
-        // Enable all system-generated factories for testing
-        updateClusterSettings("cluster.search.enabled_system_generated_factories", List.of("*"));
     }
 
     @SneakyThrows
@@ -345,7 +342,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
         request.setJsonEntity(searchBody.toString());
         Response response = client().performRequest(request);
         String responseBody = EntityUtils.toString(response.getEntity());
-        log.info("Neural query single inference response: {}", responseBody);
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
         // Check that at least one hit has OpenSearch highlighted

@@ -252,8 +252,6 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
                 List<String> highlights = (List<String>) highlight.get(field);
                 if (highlights != null && !highlights.isEmpty()) {
                     foundHighlight = true;
-                    // Log for debugging
-                    System.out.println("Found highlight: " + highlights.get(0));
                     break;
                 }
             }

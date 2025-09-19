@@ -9,7 +9,7 @@ package org.opensearch.neuralsearch.highlight;
  */
 public final class SemanticHighlightingConstants {
     // System-generated factory and processor types
-    public static final String SYSTEM_FACTORY_TYPE = "semantic_highlighting_system_factory";
+    public static final String SYSTEM_FACTORY_TYPE = "semantic-highlighter";
     public static final String PROCESSOR_TYPE = "semantic_highlighting";
 
     // Default processor tags and descriptions
