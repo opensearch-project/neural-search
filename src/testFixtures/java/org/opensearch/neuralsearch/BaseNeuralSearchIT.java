@@ -97,6 +97,9 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUE
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
+
+import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
@@ -404,7 +407,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     @SneakyThrows
     protected String prepareSentenceHighlightingModel() {
         String requestBody = Files.readString(
-            Path.of(Objects.requireNonNull(classLoader.getResource("highlight/UploadSentenceHighlightingModelRequestBody.json")).toURI())
+            Path.of(Objects.requireNonNull(classLoader.getResource("highlight/LocalQuestionAnsweringModel.json")).toURI())
         );
         String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
@@ -2898,5 +2901,45 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         assertOK(response);
+    }
+
+    protected String createSemanticHighlightingPipeline(String pipelineName, String modelId, String fieldName, boolean batchInference)
+        throws Exception {
+        String pipelineBody = TestUtils.createSemanticHighlightingPipelineBody(modelId, fieldName, batchInference);
+        Request request = new Request("PUT", "/_search/pipeline/" + pipelineName);
+        request.setJsonEntity(pipelineBody);
+        client().performRequest(request);
+        return pipelineName;
+    }
+
+    protected String createRemoteModelConnector(String endpoint) throws Exception {
+        return RemoteModelTestUtils.createTorchServeConnector(client(), endpoint);
+    }
+
+    protected String deployRemoteSemanticHighlightingModel(String connectorId, String modelName) throws Exception {
+        return RemoteModelTestUtils.deployRemoteModel(client(), connectorId, modelName);
+    }
+
+    protected void addSemanticHighlightingDocument(String indexName, String docId, String content, String title, String category)
+        throws Exception {
+        Request request = new Request("POST", "/" + indexName + "/_doc/" + docId + "?refresh=true");
+        String docBody = String.format(Locale.ROOT, """
+            {
+              "content": "%s",
+              "title": "%s",
+              "category": "%s"
+            }
+            """, content, title, category);
+        request.setJsonEntity(docBody);
+        client().performRequest(request);
+    }
+
+    protected void cleanupSemanticHighlightingResources(String connectorId, String modelId) {
+        if (modelId != null) {
+            RemoteModelTestUtils.deleteModel(client(), modelId);
+        }
+        if (connectorId != null) {
+            RemoteModelTestUtils.deleteConnector(client(), connectorId);
+        }
     }
 }
