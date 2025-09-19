@@ -117,9 +117,6 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
                 "^http://127\\.0\\.0\\.1:.*"
             )
         );
-
-        // Enable all system-generated factories for testing
-        updateClusterSettings("cluster.search.enabled_system_generated_factories", List.of("*"));
     }
 
     @SneakyThrows
@@ -285,5 +282,45 @@ public class SemanticHighlightingIT extends BaseNeuralSearchIT {
 
         // Verify semantic highlighting worked
         TestUtils.assertSemanticHighlighting(responseMap, TEST_FIELD, "natural language processing");
+    }
+
+    public void testSemanticHighlightingDisabledWhenFactoryNotEnabled() throws Exception {
+        updateClusterSettings("cluster.search.enabled_system_generated_factories", Collections.emptyList());
+        try {
+            XContentBuilder searchBody = XContentFactory.jsonBuilder()
+                .startObject()
+                .field("size", 1)
+                .startObject("query")
+                .startObject("match")
+                .field(TEST_FIELD, "What is OpenSearch used for?")
+                .endObject()
+                .endObject()
+                .startObject("highlight")
+                .startObject("fields")
+                .startObject(TEST_FIELD)
+                .field("type", "semantic")
+                .endObject()
+                .endObject()
+                .startObject("options")
+                .field("model_id", localHighlightModelId)
+                .endObject()
+                .endObject()
+                .endObject();
+
+            Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+            request.setJsonEntity(searchBody.toString());
+            Response response = client().performRequest(request);
+            String responseBody = EntityUtils.toString(response.getEntity());
+            Map<String, Object> searchResponse = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+            List<Map<String, Object>> hits = TestUtils.getNestedHits(searchResponse);
+            assertFalse("Expected at least one hit", hits.isEmpty());
+            Map<String, Object> highlight = (Map<String, Object>) hits.get(0).get("highlight");
+            assertTrue(
+                "Semantic highlighting should be absent when factory is disabled",
+                highlight == null || highlight.containsKey(TEST_FIELD) == false
+            );
+        } finally {
+            updateClusterSettings("cluster.search.enabled_system_generated_factories", null);
+        }
     }
 }

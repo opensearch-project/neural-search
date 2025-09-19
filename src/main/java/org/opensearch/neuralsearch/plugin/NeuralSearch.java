@@ -125,6 +125,7 @@ import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
+import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
@@ -308,6 +309,16 @@ public class NeuralSearch extends Plugin
             NEURAL_CIRCUIT_BREAKER_LIMIT,
             NEURAL_CIRCUIT_BREAKER_OVERHEAD
         );
+    }
+
+    @Override
+    public Settings additionalSettings() {
+        return Settings.builder()
+            .putList(
+                SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey(),
+                SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE
+            )
+            .build();
     }
 
     @Override
