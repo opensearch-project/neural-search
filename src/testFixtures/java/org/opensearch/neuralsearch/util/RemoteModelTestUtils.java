@@ -121,44 +121,17 @@ public class RemoteModelTestUtils {
         }
     }
 
-    private static String createUnifiedTorchServeConnectorBody(String name, String endpoint) {
+    private static String createUnifiedTorchServeConnectorBody(String name, String endpoint) throws IOException {
+        // Load connector template from resources
+        ClassLoader classLoader = RemoteModelTestUtils.class.getClassLoader();
         try {
-            // Load connector template from resources
-            ClassLoader classLoader = RemoteModelTestUtils.class.getClassLoader();
             String template = Files.readString(
                 Path.of(Objects.requireNonNull(classLoader.getResource("highlight/RemoteTorchServeConnector.json")).toURI())
             );
             // Replace placeholders with actual values
             return String.format(Locale.ROOT, template, name, endpoint);
         } catch (Exception e) {
-            // Fallback to inline configuration if resource loading fails
-            log.warn("Failed to load connector template from resources, using inline configuration: {}", e.getMessage());
-            return String.format(Locale.ROOT, """
-                {
-                    "name": "%s",
-                    "description": "Unified TorchServe connector for semantic highlighter (supports both single and batch)",
-                    "version": 1,
-                    "protocol": "http",
-                    "parameters": {
-                        "supports_batch_inference": "true",
-                        "max_batch_size": "100"
-                    },
-                    "credential": {
-                        "key": "test"
-                    },
-                    "actions": [
-                        {
-                            "action_type": "predict",
-                            "method": "POST",
-                            "url": "%s/predictions/semantic_highlighter",
-                            "headers": {
-                                "Content-Type": "application/json"
-                            },
-                            "request_body": "${parameters.inputs}"
-                        }
-                    ]
-                }
-                """, name, endpoint);
+            throw new IOException("Failed to load connector template from resources", e);
         }
     }
 }

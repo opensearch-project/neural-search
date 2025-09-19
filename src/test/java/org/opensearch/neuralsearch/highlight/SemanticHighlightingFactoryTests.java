@@ -148,6 +148,6 @@ public class SemanticHighlightingFactoryTests extends OpenSearchTestCase {
     }
 
     public void testFactoryType() {
-        assertEquals(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE, SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE);
+        assertEquals("semantic-highlighter", SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE);
     }
 }
