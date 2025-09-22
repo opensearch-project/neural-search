@@ -8,8 +8,6 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.search.aggregations.AggregationProcessor;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.query.QuerySearchResult;
-
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 
 /**
@@ -29,20 +27,13 @@ public class HybridAggregationProcessor implements AggregationProcessor {
 
     @Override
     public void postProcess(SearchContext context) {
-        if (isHybridQuery(context.query(), context)) {
+        if (context.numberOfShards() == 1 && isHybridQuery(context.query(), context)) {
             // In case of Hybrid Query single shard, the normalization process would run after the fetch phase execution.
             // The fetch phase will run right after the Query Phase and therefore need the right number size of docIds to be loaded.
             // As we add delimiter in the topdocs to segregate multiple query results,
             // therefore the right number of size will be calculated by scoreDocs length present in the topDocs.
-            updateQueryResult(context.queryResult(), context);
+            context.size(context.queryResult().queryResult().topDocs().topDocs.scoreDocs.length);
         }
         delegateAggsProcessor.postProcess(context);
-    }
-
-    private void updateQueryResult(final QuerySearchResult queryResult, final SearchContext searchContext) {
-        boolean isSingleShard = searchContext.numberOfShards() == 1;
-        if (isSingleShard) {
-            searchContext.size(queryResult.queryResult().topDocs().topDocs.scoreDocs.length);
-        }
     }
 }
