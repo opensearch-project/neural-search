@@ -79,7 +79,7 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
     }
 
     public void testContentType_returnsCorrectValue() {
-        assertEquals("sparse_tokens", SparseTokensFieldMapper.CONTENT_TYPE);
+        assertEquals("sparse_vector", SparseTokensFieldMapper.CONTENT_TYPE);
     }
 
     public void testGetMergeBuilder_returnsNewBuilder() {
@@ -131,7 +131,7 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
         when(context.externalValueSet()).thenReturn(true);
 
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> { mapper.parseCreateField(context); });
-        assertEquals("[sparse_tokens] fields can't be used in multi-fields", exception.getMessage());
+        assertEquals("[sparse_vector] fields can't be used in multi-fields", exception.getMessage());
     }
 
     public void testParseCreateField_withInvalidToken_throwsException() throws IOException {
@@ -257,12 +257,12 @@ public class SparseTokensFieldMapperTests extends AbstractSparseTestBase {
 
     public void testDefaults_fieldTypeAttributes() {
         Map<String, String> fieldTypeAttrs = SparseTokensFieldMapper.Defaults.FIELD_TYPE.getAttributes();
-        assertTrue(fieldTypeAttrs.containsKey("sparse_tokens_field"));
-        assertEquals("true", fieldTypeAttrs.get("sparse_tokens_field"));
+        assertTrue(fieldTypeAttrs.containsKey("sparse_vector_field"));
+        assertEquals("true", fieldTypeAttrs.get("sparse_vector_field"));
 
         Map<String, String> tokenFieldTypeAttrs = SparseTokensFieldMapper.Defaults.TOKEN_FIELD_TYPE.getAttributes();
-        assertTrue(tokenFieldTypeAttrs.containsKey("sparse_tokens_field"));
-        assertEquals("true", tokenFieldTypeAttrs.get("sparse_tokens_field"));
+        assertTrue(tokenFieldTypeAttrs.containsKey("sparse_vector_field"));
+        assertEquals("true", tokenFieldTypeAttrs.get("sparse_vector_field"));
     }
 
     public void testBuilder_getParameters_returnsCorrectParameters() {

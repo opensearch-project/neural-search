@@ -49,7 +49,7 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
     public void testConstructor_withValidParameters_createsFieldType() {
         assertNotNull(fieldType);
         assertEquals("test_field", fieldType.name());
-        assertEquals("sparse_tokens", fieldType.typeName());
+        assertEquals("sparse_vector", fieldType.typeName());
         assertEquals(sparseMethodContext, fieldType.getSparseMethodContext());
     }
 
@@ -77,21 +77,21 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
             IllegalArgumentException.class,
             () -> { fieldType.termQuery("test_value", context); }
         );
-        assertTrue(exception.getMessage().contains("Queries on [sparse_tokens] fields are not supported"));
+        assertTrue(exception.getMessage().contains("Queries on [sparse_vector] fields are not supported"));
     }
 
     public void testExistsQuery_throwsIllegalArgumentException() {
         QueryShardContext context = mock(QueryShardContext.class);
 
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> { fieldType.existsQuery(context); });
-        assertTrue(exception.getMessage().contains("[sparse_tokens] fields do not support [exists] queries"));
+        assertTrue(exception.getMessage().contains("[sparse_vector] fields do not support [exists] queries"));
     }
 
     public void testFielddataBuilder_throwsIllegalArgumentException() {
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> {
             fieldType.fielddataBuilder("test_index", () -> mock(SearchLookup.class));
         });
-        assertTrue(exception.getMessage().contains("[sparse_tokens] fields do not support sorting, scripting or aggregating"));
+        assertTrue(exception.getMessage().contains("[sparse_vector] fields do not support sorting, scripting or aggregating"));
     }
 
     public void testConstructor_withNullSparseMethodContext_createsFieldType() {
@@ -109,16 +109,16 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
         IllegalArgumentException stringException = expectThrows(IllegalArgumentException.class, () -> {
             fieldType.termQuery("string_value", context);
         });
-        assertTrue(stringException.getMessage().contains("Queries on [sparse_tokens] fields are not supported"));
+        assertTrue(stringException.getMessage().contains("Queries on [sparse_vector] fields are not supported"));
 
         IllegalArgumentException intException = expectThrows(IllegalArgumentException.class, () -> { fieldType.termQuery(123, context); });
-        assertTrue(intException.getMessage().contains("Queries on [sparse_tokens] fields are not supported"));
+        assertTrue(intException.getMessage().contains("Queries on [sparse_vector] fields are not supported"));
 
         IllegalArgumentException nullException = expectThrows(
             IllegalArgumentException.class,
             () -> { fieldType.termQuery(null, context); }
         );
-        assertTrue(nullException.getMessage().contains("Queries on [sparse_tokens] fields are not supported"));
+        assertTrue(nullException.getMessage().contains("Queries on [sparse_vector] fields are not supported"));
     }
 
     public void testFieldTypeProperties_inheritedFromParent() {
@@ -134,6 +134,6 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
     }
 
     public void test_isSparseTokensType_returnsFalse_withNonSparseTokensType() {
-        assertFalse(SparseTokensFieldType.isSparseTokensType("non_sparse_tokens"));
+        assertFalse(SparseTokensFieldType.isSparseTokensType("non_sparse_vector"));
     }
 }

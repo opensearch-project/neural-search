@@ -14,7 +14,7 @@ import java.util.Optional;
  * Lucene field for sparse token storage.
  */
 public class SparseTokensField extends Field {
-    public static final String SPARSE_FIELD = "sparse_tokens_field";
+    public static final String SPARSE_FIELD = "sparse_vector_field";
 
     /**
      * Creates sparse tokens field with byte array value.

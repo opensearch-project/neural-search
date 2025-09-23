@@ -243,7 +243,7 @@ public class SparseIndexingIT extends SparseBaseIT {
         assertTrue(properties.containsKey(field2));
         assertTrue(properties.containsKey(field3));
 
-        // Verify field types are sparse_tokens
+        // Verify field types are sparse_vector
         Map<String, Object> field1Config = (Map<String, Object>) properties.get(field1);
         Map<String, Object> field2Config = (Map<String, Object>) properties.get(field2);
         Map<String, Object> field3Config = (Map<String, Object>) properties.get(field3);

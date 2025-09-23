@@ -549,7 +549,7 @@ public class TestsPrepareUtils {
         Map<String, Object> sparseFieldMapping = new HashMap<>();
         for (String sparseField : sparseFields) {
             Map<String, Object> sparseFieldProperties = new HashMap<>();
-            sparseFieldProperties.put("type", isSeismicField ? "sparse_tokens" : "rank_features");
+            sparseFieldProperties.put("type", isSeismicField ? "sparse_vector" : "rank_features");
 
             sparseFieldMapping.put(sparseField, sparseFieldProperties);
         }

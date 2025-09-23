@@ -42,7 +42,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.
  */
 @Getter
 public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
-    public static final String CONTENT_TYPE = "sparse_tokens";
+    public static final String CONTENT_TYPE = "sparse_vector";
 
     private static final String METHOD = "method";
     @NonNull
