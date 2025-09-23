@@ -20,6 +20,7 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -64,6 +65,8 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
             .queryTokens(queryTokens)
             .filter(filter)
             .build();
+        // Initialize EventStatsManager for tests
+        TestUtils.initializeEventStatsManager();
     }
 
     public void testBuilder_withValidParameters_createsQueryBuilder() {

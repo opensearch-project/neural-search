@@ -30,6 +30,8 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -113,6 +115,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     }
 
     public static SparseAnnQueryBuilder fromXContent(XContentParser parser) throws IOException {
+        EventStatsManager.increment(EventStatName.SEISMIC_QUERY_REQUESTS);
         String methodFieldName = "";
         Token token = parser.currentToken();
         if (token != Token.START_OBJECT) {
