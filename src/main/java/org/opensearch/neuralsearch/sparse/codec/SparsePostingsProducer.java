@@ -12,7 +12,7 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.Terms;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 
 import java.io.IOException;
 import java.util.Iterator;
@@ -66,7 +66,7 @@ public class SparsePostingsProducer extends FieldsProducer {
     @Override
     public Terms terms(String field) throws IOException {
         FieldInfo fieldInfo = this.state.fieldInfos.fieldInfo(field);
-        if (!SparseTokensField.isSparseField(fieldInfo) || !PredicateUtils.shouldRunSeisPredicate.test(this.state.segmentInfo, fieldInfo)) {
+        if (!SparseVectorField.isSparseField(fieldInfo) || !PredicateUtils.shouldRunSeisPredicate.test(this.state.segmentInfo, fieldInfo)) {
             return delegate.terms(field);
         }
         CacheKey key = new CacheKey(this.state.segmentInfo, fieldInfo);

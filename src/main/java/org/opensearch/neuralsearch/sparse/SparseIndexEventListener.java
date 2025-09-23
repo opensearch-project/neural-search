@@ -17,7 +17,7 @@ import org.opensearch.indices.cluster.IndicesClusterStateService;
 import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldType;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 
 /**
  * Event listener for sparse index operations that handles cache cleanup during index removal.
@@ -40,7 +40,7 @@ public class SparseIndexEventListener implements IndexEventListener {
                 for (int i = 0; i < segmentInfos.size(); i++) {
                     SegmentInfo segmentInfo = segmentInfos.info(i).info;
                     for (MappedFieldType fieldType : mapperService.fieldTypes()) {
-                        if (fieldType instanceof SparseTokensFieldType) {
+                        if (fieldType instanceof SparseVectorFieldType) {
                             String fieldName = fieldType.name();
                             CacheKey key = new CacheKey(segmentInfo, fieldName);
                             ForwardIndexCache.getInstance().onIndexRemoval(key);

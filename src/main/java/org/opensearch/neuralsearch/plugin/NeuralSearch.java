@@ -88,7 +88,7 @@ import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
 import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.transport.NeuralStatsAction;
 import org.opensearch.neuralsearch.transport.NeuralStatsTransportAction;
 import org.opensearch.neuralsearch.transport.NeuralSparseClearCacheAction;
@@ -379,8 +379,8 @@ public class NeuralSearch extends Plugin
         return Map.of(
             SemanticFieldMapper.CONTENT_TYPE,
             new SemanticFieldMapper.TypeParser(),
-            SparseTokensFieldMapper.CONTENT_TYPE,
-            new SparseTokensFieldMapper.SparseTypeParser()
+            SparseVectorFieldMapper.CONTENT_TYPE,
+            new SparseVectorFieldMapper.SparseTypeParser()
         );
     }
 

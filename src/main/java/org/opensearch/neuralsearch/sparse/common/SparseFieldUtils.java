@@ -9,7 +9,7 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldType;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -54,7 +54,7 @@ public class SparseFieldUtils {
         for (Map.Entry<String, Object> field : fields.entrySet()) {
             Map<String, Object> fieldMap = (Map<String, Object>) field.getValue();
             Object type = fieldMap.get("type");
-            if (Objects.nonNull(type) && SparseTokensFieldType.isSparseTokensType(type.toString())) {
+            if (Objects.nonNull(type) && SparseVectorFieldType.isSparseVectorType(type.toString())) {
                 sparseAnnFields.add(field.getKey());
             }
         }

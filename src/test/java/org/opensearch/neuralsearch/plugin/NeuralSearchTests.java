@@ -55,7 +55,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.index.IndexModule;
@@ -239,7 +239,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
     public void testGetMappers_shouldReturnMappers() {
         final Map<String, Mapper.TypeParser> typeParserMap = plugin.getMappers();
         assertEquals(2, typeParserMap.size());
-        assertTrue(typeParserMap.get(SparseTokensFieldMapper.CONTENT_TYPE) instanceof SparseTokensFieldMapper.SparseTypeParser);
+        assertTrue(typeParserMap.get(SparseVectorFieldMapper.CONTENT_TYPE) instanceof SparseVectorFieldMapper.SparseTypeParser);
         assertTrue(typeParserMap.get(SemanticFieldMapper.CONTENT_TYPE) instanceof SemanticFieldMapper.TypeParser);
     }
 

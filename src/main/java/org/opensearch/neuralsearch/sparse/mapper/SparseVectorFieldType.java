@@ -18,27 +18,27 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * Field type for sparse token fields that handles sparse vector representations.
+ * Field type for sparse vector fields that handles sparse vector representations.
  * Extends MappedFieldType to provide specialized behavior for neural search sparse tokens.
  */
 @Getter
-public class SparseTokensFieldType extends MappedFieldType {
+public class SparseVectorFieldType extends MappedFieldType {
     private final SparseMethodContext sparseMethodContext;
 
     /**
-     * Creates a new SparseTokensFieldType.
+     * Creates a new SparseVectorFieldType.
      *
      * @param name field name
      * @param sparseMethodContext context for sparse encoding method
      */
-    public SparseTokensFieldType(String name, SparseMethodContext sparseMethodContext) {
+    public SparseVectorFieldType(String name, SparseMethodContext sparseMethodContext) {
         super(name, false, false, false, TextSearchInfo.NONE, Map.of());
         this.sparseMethodContext = sparseMethodContext;
     }
 
     @Override
     public String typeName() {
-        return SparseTokensFieldMapper.CONTENT_TYPE;
+        return SparseVectorFieldMapper.CONTENT_TYPE;
     }
 
     @Override
@@ -48,22 +48,22 @@ public class SparseTokensFieldType extends MappedFieldType {
 
     @Override
     public Query termQuery(Object value, QueryShardContext context) {
-        throw new IllegalArgumentException("Queries on [" + SparseTokensFieldMapper.CONTENT_TYPE + "] fields are not supported");
+        throw new IllegalArgumentException("Queries on [" + SparseVectorFieldMapper.CONTENT_TYPE + "] fields are not supported");
     }
 
     @Override
     public Query existsQuery(QueryShardContext context) {
-        throw new IllegalArgumentException("[" + SparseTokensFieldMapper.CONTENT_TYPE + "] fields do not support [exists] queries");
+        throw new IllegalArgumentException("[" + SparseVectorFieldMapper.CONTENT_TYPE + "] fields do not support [exists] queries");
     }
 
     @Override
     public IndexFieldData.Builder fielddataBuilder(String fullyQualifiedIndexName, Supplier<SearchLookup> searchLookup) {
         throw new IllegalArgumentException(
-            "[" + SparseTokensFieldMapper.CONTENT_TYPE + "] fields do not support sorting, scripting or aggregating"
+            "[" + SparseVectorFieldMapper.CONTENT_TYPE + "] fields do not support sorting, scripting or aggregating"
         );
     }
 
-    public static boolean isSparseTokensType(String type) {
-        return SparseTokensFieldMapper.CONTENT_TYPE.equals(type);
+    public static boolean isSparseVectorType(String type) {
+        return SparseVectorFieldMapper.CONTENT_TYPE.equals(type);
     }
 }

@@ -8,7 +8,7 @@ import org.apache.lucene.codecs.Codec;
 import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.PostingsFormat;
-import org.apache.lucene.codecs.lucene101.Lucene101Codec;
+import org.apache.lucene.backward_codecs.lucene101.Lucene101Codec;
 
 /**
  * SparseCodec is used to encode and decode sparse vector related data structures.

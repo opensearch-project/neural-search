@@ -38,18 +38,18 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_SUMMARY_PRUNE_RATIO;
 
 /**
- * Field mapper for sparse token fields with feature-based indexing.
+ * Field mapper for sparse vector fields with feature-based indexing.
  */
 @Getter
-public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
-    public static final String CONTENT_TYPE = "sparse_tokens";
+public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
+    public static final String CONTENT_TYPE = "sparse_vector";
 
     private static final String METHOD = "method";
     @NonNull
     private final SparseMethodContext sparseMethodContext;
     private FieldType tokenFieldType;
 
-    private SparseTokensFieldMapper(
+    private SparseVectorFieldMapper(
         String simpleName,
         MappedFieldType mappedFieldType,
         MultiFields multiFields,
@@ -68,8 +68,8 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         this.tokenFieldType.freeze();
     }
 
-    private static SparseTokensFieldType ft(FieldMapper in) {
-        return ((SparseTokensFieldMapper) in).fieldType();
+    private static SparseVectorFieldType ft(FieldMapper in) {
+        return ((SparseVectorFieldMapper) in).fieldType();
     }
 
     public static class Builder extends ParametrizedFieldMapper.Builder {
@@ -97,9 +97,9 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
 
         @Override
         public ParametrizedFieldMapper build(BuilderContext context) {
-            return new SparseTokensFieldMapper(
+            return new SparseVectorFieldMapper(
                 name,
-                new SparseTokensFieldType(buildFullName(context), sparseMethodContext.getValue()),
+                new SparseVectorFieldType(buildFullName(context), sparseMethodContext.getValue()),
                 multiFieldsBuilder.build(this, context),
                 copyTo.build(),
                 sparseMethodContext.getValue()
@@ -118,13 +118,13 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
     }
 
     @Override
-    protected SparseTokensFieldMapper clone() {
-        return (SparseTokensFieldMapper) super.clone();
+    protected SparseVectorFieldMapper clone() {
+        return (SparseVectorFieldMapper) super.clone();
     }
 
     @Override
-    public SparseTokensFieldType fieldType() {
-        return (SparseTokensFieldType) super.fieldType();
+    public SparseVectorFieldType fieldType() {
+        return (SparseVectorFieldType) super.fieldType();
     }
 
     @Override
@@ -185,7 +185,7 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
                 }
             }
             dos.flush();
-            context.doc().add(new SparseTokensField(name(), baos.toByteArray(), fieldType));
+            context.doc().add(new SparseVectorField(name(), baos.toByteArray(), fieldType));
         }
     }
 
@@ -215,12 +215,12 @@ public class SparseTokensFieldMapper extends ParametrizedFieldMapper {
         static {
             FIELD_TYPE.setTokenized(false);
             FIELD_TYPE.setIndexOptions(IndexOptions.NONE);
-            FIELD_TYPE.putAttribute(SparseTokensField.SPARSE_FIELD, "true"); // This attribute helps to determine knn field type
+            FIELD_TYPE.putAttribute(SparseVectorField.SPARSE_FIELD, "true"); // This attribute helps to determine knn field type
             FIELD_TYPE.freeze();
             TOKEN_FIELD_TYPE.setTokenized(false);
             TOKEN_FIELD_TYPE.setOmitNorms(true);
             TOKEN_FIELD_TYPE.setIndexOptions(IndexOptions.DOCS_AND_FREQS);
-            TOKEN_FIELD_TYPE.putAttribute(SparseTokensField.SPARSE_FIELD, "true"); // This attribute helps to determine knn field type
+            TOKEN_FIELD_TYPE.putAttribute(SparseVectorField.SPARSE_FIELD, "true"); // This attribute helps to determine knn field type
             TOKEN_FIELD_TYPE.freeze();
         }
     }

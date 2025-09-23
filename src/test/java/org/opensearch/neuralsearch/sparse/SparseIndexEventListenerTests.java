@@ -10,12 +10,13 @@ import org.apache.lucene.index.SegmentInfos;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.indices.cluster.IndicesClusterStateService;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldType;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -23,7 +24,6 @@ import java.util.Arrays;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import org.opensearch.common.concurrent.GatedCloseable;
 
 public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
 
@@ -47,9 +47,9 @@ public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
         listener = new SparseIndexEventListener();
     }
 
-    public void testBeforeIndexRemoved_withSparseTokensField_clearsCache() throws IOException {
+    public void testBeforeIndexRemoved_withSparseVectorField_clearsCache() throws IOException {
         SegmentCommitInfo segmentCommitInfo = TestsPrepareUtils.prepareSegmentCommitInfo();
-        SparseTokensFieldType sparseFieldType = mock(SparseTokensFieldType.class);
+        SparseVectorFieldType sparseFieldType = mock(SparseVectorFieldType.class);
         when(sparseFieldType.name()).thenReturn("sparse_field");
 
         GatedCloseable<SegmentInfos> gatedCloseable = mock(GatedCloseable.class);

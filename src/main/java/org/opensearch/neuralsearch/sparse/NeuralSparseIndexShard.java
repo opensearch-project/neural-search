@@ -40,7 +40,7 @@ import org.opensearch.neuralsearch.sparse.cache.CacheGatedPostingsReader;
 import org.opensearch.neuralsearch.sparse.codec.SparseTermsLuceneReader;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.apache.lucene.index.SegmentReadState;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -196,7 +196,7 @@ public class NeuralSparseIndexShard {
 
     private Set<FieldInfo> collectSparseFieldInfos(LeafReader leafReader) {
         return StreamSupport.stream(leafReader.getFieldInfos().spliterator(), false)
-            .filter(SparseTokensField::isSparseField)
+            .filter(SparseVectorField::isSparseField)
             .collect(Collectors.toSet());
     }
 

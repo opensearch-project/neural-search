@@ -21,7 +21,7 @@ import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 import org.opensearch.neuralsearch.sparse.common.ValueEncoder;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.IOException;
@@ -52,7 +52,7 @@ public class MergeHelper {
     ) throws IOException {
         for (DocValuesProducer producer : mergeStateFacade.getDocValuesProducers()) {
             for (FieldInfo field : mergeStateFacade.getMergeFieldInfos()) {
-                boolean isNotSparse = !SparseTokensField.isSparseField(field);
+                boolean isNotSparse = !SparseVectorField.isSparseField(field);
                 boolean fieldInfoMisMatched = fieldInfo != null && field != fieldInfo;
                 if (isNotSparse || fieldInfoMisMatched) {
                     continue;

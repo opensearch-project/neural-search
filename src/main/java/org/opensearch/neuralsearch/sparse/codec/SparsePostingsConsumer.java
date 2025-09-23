@@ -23,7 +23,7 @@ import org.opensearch.common.util.io.IOUtils;
 import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -158,7 +158,7 @@ public class SparsePostingsConsumer extends FieldsConsumer {
         List<String> sparseFields = new ArrayList<>();
         for (String field : fields) {
             FieldInfo fieldInfo = this.state.fieldInfos.fieldInfo(field);
-            if (SparseTokensField.isSparseField(fieldInfo)
+            if (SparseVectorField.isSparseField(fieldInfo)
                 && PredicateUtils.shouldRunSeisPredicate.test(this.state.segmentInfo, fieldInfo)) {
                 sparseFields.add(field);
             } else {
