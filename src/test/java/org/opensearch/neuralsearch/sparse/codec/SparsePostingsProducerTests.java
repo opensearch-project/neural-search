@@ -29,7 +29,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
-import static org.opensearch.neuralsearch.sparse.mapper.SparseTokensField.SPARSE_FIELD;
+import static org.opensearch.neuralsearch.sparse.mapper.SparseVectorField.SPARSE_FIELD;
 
 public class SparsePostingsProducerTests extends AbstractSparseTestBase {
 

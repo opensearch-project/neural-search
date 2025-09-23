@@ -34,7 +34,7 @@ import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFor
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.factory.SparseEncodingProcessorFactory;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.transport.client.OpenSearchClient;
@@ -816,7 +816,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put(KEY1, VALUE1);
         sourceAndMetadata.put(KEY2, VALUE2);
-        String seisType = SparseTokensFieldMapper.CONTENT_TYPE;
+        String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType, KEY2_MAPPED, seisType);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
@@ -842,7 +842,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put(KEY1, VALUE1);
         sourceAndMetadata.put(KEY2, VALUE2);
-        String seisType = SparseTokensFieldMapper.CONTENT_TYPE;
+        String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
@@ -872,7 +872,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put(KEY1, VALUE1);
         sourceAndMetadata.put(KEY2, VALUE2);
-        String seisType = SparseTokensFieldMapper.CONTENT_TYPE;
+        String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType);
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
@@ -896,7 +896,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
         SparseEncodingProcessor processor = createInstance(docCount, false);
         List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
-        String seisType = SparseTokensFieldMapper.CONTENT_TYPE;
+        String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType, KEY2_MAPPED, seisType);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
@@ -924,7 +924,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         SparseEncodingProcessor processor = createInstance(docCount, false);
         List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
-        String seisType = SparseTokensFieldMapper.CONTENT_TYPE;
+        String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
@@ -956,7 +956,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         SparseEncodingProcessor processor = createInstance(docCount, false);
         List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
-        String seisType = SparseTokensFieldMapper.CONTENT_TYPE;
+        String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType);
         doThrow(new RuntimeException()).doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);

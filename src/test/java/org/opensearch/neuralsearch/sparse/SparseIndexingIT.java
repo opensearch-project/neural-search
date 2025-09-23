@@ -13,7 +13,7 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -65,13 +65,13 @@ public class SparseIndexingIT extends SparseBaseIT {
     }
 
     /**
-     * Test indexing documents with sparse tokens field
+     * Test indexing documents with sparse vector field
      */
-    public void testIndexDocumentsWithSparseTokensField() throws IOException {
+    public void testIndexDocumentsWithSparseVectorField() throws IOException {
         // Create index with sparse index setting enabled
         testCreateSparseIndex();
 
-        // Create a document with sparse tokens field
+        // Create a document with sparse vector field
         Map<String, Float> sparseTokens = createRandomTokenWeightMap(TEST_TOKENS);
 
         // Index the document
@@ -154,45 +154,42 @@ public class SparseIndexingIT extends SparseBaseIT {
     /**
      * Test error handling when creating a sparse tokens field with invalid parameters
      */
-    public void testSparseTokensFieldWithInvalidParameters1() throws IOException {
+    public void testSparseVectorFieldWithInvalidParameters1() throws IOException {
         expectThrows(
             IOException.class,
             () -> { createSparseIndex(INVALID_PARAM_TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, -1, 0.4f, 0.1f, 8); }
         );
     }
 
-    public void testSparseTokensFieldWithInvalidParameters2() throws IOException {
+    public void testSparseVectorFieldWithInvalidParameters2() throws IOException {
         expectThrows(
             IOException.class,
             () -> { createSparseIndex(INVALID_PARAM_TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, -0.4f, 0.1f, 8); }
         );
     }
 
-    public void testSparseTokensFieldWithInvalidParameters3() throws IOException {
+    public void testSparseVectorFieldWithInvalidParameters3() throws IOException {
         expectThrows(
             IOException.class,
             () -> { createSparseIndex(INVALID_PARAM_TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, -0.1f, 8); }
         );
     }
 
-    public void testSparseTokensFieldWithInvalidParameters4() throws IOException {
+    public void testSparseVectorFieldWithInvalidParameters4() throws IOException {
         expectThrows(
             IOException.class,
             () -> { createSparseIndex(INVALID_PARAM_TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, -8); }
         );
     }
 
-    /**
-     * Test creating sparse tokens field with different method parameters
-     */
-    public void testSparseTokensFieldWithAdditionParameters() throws IOException {
+    public void testSparseVectorFieldWithAdditionParameters() throws IOException {
         // Create index with sparse index setting enabled
         String indexSettings = prepareIndexSettings();
         XContentBuilder mappingBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("properties")
             .startObject(TEST_SPARSE_FIELD_NAME)
-            .field("type", SparseTokensFieldMapper.CONTENT_TYPE)
+            .field("type", SparseVectorFieldMapper.CONTENT_TYPE)
             .startObject("method")
             .field("name", ALGO_NAME)
             .startObject("parameters")
@@ -243,14 +240,14 @@ public class SparseIndexingIT extends SparseBaseIT {
         assertTrue(properties.containsKey(field2));
         assertTrue(properties.containsKey(field3));
 
-        // Verify field types are sparse_tokens
+        // Verify field types are sparse_vector
         Map<String, Object> field1Config = (Map<String, Object>) properties.get(field1);
         Map<String, Object> field2Config = (Map<String, Object>) properties.get(field2);
         Map<String, Object> field3Config = (Map<String, Object>) properties.get(field3);
 
-        assertEquals(SparseTokensFieldMapper.CONTENT_TYPE, field1Config.get("type"));
-        assertEquals(SparseTokensFieldMapper.CONTENT_TYPE, field2Config.get("type"));
-        assertEquals(SparseTokensFieldMapper.CONTENT_TYPE, field3Config.get("type"));
+        assertEquals(SparseVectorFieldMapper.CONTENT_TYPE, field1Config.get("type"));
+        assertEquals(SparseVectorFieldMapper.CONTENT_TYPE, field2Config.get("type"));
+        assertEquals(SparseVectorFieldMapper.CONTENT_TYPE, field3Config.get("type"));
     }
 
     /**

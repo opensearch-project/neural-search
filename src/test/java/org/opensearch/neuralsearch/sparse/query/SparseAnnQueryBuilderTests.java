@@ -19,7 +19,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -192,7 +192,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
 
     public void testValidateFieldType_withValidFieldType_passes() {
         MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
 
         SparseAnnQueryBuilder.validateFieldType(fieldType);
     }
@@ -252,7 +252,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
             .build();
         QueryShardContext context = mock(QueryShardContext.class);
         MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
         when(context.fieldMapper("test_field")).thenReturn(fieldType);
         MappedFieldType fieldType2 = mock(MappedFieldType.class);
         when(context.fieldMapper("field")).thenReturn(fieldType2);
@@ -281,7 +281,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         queryBuilder = SparseAnnQueryBuilder.builder().fieldName("test_field").queryTokens(queryTokens).build();
         QueryShardContext context = mock(QueryShardContext.class);
         MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
         when(context.fieldMapper("test_field")).thenReturn(fieldType);
         MappedFieldType fieldType2 = mock(MappedFieldType.class);
         when(context.fieldMapper("field")).thenReturn(fieldType2);
@@ -399,7 +399,7 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
     public void testDoToQuery_withFilter_appliesFilter() throws IOException {
         QueryShardContext context = mock(QueryShardContext.class);
         MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
         when(context.fieldMapper("test_field")).thenReturn(fieldType);
 
         QueryBuilder filter = mock(QueryBuilder.class);

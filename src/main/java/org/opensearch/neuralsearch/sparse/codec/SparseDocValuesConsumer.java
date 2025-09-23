@@ -22,7 +22,7 @@ import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 
 import java.io.IOException;
 
@@ -55,7 +55,7 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
     public void addBinaryField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
         this.delegate.addBinaryField(field, valuesProducer);
         // check field is the sparse field, otherwise return
-        if (!SparseTokensField.isSparseField(field)) {
+        if (!SparseVectorField.isSparseField(field)) {
             return;
         }
         addSparseVectorBinary(field, valuesProducer, false);
@@ -125,7 +125,7 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
             }
             for (FieldInfo fieldInfo : mergeFieldInfos) {
                 DocValuesType type = fieldInfo.getDocValuesType();
-                if (type == DocValuesType.BINARY && SparseTokensField.isSparseField(fieldInfo)) {
+                if (type == DocValuesType.BINARY && SparseVectorField.isSparseField(fieldInfo)) {
                     addSparseVectorBinary(fieldInfo, mergeHelper.newSparseDocValuesReader(mergeStateFacade), true);
                 }
             }

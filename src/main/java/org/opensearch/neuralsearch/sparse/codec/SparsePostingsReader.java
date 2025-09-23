@@ -16,7 +16,7 @@ import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -53,7 +53,7 @@ public class SparsePostingsReader {
         log.debug("Merge total doc: {}", docCount);
         List<FieldInfo> sparseFieldInfos = new ArrayList<>();
         for (FieldInfo fieldInfo : mergeStateFacade.getMergeFieldInfos()) {
-            if (SparseTokensField.isSparseField(fieldInfo)
+            if (SparseVectorField.isSparseField(fieldInfo)
                 && PredicateUtils.shouldRunSeisPredicate.test(mergeStateFacade.getSegmentInfo(), fieldInfo)) {
                 sparseFieldInfos.add(fieldInfo);
             }

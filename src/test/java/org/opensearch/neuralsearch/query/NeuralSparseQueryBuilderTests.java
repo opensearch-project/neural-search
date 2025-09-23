@@ -52,7 +52,7 @@ import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbe
 import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
@@ -1025,7 +1025,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         when(mockedQueryShardContext.getIndexAnalyzers()).thenReturn(indexAnalyzers);
         NamedAnalyzer namedAnalyzer = mock(NamedAnalyzer.class);
         MappedFieldType fieldType = mock(MappedFieldType.class);
-        when(fieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
         when(mockedQueryShardContext.fieldMapper(anyString())).thenReturn(fieldType);
         when(indexAnalyzers.getAnalyzers()).thenReturn(Map.of(DEFAULT_ANALYZER, namedAnalyzer));
         TokenStream tokenStream = mock(TokenStream.class);
@@ -1301,7 +1301,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
         doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
         doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
-        when(mockedMappedFieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(mockedMappedFieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
 
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
         booleanQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "1000", 1.f), BooleanClause.Occur.SHOULD);
@@ -1328,7 +1328,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
         doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
         doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
-        when(mockedMappedFieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(mockedMappedFieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
 
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
         booleanQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "1000", 1.f), BooleanClause.Occur.SHOULD);
@@ -1355,7 +1355,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         MappedFieldType mockedMappedFieldType = mock(MappedFieldType.class);
         doAnswer(invocation -> "rank_features").when(mockedMappedFieldType).typeName();
         doAnswer(invocation -> mockedMappedFieldType).when(mockedQueryShardContext).fieldMapper(any());
-        when(mockedMappedFieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(mockedMappedFieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
         when(filter.toQuery(any())).thenReturn(filterQuery);
 
         BooleanQuery.Builder booleanQueryBuilder = new BooleanQuery.Builder();
@@ -1543,7 +1543,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         when(queryRewriteContext.convertToCoordinatorContext()).thenReturn(null);
         when(queryRewriteContext.convertToShardContext()).thenReturn(queryShardContext);
         when(queryShardContext.fieldMapper(anyString())).thenReturn(seismicFieldType);
-        when(seismicFieldType.typeName()).thenReturn(SparseTokensFieldMapper.CONTENT_TYPE);
+        when(seismicFieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
     }
 
     private void mockSeismicWithQueryCoordinatorContext(NeuralSparseQueryBuilder queryBuilder, QueryRewriteContext queryRewriteContext) {

@@ -28,8 +28,8 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldType;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -252,14 +252,14 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     }
 
     public static void validateFieldType(MappedFieldType fieldType) {
-        if (Objects.isNull(fieldType) || !SparseTokensFieldType.isSparseTokensType(fieldType.typeName())) {
+        if (Objects.isNull(fieldType) || !SparseVectorFieldType.isSparseVectorType(fieldType.typeName())) {
             throw new IllegalArgumentException(
                 "["
                     + NAME
                     + "] query with ["
                     + METHOD_PARAMETERS_FIELD.getPreferredName()
                     + "] only works on ["
-                    + SparseTokensFieldMapper.CONTENT_TYPE
+                    + SparseVectorFieldMapper.CONTENT_TYPE
                     + "] fields"
             );
         }

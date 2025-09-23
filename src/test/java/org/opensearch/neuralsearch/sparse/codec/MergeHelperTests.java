@@ -43,7 +43,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.sparse.mapper.SparseTokensField.SPARSE_FIELD;
+import static org.opensearch.neuralsearch.sparse.mapper.SparseVectorField.SPARSE_FIELD;
 
 public class MergeHelperTests extends AbstractSparseTestBase {
     @Mock

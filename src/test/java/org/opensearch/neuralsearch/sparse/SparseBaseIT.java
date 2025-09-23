@@ -25,7 +25,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 
@@ -161,7 +161,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
             .startObject()
             .startObject("properties")
             .startObject(sparseFieldName)
-            .field("type", SparseTokensFieldMapper.CONTENT_TYPE)
+            .field("type", SparseVectorFieldMapper.CONTENT_TYPE)
             .startObject("method")
             .field("name", ALGO_NAME)
             .startObject("parameters")
@@ -284,7 +284,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         // Add each sparse field to the mapping
         for (String fieldName : fieldNames) {
             mappingBuilder.startObject(fieldName)
-                .field("type", SparseTokensFieldMapper.CONTENT_TYPE)
+                .field("type", SparseVectorFieldMapper.CONTENT_TYPE)
                 .startObject("method")
                 .field("name", ALGO_NAME)
                 .startObject("parameters")
