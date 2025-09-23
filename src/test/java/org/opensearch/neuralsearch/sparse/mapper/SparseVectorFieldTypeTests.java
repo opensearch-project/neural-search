@@ -21,10 +21,10 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTIN
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
-import static org.opensearch.neuralsearch.sparse.mapper.SparseTokensFieldMapper.CONTENT_TYPE;
+import static org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper.CONTENT_TYPE;
 
-public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
-    private SparseTokensFieldType fieldType;
+public class SparseVectorFieldTypeTests extends AbstractSparseTestBase {
+    private SparseVectorFieldType fieldType;
     private SparseMethodContext sparseMethodContext;
 
     @Before
@@ -43,7 +43,7 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
         methodMap.put(NAME_FIELD, SEISMIC);
         methodMap.put(PARAMETERS_FIELD, parameters);
         sparseMethodContext = SparseMethodContext.parse(methodMap);
-        fieldType = new SparseTokensFieldType("test_field", sparseMethodContext);
+        fieldType = new SparseVectorFieldType("test_field", sparseMethodContext);
     }
 
     public void testConstructor_withValidParameters_createsFieldType() {
@@ -95,7 +95,7 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
     }
 
     public void testConstructor_withNullSparseMethodContext_createsFieldType() {
-        SparseTokensFieldType nullContextFieldType = new SparseTokensFieldType("null_context_field", null);
+        SparseVectorFieldType nullContextFieldType = new SparseVectorFieldType("null_context_field", null);
 
         assertNotNull(nullContextFieldType);
         assertEquals("null_context_field", nullContextFieldType.name());
@@ -129,11 +129,11 @@ public class SparseTokensFieldTypeTests extends AbstractSparseTestBase {
         assertFalse(fieldType.hasDocValues()); // Our hasDocValues parameter
     }
 
-    public void test_isSparseTokensType_returnsTrue_withSparseTokensType() {
-        assertTrue(SparseTokensFieldType.isSparseTokensType(CONTENT_TYPE));
+    public void test_isSparseVectorType_returnsTrue_withSparseVectorType() {
+        assertTrue(SparseVectorFieldType.isSparseVectorType(CONTENT_TYPE));
     }
 
-    public void test_isSparseTokensType_returnsFalse_withNonSparseTokensType() {
-        assertFalse(SparseTokensFieldType.isSparseTokensType("non_sparse_vector"));
+    public void test_isSparseVectorType_returnsFalse_withNonSparseVectorType() {
+        assertFalse(SparseVectorFieldType.isSparseVectorType("non_sparse_vector"));
     }
 }

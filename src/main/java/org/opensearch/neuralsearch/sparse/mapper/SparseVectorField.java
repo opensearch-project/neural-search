@@ -11,15 +11,15 @@ import org.apache.lucene.index.IndexableFieldType;
 import java.util.Optional;
 
 /**
- * Lucene field for sparse token storage.
+ * Lucene field for sparse vector storage.
  */
-public class SparseTokensField extends Field {
+public class SparseVectorField extends Field {
     public static final String SPARSE_FIELD = "sparse_vector_field";
 
     /**
-     * Creates sparse tokens field with byte array value.
+     * Creates sparse vector field with byte array value.
      */
-    public SparseTokensField(String name, byte[] value, IndexableFieldType type) {
+    public SparseVectorField(String name, byte[] value, IndexableFieldType type) {
         super(name, value, type);
     }
 

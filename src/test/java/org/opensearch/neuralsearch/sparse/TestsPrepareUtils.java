@@ -55,7 +55,7 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.ContentPath;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
-import org.opensearch.neuralsearch.sparse.mapper.SparseTokensField;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -479,7 +479,7 @@ public class TestsPrepareUtils {
         sparseFieldType.setDocValuesType(DocValuesType.BINARY);
 
         // Add required attributes for sparse field
-        sparseFieldType.putAttribute(SparseTokensField.SPARSE_FIELD, "true");
+        sparseFieldType.putAttribute(SparseVectorField.SPARSE_FIELD, "true");
         sparseFieldType.putAttribute(SparseConstants.APPROXIMATE_THRESHOLD_FIELD, "10");
         sparseFieldType.freeze();
 
