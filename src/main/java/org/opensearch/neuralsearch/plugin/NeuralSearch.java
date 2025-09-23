@@ -109,6 +109,7 @@ import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
@@ -326,7 +327,15 @@ public class NeuralSearch extends Plugin
             NeuralQueryEnricherProcessor.TYPE,
             new NeuralQueryEnricherProcessor.Factory(),
             NeuralSparseTwoPhaseProcessor.TYPE,
-            new NeuralSparseTwoPhaseProcessor.Factory(),
+            new NeuralSparseTwoPhaseProcessor.Factory()
+        );
+    }
+
+    @Override
+    public Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchRequestProcessor>> getSystemGeneratedRequestProcessors(
+        Parameters parameters
+    ) {
+        return Map.of(
             AgenticQueryTranslatorProcessor.TYPE,
             new AgenticQueryTranslatorProcessor.Factory(clientAccessor, xContentRegistry, settingsAccessor)
         );

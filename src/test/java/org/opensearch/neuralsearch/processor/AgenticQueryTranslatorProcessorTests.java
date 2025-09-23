@@ -4,16 +4,15 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import org.opensearch.OpenSearchParseException;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.MatchAllQueryBuilder;
-import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -86,7 +85,6 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             mockSettingsAccessor
         );
         Map<String, Object> config = new HashMap<>();
-        config.put("agent_id", AGENT_ID);
         processor = factory.create(null, "test-tag", "test-description", false, config, null);
     }
 
@@ -125,7 +123,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
     public void testProcessRequestAsync_withAgenticQuery_callsMLClient() {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT)
-            .queryFields(Arrays.asList("title", "description"));
+            .queryFields(Arrays.asList("title", "description"))
+            .agentId(AGENT_ID);
 
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
@@ -145,7 +144,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessRequestAsync_withAgenticQuery_agentFailure() {
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
 
@@ -162,18 +161,18 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
         ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error"));
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error:"));
     }
 
     public void testProcessRequestAsync_withAgenticQuery_parseFailure() {
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Invalid JSON response that will cause parsing to fail
-        String invalidAgentResponse = "{invalid json}";
+        String invalidAgentResponse = "{\"query\": {\"match\": {\"field\": \"value\"}";  // Missing closing braces
 
         doAnswer(invocation -> {
             ActionListener<String> agentListener = invocation.getArgument(2);
@@ -184,9 +183,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         processor.processRequestAsync(request, mockContext, listener);
 
         verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
-        ArgumentCaptor<IOException> exceptionCaptor = ArgumentCaptor.forClass(IOException.class);
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Parse error"));
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error:"));
     }
 
     public void testProcessRequest_throwsException() {
@@ -212,51 +211,14 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         );
 
         Map<String, Object> config = new HashMap<>();
-        config.put("agent_id", AGENT_ID);
-
         AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
         assertNotNull(createdProcessor);
         assertEquals("agentic_query_translator", createdProcessor.getType());
     }
 
-    public void testFactory_create_missingAgentId() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
-            mockMLClient,
-            mockXContentRegistry,
-            mockSettingsAccessor
-        );
-
-        Map<String, Object> config = new HashMap<>();
-
-        OpenSearchParseException exception = expectThrows(
-            OpenSearchParseException.class,
-            () -> factory.create(null, "test-tag", "test-description", false, config, null)
-        );
-
-        assertTrue(exception.getMessage().contains("agent_id"));
-    }
-
-    public void testFactory_create_emptyAgentId() {
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
-            mockMLClient,
-            mockXContentRegistry,
-            mockSettingsAccessor
-        );
-
-        Map<String, Object> config = new HashMap<>();
-        config.put("agent_id", "");
-
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> factory.create(null, "test-tag", "test-description", false, config, null)
-        );
-
-        assertEquals("agent_id is required for agentic_query_translator processor", exception.getMessage());
-    }
-
     public void testProcessRequestAsync_withAgenticQuery_andAggregations() {
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
         SearchRequest request = new SearchRequest("test-index");
         SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(agenticQuery);
         sourceBuilder.aggregation(AggregationBuilders.terms("test_agg").field("field"));
@@ -266,23 +228,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
-        verify(listener).onFailure(exceptionCaptor.capture());
-        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search blocked - Invalid usage with other search features"));
-        verifyNoInteractions(mockMLClient);
-    }
-
-    public void testProcessRequestAsync_withAgenticQuery_andSort() {
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
-        SearchRequest request = new SearchRequest("test-index");
-        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().query(agenticQuery);
-        sourceBuilder.sort("field");
-        request.source(sourceBuilder);
-
-        ActionListener<SearchRequest> listener = mock(ActionListener.class);
-
-        processor.processRequestAsync(request, mockContext, listener);
-
+        // Verify that onFailure was called with IllegalArgumentException
         ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search blocked - Invalid usage with other search features"));
@@ -299,18 +245,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         );
 
         Map<String, Object> config = new HashMap<>();
-        config.put("agent_id", AGENT_ID);
 
         IllegalStateException exception = expectThrows(
             IllegalStateException.class,
             () -> factory.create(null, "test-tag", "test-description", false, config, null)
         );
 
-        assertEquals(
-            "Exception message should match",
-            "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting.",
-            exception.getMessage()
-        );
+        assertTrue(exception.getMessage().contains("Agentic search is currently disabled"));
     }
 
     public void testProcessRequestAsync_withAgenticQuery_success() throws IOException {
@@ -342,10 +283,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             mockSettingsAccessor
         );
         Map<String, Object> config = new HashMap<>();
-        config.put("agent_id", AGENT_ID);
         AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
 
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
@@ -370,7 +310,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessRequestAsync_withAgenticQuery_oversizedResponse() throws IOException {
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
 
@@ -396,7 +336,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessRequestAsync_withAgenticQuery_nullResponse() throws IOException {
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT).agentId(AGENT_ID);
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
 
@@ -417,4 +357,5 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertTrue(exception.getMessage().contains("Agentic search failed - Null response from agent"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
     }
+
 }

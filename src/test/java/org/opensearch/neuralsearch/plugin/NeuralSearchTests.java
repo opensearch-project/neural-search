@@ -71,6 +71,7 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
+import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
@@ -209,13 +210,19 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertNotNull(processors);
         assertNotNull(processors.get(NeuralQueryEnricherProcessor.TYPE));
         assertNotNull(processors.get(NeuralSparseTwoPhaseProcessor.TYPE));
-        assertNotNull(processors.get(AgenticQueryTranslatorProcessor.TYPE));
     }
 
     public void testResponseProcessors() {
         Map<String, Factory<SearchResponseProcessor>> processors = plugin.getResponseProcessors(searchParameters);
         assertNotNull(processors);
         assertNotNull(processors.get(RerankProcessor.TYPE));
+    }
+
+    public void testSystemGeneratedRequestProcessors() {
+        Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchRequestProcessor>> processors = plugin
+            .getSystemGeneratedRequestProcessors(searchParameters);
+        assertNotNull(processors);
+        assertNotNull(processors.get(AgenticQueryTranslatorProcessor.TYPE));
     }
 
     public void testSearchExts() {

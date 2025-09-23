@@ -26,12 +26,17 @@ public class NeuralSearchSettingsAccessor {
     @Getter
     private volatile boolean isAgenticSearchEnabled;
 
+    private static final String SYSTEM_GENERATED_PIPELINE_SETTINGS = "cluster.search.enabled_system_generated_factories";
+
+    private final ClusterService clusterService;
+
     /**
      * Constructor, registers callbacks to update settings
      * @param clusterService
      * @param settings
      */
     public NeuralSearchSettingsAccessor(ClusterService clusterService, Settings settings) {
+        this.clusterService = clusterService;
         isStatsEnabled = NeuralSearchSettings.NEURAL_STATS_ENABLED.get(settings);
         isAgenticSearchEnabled = NeuralSearchSettings.AGENTIC_SEARCH_ENABLED.get(settings);
         registerSettingsCallbacks(clusterService, settings);
@@ -58,5 +63,14 @@ public class NeuralSearchSettingsAccessor {
                 int maxThreadQty = OpenSearchExecutors.allocatedProcessors(settings);
                 ClusterTrainingExecutor.updateThreadPoolSize(maxThreadQty, setting);
             });
+    }
+
+    /**
+     * Checks if the system processor is enabled
+     * @return true if the processor is enabled in cluster settings
+     */
+    public boolean isSystemGenerateProcessorEnabled(String processor) {
+        String enabledFactories = String.valueOf(clusterService.getClusterSettings().get(SYSTEM_GENERATED_PIPELINE_SETTINGS));
+        return enabledFactories != null && enabledFactories.contains(processor);
     }
 }
