@@ -4,8 +4,13 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import lombok.SneakyThrows;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.junit.Before;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -488,8 +493,8 @@ public class SparseSearchingIT extends SparseBaseIT {
                 Map.of("1000", 0.4f, "2000", 0.4f),
                 Map.of("1000", 0.5f, "2000", 0.5f),
                 Map.of("1000", 0.6f, "2000", 0.6f),
-                Map.of("1000", 0.7f, "7592", 0.7f),// "7592" is token id of "world"
-                Map.of("2088", 0.8f, "2000", 0.8f) // "2088" is token id of "hello"
+                Map.of("1000", 0.7f, "7592", 0.7f), // "7592" is token id of "world"
+                Map.of("2088", 0.8f, "2000", 0.8f)  // "2088" is token id of "hello"
             )
         );
         SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2)
@@ -497,6 +502,7 @@ public class SparseSearchingIT extends SparseBaseIT {
             .heapFactor(1.0f)
             .k(10);
 
+        // inference result: {2088: 3.42, 7592: 6.94}, the "world" document should rank first
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
             .fieldName(TEST_SPARSE_FIELD_NAME)
             .queryText("hello world")
@@ -506,7 +512,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertNotNull(searchResults);
         assertEquals(2, getHitCount(searchResults));
         List<String> actualIds = getDocIDs(searchResults);
-        assertEquals(List.of("8", "7"), actualIds);
+        assertEquals(List.of("7", "8"), actualIds);
     }
 
     /**
@@ -551,5 +557,129 @@ public class SparseSearchingIT extends SparseBaseIT {
         Map<String, Object> searchResults2 = search(TEST_INDEX_NAME, queryBuilder2, 10);
         assertNotNull(searchResults2);
         assertTrue(getHitCount(searchResults2) > 0);
+    }
+
+    @SneakyThrows
+    public void testSearchWithCustomizedQuantizationCeil() {
+        Settings indexSettings = Settings.builder()
+            .put("index.number_of_shards", 1)
+            .put("index.number_of_replicas", 0)
+            .put("index.sparse", true)
+            .build();
+        String indexMappings = prepareIndexMapping(1, 0.4f, 0.1f, 1, 5.0f, 6.0f, TEST_SPARSE_FIELD_NAME);
+
+        Request request = new Request("PUT", "/" + TEST_INDEX_NAME);
+        String body = String.format(
+            Locale.ROOT,
+            "{\n" + "  \"settings\": %s,\n" + "  \"mappings\": %s\n" + "}",
+            indexSettings,
+            indexMappings
+        );
+        request.setJsonEntity(body);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        ingestDocumentsAndForceMerge(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(Map.of("1000", 4.0f, "2000", 5.0f, "3000", 6.0f))
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder1 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("1000", 5.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder2 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("1000", 6.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder3 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("1000", 7.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder4 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("2000", 5.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder5 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("2000", 6.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder6 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("2000", 7.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder7 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("3000", 5.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder8 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("3000", 6.0f)
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder9 = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            1,
+            1.0f,
+            1,
+            Map.of("3000", 7.0f)
+        );
+
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder1, 20.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder2, 24.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder3, 24.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder4, 25.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder5, 30.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder6, 30.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder7, 25.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder8, 30.0f);
+        verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder9, 30.0f);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void verifyTopDocScoreExpected(String indexName, NeuralSparseQueryBuilder neuralSparseQueryBuilder, float expectedScore) {
+        float deltaForScoreAssertion = 1f; // score delta needs to be bigger due to quantization
+        Map<String, Object> searchResults1 = search(indexName, neuralSparseQueryBuilder, 1);
+        assertNotNull(searchResults1);
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResults1.get("hits");
+        List<Object> hitsList = (List<Object>) hitsMap.get("hits");
+        for (Object hitsObject : hitsList) {
+            Map<String, Object> mapObject = (Map<String, Object>) hitsObject;
+            float score = NumberUtils.createFloat(mapObject.get("_score").toString());
+            assertEquals(expectedScore, score, deltaForScoreAssertion);
+        }
     }
 }

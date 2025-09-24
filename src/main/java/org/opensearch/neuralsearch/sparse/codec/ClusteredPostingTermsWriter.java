@@ -40,6 +40,7 @@ import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -71,6 +72,13 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private SegmentWriteState state;
     private DocValuesProducer docValuesProducer;
     private final CodecUtilWrapper codecUtilWrapper;
+    private ByteQuantizer byteQuantizer;
+
+    @Override
+    public void setField(FieldInfo fieldInfo) {
+        super.setField(fieldInfo);
+        byteQuantizer = ByteQuantizerUtil.getByteQuantizerIngest(fieldInfo);
+    }
 
     public BlockTermState write(BytesRef text, TermsEnum termsEnum, NormsProducer norms) throws IOException {
         this.currentTerm = text;
@@ -85,7 +93,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     }
 
     public void setFieldAndMaxDoc(FieldInfo fieldInfo, int maxDoc, boolean isMerge) {
-        super.setField(fieldInfo);
+        setField(fieldInfo);
         key = new CacheKey(this.state.segmentInfo, fieldInfo);
 
         if (!isMerge) {
@@ -118,7 +126,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
             this.docValuesProducer = fmt.fieldsProducer(readState);
             BinaryDocValues binaryDocValues = this.docValuesProducer.getBinary(fieldInfo);
             if (binaryDocValues != null) {
-                luceneReader = new SparseBinaryDocValuesPassThrough(binaryDocValues, this.state.segmentInfo);
+                luceneReader = new SparseBinaryDocValuesPassThrough(binaryDocValues, this.state.segmentInfo, byteQuantizer);
             }
         } catch (Exception e) {
             log.error("Failed to retrieve lucene reader");
@@ -185,7 +193,8 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         if (docID == -1) {
             throw new IllegalStateException("docId must be set before startDoc");
         }
-        docWeights.add(new DocWeight(docID, ByteQuantizer.quantizeFloatToByte(ValueEncoder.decodeFeatureValue(freq))));
+        ByteQuantizer byteQuantizer = ByteQuantizerUtil.getByteQuantizerIngest(fieldInfo);
+        docWeights.add(new DocWeight(docID, byteQuantizer.quantize(ValueEncoder.decodeFeatureValue(freq))));
     }
 
     @Override

@@ -13,6 +13,7 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -36,21 +37,16 @@ public class SparseVector implements Accountable {
     private final short[] tokens;
     private final byte[] weights;
 
-    public SparseVector(BytesRef bytesRef) throws IOException {
-        this(readToMap(bytesRef));
+    public SparseVector(BytesRef bytesRef, ByteQuantizer byteQuantizer) throws IOException {
+        this(readToMap(bytesRef), byteQuantizer);
     }
 
     public int getSize() {
         return tokens == null ? 0 : tokens.length;
     }
 
-    public SparseVector(Map<Integer, Float> pairs) {
-        this(
-            pairs.entrySet()
-                .stream()
-                .map(t -> new Item(t.getKey(), ByteQuantizer.quantizeFloatToByte(t.getValue())))
-                .collect(Collectors.toList())
-        );
+    public SparseVector(Map<Integer, Float> pairs, ByteQuantizer byteQuantizer) {
+        this(pairs.entrySet().stream().map(t -> new Item(t.getKey(), byteQuantizer.quantize(t.getValue()))).collect(Collectors.toList()));
     }
 
     public SparseVector(List<Item> items) {
@@ -75,7 +71,7 @@ public class SparseVector implements Accountable {
         for (int i = 1; i < items.size(); ++i) {
             int token = prepareTokenForShortType(items.get(i).getToken());
             if (token == processedItems.getLast().getToken()) {
-                if (ByteQuantizer.compareUnsignedByte(processedItems.getLast().weight, items.get(i).getWeight()) < 0) {
+                if (ByteQuantizerUtil.compareUnsignedByte(processedItems.getLast().weight, items.get(i).getWeight()) < 0) {
                     // merge by taking the maximum value
                     processedItems.getLast().weight = items.get(i).getWeight();
                 }
@@ -137,25 +133,25 @@ public class SparseVector implements Accountable {
             if (this.tokens[i] >= denseVector.length) {
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
+            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
 
             if (this.tokens[i + 1] >= denseVector.length) {
                 ++i;
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i + 1], denseVector[this.tokens[i + 1]]);
+            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i + 1], denseVector[this.tokens[i + 1]]);
 
             if (this.tokens[i + 2] >= denseVector.length) {
                 i += 2;
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i + 2], denseVector[this.tokens[i + 2]]);
+            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i + 2], denseVector[this.tokens[i + 2]]);
 
             if (this.tokens[i + 3] >= denseVector.length) {
                 i += 3;
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i + 3], denseVector[this.tokens[i + 3]]);
+            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i + 3], denseVector[this.tokens[i + 3]]);
         }
 
         // Handle remaining elements
@@ -163,7 +159,7 @@ public class SparseVector implements Accountable {
             if (this.tokens[i] >= denseVector.length) {
                 break;
             }
-            score += ByteQuantizer.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
+            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
         }
 
         return score;
@@ -209,7 +205,7 @@ public class SparseVector implements Accountable {
         }
 
         public int getIntWeight() {
-            return ByteQuantizer.getUnsignedByte(weight);
+            return ByteQuantizerUtil.getUnsignedByte(weight);
         }
     }
 }

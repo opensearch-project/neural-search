@@ -11,6 +11,7 @@ import org.junit.Before;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.IOException;
 
@@ -32,13 +33,14 @@ public class SparseBinaryDocValuesPassThroughTests extends AbstractSparseTestBas
         super.setUp();
         mockDelegate = mock(BinaryDocValues.class);
         mockSegmentInfo = mock(SegmentInfo.class);
-        sparseBinaryDocValuesPassThrough = new SparseBinaryDocValuesPassThrough(mockDelegate, mockSegmentInfo);
+        sparseBinaryDocValuesPassThrough = new SparseBinaryDocValuesPassThrough(mockDelegate, mockSegmentInfo, new ByteQuantizer(3.0f));
     }
 
     public void testConstructor_InitializesFieldsCorrectly() {
         SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough = new SparseBinaryDocValuesPassThrough(
             mockDelegate,
-            mockSegmentInfo
+            mockSegmentInfo,
+            new ByteQuantizer(3.0f)
         );
 
         assertSame(mockSegmentInfo, sparseBinaryDocValuesPassThrough.getSegmentInfo());

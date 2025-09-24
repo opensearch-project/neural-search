@@ -56,6 +56,7 @@ import org.opensearch.index.mapper.ContentPath;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -514,7 +515,7 @@ public class TestsPrepareUtils {
                             if (original != null && field.equals("sparse_field")) {
                                 // Wrap with SparseBinaryDocValuesPassThrough for sparse fields
                                 SegmentInfo segmentInfo = prepareSegmentInfo();
-                                return new SparseBinaryDocValuesPassThrough(original, segmentInfo);
+                                return new SparseBinaryDocValuesPassThrough(original, segmentInfo, new ByteQuantizer(3.0f));
                             }
                             return original;
                         }

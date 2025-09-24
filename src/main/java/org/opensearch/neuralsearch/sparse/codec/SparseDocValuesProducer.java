@@ -14,6 +14,8 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.IOException;
 
@@ -48,7 +50,8 @@ public class SparseDocValuesProducer extends DocValuesProducer {
      */
     @Override
     public BinaryDocValues getBinary(FieldInfo field) throws IOException {
-        return new SparseBinaryDocValuesPassThrough(this.delegate.getBinary(field), this.getState().segmentInfo);
+        ByteQuantizer byteQuantizer = ByteQuantizerUtil.getByteQuantizerIngest(field);
+        return new SparseBinaryDocValuesPassThrough(this.delegate.getBinary(field), state.segmentInfo, byteQuantizer);
     }
 
     @Override

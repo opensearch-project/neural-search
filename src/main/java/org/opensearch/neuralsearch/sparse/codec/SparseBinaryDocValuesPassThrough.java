@@ -11,6 +11,7 @@ import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.IOException;
 
@@ -26,6 +27,9 @@ public class SparseBinaryDocValuesPassThrough extends BinaryDocValues implements
     /** The segment information associated with this binary doc values instance */
     @Getter
     private final SegmentInfo segmentInfo;
+
+    /** The byte quantizer instance */
+    private final ByteQuantizer byteQuantizer;
 
     @Override
     public BytesRef binaryValue() throws IOException {
@@ -66,6 +70,6 @@ public class SparseBinaryDocValuesPassThrough extends BinaryDocValues implements
         if (bytesRef == null) {
             return null;
         }
-        return new SparseVector(bytesRef);
+        return new SparseVector(bytesRef, byteQuantizer);
     }
 }

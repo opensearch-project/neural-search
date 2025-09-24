@@ -12,7 +12,7 @@ import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -42,7 +42,10 @@ public class PostingsProcessingUtils {
         if (K >= postings.size()) {
             return postings;
         }
-        PriorityQueue<DocWeight> pq = new PriorityQueue<>(K, (o1, o2) -> ByteQuantizer.compareUnsignedByte(o1.getWeight(), o2.getWeight()));
+        PriorityQueue<DocWeight> pq = new PriorityQueue<>(
+            K,
+            (o1, o2) -> ByteQuantizerUtil.compareUnsignedByte(o1.getWeight(), o2.getWeight())
+        );
         for (DocWeight docWeight : postings) {
             pq.add(docWeight);
             if (pq.size() > K) {
@@ -86,7 +89,7 @@ public class PostingsProcessingUtils {
         List<SparseVector.Item> items = summary.entrySet()
             .stream()
             .map(entry -> new SparseVector.Item(entry.getKey(), (byte) entry.getValue().intValue()))
-            .sorted((o1, o2) -> ByteQuantizer.compareUnsignedByte(o2.getWeight(), o1.getWeight()))
+            .sorted((o1, o2) -> ByteQuantizerUtil.compareUnsignedByte(o2.getWeight(), o1.getWeight()))
             .collect(Collectors.toList());
         // count total weight of items
         double totalWeight = items.stream().mapToDouble(SparseVector.Item::getIntWeight).sum();

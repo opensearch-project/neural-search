@@ -19,8 +19,11 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
+import org.opensearch.neuralsearch.sparse.mapper.MethodComponentContext;
+import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.util.TestUtils;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -29,9 +32,13 @@ import java.util.HashSet;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyFloat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
 
 public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
     private SparseAnnQueryBuilder queryBuilder;
@@ -254,9 +261,17 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
             .filter(mockFilter)
             .build();
         QueryShardContext context = mock(QueryShardContext.class);
-        MappedFieldType fieldType = mock(MappedFieldType.class);
+        SparseVectorFieldType fieldType = mock(SparseVectorFieldType.class);
         when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
+
         when(context.fieldMapper("test_field")).thenReturn(fieldType);
+        SparseMethodContext sparseMethodContext = mock(SparseMethodContext.class);
+        when(fieldType.getSparseMethodContext()).thenReturn(sparseMethodContext);
+        MethodComponentContext methodComponentContext = mock(MethodComponentContext.class);
+        when(sparseMethodContext.getMethodComponentContext()).thenReturn(methodComponentContext);
+        when(methodComponentContext.getParameter(eq(QUANTIZATION_CEILING_SEARCH_FIELD), anyFloat())).thenReturn("5.0f");
+        when(methodComponentContext.getParameter(eq(QUANTIZATION_CEILING_INGEST_FIELD), anyFloat())).thenReturn("6.0f");
+
         MappedFieldType fieldType2 = mock(MappedFieldType.class);
         when(context.fieldMapper("field")).thenReturn(fieldType2);
         Query termQuery = mock(Query.class);
@@ -270,6 +285,8 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertEquals(filterQuery, query.getFilter());
         assertEquals(HEAP_FACTOR, query.getQueryContext().getHeapFactor(), DELTA_FOR_ASSERTION);
         assertEquals(K, query.getQueryContext().getK());
+        assertEquals(5.0f, query.getQuantizationCeilSearch(), DELTA_FOR_ASSERTION);
+        assertEquals(6.0f, query.getQuantizationCeilIngest(), DELTA_FOR_ASSERTION);
     }
 
     public void testDoToQuery_withValidContext_defaultParameter() throws IOException {

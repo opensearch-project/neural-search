@@ -33,7 +33,7 @@ import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.IOException;
 
@@ -43,6 +43,8 @@ import java.io.IOException;
 @Log4j2
 public class SparseQueryWeight extends Weight {
     private final float boost;
+    private final float quantizationCeilSearch;
+    private final float quantizationCeilIngest;
     private final Weight fallbackQueryWeight;
     private final ForwardIndexCache forwardIndexCache;
 
@@ -51,10 +53,14 @@ public class SparseQueryWeight extends Weight {
         IndexSearcher searcher,
         ScoreMode scoreMode,
         float boost,
+        float quantizationCeilSearch,
+        float quantizationCeilIngest,
         ForwardIndexCache forwardIndexCache
     ) throws IOException {
         super(query);
         this.boost = boost;
+        this.quantizationCeilSearch = quantizationCeilSearch;
+        this.quantizationCeilIngest = quantizationCeilIngest;
         this.forwardIndexCache = forwardIndexCache;
         this.fallbackQueryWeight = query.getFallbackQuery().createWeight(searcher, scoreMode, boost);
     }
@@ -119,7 +125,7 @@ public class SparseQueryWeight extends Weight {
             ForwardIndexCacheItem cacheItem = forwardIndexCache.getOrCreate(key, segmentInfo.maxDoc());
             cacheGatedForwardIndexReader = getCacheGatedForwardIndexReader(cacheItem, context.reader(), query.getFieldName());
         }
-        Similarity.SimScorer simScorer = ByteQuantizer.getSimScorer(boost);
+        Similarity.SimScorer simScorer = ByteQuantizerUtil.getSimScorer(boost, quantizationCeilSearch, quantizationCeilIngest);
         BitSetIterator filterBitIterator = null;
         if (query.getFilterResults() != null) {
             BitSet filter = query.getFilterResults().get(context.id());

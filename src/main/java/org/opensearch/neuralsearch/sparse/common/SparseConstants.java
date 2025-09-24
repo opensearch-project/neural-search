@@ -13,6 +13,8 @@ public final class SparseConstants {
     public static final String PARAMETERS_FIELD = "parameters";
     public static final String N_POSTINGS_FIELD = "n_postings";
     public static final String SUMMARY_PRUNE_RATIO_FIELD = "summary_prune_ratio";
+    public static final String QUANTIZATION_CEILING_INGEST_FIELD = "quantization_ceiling_ingest";
+    public static final String QUANTIZATION_CEILING_SEARCH_FIELD = "quantization_ceiling_search";
     public static final String SEISMIC = "seismic";
     public static final String CLUSTER_RATIO_FIELD = "cluster_ratio";
     public static final String APPROXIMATE_THRESHOLD_FIELD = "approximate_threshold";
@@ -29,5 +31,7 @@ public final class SparseConstants {
         public static final int DEFAULT_APPROXIMATE_THRESHOLD = 1000000;
         public static final float DEFAULT_POSTING_PRUNE_RATIO = 0.0005f;
         public static final int DEFAULT_POSTING_MINIMUM_LENGTH = 160;
+        public static final float DEFAULT_QUANTIZATION_CEILING_INGEST = 3.0f;
+        public static final float DEFAULT_QUANTIZATION_CEILING_SEARCH = 16.0f;
     }
 }

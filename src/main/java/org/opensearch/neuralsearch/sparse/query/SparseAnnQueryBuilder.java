@@ -13,6 +13,7 @@ import lombok.experimental.Accessors;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.lucene.search.Query;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
@@ -28,10 +29,12 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
+import org.opensearch.neuralsearch.sparse.mapper.MethodComponentContext;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.IOException;
 import java.util.Collections;
@@ -41,6 +44,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_SEARCH;
 
 /**
  * SparseAnnQueryBuilder is a sub query builder of NeuralSparseQueryBuilder.
@@ -232,10 +240,23 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
 
     @Override
     public Query doToQuery(QueryShardContext context) throws IOException {
-        final MappedFieldType ft = context.fieldMapper(fieldName);
-        validateFieldType(ft);
+        final MappedFieldType fieldType = context.fieldMapper(fieldName);
+        validateFieldType(fieldType);
 
         SparseQueryContext sparseQueryContext = constructSparseQueryContext();
+
+        float quantizationCeilSearch = DEFAULT_QUANTIZATION_CEILING_SEARCH;
+        float quantizationCeilIngest = DEFAULT_QUANTIZATION_CEILING_INGEST;
+        if (fieldType instanceof SparseVectorFieldType) {
+            MethodComponentContext methodComponentContext = ((SparseVectorFieldType) fieldType).getSparseMethodContext()
+                .getMethodComponentContext();
+            quantizationCeilSearch = NumberUtils.createFloat(
+                methodComponentContext.getParameter(QUANTIZATION_CEILING_SEARCH_FIELD, DEFAULT_QUANTIZATION_CEILING_SEARCH).toString()
+            );
+            quantizationCeilIngest = NumberUtils.createFloat(
+                methodComponentContext.getParameter(QUANTIZATION_CEILING_INGEST_FIELD, DEFAULT_QUANTIZATION_CEILING_INGEST).toString()
+            );
+        }
 
         Query filterQuery = null;
         if (filter != null) {
@@ -248,9 +269,11 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         }
         return new SparseVectorQuery.SparseVectorQueryBuilder().fieldName(fieldName)
             .queryContext(sparseQueryContext)
-            .queryVector(new SparseVector(integerTokens))
+            .queryVector(new SparseVector(integerTokens, new ByteQuantizer(quantizationCeilSearch)))
             .fallbackQuery(fallbackQuery)
             .filter(filterQuery)
+            .quantizationCeilSearch(quantizationCeilSearch)
+            .quantizationCeilIngest(quantizationCeilIngest)
             .build();
     }
 
@@ -316,5 +339,4 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         }
         return intTokens.entrySet().stream().collect(Collectors.toMap(e -> String.valueOf(e.getKey()), Map.Entry::getValue));
     }
-
 }

@@ -39,6 +39,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_SEARCH;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 
 /**
@@ -157,6 +159,26 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
 
     protected String prepareIndexMapping(int nPostings, float alpha, float clusterRatio, int approximateThreshold, String sparseFieldName)
         throws IOException {
+        return prepareIndexMapping(
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold,
+            DEFAULT_QUANTIZATION_CEILING_INGEST,
+            DEFAULT_QUANTIZATION_CEILING_SEARCH,
+            sparseFieldName
+        );
+    }
+
+    protected String prepareIndexMapping(
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold,
+        float quantizationCeilingIngest,
+        float quantizationCeilingSearch,
+        String sparseFieldName
+    ) throws IOException {
         XContentBuilder mappingBuilder = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("properties")
@@ -169,6 +191,8 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
             .field("summary_prune_ratio", alpha) // Float: alpha-prune ration for summary
             .field("cluster_ratio", clusterRatio) // Float: cluster ratio
             .field("approximate_threshold", approximateThreshold)
+            .field("quantization_ceiling_ingest", quantizationCeilingIngest)
+            .field("quantization_ceiling_search", quantizationCeilingSearch)
             .endObject()
             .endObject()
             .endObject()
