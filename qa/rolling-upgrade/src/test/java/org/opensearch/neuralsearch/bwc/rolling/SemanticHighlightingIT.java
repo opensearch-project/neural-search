@@ -10,13 +10,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 
-import static org.opensearch.neuralsearch.util.TestUtils.BWCSUITE_CLUSTER;
+import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 
 /**
  * BWC test for semantic highlighting with local models during rolling upgrade.
@@ -54,7 +56,7 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
      * UPGRADED: Verify full functionality after complete upgrade
      */
     public void testSemanticHighlighting_LocalModel_RollingUpgrade() throws Exception {
-        waitForClusterHealthGreen(System.getProperty(BWCSUITE_CLUSTER));
+        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
 
         switch (getClusterType()) {
             case OLD:
@@ -210,8 +212,30 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
     private Map<String, Object> performSemanticHighlighting(String modelId) throws Exception {
         // Create match query
         QueryBuilder query = new MatchQueryBuilder(TEST_FIELD, "What is OpenSearch?");
-        // Use base search method (semantic highlighting support varies by cluster state)
-        return search(TEST_INDEX, query, null, 2);
+
+        // Build the search request with semantic highlighting
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("query", query)
+            .field("size", 2)
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(TEST_FIELD)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", modelId)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        // Execute the search request
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        return entityAsMap(response);
     }
 
     private Map<String, Object> performSemanticHighlightingWithNeuralQuery(String highlightModelId, String embeddingModelId)
@@ -223,15 +247,58 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
             .k(2)
             .build();
 
-        // Use base search method
-        return search(TEST_INDEX, neuralQuery, null, 2);
+        // Build the search request with semantic highlighting on neural query results
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("query", neuralQuery)
+            .field("size", 2)
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(TEST_FIELD)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", highlightModelId)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        // Execute the search request
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        return entityAsMap(response);
     }
 
     private Map<String, Object> performHighlightingOnNewDocument(String modelId) throws Exception {
         // Create match query
         QueryBuilder query = new MatchQueryBuilder(TEST_FIELD, "information retrieval");
-        // Use base search method
-        return search(TEST_INDEX, query, null, 2);
+
+        // Build the search request with semantic highlighting
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("query", query)
+            .field("size", 2)
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(TEST_FIELD)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", modelId)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        // Execute the search request
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        return entityAsMap(response);
     }
 
     @SuppressWarnings("unchecked")
