@@ -7,12 +7,16 @@ package org.opensearch.neuralsearch.ml;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
+import com.google.gson.Gson;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -21,11 +25,17 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.Nullable;
+import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.common.util.CollectionUtils;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
+import org.opensearch.ml.common.MLAgentType;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.dataset.MLInputDataset;
 import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
@@ -43,6 +53,7 @@ import org.opensearch.neuralsearch.processor.InferenceRequest;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
+import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.util.RetryUtil;
 import org.opensearch.ml.common.dataset.QuestionAnsweringInputDataSet;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
@@ -58,6 +69,7 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
+    private static final Gson gson = new Gson();
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
@@ -460,45 +472,258 @@ public class MLCommonsClientAccessor {
     }
 
     /**
-     * Execute agent with provided parameters and return DSL query string.
-     *
-     * @param agentId    the agent ID to execute
-     * @param parameters the parameters to pass to the agent
-     * @param listener   the listener to be called with the DSL query result
+     * Get agent type from agent ID
+     */
+    public void getAgentType(@NonNull String agentId, @NonNull ActionListener<Map<String, Object>> listener) {
+        retryableGetAgentType(agentId, 0, listener);
+    }
+
+    /**
+     * Execute get agent with retry logic
+     */
+    private void retryableGetAgentType(String agentId, int retryTime, ActionListener<Map<String, Object>> listener) {
+        mlClient.getAgent(agentId, ActionListener.wrap(mlAgent -> {
+            if (mlAgent == null) {
+                listener.onFailure(new IllegalStateException("Agent not found"));
+                return;
+            }
+
+            Map<String, Object> result = new HashMap<>();
+
+            if (mlAgent.getMlAgent().getType() != null) {
+                result.put("type", mlAgent.getMlAgent().getType());
+            }
+
+            boolean hasSystemPrompt = false;
+            boolean hasUserPrompt = false;
+
+            if (mlAgent.getMlAgent().getLlm() != null && mlAgent.getMlAgent().getLlm().getParameters() != null) {
+                Map<String, String> parameters = mlAgent.getMlAgent().getLlm().getParameters();
+                hasSystemPrompt = parameters.containsKey("system_prompt");
+                hasUserPrompt = parameters.containsKey("user_prompt");
+            }
+
+            result.put("hasSystemPrompt", hasSystemPrompt);
+            result.put("hasUserPrompt", hasUserPrompt);
+
+            listener.onResponse(result);
+        }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> retryableGetAgentType(agentId, retryTime + 1, listener), listener)));
+    }
+
+    /**
+     * Execute agent with automatic detection of agent type
      */
     public void executeAgent(
-        @NonNull final String agentId,
-        @NonNull final Map<String, String> parameters,
-        @NonNull final ActionListener<String> listener
-    ) {
-        retryableExecuteAgent(agentId, parameters, 0, listener);
+        @NonNull SearchRequest request,
+        @NonNull AgenticSearchQueryBuilder agenticQuery,
+        @NonNull String agentId,
+        @NonNull Map<String, Object> agentInfo,
+        @NonNull NamedXContentRegistry xContentRegistry,
+        @NonNull ActionListener<String> listener
+    ) throws IOException {
+        retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, 0, listener);
     }
 
+    /**
+     * Execute agent with retry logic for both flow and conversational agents
+     */
     private void retryableExecuteAgent(
-        final String agentId,
-        final Map<String, String> parameters,
-        final int retryTime,
-        final ActionListener<String> listener
-    ) {
+        SearchRequest request,
+        AgenticSearchQueryBuilder agenticQuery,
+        String agentId,
+        Map<String, Object> agentInfo,
+        NamedXContentRegistry xContentRegistry,
+        int retryTime,
+        ActionListener<String> listener
+    ) throws IOException {
+        String agentType = (String) agentInfo.get("type");
+        boolean hasSystemPrompt = (boolean) agentInfo.get("hasSystemPrompt");
+        boolean hasUserPrompt = (boolean) agentInfo.get("hasUserPrompt");
+
+        MLAgentType type;
+        try {
+            type = MLAgentType.from(agentType);
+        } catch (IllegalArgumentException e) {
+            listener.onFailure(new IllegalArgumentException("Unsupported agent type: " + agentType));
+            return;
+        }
+
+        Map<String, String> parameters = new HashMap<>();
+        parameters.put("question", agenticQuery.getQueryText());
+
+        // Add index names if present
+        String[] indices = request.indices();
+        if (indices != null && indices.length > 0) {
+            Object indexValue = (type == MLAgentType.FLOW) ? indices[0] : indices;
+            parameters.put("index_name", indexValue.toString());
+        }
+
+        if (agenticQuery.getQueryFields() != null && !agenticQuery.getQueryFields().isEmpty()) {
+            parameters.put("query_fields", gson.toJson(agenticQuery.getQueryFields()));
+        }
+
+        if (hasSystemPrompt == false && type != MLAgentType.FLOW) {
+            parameters.put("system_prompt", loadSystemPrompt());
+        }
+
+        if (hasUserPrompt == false && type != MLAgentType.FLOW) {
+            parameters.put("user_prompt", loadUserPrompt());
+        }
+
         RemoteInferenceInputDataSet dataset = RemoteInferenceInputDataSet.builder().parameters(parameters).build();
         AgentMLInput agentMLInput = new AgentMLInput(agentId, null, FunctionName.AGENT, dataset);
-        mlClient.execute(FunctionName.AGENT, agentMLInput, ActionListener.wrap(response -> {
-            try {
-                // Extract DSL query from inference results following the structure:
-                MLOutput mlOutput = (MLOutput) response.getOutput();
-                final String inferenceResults = buildQueryResultFromResponseOfOutput(mlOutput);
 
-                listener.onResponse(inferenceResults);
-            } catch (Exception e) {
-                listener.onFailure(new IllegalStateException("Failed to extract result from agent response", e));
+        mlClient.execute(FunctionName.AGENT, agentMLInput, ActionListener.wrap(response -> {
+            MLOutput mlOutput = (MLOutput) response.getOutput();
+            String result = null;
+            if (type == MLAgentType.FLOW) {
+                result = extractFlowAgentResult(mlOutput);
+            } else if (type == MLAgentType.CONVERSATIONAL) {
+                Map<String, String> conversationalResult = extractConversationalAgentResult(mlOutput, xContentRegistry);
+                result = conversationalResult.get("dsl_query");
+            } else {
+                listener.onFailure(new IllegalArgumentException("Unsupported agent type: " + agentType));
+                return;
             }
-        },
-            e -> RetryUtil.handleRetryOrFailure(
-                e,
-                retryTime,
-                () -> retryableExecuteAgent(agentId, parameters, retryTime + 1, listener),
-                listener
-            )
-        ));
+
+            listener.onResponse(result);
+        }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> {
+            try {
+                retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, retryTime + 1, listener);
+            } catch (IOException ex) {
+                throw new RuntimeException(ex);
+            }
+        }, listener)));
     }
+
+    /**
+     * Extract result from flow agent response
+     */
+    private String extractFlowAgentResult(MLOutput mlOutput) {
+        if (!(mlOutput instanceof ModelTensorOutput)) {
+            throw new IllegalStateException("Expected ModelTensorOutput but got: " + mlOutput.getClass().getSimpleName());
+        }
+        ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
+        List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+
+        if (CollectionUtils.isEmpty(tensorOutputList)) {
+            throw new IllegalStateException("Empty model result produced. Expected at least [1] tensor output, but got [0]");
+        }
+
+        // Iterate through all ModelTensors to find the DSL result
+        for (ModelTensors tensors : tensorOutputList) {
+            List<ModelTensor> tensorList = tensors.getMlModelTensors();
+            if (!CollectionUtils.isEmpty(tensorList)) {
+                for (ModelTensor tensor : tensorList) {
+                    String result = tensor.getResult();
+                    if (result != null && !result.trim().isEmpty()) {
+                        return result;
+                    }
+                }
+            }
+        }
+
+        throw new IllegalStateException("No valid DSL result found in model output");
+    }
+
+    /**
+     * Extract dsl_query and agent_steps_summary from conversational agent response
+     */
+    private Map<String, String> extractConversationalAgentResult(MLOutput mlOutput, NamedXContentRegistry xContentRegistry) {
+        if (!(mlOutput instanceof ModelTensorOutput)) {
+            throw new IllegalStateException("Expected ModelTensorOutput but got: " + mlOutput.getClass().getSimpleName());
+        }
+
+        ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
+        List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+
+        if (CollectionUtils.isEmpty(tensorOutputList)) {
+            throw new IllegalStateException("Empty model result produced. Expected at least [1] tensor output, but got [0]");
+        }
+
+        // Iterate through all ModelTensors to find the response
+        for (ModelTensors tensors : tensorOutputList) {
+            List<ModelTensor> tensorList = tensors.getMlModelTensors();
+            if (!CollectionUtils.isEmpty(tensorList)) {
+                for (ModelTensor tensor : tensorList) {
+                    if (!"response".equals(tensor.getName())) {
+                        continue;
+                    }
+
+                    Map<String, Object> dataMap = (Map<String, Object>) tensor.getDataAsMap();
+                    if (dataMap == null || !dataMap.containsKey("response")) {
+                        continue;
+                    }
+
+                    Object responseObj = dataMap.get("response");
+                    if (!(responseObj instanceof String)) {
+                        continue;
+                    }
+
+                    String responseJsonString = (String) responseObj;
+
+                    if (responseJsonString.isBlank()) {
+                        continue;
+                    }
+
+                    try (
+                        XContentParser parser = XContentType.JSON.xContent()
+                            .createParser(xContentRegistry, null, new BytesArray(responseJsonString).streamInput())
+                    ) {
+
+                        if (parser.currentToken() == null) {
+                            parser.nextToken();
+                        }
+
+                        if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
+                            throw new IllegalStateException("Expected START_OBJECT in response, but got: " + parser.currentToken());
+                        }
+
+                        Map<String, Object> responseMap = parser.map();
+                        Object dslQueryObj = responseMap.get("dsl_query");
+                        Object stepsSummaryObj = responseMap.get("agent_steps_summary");
+
+                        Map<String, String> result = new HashMap<>();
+                        if (dslQueryObj != null) {
+                            try {
+                                // Convert to proper JSON format using Gson
+                                String dslJson = gson.toJson(dslQueryObj);
+                                result.put("dsl_query", dslJson);
+                            } catch (Exception e) {
+                                throw new IllegalStateException("Failed to serialize dsl_query to JSON", e);
+                            }
+                        }
+                        if (stepsSummaryObj != null) {
+                            result.put("agent_steps_summary", stepsSummaryObj.toString());
+                        }
+
+                        if (!result.isEmpty()) return result;
+
+                    } catch (IOException e) {
+                        log.error("Failed to parse agent response JSON: {}", responseJsonString, e);
+                        throw new IllegalStateException("Failed to parse agent response using XContentParser: " + e.getMessage(), e);
+                    }
+                }
+            }
+        }
+
+        throw new IllegalStateException("No valid 'dsl_query' found in conversational agent response");
+    }
+
+    /**
+     * Load system prompt from resources file
+     */
+    private String loadSystemPrompt() throws IOException {
+        var inputStream = getClass().getClassLoader().getResourceAsStream("agentic-system-prompt.txt");
+        return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Load user prompt from resources file
+     */
+    private String loadUserPrompt() throws IOException {
+        var inputStream = getClass().getClassLoader().getResourceAsStream("agentic-user-prompt.txt");
+        return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
+    }
+
 }
