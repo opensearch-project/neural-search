@@ -18,7 +18,7 @@
             "headers": {
                 "Content-Type": "application/json"
             },
-            "request_body": "${parameters.inputs}"
+            "request_body": "{ \"question\": \"${parameters.question:-}\", \"context\": \"${parameters.context:-}\", \"inputs\": ${parameters.inputs:-null} }"
         }
     ]
 }
