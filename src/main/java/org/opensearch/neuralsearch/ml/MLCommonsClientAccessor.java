@@ -555,6 +555,9 @@ public class MLCommonsClientAccessor {
         // Add index names if present
         String[] indices = request.indices();
         if (indices != null && indices.length > 0) {
+            if (type == MLAgentType.FLOW && indices.length > 1) {
+                throw new IllegalArgumentException("Flow agent does not support multiple indices");
+            }
             parameters.put("index_name", type == MLAgentType.FLOW ? indices[0] : Arrays.toString(indices));
         }
 
