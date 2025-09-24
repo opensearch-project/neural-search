@@ -1984,8 +1984,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             waitForClusterHealthGreen(numOfNodes, 60);
         } catch (ResponseException e) {
             // Perform additional API calls to log the cause of the yellow cluster state
-            Request explain = new Request("GET", "/_cluster/allocation/explain");
-            logger.info(EntityUtils.toString(client().performRequest(explain).getEntity()));
+            try {
+                // Only call allocation/explain if there are unassigned shards
+                Request healthCheck = new Request("GET", "/_cluster/health");
+                Response healthResponse = client().performRequest(healthCheck);
+                Map<String, Object> health = entityAsMap(healthResponse);
+                int unassignedShards = ((Number) health.getOrDefault("unassigned_shards", 0)).intValue();
+
+                if (unassignedShards > 0) {
+                    Request explain = new Request("GET", "/_cluster/allocation/explain");
+                    logger.info(EntityUtils.toString(client().performRequest(explain).getEntity()));
+                }
+            } catch (Exception explainError) {
+                logger.warn("Could not get allocation explanation: " + explainError.getMessage());
+            }
+
             Request shards = new Request("GET", "/_cat/shards?v");
             logger.info(EntityUtils.toString(client().performRequest(shards).getEntity()));
             Request health = new Request("GET", "/_cat/health?v");

@@ -9,6 +9,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -228,10 +230,29 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
     @SuppressWarnings("unchecked")
     private Map<String, Object> searchWithHighlight(String index, QueryBuilder queryBuilder, String field, String modelId)
         throws Exception {
-        // For BWC tests, we'll just use the standard search with the query
-        // Semantic highlighting isn't directly supported by the base search method
-        // The test will verify highlighting exists in response
-        return search(index, queryBuilder, null, 2);
+        // Build the search request with semantic highlighting
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("query", queryBuilder)
+            .field("size", 2)
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(field)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", modelId)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        // Execute the search request
+        Request request = new Request("POST", "/" + index + "/_search");
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        return entityAsMap(response);
     }
 
     @SuppressWarnings("unchecked")
