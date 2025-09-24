@@ -106,7 +106,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         ActionListener<SearchRequest> requestListener
     ) {
         // First get agent type and prompts info
-        mlClient.getAgentType(agentId, ActionListener.wrap(agentInfo -> {
+        mlClient.getAgentDetails(agentId, ActionListener.wrap(agentInfo -> {
             mlClient.executeAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, ActionListener.wrap(agentResponse -> {
                 try {
                     // Validate response size to prevent memory exhaustion

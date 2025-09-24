@@ -664,10 +664,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
-        agentInfo.put("hasUserPrompt", false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
 
         accessor.executeAgent(
             mockRequest,
@@ -702,10 +699,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
-        agentInfo.put("hasUserPrompt", false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
 
         accessor.executeAgent(
             mockRequest,
@@ -743,10 +737,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
-        agentInfo.put("hasUserPrompt", false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
 
         accessor.executeAgent(
             mockRequest,
@@ -774,9 +765,9 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         return new ModelTensorOutput(tensorsList);
     }
 
-    public void testGetAgentType_Success() {
+    public void testGetAgentDetails_Success() {
         final String agentId = "test-agent-id";
-        final ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
+        final ActionListener<AgentInfoDTO> listener = mock(ActionListener.class);
 
         // Mock ML agent with type and system prompt
         org.opensearch.ml.common.agent.MLAgent mockMLAgent = mock(org.opensearch.ml.common.agent.MLAgent.class);
@@ -799,19 +790,19 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).getAgent(eq(agentId), any(ActionListener.class));
 
-        accessor.getAgentType(agentId, listener);
+        accessor.getAgentDetails(agentId, listener);
 
-        ArgumentCaptor<Map<String, Object>> resultCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<AgentInfoDTO> resultCaptor = ArgumentCaptor.forClass(AgentInfoDTO.class);
         verify(listener).onResponse(resultCaptor.capture());
 
-        Map<String, Object> result = resultCaptor.getValue();
-        assertEquals("conversational", result.get("type"));
-        assertEquals(true, result.get("hasSystemPrompt"));
+        AgentInfoDTO result = resultCaptor.getValue();
+        assertEquals("conversational", result.getType());
+        assertEquals(true, result.isHasSystemPrompt());
     }
 
-    public void testGetAgentType_NoSystemPrompt() {
+    public void testGetAgentDetails_NoSystemPrompt() {
         final String agentId = "test-agent-id";
-        final ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
+        final ActionListener<AgentInfoDTO> listener = mock(ActionListener.class);
 
         // Mock ML agent without system prompt
         org.opensearch.ml.common.agent.MLAgent mockMLAgent = mock(org.opensearch.ml.common.agent.MLAgent.class);
@@ -831,19 +822,19 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).getAgent(eq(agentId), any(ActionListener.class));
 
-        accessor.getAgentType(agentId, listener);
+        accessor.getAgentDetails(agentId, listener);
 
-        ArgumentCaptor<Map<String, Object>> resultCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<AgentInfoDTO> resultCaptor = ArgumentCaptor.forClass(AgentInfoDTO.class);
         verify(listener).onResponse(resultCaptor.capture());
 
-        Map<String, Object> result = resultCaptor.getValue();
-        assertEquals("flow", result.get("type"));
-        assertEquals(false, result.get("hasSystemPrompt"));
+        AgentInfoDTO result = resultCaptor.getValue();
+        assertEquals("flow", result.getType());
+        assertEquals(false, result.isHasSystemPrompt());
     }
 
-    public void testGetAgentType_NullAgent() {
+    public void testGetAgentDetails_NullAgent() {
         final String agentId = "test-agent-id";
-        final ActionListener<Map<String, Object>> listener = mock(ActionListener.class);
+        final ActionListener<AgentInfoDTO> listener = mock(ActionListener.class);
 
         Mockito.doAnswer(invocation -> {
             final ActionListener actionListener = invocation.getArgument(1);
@@ -851,7 +842,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).getAgent(eq(agentId), any(ActionListener.class));
 
-        accessor.getAgentType(agentId, listener);
+        accessor.getAgentDetails(agentId, listener);
 
         verify(listener).onFailure(any(IllegalStateException.class));
     }
@@ -881,10 +872,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", agentType);
-        agentInfo.put("hasSystemPrompt", hasSystemPrompt);
-        agentInfo.put("hasUserPrompt", false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -916,10 +904,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", agentType);
-        agentInfo.put("hasSystemPrompt", hasSystemPrompt);
-        agentInfo.put("hasUserPrompt", false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -951,10 +936,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", agentType);
-        agentInfo.put("hasSystemPrompt", hasSystemPrompt);
-        agentInfo.put("hasUserPrompt", false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -984,10 +966,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", agentType);
-        agentInfo.put("hasSystemPrompt", hasSystemPrompt);
-        agentInfo.put("hasUserPrompt", false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
 
         // No need to mock client.execute since the method should fail before calling it
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);

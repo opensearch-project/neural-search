@@ -473,25 +473,21 @@ public class MLCommonsClientAccessor {
 
     /**
      * Get agent type from agent ID
+     * @param agentId agent id
+     * @param listener listener to be called with the agent type
      */
-    public void getAgentType(@NonNull String agentId, @NonNull ActionListener<Map<String, Object>> listener) {
-        retryableGetAgentType(agentId, 0, listener);
+    public void getAgentDetails(@NonNull String agentId, @NonNull ActionListener<AgentInfoDTO> listener) {
+        retryableGetAgentDetails(agentId, 0, listener);
     }
 
     /**
      * Execute get agent with retry logic
      */
-    private void retryableGetAgentType(String agentId, int retryTime, ActionListener<Map<String, Object>> listener) {
+    private void retryableGetAgentDetails(String agentId, int retryTime, ActionListener<AgentInfoDTO> listener) {
         mlClient.getAgent(agentId, ActionListener.wrap(mlAgent -> {
             if (mlAgent == null) {
                 listener.onFailure(new IllegalStateException("Agent not found"));
                 return;
-            }
-
-            Map<String, Object> result = new HashMap<>();
-
-            if (mlAgent.getMlAgent().getType() != null) {
-                result.put("type", mlAgent.getMlAgent().getType());
             }
 
             boolean hasSystemPrompt = false;
@@ -503,21 +499,26 @@ public class MLCommonsClientAccessor {
                 hasUserPrompt = parameters.containsKey("user_prompt");
             }
 
-            result.put("hasSystemPrompt", hasSystemPrompt);
-            result.put("hasUserPrompt", hasUserPrompt);
+            AgentInfoDTO agentInfoDTO = new AgentInfoDTO(mlAgent.getMlAgent().getType(), hasSystemPrompt, hasUserPrompt);
 
-            listener.onResponse(result);
-        }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> retryableGetAgentType(agentId, retryTime + 1, listener), listener)));
+            listener.onResponse(agentInfoDTO);
+        }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> retryableGetAgentDetails(agentId, retryTime + 1, listener), listener)));
     }
 
     /**
      * Execute agent with automatic detection of agent type
+     * @param request search request
+     * @param agenticQuery agentic query
+     * @param agentId agent id
+     * @param agentInfo agent info
+     * @param xContentRegistry xContentRegistry
+     * @param listener listener to be called with the agent execution result
      */
     public void executeAgent(
         @NonNull SearchRequest request,
         @NonNull AgenticSearchQueryBuilder agenticQuery,
         @NonNull String agentId,
-        @NonNull Map<String, Object> agentInfo,
+        @NonNull AgentInfoDTO agentInfo,
         @NonNull NamedXContentRegistry xContentRegistry,
         @NonNull ActionListener<String> listener
     ) throws IOException {
@@ -531,14 +532,14 @@ public class MLCommonsClientAccessor {
         SearchRequest request,
         AgenticSearchQueryBuilder agenticQuery,
         String agentId,
-        Map<String, Object> agentInfo,
+        AgentInfoDTO agentInfo,
         NamedXContentRegistry xContentRegistry,
         int retryTime,
         ActionListener<String> listener
     ) throws IOException {
-        String agentType = (String) agentInfo.get("type");
-        boolean hasSystemPrompt = (boolean) agentInfo.get("hasSystemPrompt");
-        boolean hasUserPrompt = (boolean) agentInfo.get("hasUserPrompt");
+        String agentType = agentInfo.getType();
+        boolean hasSystemPrompt = agentInfo.isHasSystemPrompt();
+        boolean hasUserPrompt = agentInfo.isHasUserPrompt();
 
         MLAgentType type;
         try {
@@ -554,8 +555,7 @@ public class MLCommonsClientAccessor {
         // Add index names if present
         String[] indices = request.indices();
         if (indices != null && indices.length > 0) {
-            Object indexValue = (type == MLAgentType.FLOW) ? indices[0] : indices;
-            parameters.put("index_name", indexValue.toString());
+            parameters.put("index_name", type == MLAgentType.FLOW ? indices[0] : Arrays.toString(indices));
         }
 
         if (agenticQuery.getQueryFields() != null && !agenticQuery.getQueryFields().isEmpty()) {
@@ -573,6 +573,11 @@ public class MLCommonsClientAccessor {
         RemoteInferenceInputDataSet dataset = RemoteInferenceInputDataSet.builder().parameters(parameters).build();
         AgentMLInput agentMLInput = new AgentMLInput(agentId, null, FunctionName.AGENT, dataset);
 
+        if (type != MLAgentType.FLOW && type != MLAgentType.CONVERSATIONAL) {
+            listener.onFailure(new IllegalArgumentException("Unsupported agent type: " + agentType));
+            return;
+        }
+
         mlClient.execute(FunctionName.AGENT, agentMLInput, ActionListener.wrap(response -> {
             MLOutput mlOutput = (MLOutput) response.getOutput();
             String result = null;
@@ -581,9 +586,6 @@ public class MLCommonsClientAccessor {
             } else if (type == MLAgentType.CONVERSATIONAL) {
                 Map<String, String> conversationalResult = extractConversationalAgentResult(mlOutput, xContentRegistry);
                 result = conversationalResult.get("dsl_query");
-            } else {
-                listener.onFailure(new IllegalArgumentException("Unsupported agent type: " + agentType));
-                return;
             }
 
             listener.onResponse(result);
@@ -598,6 +600,8 @@ public class MLCommonsClientAccessor {
 
     /**
      * Extract result from flow agent response
+     * @param mlOutput ml output
+     * @return result
      */
     private String extractFlowAgentResult(MLOutput mlOutput) {
         if (!(mlOutput instanceof ModelTensorOutput)) {
@@ -628,6 +632,9 @@ public class MLCommonsClientAccessor {
 
     /**
      * Extract dsl_query and agent_steps_summary from conversational agent response
+     * @param mlOutput ml output
+     * @param xContentRegistry xContentRegistry
+     * @return result
      */
     private Map<String, String> extractConversationalAgentResult(MLOutput mlOutput, NamedXContentRegistry xContentRegistry) {
         if (!(mlOutput instanceof ModelTensorOutput)) {

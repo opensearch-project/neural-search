@@ -11,6 +11,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.neuralsearch.ml.AgentInfoDTO;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -132,15 +133,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         // Mock executeAgent call
         doAnswer(invocation -> {
@@ -159,7 +158,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         processor.processRequestAsync(request, mockContext, listener);
 
         // Verify ML client was called with correct parameters
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -177,15 +176,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         doAnswer(invocation -> {
             ActionListener<String> agentListener = invocation.getArgument(5);
@@ -203,7 +200,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -224,15 +221,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         // Invalid JSON response that will cause parsing to fail
         String invalidAgentResponse = "{invalid json}";
@@ -253,7 +248,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -267,23 +262,23 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Parse error"));
     }
 
-    public void testProcessRequestAsync_withAgenticQuery_getAgentTypeFailure() {
+    public void testProcessRequestAsync_withAgenticQuery_getAgentDetailsFailure() {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType failure
+        // Mock getAgentDetails failure
         doAnswer(invocation -> {
             ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onFailure(new RuntimeException("Failed to get agent info"));
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Failed to get agent info"));
@@ -456,15 +451,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         // Use match_all query which should parse correctly
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
@@ -485,7 +478,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         testProcessor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -506,15 +499,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         // Create a response larger than MAX_AGENT_RESPONSE_SIZE characters
         String oversizedResponse = "x".repeat(10_001);
@@ -535,7 +526,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -558,15 +549,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         doAnswer(invocation -> {
             ActionListener<String> agentListener = invocation.getArgument(5);
@@ -584,7 +573,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -621,15 +610,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call for flow agent
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "flow");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call for flow agent
+        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
@@ -648,7 +635,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         testProcessor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -681,15 +668,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call for agent with system prompt
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", true);
+        // Mock getAgentDetails call for agent with system prompt
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", true, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
@@ -708,7 +693,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         testProcessor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -742,15 +727,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
@@ -769,7 +752,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         testProcessor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
@@ -802,15 +785,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock getAgentType call
-        Map<String, Object> agentInfo = new HashMap<>();
-        agentInfo.put("type", "conversational");
-        agentInfo.put("hasSystemPrompt", false);
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
             return null;
-        }).when(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
@@ -829,7 +810,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         testProcessor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).getAgentType(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
         verify(mockMLClient).executeAgent(
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
