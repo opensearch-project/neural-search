@@ -15,7 +15,7 @@ import org.opensearch.common.util.concurrent.OpenSearchExecutors;
 public class ClusterTrainingExecutorIT extends OpenSearchSecureRestTestCase {
 
     private static final int INVALID_THREAD_COUNT = -5;
-    private static final String THREAD_QTY_SETTING_KEY = "neural.sparse.algo_param.index_thread_qty";
+    private static final String THREAD_QTY_SETTING_KEY = "plugins.neural_search.sparse.algo_param.index_thread_qty";
     private static final String BAD_REQUEST_ERROR = "400";
     private static final String BAD_REQUEST_TEXT = "Bad Request";
     private static final String CLUSTER_SETTINGS_ENDPOINT = "/_cluster/settings";
