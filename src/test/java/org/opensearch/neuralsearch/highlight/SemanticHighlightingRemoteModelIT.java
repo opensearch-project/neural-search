@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -18,7 +17,6 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 import org.opensearch.neuralsearch.util.TestUtils;
 
@@ -29,22 +27,17 @@ import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
-import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
 
 /**
  * Integration tests for Semantic Highlighting functionality with remote models
  */
 @Log4j2
-public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
+public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingIT {
 
     private static final String TEST_INDEX = "test-semantic-highlight-remote-index";
-    private static final String TEST_FIELD = "content";
-    private static final String TEST_KNN_VECTOR_FIELD = "content_embedding";
-    private static final int TEST_DIMENSION = 768;
 
     private String remoteHighlightModelId;
     private String remoteHighlightConnectorId;
-    private String textEmbeddingModelId;  // For neural queries
     private boolean isTorchServeAvailable = false;
     private String torchServeEndpoint;
 
@@ -52,7 +45,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void setUp() {
         super.setUp();
-        updateMLCommonsSettings();
 
         // Check for TorchServe endpoint from environment or system properties
         torchServeEndpoint = System.getenv("TORCHSERVE_ENDPOINT");
@@ -67,7 +59,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
 
                 // Create connector and deploy remote models
                 remoteHighlightConnectorId = createRemoteModelConnector(torchServeEndpoint);
-                remoteHighlightModelId = deployRemoteSemanticHighlightingModel(remoteHighlightConnectorId, "semantic-highlighter-remote");
+                remoteHighlightModelId = deployRemoteModel(remoteHighlightConnectorId, "semantic-highlighter-remote");
                 log.info("Deployed remote semantic highlighting model, model ID: {}", remoteHighlightModelId);
 
                 // Prepare text embedding model for neural queries
@@ -75,11 +67,8 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
                 log.info("Prepared text embedding model, model ID: {}", textEmbeddingModelId);
 
                 // Create index for testing (supports both text and neural searches)
-                prepareKnnIndex(
-                    TEST_INDEX,
-                    Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD, TEST_DIMENSION, TEST_SPACE_TYPE))
-                );
-                indexTestDocuments();
+                prepareHighlightingIndex(TEST_INDEX);
+                indexTestDocuments(TEST_INDEX);
             } else {
                 log.info("TorchServe not available at {}, tests will be skipped", torchServeEndpoint);
             }
@@ -99,101 +88,11 @@ public class SemanticHighlightingRemoteModelIT extends BaseNeuralSearchIT {
                 log.debug("Failed to delete index: {}", e.getMessage());
             }
 
-            // Delete text embedding pipeline
-            try {
-                Request request = new Request("DELETE", "/_ingest/pipeline/test-text-embedding-pipeline");
-                client().performRequest(request);
-            } catch (Exception e) {
-                log.debug("Failed to delete pipeline: {}", e.getMessage());
-            }
-
-            // Cleanup models
-            try {
-                if (textEmbeddingModelId != null) {
-                    deleteModel(textEmbeddingModelId);
-                }
-            } catch (Exception e) {
-                log.debug("Failed to delete text embedding model: {}", e.getMessage());
-            }
-
-            cleanupSemanticHighlightingResources(remoteHighlightConnectorId, remoteHighlightModelId);
+            // Cleanup remote model resources
+            cleanupRemoteModelResources(remoteHighlightConnectorId, remoteHighlightModelId);
         }
 
         super.tearDown();
-    }
-
-    @SneakyThrows
-    private void updateMLCommonsSettings() {
-        updateClusterSettings("plugins.ml_commons.only_run_on_ml_node", false);
-        updateClusterSettings("plugins.ml_commons.connector.private_ip_enabled", true);
-        updateClusterSettings("plugins.ml_commons.allow_registering_model_via_url", true);
-        updateClusterSettings(
-            "plugins.ml_commons.trusted_connector_endpoints_regex",
-            List.of(
-                "^https://runtime\\.sagemaker\\..*[a-z0-9-]\\.amazonaws\\.com/.*$",
-                "^http://localhost:.*",
-                "^http://127\\.0\\.0\\.1:.*",
-                "^http://torchserve:.*"
-            )
-        );
-    }
-
-    @SneakyThrows
-    private void indexTestDocuments() {
-        // Create text embedding pipeline
-        String pipeline = "test-text-embedding-pipeline";
-        XContentBuilder pipelineBuilder = XContentFactory.jsonBuilder()
-            .startObject()
-            .startArray("processors")
-            .startObject()
-            .startObject("text_embedding")
-            .field("model_id", textEmbeddingModelId)
-            .startObject("field_map")
-            .field(TEST_FIELD, TEST_KNN_VECTOR_FIELD)
-            .endObject()
-            .endObject()
-            .endObject()
-            .endArray()
-            .endObject();
-
-        Request createPipelineRequest = new Request("PUT", "/_ingest/pipeline/" + pipeline);
-        createPipelineRequest.setJsonEntity(pipelineBuilder.toString());
-        Response pipelineResponse = client().performRequest(createPipelineRequest);
-        assertEquals(200, pipelineResponse.getStatusLine().getStatusCode());
-
-        // Index documents with pipeline for neural search support
-        addKnnDocWithPipeline(
-            TEST_INDEX,
-            "1",
-            TEST_FIELD,
-            "OpenSearch is a scalable, flexible, and extensible open-source software suite for search, analytics, and observability applications. It is licensed under Apache 2.0.",
-            pipeline
-        );
-        addKnnDocWithPipeline(
-            TEST_INDEX,
-            "2",
-            TEST_FIELD,
-            "Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data.",
-            pipeline
-        );
-        addKnnDocWithPipeline(
-            TEST_INDEX,
-            "3",
-            TEST_FIELD,
-            "Natural language processing enables computers to understand, interpret, and generate human language. It combines computational linguistics with machine learning and deep learning models.",
-            pipeline
-        );
-
-        // Documents are automatically refreshed
-    }
-
-    @SneakyThrows
-    private void addKnnDocWithPipeline(String indexName, String docId, String fieldName, String content, String pipeline) {
-        Request request = new Request("PUT", "/" + indexName + "/_doc/" + docId + "?pipeline=" + pipeline + "&refresh=true");
-        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().field(fieldName, content).endObject();
-        request.setJsonEntity(builder.toString());
-        Response response = client().performRequest(request);
-        assertEquals(201, response.getStatusLine().getStatusCode());
     }
 
     /**
