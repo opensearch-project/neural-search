@@ -240,7 +240,10 @@ public enum EventStatName implements StatName {
     RERANK_ML_PROCESSOR_EXECUTIONS("rerank_ml_executions", "processors.search", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),
 
     /** Counts agentic query requests */
-    AGENTIC_QUERY_REQUESTS("agentic_query_requests", "query.agentic", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_2_0),;
+    AGENTIC_QUERY_REQUESTS("agentic_query_requests", "query.agentic", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_2_0),
+
+    /** Counts seismic query requests */
+    SEISMIC_QUERY_REQUESTS("seismic_query_requests", "query.neural_sparse", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_3_0);
 
     private final String nameString;
     private final String path;
