@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
+
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
 import static org.opensearch.neuralsearch.util.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
@@ -22,6 +23,11 @@ import org.opensearch.test.rest.OpenSearchRestTestCase;
 public abstract class AbstractRestartUpgradeRestTestCase extends BaseUpgradeTestCase {
 
     @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        tryUpdateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
+    }
+
     protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project

@@ -30,6 +30,11 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseUpgradeTestCase
     private static final Set<MLModelState> READY_FOR_INFERENCE_STATES = Set.of(MLModelState.LOADED, MLModelState.DEPLOYED);
 
     @Before
+    public void setUp() throws Exception {
+        super.setUp();
+        tryUpdateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
+    }
+
     protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
