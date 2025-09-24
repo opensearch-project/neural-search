@@ -218,9 +218,12 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         // Execute
         processor.processResponseAsync(request, response, pipelineContext, responseListener);
 
-        // Verify - should return original response on error when ignoreFailure = true
-        verify(responseListener).onResponse(response);
-        verify(responseListener, never()).onFailure(any());
+        // Verify - processor should call onFailure and let core handle ignoreFailure
+        // Core will check processor.isIgnoreFailure() and handle accordingly
+        ArgumentCaptor<Exception> errorCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(responseListener).onFailure(errorCaptor.capture());
+        assertEquals("Test error", errorCaptor.getValue().getMessage());
+        verify(responseListener, never()).onResponse(any());
     }
 
     public void testErrorHandlingWithoutIgnoreFailure() {
@@ -294,8 +297,44 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         // Execute
         processor.processResponseAsync(request, response, pipelineContext, responseListener);
 
-        // Verify - should return original response when validation fails
-        verify(responseListener).onResponse(response);
+        // Verify - should call onFailure and let core handle ignoreFailure
+        ArgumentCaptor<Exception> errorCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(responseListener).onFailure(errorCaptor.capture());
+        assertEquals("Field not found in response", errorCaptor.getValue().getMessage());
+        verify(contextBuilder, never()).build(any(), any(), anyLong());
+    }
+
+    public void testValidationFailureWithIgnoreFailure() {
+        // Setup with ignoreFailure = true
+        SearchRequest request = createSearchRequest();
+        SearchResponse response = createSearchResponse();
+
+        HighlightConfig extractedConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("test-model")
+            .queryText("test query")
+            .build();
+
+        HighlightConfig invalidatedConfig = HighlightConfig.builder()
+            .fieldName("content")
+            .modelId("test-model")
+            .queryText("test query")
+            .validationError("Field not found in response")
+            .build();
+
+        // Use ignoreFailure = true
+        processor = new TestableSemanticHighlightingProcessor(true, mlClientAccessor, configExtractor, validator, contextBuilder);
+
+        when(configExtractor.extract(eq(request), eq(response))).thenReturn(extractedConfig);
+        when(validator.validate(eq(extractedConfig), eq(response))).thenReturn(invalidatedConfig);
+
+        // Execute
+        processor.processResponseAsync(request, response, pipelineContext, responseListener);
+
+        // Verify - should still call onFailure, core will handle ignoreFailure based on processor.isIgnoreFailure()
+        ArgumentCaptor<Exception> errorCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(responseListener).onFailure(errorCaptor.capture());
+        assertEquals("Field not found in response", errorCaptor.getValue().getMessage());
         verify(contextBuilder, never()).build(any(), any(), anyLong());
     }
 
@@ -360,7 +399,8 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
 
                 config = validator.validate(config, response);
                 if (!config.isValid()) {
-                    responseListener.onResponse(response);
+                    // Let core handle ignoreFailure - just throw the exception
+                    responseListener.onFailure(new IllegalArgumentException(config.getValidationError()));
                     return;
                 }
 
@@ -375,11 +415,8 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
                 responseListener.onResponse(response);
 
             } catch (Exception e) {
-                if (isIgnoreFailure()) {
-                    responseListener.onResponse(response);
-                } else {
-                    responseListener.onFailure(e);
-                }
+                // Let core handle ignoreFailure - just propagate the exception
+                responseListener.onFailure(e);
             }
         }
     }

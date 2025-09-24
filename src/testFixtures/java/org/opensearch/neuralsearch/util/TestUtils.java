@@ -425,46 +425,6 @@ public class TestUtils {
         EventStatsManager.instance().initialize(settingsAccessor);
     }
 
-    public static String createSemanticHighlightingPipelineBody(String modelId, String fieldName, boolean batchInference) {
-        return """
-            {
-              "description": "Semantic highlighting pipeline",
-              "response_processors": [
-                {
-                  "semantic_highlighting": {}
-                }
-              ]
-            }
-            """;
-    }
-
-    public static String createIndexMappingWithDefaultPipeline(String pipelineName) {
-        return String.format(Locale.ROOT, """
-            {
-              "settings": {
-                "index": {
-                  "number_of_shards": 1,
-                  "number_of_replicas": 0,
-                  "search.default_pipeline": "%s"
-                }
-              },
-              "mappings": {
-                "properties": {
-                  "content": {
-                    "type": "text"
-                  },
-                  "title": {
-                    "type": "text"
-                  },
-                  "category": {
-                    "type": "keyword"
-                  }
-                }
-              }
-            }
-            """, pipelineName);
-    }
-
     public static void assertSemanticHighlighting(Map<String, Object> responseMap, String fieldName, String expectedHighlight) {
         Map<String, Object> hits = getTotalHits(responseMap);
         List<Map<String, Object>> hitsList = getNestedHits(responseMap);

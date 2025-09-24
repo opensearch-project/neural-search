@@ -111,12 +111,7 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
             enrichedConfig = validator.validate(enrichedConfig, response);
 
             if (!enrichedConfig.isValid()) {
-                if (ignoreFailure) {
-                    log.warn("Semantic highlighting validation failed: {}", enrichedConfig.getValidationError());
-                    responseListener.onResponse(response);
-                } else {
-                    responseListener.onFailure(new IllegalArgumentException(enrichedConfig.getValidationError()));
-                }
+                responseListener.onFailure(new IllegalArgumentException(enrichedConfig.getValidationError()));
                 return;
             }
 

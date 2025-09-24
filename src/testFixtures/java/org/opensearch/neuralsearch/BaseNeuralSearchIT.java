@@ -51,7 +51,6 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.ml.common.model.MLModelState;
-import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -99,7 +98,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
 
 import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
-import org.opensearch.neuralsearch.util.TestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
@@ -398,16 +396,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected String prepareSparseEncodingModel() {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
-        );
-        String modelId = registerModelGroupAndUploadModel(requestBody);
-        loadModel(modelId);
-        return modelId;
-    }
-
-    @SneakyThrows
-    protected String prepareSentenceHighlightingModel() {
-        String requestBody = Files.readString(
-            Path.of(Objects.requireNonNull(classLoader.getResource("highlight/LocalQuestionAnsweringModel.json")).toURI())
         );
         String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
@@ -2727,139 +2715,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return null;
     }
 
-    /**
-     * Execute a search request with all possible parameters including highlighting
-     *
-     * @param index Index to search against
-     * @param queryBuilder queryBuilder to produce source of query
-     * @param rescorer used for rescorer query builder
-     * @param resultSize number of results to return in the search
-     * @param requestParams additional request params for search
-     * @param aggs aggregations to include in the search
-     * @param postFilterBuilder post filter query builder
-     * @param sortBuilders sort builders for the search
-     * @param trackScores whether to track scores
-     * @param searchAfter search after parameters
-     * @param from from parameter for pagination
-     * @param highlightFields map of field names to highlight configurations
-     * @param highlightOptions global highlight options
-     * @return Search results represented as a map
-     */
-    @SneakyThrows
-    protected Map<String, Object> search(
-        String index,
-        QueryBuilder queryBuilder,
-        QueryBuilder rescorer,
-        int resultSize,
-        Map<String, String> requestParams,
-        List<Object> aggs,
-        QueryBuilder postFilterBuilder,
-        List<SortBuilder<?>> sortBuilders,
-        boolean trackScores,
-        List<Object> searchAfter,
-        int from,
-        Map<String, Map<String, Object>> highlightFields,
-        Map<String, Object> highlightOptions
-    ) {
-        return search(
-            index,
-            queryBuilder,
-            rescorer,
-            resultSize,
-            requestParams,
-            aggs,
-            postFilterBuilder,
-            sortBuilders,
-            trackScores,
-            searchAfter,
-            from,
-            highlightFields,
-            highlightOptions,
-            null,
-            null,
-            null
-        );
-    }
-
-    /**
-     * Execute a search request with highlighting
-     *
-     * @param index Index to search against
-     * @param queryBuilder queryBuilder to produce source of query
-     * @param resultSize number of results to return in the search
-     * @param highlightFields map of field names to highlight configurations
-     * @param highlightOptions global highlight options
-     * @return Search results represented as a map
-     */
-    @SneakyThrows
-    protected Map<String, Object> searchWithHighlight(
-        final String index,
-        final QueryBuilder queryBuilder,
-        final int resultSize,
-        final Map<String, Map<String, Object>> highlightFields,
-        final Map<String, Object> highlightOptions
-    ) {
-        return search(
-            index,
-            queryBuilder,
-            null,
-            resultSize,
-            Map.of(),
-            null,
-            null,
-            null,
-            false,
-            null,
-            0,
-            highlightFields,
-            highlightOptions,
-            null,
-            null,
-            null
-        );
-    }
-
-    /**
-     * Execute a search request with highlighting and custom tags
-     *
-     * @param index Index to search against
-     * @param queryBuilder queryBuilder to produce source of query
-     * @param resultSize number of results to return in the search
-     * @param highlightFields map of field names to highlight configurations
-     * @param highlightOptions global highlight options
-     * @param preTags array of pre-tags for highlighting
-     * @param postTags array of post-tags for highlighting
-     * @return Search results represented as a map
-     */
-    protected Map<String, Object> searchWithHighlight(
-        final String index,
-        final QueryBuilder queryBuilder,
-        final int resultSize,
-        final Map<String, Map<String, Object>> highlightFields,
-        final Map<String, Object> highlightOptions,
-        final String[] preTags,
-        final String[] postTags
-    ) {
-        return search(
-            index,
-            queryBuilder,
-            null,
-            resultSize,
-            Map.of(),
-            null,
-            null,
-            null,
-            false,
-            null,
-            0,
-            highlightFields,
-            highlightOptions,
-            Arrays.asList(preTags),
-            Arrays.asList(postTags),
-            null
-        );
-    }
-
     protected void ingestBatchDocumentWithBulk(
         String index,
         String idPrefix,
@@ -2925,38 +2780,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertOK(response);
     }
 
-    protected String createSemanticHighlightingPipeline(String pipelineName, String modelId, String fieldName, boolean batchInference)
-        throws Exception {
-        String pipelineBody = TestUtils.createSemanticHighlightingPipelineBody(modelId, fieldName, batchInference);
-        Request request = new Request("PUT", "/_search/pipeline/" + pipelineName);
-        request.setJsonEntity(pipelineBody);
-        client().performRequest(request);
-        return pipelineName;
-    }
-
     protected String createRemoteModelConnector(String endpoint) throws Exception {
         return RemoteModelTestUtils.createTorchServeConnector(client(), endpoint);
     }
 
-    protected String deployRemoteSemanticHighlightingModel(String connectorId, String modelName) throws Exception {
+    protected String deployRemoteModel(String connectorId, String modelName) throws Exception {
         return RemoteModelTestUtils.deployRemoteModel(client(), connectorId, modelName);
     }
 
-    protected void addSemanticHighlightingDocument(String indexName, String docId, String content, String title, String category)
-        throws Exception {
-        Request request = new Request("POST", "/" + indexName + "/_doc/" + docId + "?refresh=true");
-        String docBody = String.format(Locale.ROOT, """
-            {
-              "content": "%s",
-              "title": "%s",
-              "category": "%s"
-            }
-            """, content, title, category);
-        request.setJsonEntity(docBody);
-        client().performRequest(request);
-    }
-
-    protected void cleanupSemanticHighlightingResources(String connectorId, String modelId) {
+    protected void cleanupRemoteModelResources(String connectorId, String modelId) {
         if (modelId != null) {
             RemoteModelTestUtils.deleteModel(client(), modelId);
         }
