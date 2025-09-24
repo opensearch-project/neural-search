@@ -331,7 +331,7 @@ def handle(data, context):
 
     # Process requests
     results = []
-    
+
     # Log raw data for debugging
     logger.info(f"Raw data received: type={type(data)}, len={len(data) if data else 0}")
     if data and len(data) > 0:
@@ -344,52 +344,43 @@ def handle(data, context):
 
         # Log the input for debugging
         logger.info(f"Processing input_data type: {type(input_data)}, content preview: {str(input_data)[:200]}")
-        
-        # Handle different input formats
-        # Check if input_data is directly an array (unified connector always sends array)
-        if isinstance(input_data, list):
-            # Array format - could be single or batch
-            logger.info(f"Processing array with {len(input_data)} items")
-            
-            if len(input_data) == 1:
-                # Single document wrapped in array - return single format
-                logger.info("Single document in array format")
-                result = _process_single(input_data[0]["question"], input_data[0]["context"])
-                results.append(result)
-            else:
-                # Multiple documents - return batch format
-                logger.info("Batch processing multiple documents")
-                batch_results = []
-                for item in input_data:
-                    result = _process_single(item["question"], item["context"])
-                    batch_results.append(result["highlights"])
-                # For batch, TorchServe expects a single response containing all results
-                results.append({"highlights": batch_results})
-                
-        elif "inputs" in input_data:
-            # Batch processing with wrapper - handle both array and JSON string formats
+
+        # Unified format detection - check for inputs field first
+        if "inputs" in input_data and input_data["inputs"] is not None:
+            # Batch format from OpenSearch 3.3+
             inputs = input_data["inputs"]
-            
-            if isinstance(inputs, list):
-                logger.info(f"Processing wrapped batch with {len(inputs)} items")
-                # For wrapped format, return nested structure like SageMaker
-                batch_results = []
+
+            # Handle case where inputs might be a JSON string
+            if isinstance(inputs, str):
+                try:
+                    inputs = json.loads(inputs)
+                except:
+                    logger.error(f"Failed to parse inputs string: {inputs}")
+                    results.append({"error": "Invalid inputs format"})
+                    continue
+
+            if isinstance(inputs, list) and len(inputs) > 0:
+                logger.info(f"Processing batch with {len(inputs)} documents")
+                # Process as batch - return nested structure for neural search
+                batch_highlights = []
                 for item in inputs:
                     result = _process_single(item["question"], item["context"])
-                    batch_results.append(result["highlights"])
-                # Return a single result containing all highlights (SageMaker format)
-                results.append({"highlights": batch_results})
+                    # For batch, each document gets wrapped with {"highlights": [...]}
+                    batch_highlights.append({"highlights": result["highlights"]})
+                # Return nested structure for batch
+                results.append({"highlights": batch_highlights})
             else:
-                # For direct string inputs (shouldn't happen with ML Commons connector)
-                results.append({"error": "Unexpected inputs format"})
+                logger.error(f"Invalid inputs format: {inputs}")
+                results.append({"error": "Invalid inputs format"})
 
         elif "question" in input_data and "context" in input_data:
-            # Single document
+            # Single format from OpenSearch 3.0-3.2
             logger.info("Processing single document")
             result = _process_single(input_data["question"], input_data["context"])
+            # Return flat structure for single
             results.append(result)
         else:
-            logger.error(f"Invalid input format. Type: {type(input_data)}, Content: {input_data}")
+            logger.error(f"Invalid input format. Keys: {input_data.keys() if isinstance(input_data, dict) else 'not a dict'}")
             results.append({"error": "Invalid input format"})
 
     logger.info(f"Returning {len(results)} results")
