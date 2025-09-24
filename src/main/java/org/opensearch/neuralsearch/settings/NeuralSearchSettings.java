@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.settings;
 
-import java.util.List;
-
 import org.opensearch.common.settings.Setting;
 
 import lombok.AccessLevel;
@@ -25,11 +23,6 @@ public final class NeuralSearchSettings {
     public static final int DEFAULT_INDEX_THREAD_QTY = 1; // Choosing 1 as default value to protect safety
     public static final int MINIMUM_INDEX_THREAD_QTY = 1;
     public static final int MAXIMUM_INDEX_THREAD_QTY = 1024;
-
-    // Constants for system-generated factories setting
-    public static final String SYSTEM_GENERATED_FACTORIES_KEY = "cluster.search.enabled_system_generated_factories";
-    public static final String SEMANTIC_HIGHLIGHTER_FACTORY_NAME = "semantic-highlighter";
-    public static final List<String> DEFAULT_ENABLED_SYSTEM_FACTORIES = List.of(SEMANTIC_HIGHLIGHTER_FACTORY_NAME);
 
     /**
      * Specifies the initial memory limit for the parent circuit breaker.
