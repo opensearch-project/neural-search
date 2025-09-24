@@ -193,7 +193,6 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         if (docID == -1) {
             throw new IllegalStateException("docId must be set before startDoc");
         }
-        ByteQuantizer byteQuantizer = ByteQuantizerUtil.getByteQuantizerIngest(fieldInfo);
         docWeights.add(new DocWeight(docID, byteQuantizer.quantize(ValueEncoder.decodeFeatureValue(freq))));
     }
 
