@@ -1052,6 +1052,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);
     }
+
     /**
      * Tests successful batch sentence highlighting inference with valid input.
      */
