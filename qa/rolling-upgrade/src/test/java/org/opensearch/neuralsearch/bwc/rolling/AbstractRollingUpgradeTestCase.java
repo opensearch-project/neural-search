@@ -9,8 +9,8 @@ import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
-
 import org.junit.Before;
+
 import org.opensearch.common.settings.Settings;
 import org.opensearch.ml.common.model.MLModelState;
 import static org.opensearch.neuralsearch.util.TestUtils.NEURAL_SEARCH_BWC_PREFIX;
@@ -30,11 +30,6 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseUpgradeTestCase
     private static final Set<MLModelState> READY_FOR_INFERENCE_STATES = Set.of(MLModelState.LOADED, MLModelState.DEPLOYED);
 
     @Before
-    public void setUp() throws Exception {
-        super.setUp();
-        tryUpdateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
-    }
-
     protected String getIndexNameForTest() {
         // Creating index name by concatenating "neural-bwc-" prefix with test method name
         // for all the tests in this sub-project
@@ -43,12 +38,14 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseUpgradeTestCase
 
     @Override
     protected final Settings restClientSettings() {
+        tryUpdateClusterSettings("plugins.ml_commons.disk_free_space_threshold", -1);
         return Settings.builder()
             .put(super.restClientSettings())
             // increase the timeout here to 90 seconds to handle long waits for a green
             // cluster health. the waits for green need to be longer than a minute to
             // account for delayed shards
             .put(OpenSearchRestTestCase.CLIENT_SOCKET_TIMEOUT, "120s")
+            .put("plugins.ml_commons.disk_free_space_threshold", -1)
             .build();
     }
 
