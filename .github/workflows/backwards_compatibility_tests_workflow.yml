@@ -25,22 +25,17 @@ jobs:
       BWC_VERSION_RESTART_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
-      # Run cleanup on host before starting container
-      - name: Check disk space before cleanup
-        run: |
-          echo "Disk space before cleanup (host):"
-          df -h
-
+      # Maximize disk space BEFORE checkout as per documentation
       - name: Maximize build disk space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 512
+          root-reserve-mb: 4096  # Increase reserve for Docker operations
           swap-size-mb: 1024
           remove-dotnet: true
           remove-android: true
           remove-haskell: true
           remove-codeql: true
-          remove-docker-images: true
+          remove-docker-images: false  # Keep Docker images since we need them
 
       - name: Check disk space after cleanup
         run: |
@@ -94,22 +89,17 @@ jobs:
       BWC_VERSION_ROLLING_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
-      # Run cleanup on host before starting container
-      - name: Check disk space before cleanup
-        run: |
-          echo "Disk space before cleanup (host):"
-          df -h
-
+      # Maximize disk space BEFORE checkout as per documentation
       - name: Maximize build disk space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 512
+          root-reserve-mb: 4096  # Increase reserve for Docker operations
           swap-size-mb: 1024
           remove-dotnet: true
           remove-android: true
           remove-haskell: true
           remove-codeql: true
-          remove-docker-images: true
+          remove-docker-images: false  # Keep Docker images since we need them
 
       - name: Check disk space after cleanup
         run: |
