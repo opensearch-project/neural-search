@@ -60,6 +60,7 @@ jobs:
             -e BWC_VERSION_RESTART_UPGRADE=${{ matrix.bwc_version }} \
             ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }} \
             bash -c "
+              mkdir -p /node /node24 &&
               ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }} &&
               echo 'Disk space in container:' &&
               df -h &&
@@ -123,6 +124,7 @@ jobs:
             -e BWC_VERSION_ROLLING_UPGRADE=${{ matrix.bwc_version }} \
             ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }} \
             bash -c "
+              mkdir -p /node /node24 &&
               ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }} &&
               echo 'Disk space in container:' &&
               df -h &&
