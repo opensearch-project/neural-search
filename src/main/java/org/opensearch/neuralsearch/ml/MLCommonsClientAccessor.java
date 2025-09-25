@@ -916,4 +916,128 @@ public class MLCommonsClientAccessor {
         return new String(inputStream.readAllBytes(), StandardCharsets.UTF_8);
     }
 
+    /**
+     * Parse the ML output for batch highlighting results
+     * Leverages buildMapResultFromResponse for consistent tensor parsing
+     */
+    private List<List<Map<String, Object>>> parseBatchHighlightingOutput(MLOutput mlOutput) {
+        List<List<Map<String, Object>>> results = new ArrayList<>();
+
+        // Validate ML output type
+        if (mlOutput == null) {
+            log.error("ML output is null in batch highlighting parsing");
+            throw new IllegalStateException("ML output cannot be null");
+        }
+
+        List<Map<String, ?>> tensorMaps;
+        try {
+            tensorMaps = buildMapResultFromResponse(mlOutput);
+        } catch (IllegalStateException e) {
+            log.warn("No valid tensor output in batch highlighting response: {}", e.getMessage());
+            return results;
+        }
+
+        // Process each tensor map which represents a document's highlights
+        for (Map<String, ?> dataMap : tensorMaps) {
+            if (dataMap == null) {
+                log.warn("Null data map in tensor, adding empty result");
+                results.add(new ArrayList<>());
+                continue;
+            }
+
+            Object highlightsObj = dataMap.get(SemanticHighlightingConstants.HIGHLIGHTS_KEY);
+
+            if (highlightsObj == null) {
+                log.debug("No highlights key in response, adding empty result");
+                results.add(new ArrayList<>());
+                continue;
+            }
+
+            if (!(highlightsObj instanceof List<?> highlightsList)) {
+                log.error("Invalid highlights type: expected List, got: {}", highlightsObj.getClass().getSimpleName());
+                throw new IllegalStateException("Expected highlights to be a List, but got: " + highlightsObj.getClass().getSimpleName());
+            }
+
+            if (highlightsList.isEmpty()) {
+                log.debug("Empty highlights list, adding empty result");
+                results.add(new ArrayList<>());
+                continue;
+            }
+
+            // Check if it's a batch response (list of lists) or single document response
+            Object firstElement = highlightsList.get(0);
+            if (firstElement == null) {
+                log.debug("First element in highlights list is null, adding empty result");
+                results.add(new ArrayList<>());
+                continue;
+            }
+
+            // Handle batch response format (list of lists)
+            if (firstElement instanceof List) {
+                // Process each document's highlights in the batch
+                for (Object docHighlights : highlightsList) {
+                    results.add(processDocumentHighlights(docHighlights));
+                }
+            } else if (firstElement instanceof Map) {
+                // Handle single document format (list of maps)
+                results.add(processDocumentHighlights(highlightsList));
+            } else {
+                log.error(
+                    "Invalid highlights structure: expected list of lists or list of maps, got list of: {}",
+                    firstElement.getClass().getSimpleName()
+                );
+                throw new IllegalStateException(
+                    "Expected highlights to be a list of lists or list of maps, but got list of: " + firstElement.getClass().getSimpleName()
+                );
+            }
+        }
+
+        return results;
+    }
+
+    /**
+     * Process a single document's highlights
+     */
+    private List<Map<String, Object>> processDocumentHighlights(Object docHighlights) {
+        List<Map<String, Object>> highlights = new ArrayList<>();
+
+        if (docHighlights == null) {
+            log.debug("Null document highlights, returning empty list");
+            return highlights;
+        }
+
+        if (!(docHighlights instanceof List<?> highlightList)) {
+            log.error("Invalid document highlights type: expected List, got: {}", docHighlights.getClass().getSimpleName());
+            throw new IllegalStateException(
+                "Expected document highlights to be a List, but got: " + docHighlights.getClass().getSimpleName()
+            );
+        }
+
+        for (Object item : highlightList) {
+            if (item == null) {
+                log.debug("Null highlight item, skipping");
+                continue;
+            }
+
+            if (!(item instanceof Map)) {
+                log.error("Invalid highlight item type: expected Map, got: {}", item.getClass().getSimpleName());
+                throw new IllegalStateException("Expected highlight item to be a Map, but got: " + item.getClass().getSimpleName());
+            }
+
+            @SuppressWarnings("unchecked")
+            Map<String, Object> highlight = (Map<String, Object>) item;
+
+            // Validate highlight structure has required fields
+            if (!highlight.containsKey(SemanticHighlightingConstants.START_KEY)
+                || !highlight.containsKey(SemanticHighlightingConstants.END_KEY)) {
+                log.warn("Highlight missing required fields (start/end), skipping: {}", highlight);
+                continue;
+            }
+
+            highlights.add(highlight);
+        }
+
+        return highlights;
+    }
+
 }
