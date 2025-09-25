@@ -18,7 +18,7 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NeuralSearchSettings {
 
-    public static final String SPARSE_ALGO_PARAM_INDEX_THREAD_QTY = "neural.sparse.algo_param.index_thread_qty";
+    public static final String SPARSE_ALGO_PARAM_INDEX_THREAD_QTY = "plugins.neural_search.sparse.algo_param.index_thread_qty";
     public static final String NEURAL_CIRCUIT_BREAKER_NAME = "neural_search";
     public static final int DEFAULT_INDEX_THREAD_QTY = 1; // Choosing 1 as default value to protect safety
     public static final int MINIMUM_INDEX_THREAD_QTY = 1;
