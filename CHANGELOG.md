@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 
 - [Unit Test] Enable mocking of final classes and static functions ([#1528](https://github.com/opensearch-project/neural-search/pull/1528)).
+- [BWC Test] Remove CodeQL from BWC's CI node to increase available disk size ([#1584](https://github.com/opensearch-project/neural-search/pull/1584)) 
 
 ### Documentation
 
