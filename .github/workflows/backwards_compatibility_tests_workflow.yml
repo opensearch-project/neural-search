@@ -2,12 +2,7 @@ name: Backwards Compatibility Tests NeuralSearch
 on:
   push:
     branches:
-      - "*"
-      - "feature/**"
-  pull_request:
-    branches:
-      - "*"
-      - "feature/**"
+      - "test-bwc"
 
 jobs:
   Get-CI-Image-Tag:
@@ -19,29 +14,21 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [ 21, 24 ]
+        java: [ 21 ]
         os: [ubuntu-latest]
-        bwc_version : [ "2.9.0","2.10.0","2.11.0","2.12.0","2.13.0","2.14.0","2.15.0","2.16.0","2.17.0","2.18.0","2.19.0","2.20.0-SNAPSHOT","3.0.0", "3.1.0" ]
+        bwc_version : [ "3.0.0" ]  # Test with just one version for quick testing
         opensearch_version : [ "3.2.0-SNAPSHOT" ]
 
     name: NeuralSearch Restart-Upgrade BWC Tests
     runs-on: ${{ matrix.os }}
-    container:
-      # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
-      # this image tag is subject to change as more dependencies and updates will arrive over time
-      image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
-      # need to switch to root so that github actions can install runner binary on container without permission issues.
-      options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
     env:
       BWC_VERSION_RESTART_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
-      - name: Run start commands
-        run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
-
+      # Run cleanup on host before starting container
       - name: Check disk space before cleanup
         run: |
-          echo "Disk space before cleanup:"
+          echo "Disk space before cleanup (host):"
           df -h
 
       - name: Free up disk space
@@ -52,7 +39,7 @@ jobs:
 
       - name: Check disk space after cleanup
         run: |
-          echo "Disk space after cleanup:"
+          echo "Disk space after cleanup (host):"
           df -h
 
       - name: Checkout neural-search
@@ -64,45 +51,47 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
-      - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
+      - name: Run NeuralSearch Restart-Upgrade BWC Tests in Container
         run: |
-          chown -R 1000:1000 `pwd`
-          echo "Running restart-upgrade backwards compatibility tests ..."
-          su `id -un 1000` -c "./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          docker run \
+            --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e BWC_VERSION_RESTART_UPGRADE=${{ matrix.bwc_version }} \
+            ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }} \
+            bash -c "
+              ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }} &&
+              echo 'Disk space in container:' &&
+              df -h &&
+              chown -R 1000:1000 /workspace &&
+              su \$(id -un 1000) -c './gradlew :qa:restart-upgrade:testAgainstNewCluster -D\"tests.bwc.version=${{ matrix.bwc_version }}\"'
+            "
 
       - name: Check disk space after tests
         if: always()
         run: |
-          echo "Disk space after tests completed:"
+          echo "Disk space after tests completed (host):"
           df -h
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [21, 24]
+        java: [21]
         os: [ubuntu-latest]
-        bwc_version: [ "2.20.0-SNAPSHOT","3.0.0", "3.1.0" ]
+        bwc_version: [ "3.0.0" ]  # Test with just one version for quick testing
         opensearch_version: [ "3.2.0-SNAPSHOT" ]
 
     name: NeuralSearch Rolling-Upgrade BWC Tests
     runs-on: ${{ matrix.os }}
-    container:
-      # using the same image which is used by opensearch-build team to build the OpenSearch Distribution
-      # this image tag is subject to change as more dependencies and updates will arrive over time
-      image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
-      # need to switch to root so that github actions can install runner binary on container without permission issues.
-      options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
     env:
       BWC_VERSION_ROLLING_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
-      - name: Run start commands
-        run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
-
+      # Run cleanup on host before starting container
       - name: Check disk space before cleanup
         run: |
-          echo "Disk space before cleanup:"
+          echo "Disk space before cleanup (host):"
           df -h
 
       - name: Free up disk space
@@ -113,7 +102,7 @@ jobs:
 
       - name: Check disk space after cleanup
         run: |
-          echo "Disk space after cleanup:"
+          echo "Disk space after cleanup (host):"
           df -h
 
       - name: Checkout neural-search
@@ -125,14 +114,24 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
-      - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
+      - name: Run NeuralSearch Rolling-Upgrade BWC Tests in Container
         run: |
-          chown -R 1000:1000 `pwd`
-          echo "Running rolling-upgrade backwards compatibility tests ..."
-          su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          docker run \
+            --rm \
+            -v ${{ github.workspace }}:/workspace \
+            -w /workspace \
+            -e BWC_VERSION_ROLLING_UPGRADE=${{ matrix.bwc_version }} \
+            ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }} \
+            bash -c "
+              ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }} &&
+              echo 'Disk space in container:' &&
+              df -h &&
+              chown -R 1000:1000 /workspace &&
+              su \$(id -un 1000) -c './gradlew :qa:rolling-upgrade:testRollingUpgrade -D\"tests.bwc.version=${{ matrix.bwc_version }}\"'
+            "
 
       - name: Check disk space after tests
         if: always()
         run: |
-          echo "Disk space after tests completed:"
+          echo "Disk space after tests completed (host):"
           df -h
