@@ -32,10 +32,12 @@ jobs:
           df -h
 
       - name: Free up disk space
+        timeout-minutes: 2
         uses: mathio/gha-cleanup@v1
         with:
           remove-browsers: true
           verbose: false
+        continue-on-error: true
 
       - name: Check disk space after cleanup
         run: |
@@ -96,10 +98,12 @@ jobs:
           df -h
 
       - name: Free up disk space
+        timeout-minutes: 2
         uses: mathio/gha-cleanup@v1
         with:
           remove-browsers: true
           verbose: false
+        continue-on-error: true
 
       - name: Check disk space after cleanup
         run: |
