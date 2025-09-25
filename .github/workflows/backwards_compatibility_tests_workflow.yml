@@ -39,6 +39,22 @@ jobs:
       - name: Run start commands
         run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
 
+      - name: Check disk space before cleanup
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+
+      - name: Free up disk space
+        uses: mathio/gha-cleanup@v1
+        with:
+          remove-browsers: true
+          verbose: false
+
+      - name: Check disk space after cleanup
+        run: |
+          echo "Disk space after cleanup:"
+          df -h
+
       - name: Checkout neural-search
         uses: actions/checkout@v4
 
@@ -53,6 +69,12 @@ jobs:
           chown -R 1000:1000 `pwd`
           echo "Running restart-upgrade backwards compatibility tests ..."
           su `id -un 1000` -c "./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+
+      - name: Check disk space after tests
+        if: always()
+        run: |
+          echo "Disk space after tests completed:"
+          df -h
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
@@ -78,6 +100,22 @@ jobs:
       - name: Run start commands
         run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
 
+      - name: Check disk space before cleanup
+        run: |
+          echo "Disk space before cleanup:"
+          df -h
+
+      - name: Free up disk space
+        uses: mathio/gha-cleanup@v1
+        with:
+          remove-browsers: true
+          verbose: false
+
+      - name: Check disk space after cleanup
+        run: |
+          echo "Disk space after cleanup:"
+          df -h
+
       - name: Checkout neural-search
         uses: actions/checkout@v4
 
@@ -92,3 +130,9 @@ jobs:
           chown -R 1000:1000 `pwd`
           echo "Running rolling-upgrade backwards compatibility tests ..."
           su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+
+      - name: Check disk space after tests
+        if: always()
+        run: |
+          echo "Disk space after tests completed:"
+          df -h
