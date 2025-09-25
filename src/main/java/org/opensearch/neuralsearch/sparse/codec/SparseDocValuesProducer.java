@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.IOException;
+import java.util.Map;
 
 /**
  * DocValues producer for sparse vector fields that wraps a delegate producer
@@ -27,6 +28,8 @@ public class SparseDocValuesProducer extends DocValuesProducer {
     private final DocValuesProducer delegate;
     @Getter
     private final SegmentReadState state;
+
+    private Map<FieldInfo, ByteQuantizer> byteQuantizerMap;
 
     /**
      * Creates a new sparse doc values producer.
@@ -50,8 +53,11 @@ public class SparseDocValuesProducer extends DocValuesProducer {
      */
     @Override
     public BinaryDocValues getBinary(FieldInfo field) throws IOException {
-        ByteQuantizer byteQuantizer = ByteQuantizerUtil.getByteQuantizerIngest(field);
-        return new SparseBinaryDocValuesPassThrough(this.delegate.getBinary(field), state.segmentInfo, byteQuantizer);
+        if (!byteQuantizerMap.containsKey(field)) {
+            byteQuantizerMap.put(field, ByteQuantizerUtil.getByteQuantizerIngest(field));
+        }
+
+        return new SparseBinaryDocValuesPassThrough(this.delegate.getBinary(field), state.segmentInfo, byteQuantizerMap.get(field));
     }
 
     @Override
