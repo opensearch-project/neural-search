@@ -342,7 +342,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                 }
             }
         } catch (Exception e) {
-            log.error(String.format(Locale.ROOT, "Failed to get quantization ceiling search value for field [%s]", fieldName), e);
+            log.error("Failed to get quantization ceiling search value for field [{}]", fieldName, e);
         }
         return quantizationCeilSearch;
     }
