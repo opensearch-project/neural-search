@@ -247,19 +247,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         SparseQueryContext sparseQueryContext = constructSparseQueryContext();
 
         // different field infos should have the same value for quantization ceiling search
-        float quantizationCeilSearch = DEFAULT_QUANTIZATION_CEILING_SEARCH;
-        try {
-            for (LeafReaderContext leafContext : context.searcher().getTopReaderContext().leaves()) {
-                FieldInfos fieldInfos = leafContext.reader().getFieldInfos();
-                FieldInfo fieldInfo = fieldInfos.fieldInfo(fieldName);
-                if (fieldInfo != null) {
-                    quantizationCeilSearch = ByteQuantizationUtil.getCeilingValueSearch(fieldInfo);
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            log.error(String.format(Locale.ROOT, "Failed to get quantization ceiling search value for field [%s]", fieldName), e);
-        }
+        float quantizationCeilSearch = getQuantizationCeilSearch(context, fieldName);
 
         Query filterQuery = null;
         if (filter != null) {
@@ -339,5 +327,23 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             throw new IllegalArgumentException("Query tokens should be valid integer");
         }
         return intTokens.entrySet().stream().collect(Collectors.toMap(e -> String.valueOf(e.getKey()), Map.Entry::getValue));
+    }
+
+    private static float getQuantizationCeilSearch(QueryShardContext context, String fieldName) {
+        // different field infos should have the same value for quantization ceiling search
+        float quantizationCeilSearch = DEFAULT_QUANTIZATION_CEILING_SEARCH;
+        try {
+            for (LeafReaderContext leafContext : context.searcher().getTopReaderContext().leaves()) {
+                FieldInfos fieldInfos = leafContext.reader().getFieldInfos();
+                FieldInfo fieldInfo = fieldInfos.fieldInfo(fieldName);
+                if (fieldInfo != null) {
+                    quantizationCeilSearch = ByteQuantizationUtil.getCeilingValueSearch(fieldInfo);
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            log.error(String.format(Locale.ROOT, "Failed to get quantization ceiling search value for field [%s]", fieldName), e);
+        }
+        return quantizationCeilSearch;
     }
 }

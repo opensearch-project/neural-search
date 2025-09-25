@@ -53,6 +53,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_N_POSTINGS;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_POSTING_MINIMUM_LENGTH;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_POSTING_PRUNE_RATIO;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
 
 /**
  * ClusteredPostingTermsWriter is used to write postings for each segment.
@@ -71,7 +72,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private final int version;
     private SegmentWriteState state;
     private DocValuesProducer docValuesProducer;
-    private ByteQuantizer byteQuantizer;
+    private ByteQuantizer byteQuantizer = new ByteQuantizer(DEFAULT_QUANTIZATION_CEILING_INGEST);
     private final CodecUtilWrapper codecUtilWrapper;
 
     @Override
