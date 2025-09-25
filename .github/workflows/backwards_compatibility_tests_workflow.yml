@@ -79,6 +79,10 @@ jobs:
       BWC_VERSION_ROLLING_UPGRADE: ${{ matrix.bwc_version }}
 
     steps:
+      - name: "node-cleanup"
+        run: |
+          rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /__t/CodeQL 
+          
       - name: Run start commands
         run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
 
