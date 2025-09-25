@@ -5,13 +5,13 @@
 package org.opensearch.neuralsearch.sparse.codec;
 
 import org.apache.lucene.index.BinaryDocValues;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.util.BytesRef;
 import org.junit.Before;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.IOException;
 
@@ -20,11 +20,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
 
 public class SparseBinaryDocValuesPassThroughTests extends AbstractSparseTestBase {
 
     private BinaryDocValues mockDelegate;
     private SegmentInfo mockSegmentInfo;
+    private FieldInfo mockFieldInfo;
     private SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough;
 
     @Before
@@ -33,14 +35,17 @@ public class SparseBinaryDocValuesPassThroughTests extends AbstractSparseTestBas
         super.setUp();
         mockDelegate = mock(BinaryDocValues.class);
         mockSegmentInfo = mock(SegmentInfo.class);
-        sparseBinaryDocValuesPassThrough = new SparseBinaryDocValuesPassThrough(mockDelegate, mockSegmentInfo, new ByteQuantizer(3.0f));
+        mockFieldInfo = mock(FieldInfo.class);
+        when(mockFieldInfo.getAttribute(QUANTIZATION_CEILING_INGEST_FIELD)).thenReturn("5.0");
+
+        sparseBinaryDocValuesPassThrough = new SparseBinaryDocValuesPassThrough(mockDelegate, mockSegmentInfo, mockFieldInfo);
     }
 
     public void testConstructor_InitializesFieldsCorrectly() {
         SparseBinaryDocValuesPassThrough sparseBinaryDocValuesPassThrough = new SparseBinaryDocValuesPassThrough(
             mockDelegate,
             mockSegmentInfo,
-            new ByteQuantizer(3.0f)
+            mockFieldInfo
         );
 
         assertSame(mockSegmentInfo, sparseBinaryDocValuesPassThrough.getSegmentInfo());

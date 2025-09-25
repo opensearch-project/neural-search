@@ -554,10 +554,10 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
-        final MappedFieldType fieldType = context.fieldMapper(fieldName);
-        boolean isSeismic = isSeismicFieldType(fieldType);
+        final MappedFieldType ft = context.fieldMapper(fieldName);
+        boolean isSeismic = isSeismicFieldType(ft);
         if (!isSeismic) {
-            validateFieldType(fieldType);
+            validateFieldType(ft);
         }
         Map<String, Float> queryTokens = getQueryTokens(context);
         BooleanQuery.Builder builder = new BooleanQuery.Builder();

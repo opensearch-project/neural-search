@@ -13,7 +13,7 @@ import org.opensearch.neuralsearch.sparse.common.DocWeightIterator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 
@@ -46,7 +46,7 @@ public class SparsePostingsEnum extends PostingsEnum {
     @Override
     public int freq() throws IOException {
         assert this.currentDocWeight != null;
-        return ByteQuantizerUtil.getUnsignedByte(this.currentDocWeight.weight());
+        return ByteQuantizationUtil.getUnsignedByte(this.currentDocWeight.weight());
     }
 
     @Override

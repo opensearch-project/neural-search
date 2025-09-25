@@ -4,6 +4,12 @@
  */
 package org.opensearch.neuralsearch.sparse.query;
 
+import org.apache.lucene.index.CompositeReaderContext;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
+import org.apache.lucene.index.LeafReader;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.junit.Before;
 import org.mockito.MockitoAnnotations;
@@ -19,8 +25,6 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
-import org.opensearch.neuralsearch.sparse.mapper.MethodComponentContext;
-import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
@@ -29,15 +33,13 @@ import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyFloat;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
 
 public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
@@ -265,12 +267,19 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
 
         when(context.fieldMapper("test_field")).thenReturn(fieldType);
-        SparseMethodContext sparseMethodContext = mock(SparseMethodContext.class);
-        when(fieldType.getSparseMethodContext()).thenReturn(sparseMethodContext);
-        MethodComponentContext methodComponentContext = mock(MethodComponentContext.class);
-        when(sparseMethodContext.getMethodComponentContext()).thenReturn(methodComponentContext);
-        when(methodComponentContext.getParameter(eq(QUANTIZATION_CEILING_SEARCH_FIELD), anyFloat())).thenReturn("5.0f");
-        when(methodComponentContext.getParameter(eq(QUANTIZATION_CEILING_INGEST_FIELD), anyFloat())).thenReturn("6.0f");
+        IndexSearcher indexSearcher = mock(IndexSearcher.class);
+        when(context.searcher()).thenReturn(indexSearcher);
+        CompositeReaderContext compositeReaderContext = mock(CompositeReaderContext.class);
+        when(indexSearcher.getTopReaderContext()).thenReturn(compositeReaderContext);
+        LeafReaderContext leafReaderContext = mock(LeafReaderContext.class);
+        when(compositeReaderContext.leaves()).thenReturn(List.of(leafReaderContext));
+        LeafReader leafReader = mock(LeafReader.class);
+        when(leafReaderContext.reader()).thenReturn(leafReader);
+        FieldInfos fieldInfos = mock(FieldInfos.class);
+        when(leafReader.getFieldInfos()).thenReturn(fieldInfos);
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        when(fieldInfos.fieldInfo("test_field")).thenReturn(fieldInfo);
+        when(fieldInfo.getAttribute(QUANTIZATION_CEILING_SEARCH_FIELD)).thenReturn("5.0f");
 
         MappedFieldType fieldType2 = mock(MappedFieldType.class);
         when(context.fieldMapper("field")).thenReturn(fieldType2);
@@ -285,8 +294,6 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertEquals(filterQuery, query.getFilter());
         assertEquals(HEAP_FACTOR, query.getQueryContext().getHeapFactor(), DELTA_FOR_ASSERTION);
         assertEquals(K, query.getQueryContext().getK());
-        assertEquals(5.0f, query.getQuantizationCeilSearch(), DELTA_FOR_ASSERTION);
-        assertEquals(6.0f, query.getQuantizationCeilIngest(), DELTA_FOR_ASSERTION);
     }
 
     public void testDoToQuery_withValidContext_defaultParameter() throws IOException {

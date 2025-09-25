@@ -10,10 +10,13 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import lombok.extern.log4j.Log4j2;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
-import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.lucene.index.FieldInfo;
+import org.apache.lucene.index.FieldInfos;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Query;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
@@ -29,9 +32,9 @@ import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
-import org.opensearch.neuralsearch.sparse.mapper.MethodComponentContext;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
@@ -45,9 +48,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_SEARCH;
 
 /**
@@ -57,6 +57,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.
  */
 @Getter
 @Setter
+@Log4j2
 @Accessors(chain = true, fluent = true)
 @NoArgsConstructor
 @Builder
@@ -245,17 +246,19 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
 
         SparseQueryContext sparseQueryContext = constructSparseQueryContext();
 
+        // different field infos should have the same value for quantization ceiling search
         float quantizationCeilSearch = DEFAULT_QUANTIZATION_CEILING_SEARCH;
-        float quantizationCeilIngest = DEFAULT_QUANTIZATION_CEILING_INGEST;
-        if (fieldType instanceof SparseVectorFieldType) {
-            MethodComponentContext methodComponentContext = ((SparseVectorFieldType) fieldType).getSparseMethodContext()
-                .getMethodComponentContext();
-            quantizationCeilSearch = NumberUtils.createFloat(
-                methodComponentContext.getParameter(QUANTIZATION_CEILING_SEARCH_FIELD, DEFAULT_QUANTIZATION_CEILING_SEARCH).toString()
-            );
-            quantizationCeilIngest = NumberUtils.createFloat(
-                methodComponentContext.getParameter(QUANTIZATION_CEILING_INGEST_FIELD, DEFAULT_QUANTIZATION_CEILING_INGEST).toString()
-            );
+        try {
+            for (LeafReaderContext leafContext : context.searcher().getTopReaderContext().leaves()) {
+                FieldInfos fieldInfos = leafContext.reader().getFieldInfos();
+                FieldInfo fieldInfo = fieldInfos.fieldInfo(fieldName);
+                if (fieldInfo != null) {
+                    quantizationCeilSearch = ByteQuantizationUtil.getCeilingValueSearch(fieldInfo);
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            log.error(String.format(Locale.ROOT, "Failed to get quantization ceiling search value for field [%s]", fieldName), e);
         }
 
         Query filterQuery = null;
@@ -272,8 +275,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             .queryVector(new SparseVector(integerTokens, new ByteQuantizer(quantizationCeilSearch)))
             .fallbackQuery(fallbackQuery)
             .filter(filterQuery)
-            .quantizationCeilSearch(quantizationCeilSearch)
-            .quantizationCeilIngest(quantizationCeilIngest)
             .build();
     }
 

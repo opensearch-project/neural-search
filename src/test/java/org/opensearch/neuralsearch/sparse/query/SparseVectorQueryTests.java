@@ -255,28 +255,6 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
             .fieldName(FIELD_NAME)
             .fallbackQuery(originalQuery)
             .filter(originalQuery)
-            .quantizationCeilSearch(5.0f)
-            .build();
-
-        assertFalse(query.equals(query2));
-
-        query2 = SparseVectorQuery.builder()
-            .queryVector(createVector(1, 1, 3, 2, 5, 3))
-            .queryContext(context)
-            .fieldName(FIELD_NAME)
-            .fallbackQuery(originalQuery)
-            .filter(originalQuery)
-            .quantizationCeilIngest(5.0f)
-            .build();
-
-        assertFalse(query.equals(query2));
-
-        query2 = SparseVectorQuery.builder()
-            .queryVector(createVector(1, 1, 3, 2, 5, 3))
-            .queryContext(context)
-            .fieldName(FIELD_NAME)
-            .fallbackQuery(originalQuery)
-            .filter(originalQuery)
             .build();
 
         assertTrue(query.equals(query2));

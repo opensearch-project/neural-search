@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.quantization;
 
-import static org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil.MAX_UNSIGNED_BYTE_VALUE;
+import static org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil.MAX_UNSIGNED_BYTE_VALUE;
 
 /**
  * Maps a positive float value to an unsigned integer within the range of the specified type.
@@ -15,7 +15,7 @@ public final class ByteQuantizer {
     private final float ceilValue;
 
     public ByteQuantizer(float ceilValue) {
-        if (ceilValue < 0) {
+        if (ceilValue <= 0) {
             throw new IllegalArgumentException("Ceiling value must be positive for byte quantizer");
         }
         this.ceilValue = ceilValue;

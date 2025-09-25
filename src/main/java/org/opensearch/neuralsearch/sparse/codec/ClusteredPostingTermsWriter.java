@@ -40,12 +40,14 @@ import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
@@ -72,13 +74,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private SegmentWriteState state;
     private DocValuesProducer docValuesProducer;
     private final CodecUtilWrapper codecUtilWrapper;
-    private ByteQuantizer byteQuantizer;
-
-    @Override
-    public void setField(FieldInfo fieldInfo) {
-        super.setField(fieldInfo);
-        byteQuantizer = ByteQuantizerUtil.getByteQuantizerIngest(fieldInfo);
-    }
+    private final Map<FieldInfo, ByteQuantizer> byteQuantizerMap = new HashMap<>();
 
     public BlockTermState write(BytesRef text, TermsEnum termsEnum, NormsProducer norms) throws IOException {
         this.currentTerm = text;
@@ -126,7 +122,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
             this.docValuesProducer = fmt.fieldsProducer(readState);
             BinaryDocValues binaryDocValues = this.docValuesProducer.getBinary(fieldInfo);
             if (binaryDocValues != null) {
-                luceneReader = new SparseBinaryDocValuesPassThrough(binaryDocValues, this.state.segmentInfo, byteQuantizer);
+                luceneReader = new SparseBinaryDocValuesPassThrough(binaryDocValues, this.state.segmentInfo, fieldInfo);
             }
         } catch (Exception e) {
             log.error("Failed to retrieve lucene reader");
@@ -193,6 +189,10 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         if (docID == -1) {
             throw new IllegalStateException("docId must be set before startDoc");
         }
+        if (!byteQuantizerMap.containsKey(fieldInfo)) {
+            byteQuantizerMap.put(fieldInfo, ByteQuantizationUtil.getByteQuantizerIngest(fieldInfo));
+        }
+        ByteQuantizer byteQuantizer = byteQuantizerMap.get(fieldInfo);
         docWeights.add(new DocWeight(docID, byteQuantizer.quantize(ValueEncoder.decodeFeatureValue(freq))));
     }
 

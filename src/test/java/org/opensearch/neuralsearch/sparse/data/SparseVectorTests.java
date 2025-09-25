@@ -9,7 +9,7 @@ import org.junit.Assert;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -39,17 +39,17 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item1 = iterator.next();
         Assert.assertEquals(1, item1.getToken());
-        Assert.assertEquals(20, ByteQuantizerUtil.getUnsignedByte(item1.getWeight()));
+        Assert.assertEquals(20, ByteQuantizationUtil.getUnsignedByte(item1.getWeight()));
 
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item2 = iterator.next();
         Assert.assertEquals(2, item2.getToken());
-        Assert.assertEquals(30, ByteQuantizerUtil.getUnsignedByte(item2.getWeight()));
+        Assert.assertEquals(30, ByteQuantizationUtil.getUnsignedByte(item2.getWeight()));
 
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item3 = iterator.next();
         Assert.assertEquals(3, item3.getToken());
-        Assert.assertEquals(10, ByteQuantizerUtil.getUnsignedByte(item3.getWeight()));
+        Assert.assertEquals(10, ByteQuantizationUtil.getUnsignedByte(item3.getWeight()));
 
         Assert.assertFalse(iterator.hasNext());
     }
@@ -131,17 +131,17 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item1 = iterator.next();
         Assert.assertEquals(1, item1.getToken());
-        Assert.assertEquals(20, ByteQuantizerUtil.getUnsignedByte(item1.getWeight()));
+        Assert.assertEquals(20, ByteQuantizationUtil.getUnsignedByte(item1.getWeight()));
 
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item2 = iterator.next();
         Assert.assertEquals(2, item2.getToken());
-        Assert.assertEquals(30, ByteQuantizerUtil.getUnsignedByte(item2.getWeight()));
+        Assert.assertEquals(30, ByteQuantizationUtil.getUnsignedByte(item2.getWeight()));
 
         Assert.assertTrue(iterator.hasNext());
         SparseVector.Item item3 = iterator.next();
         Assert.assertEquals(3, item3.getToken());
-        Assert.assertEquals(40, ByteQuantizerUtil.getUnsignedByte(item3.getWeight()));
+        Assert.assertEquals(40, ByteQuantizationUtil.getUnsignedByte(item3.getWeight()));
 
         Assert.assertFalse(iterator.hasNext());
     }

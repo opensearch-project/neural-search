@@ -23,7 +23,7 @@ import org.opensearch.neuralsearch.sparse.common.ValueEncoder;
 import org.opensearch.neuralsearch.sparse.data.DocWeight;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -87,7 +87,7 @@ public class MergeHelper {
         int[] newIdToOldId
     ) throws IOException {
         List<DocWeight> docWeights = new ArrayList<>();
-        ByteQuantizer byteQuantizer = ByteQuantizerUtil.getByteQuantizerIngest(fieldInfo);
+        ByteQuantizer byteQuantizer = ByteQuantizationUtil.getByteQuantizerIngest(fieldInfo);
         for (int i = 0; i < mergeStateFacade.getFieldsProducers().length; i++) {
             // we need this SparseBinaryDocValuesPassThrough to get segment info
             BinaryDocValues binaryDocValues = mergeStateFacade.getDocValuesProducers()[i].getBinary(fieldInfo);

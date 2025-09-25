@@ -158,22 +158,14 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
     public void testCreateWeight() throws IOException {
         when(mockSearcher.createWeight(any(Query.class), any(ScoreMode.class), anyFloat())).thenReturn(mockBooleanQueryWeight);
 
-        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, 3.0f, 3.0f, mockForwardIndexCache);
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         assertNotNull("Weight should not be null", weight);
         assertEquals("Weight should have the correct query", sparseVectorQuery, weight.getQuery());
     }
 
     public void testScorerSupplierWithSparseAlgorithm() throws Exception {
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         ScorerSupplier scorerSupplier = weight.scorerSupplier(leafReaderContext);
         assertNotNull("ScorerSupplier should not be null", scorerSupplier);
@@ -185,15 +177,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
     }
 
     public void testScorerSupplierFallbackToBooleanQuery() throws Exception {
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         ScorerSupplier scorerSupplier = weight.scorerSupplier(fallbackContext);
         assertNotNull(scorerSupplier);
@@ -227,15 +211,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
             .filterResults(filterResults)
             .build();
 
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         ScorerSupplier scorerSupplier = weight.scorerSupplier(leafReaderContext);
         assertNotNull("ScorerSupplier should not be null", scorerSupplier);
@@ -247,7 +223,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
     public void testIsCacheable() throws IOException {
         when(mockSearcher.createWeight(any(Query.class), any(ScoreMode.class), anyFloat())).thenReturn(mockBooleanQueryWeight);
 
-        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, 3.0f, 3.0f, mockForwardIndexCache);
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         assertFalse("Weight should not be cacheable", weight.isCacheable(leafReaderContext));
     }
@@ -255,21 +231,13 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
     public void testExplain() throws IOException {
         when(mockSearcher.createWeight(any(Query.class), any(ScoreMode.class), anyFloat())).thenReturn(mockBooleanQueryWeight);
 
-        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, 3.0f, 3.0f, mockForwardIndexCache);
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         assertNull("Explain should return null", weight.explain(leafReaderContext, 0));
     }
 
     public void testBulkScorerFunctionality() throws Exception {
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         ScorerSupplier scorerSupplier = weight.scorerSupplier(leafReaderContext);
         assertNotNull(scorerSupplier);
@@ -288,7 +256,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
         DocIdSetIterator iter = mock(DocIdSetIterator.class);
         when(scorer.iterator()).thenReturn(iter);
         when(iter.nextDoc()).thenReturn(1, 2, DocIdSetIterator.NO_MORE_DOCS);
-        SparseQueryWeight weight = spy(new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, 3.0f, 3.0f, mockForwardIndexCache));
+        SparseQueryWeight weight = spy(new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache));
         doReturn(scorer).when(weight).selectScorer(any(), any(), any());
 
         ScorerSupplier scorerSupplier = weight.scorerSupplier(leafReaderContext);
@@ -325,15 +293,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
             .filterResults(filterResults)
             .build();
 
-        SparseQueryWeight weight = new SparseQueryWeight(
-            queryWithFilter,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(queryWithFilter, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
         ScorerSupplier scorerSupplier = weight.scorerSupplier(leafReaderContext);
 
         assertNotNull("ScorerSupplier should not be null", scorerSupplier);
@@ -346,15 +306,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
         SparseBinaryDocValuesPassThrough mockDocValues = mock(SparseBinaryDocValuesPassThrough.class);
         when(sparseSegmentReader.getBinaryDocValues(FIELD_NAME)).thenReturn(mockDocValues);
 
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
         ScorerSupplier scorerSupplier = weight.scorerSupplier(leafReaderContext);
 
         assertNotNull("ScorerSupplier should not be null", scorerSupplier);
@@ -367,15 +319,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
         when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(mockDocValues);
         when(sparseVectorQuery.getFilterResults()).thenReturn(null);
 
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
         Scorer scorer = weight.selectScorer(sparseVectorQuery, leafReaderContext, segmentInfo);
         assertTrue(scorer instanceof OrderedPostingWithClustersScorer);
     }
@@ -389,30 +333,14 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
         when(sparseVectorQuery.getFilterResults()).thenReturn(Map.of(id, bitSet));
         when(bitSet.cardinality()).thenReturn(2);
 
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
         Scorer scorer = weight.selectScorer(sparseVectorQuery, leafReaderContext, segmentInfo);
         assertTrue(scorer instanceof ExactMatchScorer);
     }
 
     public void test_selectScorer_IOException() throws IOException {
         doThrow(IOException.class).when(sparseSegmentReader).getBinaryDocValues(anyString());
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
         expectThrows(IOException.class, () -> weight.selectScorer(sparseVectorQuery, leafReaderContext, segmentInfo));
     }
 
@@ -421,15 +349,7 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
         when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(mockDocValues);
         when(sparseVectorQuery.getFilterResults()).thenReturn(null);
 
-        SparseQueryWeight weight = new SparseQueryWeight(
-            sparseVectorQuery,
-            mockSearcher,
-            ScoreMode.COMPLETE,
-            1.0f,
-            3.0f,
-            3.0f,
-            mockForwardIndexCache
-        );
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
         Scorer scorer = weight.selectScorer(sparseVectorQuery, leafReaderContext, null);
         assertTrue(scorer instanceof OrderedPostingWithClustersScorer);
         verify(mockForwardIndexCache, never()).getOrCreate(any(), anyInt());

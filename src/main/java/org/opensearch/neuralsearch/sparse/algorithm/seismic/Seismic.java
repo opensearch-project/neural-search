@@ -95,7 +95,7 @@ public class Seismic implements SparseAlgorithm {
                 int algoTriggerThreshold = NumberUtils.createInteger(fieldValueString);
                 if (algoTriggerThreshold < 0) {
                     errorMessages.add(
-                        String.format(Locale.ROOT, "Parameter [%s] must be a non-Negative integer", APPROXIMATE_THRESHOLD_FIELD)
+                        String.format(Locale.ROOT, "Parameter [%s] must be a non-negative integer", APPROXIMATE_THRESHOLD_FIELD)
                     );
                 }
             } catch (Exception e) {
@@ -110,7 +110,9 @@ public class Seismic implements SparseAlgorithm {
                 String fieldValueString = parameters.get(QUANTIZATION_CEILING_INGEST_FIELD).toString();
                 float quantizationCeilValue = NumberUtils.createFloat(fieldValueString);
                 if (quantizationCeilValue <= 0) {
-                    errorMessages.add(String.format(Locale.ROOT, "Parameter [%s] must be positive", QUANTIZATION_CEILING_INGEST_FIELD));
+                    errorMessages.add(
+                        String.format(Locale.ROOT, "Parameter [%s] must be a positive float number", QUANTIZATION_CEILING_INGEST_FIELD)
+                    );
                 }
             } catch (Exception e) {
                 errorMessages.add(
@@ -129,7 +131,9 @@ public class Seismic implements SparseAlgorithm {
                 String fieldValueString = parameters.get(QUANTIZATION_CEILING_SEARCH_FIELD).toString();
                 float quantizationCeilValue = NumberUtils.createFloat(fieldValueString);
                 if (quantizationCeilValue <= 0) {
-                    errorMessages.add(String.format(Locale.ROOT, "Parameter [%s] must be positive", QUANTIZATION_CEILING_SEARCH_FIELD));
+                    errorMessages.add(
+                        String.format(Locale.ROOT, "Parameter [%s] must be a positive float number", QUANTIZATION_CEILING_SEARCH_FIELD)
+                    );
                 }
             } catch (Exception e) {
                 errorMessages.add(

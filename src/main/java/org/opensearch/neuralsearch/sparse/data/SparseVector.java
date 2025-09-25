@@ -13,7 +13,7 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -71,7 +71,7 @@ public class SparseVector implements Accountable {
         for (int i = 1; i < items.size(); ++i) {
             int token = prepareTokenForShortType(items.get(i).getToken());
             if (token == processedItems.getLast().getToken()) {
-                if (ByteQuantizerUtil.compareUnsignedByte(processedItems.getLast().weight, items.get(i).getWeight()) < 0) {
+                if (ByteQuantizationUtil.compareUnsignedByte(processedItems.getLast().weight, items.get(i).getWeight()) < 0) {
                     // merge by taking the maximum value
                     processedItems.getLast().weight = items.get(i).getWeight();
                 }
@@ -133,25 +133,25 @@ public class SparseVector implements Accountable {
             if (this.tokens[i] >= denseVector.length) {
                 break;
             }
-            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
+            score += ByteQuantizationUtil.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
 
             if (this.tokens[i + 1] >= denseVector.length) {
                 ++i;
                 break;
             }
-            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i + 1], denseVector[this.tokens[i + 1]]);
+            score += ByteQuantizationUtil.multiplyUnsignedByte(this.weights[i + 1], denseVector[this.tokens[i + 1]]);
 
             if (this.tokens[i + 2] >= denseVector.length) {
                 i += 2;
                 break;
             }
-            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i + 2], denseVector[this.tokens[i + 2]]);
+            score += ByteQuantizationUtil.multiplyUnsignedByte(this.weights[i + 2], denseVector[this.tokens[i + 2]]);
 
             if (this.tokens[i + 3] >= denseVector.length) {
                 i += 3;
                 break;
             }
-            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i + 3], denseVector[this.tokens[i + 3]]);
+            score += ByteQuantizationUtil.multiplyUnsignedByte(this.weights[i + 3], denseVector[this.tokens[i + 3]]);
         }
 
         // Handle remaining elements
@@ -159,7 +159,7 @@ public class SparseVector implements Accountable {
             if (this.tokens[i] >= denseVector.length) {
                 break;
             }
-            score += ByteQuantizerUtil.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
+            score += ByteQuantizationUtil.multiplyUnsignedByte(this.weights[i], denseVector[this.tokens[i]]);
         }
 
         return score;
@@ -205,7 +205,7 @@ public class SparseVector implements Accountable {
         }
 
         public int getIntWeight() {
-            return ByteQuantizerUtil.getUnsignedByte(weight);
+            return ByteQuantizationUtil.getUnsignedByte(weight);
         }
     }
 }

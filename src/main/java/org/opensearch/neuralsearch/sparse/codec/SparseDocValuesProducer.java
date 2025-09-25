@@ -14,12 +14,8 @@ import org.apache.lucene.index.SegmentReadState;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.index.SortedSetDocValues;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * DocValues producer for sparse vector fields that wraps a delegate producer
@@ -29,8 +25,6 @@ public class SparseDocValuesProducer extends DocValuesProducer {
     private final DocValuesProducer delegate;
     @Getter
     private final SegmentReadState state;
-
-    private final Map<FieldInfo, ByteQuantizer> byteQuantizerMap = new HashMap<>();
 
     /**
      * Creates a new sparse doc values producer.
@@ -54,11 +48,7 @@ public class SparseDocValuesProducer extends DocValuesProducer {
      */
     @Override
     public BinaryDocValues getBinary(FieldInfo field) throws IOException {
-        if (!byteQuantizerMap.containsKey(field)) {
-            byteQuantizerMap.put(field, ByteQuantizerUtil.getByteQuantizerIngest(field));
-        }
-
-        return new SparseBinaryDocValuesPassThrough(this.delegate.getBinary(field), state.segmentInfo, byteQuantizerMap.get(field));
+        return new SparseBinaryDocValuesPassThrough(this.delegate.getBinary(field), state.segmentInfo, field);
     }
 
     @Override

@@ -56,8 +56,6 @@ public class SparseVectorQuery extends Query {
     private final Query fallbackQuery;
     private final Query filter;
     private Map<Object, BitSet> filterResults;
-    private final float quantizationCeilSearch;
-    private final float quantizationCeilIngest;
 
     @Override
     public String toString(String field) {
@@ -95,18 +93,12 @@ public class SparseVectorQuery extends Query {
         if (this.filter != null && !this.filter.equals(otherQuery.getFilter())) {
             return false;
         }
-        if (this.quantizationCeilSearch != otherQuery.getQuantizationCeilSearch()) {
-            return false;
-        }
-        if (this.quantizationCeilIngest != otherQuery.getQuantizationCeilIngest()) {
-            return false;
-        }
         return queryVector.equals(otherQuery.getQueryVector());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(queryVector, queryContext, fieldName, fallbackQuery, filter, quantizationCeilSearch, quantizationCeilIngest);
+        return Objects.hash(queryVector, queryContext, fieldName, fallbackQuery, filter);
     }
 
     @Override
@@ -173,14 +165,6 @@ public class SparseVectorQuery extends Query {
 
     @Override
     public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        return new SparseQueryWeight(
-            this,
-            searcher,
-            scoreMode,
-            boost,
-            quantizationCeilSearch,
-            quantizationCeilIngest,
-            ForwardIndexCache.getInstance()
-        );
+        return new SparseQueryWeight(this, searcher, scoreMode, boost, ForwardIndexCache.getInstance());
     }
 }
