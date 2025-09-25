@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizerUtil;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -29,7 +30,7 @@ public class SparseDocValuesProducer extends DocValuesProducer {
     @Getter
     private final SegmentReadState state;
 
-    private Map<FieldInfo, ByteQuantizer> byteQuantizerMap;
+    private final Map<FieldInfo, ByteQuantizer> byteQuantizerMap = new HashMap<>();
 
     /**
      * Creates a new sparse doc values producer.
