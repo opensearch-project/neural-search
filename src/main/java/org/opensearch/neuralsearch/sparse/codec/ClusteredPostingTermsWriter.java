@@ -44,10 +44,8 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
@@ -73,8 +71,14 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private final int version;
     private SegmentWriteState state;
     private DocValuesProducer docValuesProducer;
+    private ByteQuantizer byteQuantizer;
     private final CodecUtilWrapper codecUtilWrapper;
-    private final Map<FieldInfo, ByteQuantizer> byteQuantizerMap = new HashMap<>();
+
+    @Override
+    public void setField(FieldInfo fieldInfo) {
+        super.setField(fieldInfo);
+        byteQuantizer = ByteQuantizationUtil.getByteQuantizerIngest(fieldInfo);
+    }
 
     public BlockTermState write(BytesRef text, TermsEnum termsEnum, NormsProducer norms) throws IOException {
         this.currentTerm = text;
@@ -189,10 +193,6 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         if (docID == -1) {
             throw new IllegalStateException("docId must be set before startDoc");
         }
-        if (!byteQuantizerMap.containsKey(fieldInfo)) {
-            byteQuantizerMap.put(fieldInfo, ByteQuantizationUtil.getByteQuantizerIngest(fieldInfo));
-        }
-        ByteQuantizer byteQuantizer = byteQuantizerMap.get(fieldInfo);
         docWeights.add(new DocWeight(docID, byteQuantizer.quantize(ValueEncoder.decodeFeatureValue(freq))));
     }
 
