@@ -11,6 +11,7 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.neuralsearch.ml.AgentInfoDTO;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -123,7 +124,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         verifyNoInteractions(mockMLClient);
     }
 
-    public void testProcessRequestAsync_withAgenticQuery_callsMLClient() {
+    public void testProcessRequestAsync_withAgenticQuery_callsMLClient() throws IOException {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT)
             .queryFields(Arrays.asList("title", "description"));
 
@@ -132,61 +133,155 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock ML client to verify it gets called
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        // Mock executeAgent call
         doAnswer(invocation -> {
             // Don't call the listener to avoid parsing issues in test
             return null;
-        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                eq(mockXContentRegistry),
+                any(ActionListener.class)
+            );
 
         processor.processRequestAsync(request, mockContext, listener);
 
         // Verify ML client was called with correct parameters
-        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            eq(mockXContentRegistry),
+            any(ActionListener.class)
+        );
     }
 
-    public void testProcessRequestAsync_withAgenticQuery_agentFailure() {
+    public void testProcessRequestAsync_withAgenticQuery_agentFailure() throws IOException {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(2);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(5);
             agentListener.onFailure(new RuntimeException("Agent failed"));
             return null;
-        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                eq(mockXContentRegistry),
+                any(ActionListener.class)
+            );
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            eq(mockXContentRegistry),
+            any(ActionListener.class)
+        );
         ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error"));
     }
 
-    public void testProcessRequestAsync_withAgenticQuery_parseFailure() {
+    public void testProcessRequestAsync_withAgenticQuery_parseFailure() throws IOException {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         SearchRequest request = new SearchRequest("test-index");
         request.source(new SearchSourceBuilder().query(agenticQuery));
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
         // Invalid JSON response that will cause parsing to fail
         String invalidAgentResponse = "{invalid json}";
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(2);
+            ActionListener<String> agentListener = invocation.getArgument(5);
             agentListener.onResponse(invalidAgentResponse);
             return null;
-        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                eq(mockXContentRegistry),
+                any(ActionListener.class)
+            );
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            eq(mockXContentRegistry),
+            any(ActionListener.class)
+        );
         ArgumentCaptor<IOException> exceptionCaptor = ArgumentCaptor.forClass(IOException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Parse error"));
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_getAgentDetailsFailure() {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Mock getAgentDetails failure
+        doAnswer(invocation -> {
+            ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onFailure(new RuntimeException("Failed to get agent info"));
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Failed to get agent info"));
     }
 
     public void testProcessRequest_throwsException() {
@@ -198,6 +293,10 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         );
 
         assertEquals("Use processRequestAsync for agentic search processor", exception.getMessage());
+    }
+
+    public void testIsIgnoreFailure() {
+        assertFalse(processor.isIgnoreFailure());
     }
 
     public void testGetType() {
@@ -352,18 +451,42 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
         // Use match_all query which should parse correctly
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(2);
+            ActionListener<String> agentListener = invocation.getArgument(5);
             agentListener.onResponse(validAgentResponse);
             return null;
-        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                any(NamedXContentRegistry.class),
+                any(ActionListener.class)
+            );
 
         testProcessor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            any(NamedXContentRegistry.class),
+            any(ActionListener.class)
+        );
         verify(listener).onResponse(request);
 
         assertNotNull(request.source());
@@ -376,18 +499,42 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
         // Create a response larger than MAX_AGENT_RESPONSE_SIZE characters
         String oversizedResponse = "x".repeat(10_001);
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(2);
+            ActionListener<String> agentListener = invocation.getArgument(5);
             agentListener.onResponse(oversizedResponse);
             return null;
-        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                eq(mockXContentRegistry),
+                any(ActionListener.class)
+            );
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            eq(mockXContentRegistry),
+            any(ActionListener.class)
+        );
         ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         RuntimeException exception = exceptionCaptor.getValue();
@@ -402,19 +549,276 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(2);
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(5);
             agentListener.onResponse(null);
             return null;
-        }).when(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                eq(mockXContentRegistry),
+                any(ActionListener.class)
+            );
 
         processor.processRequestAsync(request, mockContext, listener);
 
-        verify(mockMLClient).executeAgent(eq(AGENT_ID), any(Map.class), any(ActionListener.class));
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            eq(mockXContentRegistry),
+            any(ActionListener.class)
+        );
         ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         RuntimeException exception = exceptionCaptor.getValue();
         assertTrue(exception.getMessage().contains("Agentic search failed - Null response from agent"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
+    }
+
+    public void testProcessRequestAsync_withFlowAgent() throws IOException {
+        // Create processor with proper NamedXContentRegistry
+        List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
+        entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match_all"), MatchAllQueryBuilder::fromXContent));
+        NamedXContentRegistry registry = new NamedXContentRegistry(entries);
+
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            registry,
+            mockSettingsAccessor
+        );
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Mock getAgentDetails call for flow agent
+        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(validAgentResponse);
+            return null;
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                any(NamedXContentRegistry.class),
+                any(ActionListener.class)
+            );
+
+        testProcessor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            any(NamedXContentRegistry.class),
+            any(ActionListener.class)
+        );
+        verify(listener).onResponse(request);
+    }
+
+    public void testProcessRequestAsync_withSystemPromptAgent() throws IOException {
+        // Create processor with proper NamedXContentRegistry
+        List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
+        entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match_all"), MatchAllQueryBuilder::fromXContent));
+        NamedXContentRegistry registry = new NamedXContentRegistry(entries);
+
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            registry,
+            mockSettingsAccessor
+        );
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Mock getAgentDetails call for agent with system prompt
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", true, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(validAgentResponse);
+            return null;
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                any(NamedXContentRegistry.class),
+                any(ActionListener.class)
+            );
+
+        testProcessor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            any(NamedXContentRegistry.class),
+            any(ActionListener.class)
+        );
+        verify(listener).onResponse(request);
+    }
+
+    public void testProcessRequestAsync_withQueryFields() throws IOException {
+        // Create processor with proper NamedXContentRegistry
+        List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
+        entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match_all"), MatchAllQueryBuilder::fromXContent));
+        NamedXContentRegistry registry = new NamedXContentRegistry(entries);
+
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            registry,
+            mockSettingsAccessor
+        );
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT)
+            .queryFields(Arrays.asList("title", "content"));
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(validAgentResponse);
+            return null;
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                any(NamedXContentRegistry.class),
+                any(ActionListener.class)
+            );
+
+        testProcessor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            any(NamedXContentRegistry.class),
+            any(ActionListener.class)
+        );
+        verify(listener).onResponse(request);
+    }
+
+    public void testProcessRequestAsync_withMultipleIndices() throws IOException {
+        // Create processor with proper NamedXContentRegistry
+        List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
+        entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match_all"), MatchAllQueryBuilder::fromXContent));
+        NamedXContentRegistry registry = new NamedXContentRegistry(entries);
+
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            registry,
+            mockSettingsAccessor
+        );
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("index1", "index2");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+        doAnswer(invocation -> {
+            ActionListener<String> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(validAgentResponse);
+            return null;
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                any(NamedXContentRegistry.class),
+                any(ActionListener.class)
+            );
+
+        testProcessor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            any(NamedXContentRegistry.class),
+            any(ActionListener.class)
+        );
+        verify(listener).onResponse(request);
     }
 }
