@@ -55,7 +55,7 @@ import org.opensearch.neuralsearch.highlight.SemanticHighlighterEngine;
 import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
-import org.opensearch.neuralsearch.processor.AgentContextResponseProcessor;
+import org.opensearch.neuralsearch.processor.AgenticContextResponseProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
@@ -346,8 +346,8 @@ public class NeuralSearch extends Plugin
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
             new ExplanationResponseProcessorFactory(),
-            AgentContextResponseProcessor.TYPE,
-            new AgentContextResponseProcessor.Factory()
+            AgenticContextResponseProcessor.TYPE,
+            new AgenticContextResponseProcessor.Factory()
         );
     }
 

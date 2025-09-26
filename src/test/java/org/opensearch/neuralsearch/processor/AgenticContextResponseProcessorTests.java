@@ -21,24 +21,24 @@ import java.util.Map;
 
 import static org.mockito.Mockito.mock;
 
-public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
+public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
 
     private static final String PROCESSOR_TAG = "test-tag";
     private static final String DESCRIPTION = "test-description";
 
     public void testConstructor() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
 
         assertEquals(PROCESSOR_TAG, processor.getTag());
         assertEquals(DESCRIPTION, processor.getDescription());
         assertTrue(processor.isIncludeAgentSteps());
         assertFalse(processor.isIncludeDslQuery());
         assertFalse(processor.isIgnoreFailure());
-        assertEquals(AgentContextResponseProcessor.TYPE, processor.getType());
+        assertEquals(AgenticContextResponseProcessor.TYPE, processor.getType());
     }
 
     public void testProcessResponse_withoutContext() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
 
@@ -47,7 +47,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withNullContext() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
 
@@ -56,7 +56,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withEmptyContext() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -66,7 +66,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withNullAgentSteps() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -78,7 +78,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withEmptyAgentSteps() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -89,7 +89,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withWhitespaceAgentSteps() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -100,7 +100,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withNonStringAgentSteps() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -111,7 +111,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withValidAgentSteps() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -132,7 +132,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withExistingExtensions() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
 
         // Create response with existing extensions
@@ -153,7 +153,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withValidAgentStepsAndMemoryId() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -176,7 +176,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessResponse_withNonStringMemoryId() {
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -188,7 +188,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
 
     public void testProcessResponse_withOnlyMemoryId_AlwaysShown() {
         // Test that memory_id is always shown regardless of configuration
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -210,9 +210,9 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory() {
-        AgentContextResponseProcessor.Factory factory = new AgentContextResponseProcessor.Factory();
+        AgenticContextResponseProcessor.Factory factory = new AgenticContextResponseProcessor.Factory();
 
-        AgentContextResponseProcessor processor = factory.create(null, PROCESSOR_TAG, DESCRIPTION, false, new HashMap<>(), null);
+        AgenticContextResponseProcessor processor = factory.create(null, PROCESSOR_TAG, DESCRIPTION, false, new HashMap<>(), null);
 
         assertNotNull(processor);
         assertEquals(DESCRIPTION, processor.getDescription());
@@ -239,7 +239,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
 
     public void testProcessResponse_withAgentStepsDisabled() {
         // Test that agent steps are not included when includeAgentSteps is false
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -264,7 +264,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
 
     public void testProcessResponse_withDslQueryEnabled() {
         // Test that DSL query is included when includeDslQuery is true
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, true);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, true);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -289,7 +289,7 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
 
     public void testProcessResponse_withAllFieldsEnabled() {
         // Test that all fields are included when both flags are true
-        AgentContextResponseProcessor processor = new AgentContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, true);
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, true);
         SearchRequest request = mock(SearchRequest.class);
         SearchResponse response = createMockSearchResponse();
         PipelineProcessingContext context = new PipelineProcessingContext();
@@ -315,12 +315,12 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_withConfiguration() {
-        AgentContextResponseProcessor.Factory factory = new AgentContextResponseProcessor.Factory();
+        AgenticContextResponseProcessor.Factory factory = new AgenticContextResponseProcessor.Factory();
         Map<String, Object> config = new HashMap<>();
         config.put("agent_steps_summary", true);
         config.put("dsl_query", false);
 
-        AgentContextResponseProcessor processor = factory.create(null, PROCESSOR_TAG, DESCRIPTION, false, config, null);
+        AgenticContextResponseProcessor processor = factory.create(null, PROCESSOR_TAG, DESCRIPTION, false, config, null);
 
         assertNotNull(processor);
         assertEquals(DESCRIPTION, processor.getDescription());
@@ -331,11 +331,11 @@ public class AgentContextResponseProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_withPartialConfiguration() {
-        AgentContextResponseProcessor.Factory factory = new AgentContextResponseProcessor.Factory();
+        AgenticContextResponseProcessor.Factory factory = new AgenticContextResponseProcessor.Factory();
         Map<String, Object> config = new HashMap<>();
         config.put("dsl_query", true);
 
-        AgentContextResponseProcessor processor = factory.create(null, PROCESSOR_TAG, DESCRIPTION, false, config, null);
+        AgenticContextResponseProcessor processor = factory.create(null, PROCESSOR_TAG, DESCRIPTION, false, config, null);
 
         assertNotNull(processor);
         assertFalse(processor.isIncludeAgentSteps()); // Should use default false

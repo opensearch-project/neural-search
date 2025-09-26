@@ -29,7 +29,7 @@ import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
 @Getter
 @AllArgsConstructor
 @Log4j2
-public class AgentContextResponseProcessor implements SearchResponseProcessor {
+public class AgenticContextResponseProcessor implements SearchResponseProcessor {
 
     public static final String TYPE = "agentic_context";
     @Getter
@@ -131,7 +131,7 @@ public class AgentContextResponseProcessor implements SearchResponseProcessor {
     public static class Factory implements Processor.Factory<SearchResponseProcessor> {
 
         @Override
-        public AgentContextResponseProcessor create(
+        public AgenticContextResponseProcessor create(
             Map<String, Processor.Factory<SearchResponseProcessor>> processorFactories,
             String tag,
             String description,
@@ -142,7 +142,7 @@ public class AgentContextResponseProcessor implements SearchResponseProcessor {
             boolean includeAgentSteps = readBooleanProperty(TYPE, tag, config, "agent_steps_summary", false);
             boolean includeDslQuery = readBooleanProperty(TYPE, tag, config, "dsl_query", false);
 
-            return new AgentContextResponseProcessor(tag, description, ignoreFailure, includeAgentSteps, includeDslQuery);
+            return new AgenticContextResponseProcessor(tag, description, ignoreFailure, includeAgentSteps, includeDslQuery);
         }
     }
 }
