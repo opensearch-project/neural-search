@@ -1082,8 +1082,7 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         KNNQueryBuilder returnedKNNQueryBuilder = (KNNQueryBuilder) result;
         assertEquals("Field name should match", FIELD_NAME, returnedKNNQueryBuilder.fieldName());
         assertArrayEquals("Vector should match", testVector, (float[]) returnedKNNQueryBuilder.vector(), 0.0f);
-        assertEquals("K should match", neuralQueryBuilder.k().intValue(), returnedKNNQueryBuilder.getK());
-
+        assertEquals("K should match", neuralQueryBuilder.k().intValue(), (int) returnedKNNQueryBuilder.getK());
     }
 
     @SneakyThrows
@@ -1146,7 +1145,8 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
             DELTA_FOR_FLOATS_ASSERTION
         );
         // For radial search, KNNQueryBuilder defaults K to 0 when not specified
-        assertEquals("K should be 0 for radial search when not specified", 0, returnedKNNQueryBuilder.getK());
+        Integer k = returnedKNNQueryBuilder.getK();
+        assertEquals("K should be 0 for radial search when not specified", 0, k == null ? 0 : k.intValue());
     }
 
     public void testPrepareTwoPhase_Query_whenRawTokensAvailable() {

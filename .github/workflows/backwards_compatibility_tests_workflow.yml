@@ -48,6 +48,8 @@ jobs:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
 
+      - uses: ./.github/actions/clean-up-disk
+
       - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |
           chown -R 1000:1000 `pwd`
@@ -86,6 +88,8 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+
+      - uses: ./.github/actions/clean-up-disk
 
       - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
         run: |

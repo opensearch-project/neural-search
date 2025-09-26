@@ -1,0 +1,60 @@
+name: Clean Up Disk Space
+description: Clean up disk space in CI environment
+
+inputs:
+  remove-go:
+    description: 'Remove Go installation'
+    required: false
+    default: 'true'
+  remove-gcc:
+    description: 'Remove GCC installation'
+    required: false
+    default: 'true'
+  remove-python:
+    description: 'Remove Python installation'
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Check initial disk space
+      run: df -h
+      shell: bash
+
+    - name: Clean up disk space
+      run: |
+        # Remove temp files
+        rm -rf /tmp/* || true
+
+        # Clean docker if available
+        docker system prune -af || true
+
+        # Remove large directories commonly found in CI
+        rm -rf /usr/share/dotnet || true
+        rm -rf /opt/ghc || true
+        rm -rf /usr/local/share/boost || true
+
+        # Remove CodeQL
+        rm -rf /__t/CodeQL || true
+
+        # Remove Go
+        if [[ "${{ inputs.remove-go }}" == "true" ]]; then
+          rm -rf /__t/go || true
+        fi
+
+        # Remove GCC
+        if [[ "${{ inputs.remove-gcc }}" == "true" ]]; then
+          rm -rf /usr/libexec || true
+        fi
+
+        # Remove Python
+        if [[ "${{ inputs.remove-python }}" == "true" ]]; then
+          rm -rf /__t/Python || true
+        fi
+
+      shell: bash
+
+    - name: Check final disk space
+      run: df -h
+      shell: bash
