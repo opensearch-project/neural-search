@@ -50,7 +50,6 @@ import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.plugins.MapperPlugin;
-import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.query.QueryCollectorContextSpecFactory;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.transport.client.Client;
@@ -197,6 +196,10 @@ public class NeuralSearch extends Plugin
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
     public static final String NEURAL_BASE_URI = "/_plugins/_neural";
+
+    public NeuralSearch() {
+        this.semanticHighlighter = new SemanticHighlighter();
+    }
 
     @Override
     public Collection<Object> createComponents(
@@ -395,10 +398,6 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory()
-            new ExplanationResponseProcessorFactory(),
-            SemanticHighlightingConstants.PROCESSOR_TYPE,
-            new SemanticHighlightingResponseProcessorFactory(clientAccessor)
             new ExplanationResponseProcessorFactory(),
             AgenticContextResponseProcessor.TYPE,
             new AgenticContextResponseProcessor.Factory()

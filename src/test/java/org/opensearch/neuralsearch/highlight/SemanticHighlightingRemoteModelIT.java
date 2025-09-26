@@ -11,6 +11,7 @@ import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.After;
 import org.junit.Assume;
 import org.junit.Before;
+import static org.junit.Assert.fail;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
