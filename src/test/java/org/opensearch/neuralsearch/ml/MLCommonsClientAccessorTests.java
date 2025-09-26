@@ -999,6 +999,27 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         assertEquals("Flow agent does not support multiple indices", exception.getMessage());
     }
 
+    public void testExecuteAgent_FlowAgentWithMemoryId() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+        when(mockQuery.getMemoryId()).thenReturn("test-memory-123");
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener)
+        );
+
+        assertEquals("Flow agent does not support memory_id", exception.getMessage());
+    }
+
     private ModelTensorOutput createConversationalAgentResponse() {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();

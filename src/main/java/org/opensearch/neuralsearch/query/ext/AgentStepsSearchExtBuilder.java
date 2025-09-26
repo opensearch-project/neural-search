@@ -11,7 +11,6 @@ import lombok.AllArgsConstructor;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
-import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.search.SearchExtBuilder;
 
 import lombok.Getter;
@@ -24,14 +23,18 @@ public class AgentStepsSearchExtBuilder extends SearchExtBuilder {
 
     public final static String AGENT_STEPS_FIELD_NAME = "agent_steps_summary";
     public final static String MEMORY_ID_FIELD_NAME = "memory_id";
+    public final static String DSL_QUERY_FIELD_NAME = "dsl_query";
     @Getter
     protected String agentStepsSummary;
     @Getter
     protected String memoryId;
+    @Getter
+    protected String dslQuery;
 
     public AgentStepsSearchExtBuilder(StreamInput in) throws IOException {
-        agentStepsSummary = in.readString();
+        agentStepsSummary = in.readOptionalString();
         memoryId = in.readOptionalString();
+        dslQuery = in.readOptionalString();
     }
 
     @Override
@@ -41,50 +44,35 @@ public class AgentStepsSearchExtBuilder extends SearchExtBuilder {
 
     @Override
     public void writeTo(StreamOutput out) throws IOException {
-        out.writeString(agentStepsSummary);
+        out.writeOptionalString(agentStepsSummary);
         out.writeOptionalString(memoryId);
+        out.writeOptionalString(dslQuery);
     }
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(AGENT_STEPS_FIELD_NAME, agentStepsSummary);
-        builder.field(MEMORY_ID_FIELD_NAME, memoryId);
+        if (agentStepsSummary != null) {
+            builder.field(AGENT_STEPS_FIELD_NAME, agentStepsSummary);
+        }
+        if (memoryId != null) {
+            builder.field(MEMORY_ID_FIELD_NAME, memoryId);
+        }
+        if (dslQuery != null) {
+            builder.field(DSL_QUERY_FIELD_NAME, dslQuery);
+        }
         return builder;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(this.getClass(), this.agentStepsSummary, this.memoryId);
+        return Objects.hash(this.getClass(), this.agentStepsSummary, this.memoryId, this.dslQuery);
     }
 
     @Override
     public boolean equals(Object obj) {
         return (obj instanceof AgentStepsSearchExtBuilder)
             && Objects.equals(agentStepsSummary, ((AgentStepsSearchExtBuilder) obj).agentStepsSummary)
-            && Objects.equals(memoryId, ((AgentStepsSearchExtBuilder) obj).memoryId);
-    }
-
-    public static AgentStepsSearchExtBuilder fromXContent(XContentParser parser) throws IOException {
-        String agentSteps = null;
-        String memoryId = null;
-
-        while (parser.nextToken() != XContentParser.Token.END_OBJECT) {
-            if (parser.currentToken() == XContentParser.Token.FIELD_NAME) {
-                String fieldName = parser.currentName();
-                parser.nextToken();
-
-                if (AGENT_STEPS_FIELD_NAME.equals(fieldName)) {
-                    if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
-                        agentSteps = parser.text();
-                    }
-                } else if (MEMORY_ID_FIELD_NAME.equals(fieldName)) {
-                    if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
-                        memoryId = parser.text();
-                    }
-                }
-            }
-        }
-
-        return new AgentStepsSearchExtBuilder(agentSteps, memoryId);
+            && Objects.equals(memoryId, ((AgentStepsSearchExtBuilder) obj).memoryId)
+            && Objects.equals(dslQuery, ((AgentStepsSearchExtBuilder) obj).dslQuery);
     }
 }

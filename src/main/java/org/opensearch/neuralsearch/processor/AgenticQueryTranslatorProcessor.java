@@ -31,6 +31,7 @@ import java.util.Map;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 
 @Log4j2
 public class AgenticQueryTranslatorProcessor extends AbstractProcessor implements SearchRequestProcessor {
@@ -142,6 +143,8 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     if (memoryId != null && !memoryId.trim().isEmpty()) {
                         requestContext.setAttribute(MEMORY_ID_FIELD_NAME, memoryId);
                     }
+
+                    requestContext.setAttribute(DSL_QUERY_FIELD_NAME, dslQuery);
 
                     // Parse the agent response to get the new search source
                     BytesReference bytes = new BytesArray(dslQuery);

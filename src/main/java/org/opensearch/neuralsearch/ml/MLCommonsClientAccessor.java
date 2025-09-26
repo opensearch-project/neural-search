@@ -8,6 +8,7 @@ import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 
 import com.google.gson.Gson;
 import java.io.IOException;
@@ -74,7 +75,6 @@ import lombok.extern.log4j.Log4j2;
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
     private static final Gson gson = new Gson();
-    public static final String DSL_QUERY_FIELD = "dsl_query";
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
@@ -554,6 +554,11 @@ public class MLCommonsClientAccessor {
             return;
         }
 
+        // Validate flow agent and memory id
+        if (type == MLAgentType.FLOW && agenticQuery.getMemoryId() != null) {
+            throw new IllegalArgumentException("Flow agent does not support memory_id");
+        }
+
         Map<String, String> parameters = new HashMap<>();
         parameters.put("question", agenticQuery.getQueryText());
 
@@ -600,7 +605,7 @@ public class MLCommonsClientAccessor {
                 dslQuery = extractFlowAgentResult(mlOutput);
             } else if (type == MLAgentType.CONVERSATIONAL) {
                 Map<String, String> conversationalResult = extractConversationalAgentResult(mlOutput, xContentRegistry);
-                dslQuery = conversationalResult.get(DSL_QUERY_FIELD);
+                dslQuery = conversationalResult.get(DSL_QUERY_FIELD_NAME);
                 agentStepsSummary = conversationalResult.get(AGENT_STEPS_FIELD_NAME);
                 memoryId = conversationalResult.get(MEMORY_ID_FIELD_NAME);
             }
@@ -718,14 +723,14 @@ public class MLCommonsClientAccessor {
                         }
 
                         Map<String, Object> responseMap = parser.map();
-                        Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD);
+                        Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD_NAME);
                         Object stepsSummaryObj = responseMap.get(AGENT_STEPS_FIELD_NAME);
 
                         if (dslQueryObj != null) {
                             try {
                                 // Convert to proper JSON format using Gson
                                 String dslJson = gson.toJson(dslQueryObj);
-                                result.put(DSL_QUERY_FIELD, dslJson);
+                                result.put(DSL_QUERY_FIELD_NAME, dslJson);
                             } catch (Exception e) {
                                 throw new IllegalStateException("Failed to serialize dsl_query to JSON", e);
                             }
@@ -742,7 +747,7 @@ public class MLCommonsClientAccessor {
             }
         }
 
-        if (!result.containsKey(DSL_QUERY_FIELD)) {
+        if (!result.containsKey(DSL_QUERY_FIELD_NAME)) {
             throw new IllegalStateException("No valid 'dsl_query' found in conversational agent response");
         }
 

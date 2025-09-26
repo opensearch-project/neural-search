@@ -21,21 +21,27 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
+
 /**
- * Response processor that adds agent steps summary to search response extensions
+ * Response processor that adds agent context information to search response extensions
  */
 @Getter
 @AllArgsConstructor
 @Log4j2
-public class AgentStepsResponseProcessor implements SearchResponseProcessor {
+public class AgentContextResponseProcessor implements SearchResponseProcessor {
 
-    public static final String TYPE = "agent_steps";
-    @Getter
-    private final String description;
+    public static final String TYPE = "agentic_context";
     @Getter
     private final String tag;
     @Getter
+    private final String description;
+    @Getter
     private final boolean ignoreFailure;
+    @Getter
+    private final boolean includeAgentSteps;
+    @Getter
+    private final boolean includeDslQuery;
 
     @Override
     public SearchResponse processResponse(SearchRequest request, SearchResponse response) {
@@ -50,19 +56,47 @@ public class AgentStepsResponseProcessor implements SearchResponseProcessor {
 
         Object agentStepsSummary = requestContext.getAttribute("agent_steps_summary");
         Object memoryId = requestContext.getAttribute("memory_id");
+        Object dslQuery = requestContext.getAttribute("dsl_query");
 
-        if (!(agentStepsSummary instanceof String) || ((String) agentStepsSummary).trim().isEmpty()) {
-            return response;
+        // Validate types when attributes are present
+        if (agentStepsSummary != null && !(agentStepsSummary instanceof String)) {
+            throw new RuntimeException("agent_steps_summary must be a String, but got: " + agentStepsSummary.getClass().getSimpleName());
         }
 
-        String memoryIdStr = (memoryId instanceof String) ? (String) memoryId : null;
+        if (memoryId != null && !(memoryId instanceof String)) {
+            throw new RuntimeException("memory_id must be a String, but got: " + memoryId.getClass().getSimpleName());
+        }
+
+        if (dslQuery != null && !(dslQuery instanceof String)) {
+            throw new RuntimeException("dsl_query must be a String, but got: " + dslQuery.getClass().getSimpleName());
+        }
+
+        String agentStepsStr = null;
+        if (includeAgentSteps && agentStepsSummary != null && !((String) agentStepsSummary).trim().isEmpty()) {
+            agentStepsStr = (String) agentStepsSummary;
+        }
+
+        // Always include memory_id when available
+        String memoryIdStr = null;
+        if (memoryId != null && !((String) memoryId).trim().isEmpty()) {
+            memoryIdStr = (String) memoryId;
+        }
+
+        String dslQueryStr = null;
+        if (includeDslQuery && dslQuery != null && !((String) dslQuery).trim().isEmpty()) {
+            dslQueryStr = (String) dslQuery;
+        }
+
+        if (agentStepsStr == null && memoryIdStr == null && dslQueryStr == null) {
+            return response;
+        }
 
         List<SearchExtBuilder> newExtensions = new ArrayList<>();
         List<SearchExtBuilder> existingExtensions = response.getInternalResponse().getSearchExtBuilders();
         if (existingExtensions != null) {
             newExtensions.addAll(existingExtensions);
         }
-        newExtensions.add(new AgentStepsSearchExtBuilder((String) agentStepsSummary, memoryIdStr));
+        newExtensions.add(new AgentStepsSearchExtBuilder(agentStepsStr, memoryIdStr, dslQueryStr));
 
         SearchResponseSections newInternalResponse = new SearchResponseSections(
             response.getHits(),
@@ -97,7 +131,7 @@ public class AgentStepsResponseProcessor implements SearchResponseProcessor {
     public static class Factory implements Processor.Factory<SearchResponseProcessor> {
 
         @Override
-        public AgentStepsResponseProcessor create(
+        public AgentContextResponseProcessor create(
             Map<String, Processor.Factory<SearchResponseProcessor>> processorFactories,
             String tag,
             String description,
@@ -105,7 +139,10 @@ public class AgentStepsResponseProcessor implements SearchResponseProcessor {
             Map<String, Object> config,
             PipelineContext pipelineContext
         ) {
-            return new AgentStepsResponseProcessor(tag, description, ignoreFailure);
+            boolean includeAgentSteps = readBooleanProperty(TYPE, tag, config, "agent_steps_summary", false);
+            boolean includeDslQuery = readBooleanProperty(TYPE, tag, config, "dsl_query", false);
+
+            return new AgentContextResponseProcessor(tag, description, ignoreFailure, includeAgentSteps, includeDslQuery);
         }
     }
 }
