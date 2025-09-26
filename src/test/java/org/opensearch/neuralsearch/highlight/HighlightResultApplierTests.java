@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.highlight;
 
 import org.junit.Before;
+import org.opensearch.neuralsearch.highlight.batch.utils.HighlightResultApplier;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.fetch.subphase.highlight.HighlightField;

@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.plugin;
 
+import static org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants.HIGHLIGHTER_TYPE;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
@@ -27,6 +28,8 @@ import org.opensearch.index.mapper.Mapper;
 import org.opensearch.indices.breaker.BreakerSettings;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
+import org.opensearch.neuralsearch.highlight.single.SemanticHighlighterEngine;
+import org.opensearch.neuralsearch.highlight.single.extractor.QueryTextExtractorRegistry;
 import com.google.common.collect.ImmutableList;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.ActionRequest;
@@ -48,12 +51,11 @@ import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.plugins.MapperPlugin;
-import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.query.QueryCollectorContextSpecFactory;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.transport.client.Client;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
-import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.highlight.batch.processor.SemanticHighlightingFactory;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
@@ -114,7 +116,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.factory.ExplanationResponseProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
-import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingFactory;
+import org.opensearch.neuralsearch.highlight.batch.processor.SemanticHighlightingFactory;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.processor.factory.TextChunkingProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
@@ -189,10 +191,16 @@ public class NeuralSearch extends Plugin
     private NeuralSearchSettingsAccessor settingsAccessor;
     private PipelineServiceUtil pipelineServiceUtil;
     private InfoStatsManager infoStatsManager;
+    private ClusterService clusterService;
+    private final SemanticHighlighter semanticHighlighter;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
     public static final String EXPLANATION_RESPONSE_KEY = "explanation_response";
     public static final String NEURAL_BASE_URI = "/_plugins/_neural";
+
+    public NeuralSearch() {
+        this.semanticHighlighter = new SemanticHighlighter();
+    }
 
     @Override
     public Collection<Object> createComponents(
@@ -208,6 +216,10 @@ public class NeuralSearch extends Plugin
         final IndexNameExpressionResolver indexNameExpressionResolver,
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
+        this.clusterService = clusterService;
+        // Create clientAccessor first as it's needed by other components
+        clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(client));
+
         NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
         NeuralQueryBuilder.initialize(clientAccessor);
         NeuralSparseQueryBuilder.initialize(clientAccessor);
@@ -219,6 +231,18 @@ public class NeuralSearch extends Plugin
         EventStatsManager.instance().initialize(settingsAccessor);
         this.xContentRegistry = xContentRegistry;
         ClusterTrainingExecutor.getInstance().initialize(threadPool);
+
+        // Initialize SemanticHighlighterEngine for legacy non-batch highlighting
+        QueryTextExtractorRegistry queryTextExtractorRegistry = new QueryTextExtractorRegistry();
+        SemanticHighlighterEngine semanticHighlighterEngine = SemanticHighlighterEngine.builder()
+            .mlCommonsClient(clientAccessor)
+            .queryTextExtractorRegistry(queryTextExtractorRegistry)
+            .build();
+
+        // Initialize the semantic highlighter
+        this.semanticHighlighter.initialize(semanticHighlighterEngine);
+        this.semanticHighlighter.setClusterService(clusterService);
+
         return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
     }
 
@@ -281,7 +305,11 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
-        clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
+        // clientAccessor is already initialized in createComponents
+        if (clientAccessor == null) {
+            // Fallback initialization if createComponents wasn't called (e.g., in some test scenarios)
+            clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
+        }
         return Map.of(
             TextEmbeddingProcessor.TYPE,
             new TextEmbeddingProcessorFactory(
@@ -342,12 +370,11 @@ public class NeuralSearch extends Plugin
 
     @Override
     public Settings additionalSettings() {
-        return Settings.builder()
-            .putList(
-                SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey(),
-                SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE
-            )
-            .build();
+        // System processor for batch semantic highlighting is not enabled by default
+        // Users must explicitly enable it in opensearch.yml:
+        // search.pipeline.enabled_system_generated_factories:
+        // ["org.opensearch.neuralsearch.highlight.SemanticHighlightingProcessorFactory"]
+        return Settings.EMPTY;
     }
 
     @Override
@@ -372,10 +399,6 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory()
-            new ExplanationResponseProcessorFactory(),
-            SemanticHighlightingConstants.PROCESSOR_TYPE,
-            new SemanticHighlightingResponseProcessorFactory(clientAccessor)
             new ExplanationResponseProcessorFactory(),
             AgenticContextResponseProcessor.TYPE,
             new AgenticContextResponseProcessor.Factory()
@@ -413,12 +436,13 @@ public class NeuralSearch extends Plugin
     }
 
     /**
-     * Register minimal semantic highlighter for type validation
-     * Actual highlighting is done by SemanticHighlightingProcessor
+     * Register hybrid semantic highlighter that supports both batch and non-batch modes
+     * - Batch mode: Requires system processor to be explicitly enabled
+     * - Non-batch mode: Uses legacy highlighting for backward compatibility
      */
     @Override
     public Map<String, Highlighter> getHighlighters() {
-        return Collections.singletonMap(SemanticHighlighter.NAME, new SemanticHighlighter());
+        return Collections.singletonMap(HIGHLIGHTER_TYPE, semanticHighlighter);
     }
 
     @Override

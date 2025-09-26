@@ -29,7 +29,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_M
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
 import static org.opensearch.neuralsearch.util.TestUtils.getMaxScore;
-import static org.opensearch.neuralsearch.util.TestUtils.getNestedHits;
+import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
 import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
 import static org.opensearch.neuralsearch.util.TestUtils.getValueByKey;
 

@@ -8,6 +8,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 
 import org.junit.After;
@@ -17,6 +19,7 @@ import org.opensearch.client.Response;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.util.AggregationsTestUtils;
 
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
@@ -147,6 +150,7 @@ public abstract class BaseSemanticHighlightingIT extends BaseNeuralSearchIT {
 
     /**
      * Index test documents for semantic highlighting tests
+     * Uses medical research documents about neurodegenerative diseases to demonstrate semantic highlighting
      */
     @SneakyThrows
     protected void indexTestDocuments(String indexName) {
@@ -157,17 +161,27 @@ public abstract class BaseSemanticHighlightingIT extends BaseNeuralSearchIT {
             addKnnDocWithPipeline(
                 indexName,
                 "1",
-                "OpenSearch is a scalable, flexible, and extensible open-source software suite for search, analytics, and observability applications. It is licensed under Apache 2.0."
+                "Parkinson disease is a progressive neurodegenerative disorder characterized by synaptic loss and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on cholinesterase inhibitors and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cholinesterase inhibitors has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
             );
             addKnnDocWithPipeline(
                 indexName,
                 "2",
-                "Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data."
+                "ALS disease is a progressive neurodegenerative disorder characterized by glial activation and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on cognitive rehabilitation and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cognitive rehabilitation has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
             );
             addKnnDocWithPipeline(
                 indexName,
                 "3",
-                "Natural language processing enables computers to understand, interpret, and generate human language. It combines computational linguistics with machine learning and deep learning models."
+                "Alzheimer disease is a progressive neurodegenerative disorder characterized by alpha-synuclein aggregation and associated pathological changes. Clinical presentation typically includes motor dysfunction and progressive functional decline. Current therapeutic approaches focus on gene therapy and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with gene therapy has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
+            );
+            addKnnDocWithPipeline(
+                indexName,
+                "4",
+                "Huntington disease is a progressive neurodegenerative disorder characterized by neuroinflammation and associated pathological changes. Clinical presentation typically includes rigidity and progressive functional decline. Current therapeutic approaches focus on cognitive rehabilitation and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cognitive rehabilitation has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
+            );
+            addKnnDocWithPipeline(
+                indexName,
+                "5",
+                "Lewy Body Dementia disease is a progressive neurodegenerative disorder characterized by neuroinflammation and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on stem cell therapy and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with stem cell therapy has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
             );
         } else {
             // Index documents without pipeline for basic match query tests
@@ -178,7 +192,7 @@ public abstract class BaseSemanticHighlightingIT extends BaseNeuralSearchIT {
                 Collections.emptyList(),
                 Collections.singletonList(TEST_FIELD),
                 Collections.singletonList(
-                    "OpenSearch is a scalable, flexible, and extensible open-source software suite for search, analytics, and observability applications. It is licensed under Apache 2.0."
+                    "Parkinson disease is a progressive neurodegenerative disorder characterized by synaptic loss and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on cholinesterase inhibitors and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cholinesterase inhibitors has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
                 )
             );
             addKnnDoc(
@@ -188,7 +202,7 @@ public abstract class BaseSemanticHighlightingIT extends BaseNeuralSearchIT {
                 Collections.emptyList(),
                 Collections.singletonList(TEST_FIELD),
                 Collections.singletonList(
-                    "Machine learning is a method of data analysis that automates analytical model building. It is a branch of artificial intelligence based on the idea that systems can learn from data."
+                    "ALS disease is a progressive neurodegenerative disorder characterized by glial activation and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on cognitive rehabilitation and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cognitive rehabilitation has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
                 )
             );
             addKnnDoc(
@@ -198,7 +212,27 @@ public abstract class BaseSemanticHighlightingIT extends BaseNeuralSearchIT {
                 Collections.emptyList(),
                 Collections.singletonList(TEST_FIELD),
                 Collections.singletonList(
-                    "Natural language processing enables computers to understand, interpret, and generate human language. It combines computational linguistics with machine learning and deep learning models."
+                    "Alzheimer disease is a progressive neurodegenerative disorder characterized by alpha-synuclein aggregation and associated pathological changes. Clinical presentation typically includes motor dysfunction and progressive functional decline. Current therapeutic approaches focus on gene therapy and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with gene therapy has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
+                )
+            );
+            addKnnDoc(
+                indexName,
+                "4",
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(TEST_FIELD),
+                Collections.singletonList(
+                    "Huntington disease is a progressive neurodegenerative disorder characterized by neuroinflammation and associated pathological changes. Clinical presentation typically includes rigidity and progressive functional decline. Current therapeutic approaches focus on cognitive rehabilitation and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cognitive rehabilitation has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
+                )
+            );
+            addKnnDoc(
+                indexName,
+                "5",
+                Collections.emptyList(),
+                Collections.emptyList(),
+                Collections.singletonList(TEST_FIELD),
+                Collections.singletonList(
+                    "Lewy Body Dementia disease is a progressive neurodegenerative disorder characterized by neuroinflammation and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on stem cell therapy and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with stem cell therapy has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future."
                 )
             );
         }
@@ -212,6 +246,69 @@ public abstract class BaseSemanticHighlightingIT extends BaseNeuralSearchIT {
         String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
         return modelId;
+    }
+
+    /**
+     * Assert semantic highlighting with default tags (<em></em>)
+     * This is a semantic highlighting-specific assertion method
+     */
+    protected void assertSemanticHighlighting(Map<String, Object> responseMap, String fieldName, String expectedHighlight) {
+        assertSemanticHighlighting(responseMap, fieldName, expectedHighlight, "<em>", "</em>");
+    }
+
+    /**
+     * Assert semantic highlighting with custom tags
+     * Verifies:
+     * 1. Response structure is correct
+     * 2. Highlight tags are present in the fragments
+     * 3. Expected text appears in the highlighted content
+     * 4. Checks all hits, not just the first one
+     */
+    protected void assertSemanticHighlighting(
+        Map<String, Object> responseMap,
+        String fieldName,
+        String expectedHighlight,
+        String preTag,
+        String postTag
+    ) {
+        // 1. Verify response structure
+        assertNotNull("Response should not be null", responseMap);
+        List<Map<String, Object>> hits = AggregationsTestUtils.getNestedHits(responseMap);
+        assertNotNull("Response should contain hits", hits);
+        assertFalse("Should have at least one hit", hits.isEmpty());
+
+        // 2. Check each hit for highlights (not just the first one)
+        boolean foundHighlight = false;
+        StringBuilder allFragments = new StringBuilder();
+
+        for (Map<String, Object> hit : hits) {
+            Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
+            if (highlight != null && highlight.containsKey(fieldName)) {
+                List<String> fragments = (List<String>) highlight.get(fieldName);
+                assertNotNull("Highlight fragments should not be null", fragments);
+                assertFalse("Highlight fragments should not be empty", fragments.isEmpty());
+
+                // 3. Verify highlight structure
+                for (String fragment : fragments) {
+                    allFragments.append(fragment).append(" ");
+
+                    // Check that highlight tags are present
+                    assertTrue("Fragment should contain opening tag '" + preTag + "' in: " + fragment, fragment.contains(preTag));
+                    assertTrue("Fragment should contain closing tag '" + postTag + "' in: " + fragment, fragment.contains(postTag));
+
+                    // 4. Verify the expected text is somewhere in the fragment
+                    String plainText = fragment.replaceAll("<[^>]*>", "");
+                    if (plainText.toLowerCase(Locale.ROOT).contains(expectedHighlight.toLowerCase(Locale.ROOT))) {
+                        foundHighlight = true;
+                    }
+                }
+            }
+        }
+
+        assertTrue(
+            "Should find expected text '" + expectedHighlight + "' in at least one highlighted fragment. Fragments: " + allFragments,
+            foundHighlight
+        );
     }
 
 }

@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.highlight;
+package org.opensearch.neuralsearch.highlight.batch.config;
 
 import java.util.Locale;
 
@@ -10,6 +10,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.With;
 import org.opensearch.ml.common.FunctionName;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 
 /**
  * Immutable configuration for semantic highlighting extracted and validated from search request options.

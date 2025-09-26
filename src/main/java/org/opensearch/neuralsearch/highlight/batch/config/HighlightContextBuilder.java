@@ -2,11 +2,12 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.highlight;
+package org.opensearch.neuralsearch.highlight.batch.config;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
+import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.search.SearchHit;
 
 import java.util.ArrayList;

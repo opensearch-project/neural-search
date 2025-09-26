@@ -8,7 +8,7 @@ import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.neuralsearch.highlight.processor.SemanticHighlightingFactory;
+import org.opensearch.neuralsearch.highlight.batch.processor.SemanticHighlightingFactory;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;

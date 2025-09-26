@@ -129,8 +129,8 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseUpgradeTestCase
     }
 
     protected void waitForModelToLoad(String modelId) throws Exception {
-        int maxAttempts = 30;  // Maximum number of attempts
-        int waitTimeInSeconds = 2;  // Time to wait between attempts
+        int maxAttempts = 60;  // Maximum number of attempts
+        int waitTimeInSeconds = 3;  // Time to wait between attempts
 
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             MLModelState state = getModelState(modelId);

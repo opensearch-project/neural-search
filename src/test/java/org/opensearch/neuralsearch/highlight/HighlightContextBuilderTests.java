@@ -6,6 +6,9 @@ package org.opensearch.neuralsearch.highlight;
 
 import org.junit.Before;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.neuralsearch.highlight.batch.config.HighlightContextBuilder;
+import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
+import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.SearchHit;
