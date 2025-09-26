@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import com.google.gson.Gson;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.xcontent.XContentType;
@@ -30,6 +29,8 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
 
 @Log4j2
 public class AgenticQueryTranslatorProcessor extends AbstractProcessor implements SearchRequestProcessor {
@@ -39,7 +40,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
     private final MLCommonsClientAccessor mlClient;
     private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
-    private static final Gson gson = new Gson();
 
     AgenticQueryTranslatorProcessor(
         String tag,
@@ -136,11 +136,11 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
                     // Store agent steps summary in request context for response processing
                     if (agentStepsSummary != null && !agentStepsSummary.trim().isEmpty()) {
-                        requestContext.setAttribute("agent_steps_summary", agentStepsSummary);
+                        requestContext.setAttribute(AGENT_STEPS_FIELD_NAME, agentStepsSummary);
                     }
 
                     if (memoryId != null && !memoryId.trim().isEmpty()) {
-                        requestContext.setAttribute("memory_id", memoryId);
+                        requestContext.setAttribute(MEMORY_ID_FIELD_NAME, memoryId);
                     }
 
                     // Parse the agent response to get the new search source

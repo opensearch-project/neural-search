@@ -25,7 +25,7 @@ public class AgentStepsSearchExtBuilderTests extends OpenSearchTestCase {
 
         assertEquals(agentSteps, builder.getAgentStepsSummary());
         assertEquals(memoryId, builder.getMemoryId());
-        assertEquals(AgentStepsSearchExtBuilder.PARAM_FIELD_NAME, builder.getWriteableName());
+        assertEquals(AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME, builder.getWriteableName());
     }
 
     public void testConstructorWithEmptySteps() {

@@ -22,7 +22,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public class AgentStepsSearchExtBuilder extends SearchExtBuilder {
 
-    public final static String PARAM_FIELD_NAME = "agent_steps_summary";
+    public final static String AGENT_STEPS_FIELD_NAME = "agent_steps_summary";
     public final static String MEMORY_ID_FIELD_NAME = "memory_id";
     @Getter
     protected String agentStepsSummary;
@@ -36,7 +36,7 @@ public class AgentStepsSearchExtBuilder extends SearchExtBuilder {
 
     @Override
     public String getWriteableName() {
-        return PARAM_FIELD_NAME;
+        return AGENT_STEPS_FIELD_NAME;
     }
 
     @Override
@@ -47,7 +47,7 @@ public class AgentStepsSearchExtBuilder extends SearchExtBuilder {
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        builder.field(PARAM_FIELD_NAME, agentStepsSummary);
+        builder.field(AGENT_STEPS_FIELD_NAME, agentStepsSummary);
         builder.field(MEMORY_ID_FIELD_NAME, memoryId);
         return builder;
     }
@@ -73,7 +73,7 @@ public class AgentStepsSearchExtBuilder extends SearchExtBuilder {
                 String fieldName = parser.currentName();
                 parser.nextToken();
 
-                if (PARAM_FIELD_NAME.equals(fieldName)) {
+                if (AGENT_STEPS_FIELD_NAME.equals(fieldName)) {
                     if (parser.currentToken() == XContentParser.Token.VALUE_STRING) {
                         agentSteps = parser.text();
                     }

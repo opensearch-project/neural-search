@@ -359,7 +359,7 @@ public class NeuralSearch extends Plugin
                 in -> new RerankSearchExtBuilder(in),
                 parser -> RerankSearchExtBuilder.parse(parser)
             ),
-            new SearchExtSpec<>(AgentStepsSearchExtBuilder.PARAM_FIELD_NAME, in -> new AgentStepsSearchExtBuilder(in), parser -> {
+            new SearchExtSpec<>(AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME, in -> new AgentStepsSearchExtBuilder(in), parser -> {
                 throw new UnsupportedOperationException("AgentStepsSearchExtBuilder should not be parsed from request");
             })
         );
