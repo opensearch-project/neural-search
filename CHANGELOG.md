@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Agentic Search] Adds validations and logging for agentic query
 - [Performance Improvement] Introduce QueryCollectContextSpec in Hybrid Query to improve search performance.
 - [Agentic Search] Add support for conversational agent
+- [Semantic Highlighting] Add semantic highlighting response processor with batch inference support ([#1520](https://github.com/opensearch-project/neural-search/pull/1520))
 
 ### Bug Fixes
 - Fix reversed order of values in nested list with embedding processor [#1570](https://github.com/opensearch-project/neural-search/pull/1570)
