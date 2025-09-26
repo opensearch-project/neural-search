@@ -6,11 +6,15 @@ package org.opensearch.neuralsearch.highlight;
 
 import org.junit.Before;
 import org.mockito.Mock;
+import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
+import org.opensearch.neuralsearch.highlight.utils.HighlightConfigBuilder;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.opensearch.test.OpenSearchTestCase;
@@ -19,20 +23,19 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 
 public class HighlightConfigExtractorTests extends OpenSearchTestCase {
 
     @Mock
     private SearchResponse searchResponse;
 
-    private HighlightConfigExtractor extractor;
-
     @Before
     public void setUp() throws Exception {
         super.setUp();
         MockitoAnnotations.openMocks(this);
-        extractor = new HighlightConfigExtractor();
     }
 
     public void testExtractWithValidSemanticField() {
@@ -53,11 +56,16 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         sourceBuilder.highlighter(highlightBuilder);
         request.source(sourceBuilder);
 
+        // Mock search response with hits for validation
+        SearchHits searchHits = mock(SearchHits.class);
+        when(searchResponse.getHits()).thenReturn(searchHits);
+        when(searchHits.getHits()).thenReturn(new SearchHit[] { mock(SearchHit.class) });
+
         // Execute
         try (var mockedStatic = mockStatic(ProcessorUtils.class)) {
             mockedStatic.when(() -> ProcessorUtils.extractQueryTextFromBuilder(any())).thenReturn("test query");
 
-            HighlightConfig config = extractor.extract(request, searchResponse);
+            HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
             // Verify
             assertNotNull(config);
@@ -96,7 +104,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         try (var mockedStatic = mockStatic(ProcessorUtils.class)) {
             mockedStatic.when(() -> ProcessorUtils.extractQueryTextFromBuilder(any())).thenReturn("search text");
 
-            HighlightConfig config = extractor.extract(request, searchResponse);
+            HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
             // Verify - should extract only semantic field
             assertNotNull(config);
@@ -124,7 +132,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         try (var mockedStatic = mockStatic(ProcessorUtils.class)) {
             mockedStatic.when(() -> ProcessorUtils.extractQueryTextFromBuilder(any())).thenReturn("test");
 
-            HighlightConfig config = extractor.extract(request, searchResponse);
+            HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
             // Verify - extraction succeeds but modelId is null
             assertNotNull(config);
@@ -153,7 +161,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         request.source(sourceBuilder);
 
         // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
         // Verify
         assertNotNull(config);
@@ -183,7 +191,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         request.source(sourceBuilder);
 
         // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
         // Verify
         assertNotNull(config);
@@ -212,7 +220,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         request.source(sourceBuilder);
 
         // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
         // Verify
         assertNotNull(config);
@@ -229,7 +237,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         request.source(sourceBuilder);
 
         // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
         // Verify - should return empty config with validation error
         assertNotNull(config);
@@ -241,7 +249,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
 
     public void testExtractWithNullRequest() {
         // Execute
-        HighlightConfig config = extractor.extract(null, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(null, searchResponse);
 
         // Verify - should return empty config with validation error
         assertNotNull(config);
@@ -257,7 +265,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         // No source set
 
         // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
         // Verify - should return empty config with validation error
         assertNotNull(config);
@@ -286,7 +294,7 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         request.source(sourceBuilder);
 
         // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
         // Verify defaults
         assertNotNull(config);
@@ -307,8 +315,8 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
 
         Map<String, Object> options = new HashMap<>();
         options.put(SemanticHighlightingConstants.MODEL_ID, 123);  // Wrong type - should be ignored
-        options.put(SemanticHighlightingConstants.BATCH_INFERENCE, "true");  // Wrong type - should default to false
-        options.put(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE, "100");  // Wrong type - should use default
+        options.put(SemanticHighlightingConstants.BATCH_INFERENCE, "true");  // String type - should parse to true
+        options.put(SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE, "100");  // String type - should parse to 100
         highlightBuilder.options(options);
         highlightBuilder.field(field);
 
@@ -316,12 +324,12 @@ public class HighlightConfigExtractorTests extends OpenSearchTestCase {
         request.source(sourceBuilder);
 
         // Execute
-        HighlightConfig config = extractor.extract(request, searchResponse);
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, searchResponse);
 
-        // Verify - invalid types should be ignored or use defaults
+        // Verify - string values for batch options are now supported and parsed
         assertNotNull(config);
-        assertNull(config.getModelId());  // Invalid type, so null
-        assertFalse(config.isBatchInference());  // Invalid type, so default false
-        assertEquals(SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE, config.getMaxBatchSize());
+        assertNull(config.getModelId());  // Invalid type (integer), so null
+        assertTrue(config.isBatchInference());  // String "true" parsed to boolean true
+        assertEquals(100, config.getMaxBatchSize());  // String "100" parsed to int 100
     }
 }

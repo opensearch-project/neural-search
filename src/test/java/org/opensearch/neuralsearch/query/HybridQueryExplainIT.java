@@ -33,7 +33,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.util.TestUtils.getMaxScore;
-import static org.opensearch.neuralsearch.util.TestUtils.getNestedHits;
+import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
 import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
 import static org.opensearch.neuralsearch.util.TestUtils.getValueByKey;
 

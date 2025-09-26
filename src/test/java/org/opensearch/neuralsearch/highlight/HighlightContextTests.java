@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.highlight;
 
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;

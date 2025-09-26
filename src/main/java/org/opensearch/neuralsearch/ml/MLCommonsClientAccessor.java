@@ -504,6 +504,22 @@ public class MLCommonsClientAccessor {
     }
 
     /**
+     * Overload method for semantic highlighting with single document inference.
+     * This method is used by the SemanticHighlighter for non-batch mode.
+     * It defaults to QUESTION_ANSWERING model type for single document inference.
+     *
+     * @param inferenceRequest the request containing modelId, question, and context
+     * @param listener the listener to be called with the highlighting results
+     */
+    public void inferenceSentenceHighlighting(
+        @NonNull final SentenceHighlightingRequest inferenceRequest,
+        @NonNull final ActionListener<List<Map<String, Object>>> listener
+    ) {
+        // For non-batch single document inference, use QUESTION_ANSWERING model type
+        inferenceSentenceHighlighting(inferenceRequest, FunctionName.QUESTION_ANSWERING, listener);
+    }
+
+    /**
      * Performs sentence highlighting inference using the provided model.
      * This method will highlight relevant sentences in the context based on the question.
      * Uses the provided model type to determine the appropriate input format.

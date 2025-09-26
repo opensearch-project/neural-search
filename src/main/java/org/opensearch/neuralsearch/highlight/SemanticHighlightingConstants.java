@@ -32,6 +32,7 @@ public final class SemanticHighlightingConstants {
     public static final String DEFAULT_PRE_TAG = "<em>";
     public static final String DEFAULT_POST_TAG = "</em>";
     public static final int DEFAULT_MAX_INFERENCE_BATCH_SIZE = 100;
+    public static final Boolean DEFAULT_BATCH_INFERENCE = false;
 
     // ML inference keys
     public static final String HIGHLIGHTS_KEY = "highlights";

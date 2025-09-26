@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.highlight;
 
 import org.opensearch.ml.common.FunctionName;
+import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class HighlightConfigTest extends OpenSearchTestCase {

@@ -4,12 +4,12 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import static org.junit.Assert.fail;
 import org.opensearch.client.Request;
@@ -19,89 +19,77 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.neuralsearch.util.AggregationsTestUtils;
-import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
 
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
-import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
 
 /**
- * Integration tests for Semantic Highlighting functionality with remote models
+ * Integration tests for Semantic Highlighting functionality with local models
  */
 @Log4j2
-public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingIT {
+public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT {
 
-    private static final String TEST_INDEX = "test-semantic-highlight-remote-index";
-
-    private String remoteHighlightModelId;
-    private String remoteHighlightConnectorId;
-    private boolean isTorchServeAvailable = false;
-    private String torchServeEndpoint;
+    private static final String TEST_INDEX = "test-semantic-highlight-index";
+    private String localHighlightModelId;  // For local model tests
 
     @Before
     @SneakyThrows
     public void setUp() {
         super.setUp();
 
-        // Check for TorchServe endpoint from environment or system properties
-        torchServeEndpoint = System.getenv("TORCHSERVE_ENDPOINT");
-        if (torchServeEndpoint == null || torchServeEndpoint.isEmpty()) {
-            torchServeEndpoint = System.getProperty("tests.torchserve.endpoint");
+        // Prepare models for local tests
+        try {
+            textEmbeddingModelId = prepareModel();
+            log.info("Prepared text embedding model, model ID: {}", textEmbeddingModelId);
+        } catch (Exception e) {
+            log.warn("Failed to prepare text embedding model: {}", e.getMessage());
         }
 
-        if (torchServeEndpoint != null && !torchServeEndpoint.isEmpty()) {
-            isTorchServeAvailable = RemoteModelTestUtils.isRemoteEndpointAvailable(torchServeEndpoint);
-            if (isTorchServeAvailable) {
-                log.info("TorchServe is available at: {}", torchServeEndpoint);
-
-                // Create connector and deploy remote models
-                remoteHighlightConnectorId = createRemoteModelConnector(torchServeEndpoint);
-                remoteHighlightModelId = deployRemoteModel(remoteHighlightConnectorId, "semantic-highlighter-remote");
-                log.info("Deployed remote semantic highlighting model, model ID: {}", remoteHighlightModelId);
-
-                // Prepare text embedding model for neural queries
-                textEmbeddingModelId = prepareModel();
-                log.info("Prepared text embedding model, model ID: {}", textEmbeddingModelId);
-
-                // Create index for testing (supports both text and neural searches)
-                prepareHighlightingIndex(TEST_INDEX);
-                indexTestDocuments(TEST_INDEX);
-            } else {
-                log.info("TorchServe not available at {}, tests will be skipped", torchServeEndpoint);
-            }
-        } else {
-            log.info("No TorchServe endpoint configured, tests will be skipped");
+        try {
+            localHighlightModelId = prepareSentenceHighlightingModel();
+            log.info("Prepared local highlighting model, model ID: {}", localHighlightModelId);
+        } catch (Exception e) {
+            log.warn("Failed to prepare local highlighting model: {}", e.getMessage());
         }
+
+        // Create index for tests (supports both text and neural searches)
+        prepareHighlightingIndex(TEST_INDEX);
+        indexTestDocuments(TEST_INDEX);
     }
 
     @After
     @SneakyThrows
     public void tearDown() {
-        if (isTorchServeAvailable) {
-            // Cleanup indexes
-            try {
-                deleteIndex(TEST_INDEX);
-            } catch (Exception e) {
-                log.debug("Failed to delete index: {}", e.getMessage());
-            }
+        // Cleanup indexes
+        try {
+            deleteIndex(TEST_INDEX);
+        } catch (Exception e) {
+            log.debug("Failed to delete index: {}", e.getMessage());
+        }
 
-            // Cleanup remote model resources
-            cleanupRemoteModelResources(remoteHighlightConnectorId, remoteHighlightModelId);
+        // Cleanup local model
+        try {
+            if (localHighlightModelId != null) {
+                deleteModel(localHighlightModelId);
+            }
+        } catch (Exception e) {
+            log.debug("Failed to delete local highlight model: {}", e.getMessage());
         }
 
         super.tearDown();
     }
 
     /**
-     * Test semantic highlighting with match query using batch inference disabled with remote model
+     * Test semantic highlighting with local TORCH_SCRIPT model using QUESTION_ANSWERING function
+     * This tests backward compatibility with OpenSearch 3.1 local models
      */
-    public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithRemoteModel() throws Exception {
-        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
+    public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithLocalModel() throws Exception {
+        // Use the already prepared local model from setUp()
+        log.info("Using pre-prepared local model with ID: {}", localHighlightModelId);
 
+        // Create query with semantic highlighting and model_id in options
         XContentBuilder searchBody = XContentFactory.jsonBuilder()
             .startObject()
             .field("size", 2)
@@ -117,7 +105,46 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .endObject()
             .startObject("options")
-            .field("model_id", remoteHighlightModelId)
+            .field("model_id", localHighlightModelId)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        log.info("Sending search request with semantic highlighting: {}", searchBody.toString());
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> searchResponse = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+        // Verify semantic highlighting worked
+        assertSemanticHighlighting(searchResponse, TEST_FIELD, "treatments");
+
+        log.info("Local model test completed successfully");
+    }
+
+    /**
+     * Test semantic highlighting with term query using local model
+     */
+    public void testSemanticHighlightingWithTermQueryWithLocalModel() throws Exception {
+        XContentBuilder searchBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("size", 2)
+            .startObject("query")
+            .startObject("term")
+            .startObject(TEST_FIELD)
+            .field("value", "neurodegenerative")
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(TEST_FIELD)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", localHighlightModelId)
             .endObject()
             .endObject()
             .endObject();
@@ -128,31 +155,123 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-        assertSemanticHighlighting(responseMap, TEST_FIELD, "treatments");
+        assertSemanticHighlighting(responseMap, TEST_FIELD, "neurodegenerative");
     }
 
     /**
-     * Test semantic highlighting with match query using batch inference enabled with remote model
+     * Test semantic highlighting with boolean query using local model
      */
-    public void testSemanticHighlightingWithQueryMatchWithBatchEnabledWithRemoteModel() throws Exception {
-        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
+    public void testSemanticHighlightingWithBooleanQueryWithLocalModel() throws Exception {
+        XContentBuilder searchBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("size", 3)
+            .startObject("query")
+            .startObject("bool")
+            .startArray("must")
+            .startObject()
+            .startObject("match")
+            .field(TEST_FIELD, "disease")
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject("match")
+            .field(TEST_FIELD, "therapy")
+            .endObject()
+            .endObject()
+            .endArray()
+            .startArray("should")
+            .startObject()
+            .startObject("match")
+            .field(TEST_FIELD, "clinical")
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject()
+            .endObject()
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(TEST_FIELD)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", localHighlightModelId)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+        assertSemanticHighlighting(responseMap, TEST_FIELD, "disease");
+    }
+
+    /**
+     * Test semantic highlighting with query_string query using local model
+     */
+    public void testSemanticHighlightingWithQueryStringQueryWithLocalModel() throws Exception {
+        XContentBuilder searchBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("size", 2)
+            .startObject("query")
+            .startObject("query_string")
+            .field("query", "neurodegenerative AND therapy")
+            .field("default_field", TEST_FIELD)
+            .endObject()
+            .endObject()
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(TEST_FIELD)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", localHighlightModelId)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+        assertSemanticHighlighting(responseMap, TEST_FIELD, "neurodegenerative");
+    }
+
+    /**
+     * Test semantic highlighting with custom tags using local model
+     */
+    public void testSemanticHighlightingWithCustomTagsWithLocalModel() throws Exception {
+        String customPreTag = "<custom>";
+        String customPostTag = "</custom>";
 
         XContentBuilder searchBody = XContentFactory.jsonBuilder()
             .startObject()
             .field("size", 2)
             .startObject("query")
             .startObject("match")
-            .field(TEST_FIELD, "clinical trials for therapies")
+            .field(TEST_FIELD, "clinical trials for disease treatment")
             .endObject()
             .endObject()
             .startObject("highlight")
+            .startArray("pre_tags")
+            .value(customPreTag)
+            .endArray()
+            .startArray("post_tags")
+            .value(customPostTag)
+            .endArray()
             .startObject("fields")
             .startObject(TEST_FIELD)
             .field("type", "semantic")
             .endObject()
             .endObject()
             .startObject("options")
-            .field("model_id", remoteHighlightModelId)
+            .field("model_id", localHighlightModelId)
             .endObject()
             .endObject()
             .endObject();
@@ -163,58 +282,17 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-        assertSemanticHighlighting(responseMap, TEST_FIELD, "clinical trials");
+        assertSemanticHighlighting(responseMap, TEST_FIELD, "clinical trials", customPreTag, customPostTag);
     }
 
     /**
-     * Test semantic highlighting with Neural query using batch inference enabled with remote model
+     * Test semantic highlighting with Neural query using batch inference disabled with local model
      */
-    public void testSemanticHighlightingWithNeuralQueryWithBatchEnabledWithRemoteModel() throws Exception {
-        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
-
+    public void testSemanticHighlightingWithNeuralQueryWithLocalModel() throws Exception {
+        // Create neural query
         NeuralQueryBuilder neuralQuery = NeuralQueryBuilder.builder()
             .fieldName(TEST_KNN_VECTOR_FIELD)
             .queryText("What are the treatments for neurodegenerative diseases?")
-            .modelId(textEmbeddingModelId)
-            .k(3)
-            .build();
-
-        XContentBuilder searchBody = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("size", 3)
-            .field("query")
-            .value(neuralQuery)
-            .startObject("highlight")
-            .startObject("fields")
-            .startObject(TEST_FIELD)
-            .field("type", "semantic")
-            .endObject()
-            .endObject()
-            .startObject("options")
-            .field("model_id", remoteHighlightModelId)
-            .endObject()
-            .endObject()
-            .endObject();
-
-        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
-        request.setJsonEntity(searchBody.toString());
-        Response response = client().performRequest(request);
-        String responseBody = EntityUtils.toString(response.getEntity());
-        log.info("Neural query batch response: {}", responseBody);
-        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
-
-        assertSemanticHighlighting(responseMap, TEST_FIELD, "treatments");
-    }
-
-    /**
-     * Test semantic highlighting with Neural query using batch inference disabled with remote model
-     */
-    public void testSemanticHighlightingWithNeuralQueryWithBatchDisabledWithRemoteModel() throws Exception {
-        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
-
-        NeuralQueryBuilder neuralQuery = NeuralQueryBuilder.builder()
-            .fieldName(TEST_KNN_VECTOR_FIELD)
-            .queryText("disease mechanisms and therapeutic interventions")
             .modelId(textEmbeddingModelId)
             .k(2)
             .build();
@@ -231,46 +309,24 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .endObject()
             .startObject("options")
-            .field("model_id", remoteHighlightModelId)
+            .field("model_id", localHighlightModelId)  // Use local model
             .endObject()
             .endObject()
             .endObject();
 
-        log.info("Testing neural query with batch inference disabled: {}", searchBody.toString());
+        log.info("Testing neural query with local model (batch disabled): {}", searchBody.toString());
         Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
         request.setJsonEntity(searchBody.toString());
         Response response = client().performRequest(request);
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-        // Check that at least one hit has disease or therapy highlighted
-        // (neural search ordering can vary, so we check any hit)
-        boolean foundHighlight = false;
-        List<Map<String, Object>> hits = AggregationsTestUtils.getNestedHits(responseMap);
-        for (Map<String, Object> hit : hits) {
-            Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
-            if (highlight != null && highlight.containsKey(TEST_FIELD)) {
-                List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
-                if (contentHighlights != null && !contentHighlights.isEmpty()) {
-                    String highlightText = contentHighlights.get(0);
-                    if (highlightText.contains("disease") || highlightText.contains("therapy")) {
-                        foundHighlight = true;
-                        break;
-                    }
-                }
-            }
-        }
-        assertTrue("Should have found disease or therapy in highlights", foundHighlight);
+        // Verify semantic highlighting worked
+        assertSemanticHighlighting(responseMap, TEST_FIELD, "treatments");
     }
 
-    /**
-     * Test semantic highlighting throws exception when batch mode is requested without system processor enabled
-     */
-    public void testSemanticHighlightingBatchModeWithoutSystemProcessor() throws Exception {
-        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
-
-        // First, ensure system processor is disabled
-        updateClusterSettings("cluster.search.enabled_system_generated_factories", java.util.Collections.emptyList());
+    public void testSemanticHighlightingDisabledWhenFactoryNotEnabled() throws Exception {
+        updateClusterSettings("cluster.search.enabled_system_generated_factories", Collections.emptyList());
         try {
             // Test 1: Batch mode should fail without system factory
             XContentBuilder batchSearchBody = XContentFactory.jsonBuilder()
@@ -288,7 +344,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
                 .endObject()
                 .endObject()
                 .startObject("options")
-                .field("model_id", remoteHighlightModelId)
+                .field("model_id", localHighlightModelId)
                 .field("batch_inference", true)  // Test batch mode which requires system factory
                 .endObject()
                 .endObject()
@@ -306,8 +362,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
                 batchResponse = client().performRequest(batchRequest);
                 // If we get here, the request succeeded - check if there's an error in the response
                 String responseBody = EntityUtils.toString(batchResponse.getEntity());
-                log.info("Batch request response status: {}", batchResponse.getStatusLine());
-                log.info("Batch request response body: {}", responseBody);
 
                 // Check if the response contains an error or failure
                 Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
@@ -402,7 +456,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
                 .endObject()
                 .endObject()
                 .startObject("options")
-                .field("model_id", remoteHighlightModelId)
+                .field("model_id", localHighlightModelId)
                 .field("batch_inference", false)  // Single inference mode (default)
                 .endObject()
                 .endObject()
@@ -417,72 +471,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             // Single inference mode should work and produce highlights
             assertSemanticHighlighting(singleSearchResponse, TEST_FIELD, "treatments");
         } finally {
-            // Restore default setting
             updateClusterSettings("cluster.search.enabled_system_generated_factories", null);
         }
-    }
-
-    /**
-     * Test semantic highlighting with Hybrid query using batch inference enabled with remote model
-     */
-    public void testSemanticHighlightingWithHybridQueryWithBatchEnabledWithRemoteModel() throws Exception {
-        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
-
-        // Create hybrid query with neural and match components
-        NeuralQueryBuilder neuralQuery = NeuralQueryBuilder.builder()
-            .fieldName(TEST_KNN_VECTOR_FIELD)
-            .queryText("What are the treatments for neurodegenerative diseases?")
-            .modelId(textEmbeddingModelId)
-            .k(2)
-            .build();
-
-        MatchQueryBuilder matchQuery = QueryBuilders.matchQuery(TEST_FIELD, "clinical trials therapy");
-
-        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
-        hybridQuery.add(neuralQuery);
-        hybridQuery.add(matchQuery);
-
-        XContentBuilder searchBody = XContentFactory.jsonBuilder()
-            .startObject()
-            .field("size", 3)
-            .field("query")
-            .value(hybridQuery)
-            .startObject("highlight")
-            .startObject("fields")
-            .startObject(TEST_FIELD)
-            .field("type", "semantic")
-            .endObject()
-            .endObject()
-            .startObject("options")
-            .field("model_id", remoteHighlightModelId)
-            .endObject()
-            .endObject()
-            .endObject();
-
-        log.info("Testing hybrid query with batch inference enabled: {}", searchBody.toString());
-        Request request = new Request("POST", "/" + TEST_INDEX + "/_search");
-        request.setJsonEntity(searchBody.toString());
-        Response response = client().performRequest(request);
-        String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
-
-        // Verify semantic highlighting worked
-        List<Map<String, Object>> hits = AggregationsTestUtils.getNestedHits(responseMap);
-        assertNotNull("Should have search hits", hits);
-        assertTrue("Should have at least one hit", !hits.isEmpty());
-
-        // Check that highlights exist
-        boolean foundHighlight = false;
-        for (Map<String, Object> hit : hits) {
-            Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
-            if (highlight != null && highlight.containsKey(TEST_FIELD)) {
-                foundHighlight = true;
-                List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
-                log.info("Hybrid query highlights: {}", contentHighlights);
-                assertNotNull("Highlights should not be null", contentHighlights);
-                assertTrue("Should have at least one highlight", !contentHighlights.isEmpty());
-            }
-        }
-        assertTrue("Should have found at least one highlight", foundHighlight);
     }
 }

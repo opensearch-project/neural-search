@@ -2,11 +2,11 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.highlight.processor;
+package org.opensearch.neuralsearch.highlight.batch.processor;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
+import org.opensearch.neuralsearch.highlight.utils.HighlightExtractorUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
@@ -45,15 +45,9 @@ public class SemanticHighlightingFactory implements SystemGeneratedProcessor.Sys
             return false;
         }
 
-        // Check if any field has semantic highlighting type
-        for (HighlightBuilder.Field field : highlightBuilder.fields()) {
-            String highlightType = field.highlighterType();
-            if (SemanticHighlightingConstants.HIGHLIGHTER_TYPE.equals(highlightType)) {
-                return true;
-            }
-        }
-
-        return false;
+        // Use utility method to check for semantic highlighting field
+        String semanticField = HighlightExtractorUtils.extractSemanticField(highlightBuilder);
+        return semanticField != null;
     }
 
     @Override

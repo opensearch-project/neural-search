@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.highlight;
+package org.opensearch.neuralsearch.highlight.batch;
 
 import lombok.Builder;
 import lombok.Getter;

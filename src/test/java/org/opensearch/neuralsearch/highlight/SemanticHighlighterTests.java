@@ -7,74 +7,457 @@ package org.opensearch.neuralsearch.highlight;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.neuralsearch.highlight.single.SemanticHighlighterEngine;
+import org.opensearch.neuralsearch.util.TestUtils;
+import org.apache.lucene.search.Query;
+import org.opensearch.search.fetch.FetchContext;
+import org.opensearch.search.fetch.FetchSubPhase;
 import org.opensearch.search.fetch.subphase.highlight.FieldHighlightContext;
 import org.opensearch.search.fetch.subphase.highlight.HighlightField;
+import org.opensearch.search.fetch.subphase.highlight.SearchHighlightContext;
+import org.opensearch.search.lookup.SourceLookup;
+import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.test.OpenSearchTestCase;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants.HIGHLIGHTER_TYPE;
 
 public class SemanticHighlighterTests extends OpenSearchTestCase {
 
-    @Mock
-    private MappedFieldType fieldType;
+    private SemanticHighlighter highlighter;
 
     @Mock
+    private SemanticHighlighterEngine semanticHighlighterEngine;
+
+    @Mock
+    private ClusterService clusterService;
+
+    @Mock
+    private ClusterState clusterState;
+
+    @Mock
+    private Metadata metadata;
+
     private FieldHighlightContext fieldContext;
 
-    private SemanticHighlighter highlighter;
+    @Mock
+    private FetchContext fetchContext;
+
+    @Mock
+    private Query query;
+
+    @Mock
+    private MappedFieldType mappedFieldType;
+
+    @Mock
+    private SearchHighlightContext.Field field;
+
+    @Mock
+    private SearchHighlightContext.FieldOptions fieldOptions;
+
+    @Mock
+    private Settings settings;
+
+    @Mock
+    private FetchSubPhase.HitContext hitContext;
+
+    @Mock
+    private SourceLookup sourceLookup;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         MockitoAnnotations.openMocks(this);
+        TestUtils.initializeEventStatsManager();
         highlighter = new SemanticHighlighter();
+
+        // Setup common mocks using reflection to set final fields
+        fieldContext = mock(FieldHighlightContext.class);
+        field = mock(SearchHighlightContext.Field.class);
+        fieldOptions = mock(SearchHighlightContext.FieldOptions.class);
+        hitContext = mock(FetchSubPhase.HitContext.class);
+        sourceLookup = mock(SourceLookup.class);
+
+        // Create FieldHighlightContext using constructor instead of reflection
+        fieldContext = new FieldHighlightContext(
+            "test_field",
+            field,
+            mappedFieldType,
+            fetchContext,
+            hitContext,
+            query,
+            false,
+            new HashMap<>()
+        );
+
+        // Setup hitContext to return sourceLookup
+        when(hitContext.sourceLookup()).thenReturn(sourceLookup);
+        // Setup sourceLookup to return test field content
+        when(sourceLookup.extractValue("test_field", null)).thenReturn("test field content");
+
+        when(field.fieldOptions()).thenReturn(fieldOptions);
+        when(fieldOptions.preTags()).thenReturn(new String[] { "<em>" });
+        when(fieldOptions.postTags()).thenReturn(new String[] { "</em>" });
     }
 
     public void testCanHighlightAlwaysReturnsTrue() {
         // Test with any field type - should always return true
+        MappedFieldType fieldType = mock(MappedFieldType.class);
         assertTrue(highlighter.canHighlight(fieldType));
 
         // Test with null - should still return true
         assertTrue(highlighter.canHighlight(null));
     }
 
-    public void testHighlightAlwaysReturnsNull() {
-        // The highlight method should always return null
-        // Actual highlighting is done by SemanticHighlightingProcessor
-        HighlightField result = highlighter.highlight(fieldContext);
-        assertNull(result);
-
-        // Test with null context
-        HighlightField resultWithNull = highlighter.highlight(null);
-        assertNull(resultWithNull);
-    }
-
     public void testHighlighterName() {
         // Verify the highlighter name matches the constant
-        assertEquals(SemanticHighlightingConstants.HIGHLIGHTER_TYPE, SemanticHighlighter.NAME);
-        assertEquals("semantic", SemanticHighlighter.NAME);
+        assertEquals("semantic", HIGHLIGHTER_TYPE);
     }
 
-    public void testHighlighterPurpose() {
-        // This test documents the purpose of the SemanticHighlighter
-        // It's a minimal implementation that only validates the "semantic" type
-        // The actual highlighting work is delegated to SemanticHighlightingProcessor
+    public void testInitializeThrowsExceptionWhenAlreadyInitialized() {
+        highlighter.initialize(semanticHighlighterEngine);
 
-        // Verify it can highlight any field type
-        MappedFieldType textField = mock(MappedFieldType.class);
-        MappedFieldType keywordField = mock(MappedFieldType.class);
-        MappedFieldType numericField = mock(MappedFieldType.class);
+        IllegalStateException exception = expectThrows(
+            IllegalStateException.class,
+            () -> highlighter.initialize(semanticHighlighterEngine)
+        );
 
-        assertTrue(highlighter.canHighlight(textField));
-        assertTrue(highlighter.canHighlight(keywordField));
-        assertTrue(highlighter.canHighlight(numericField));
-
-        // Verify it doesn't actually perform highlighting
-        FieldHighlightContext context = mock(FieldHighlightContext.class);
-        assertNull(highlighter.highlight(context));
+        assertTrue(exception.getMessage().contains("already been initialized"));
     }
 
-    // Helper method for mocking
-    private <T> T mock(Class<T> classToMock) {
-        return org.mockito.Mockito.mock(classToMock);
+    // ============= Tests for Single Inference Mode =============
+
+    public void testSingleInferenceModeWithoutBatchInference() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            "<em>highlighted text</em>"
+        );
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNotNull(result);
+        assertEquals("test_field", result.name());
+        assertEquals(1, result.fragments().length);
+        assertEquals("<em>highlighted text</em>", result.fragments()[0].string());
+    }
+
+    public void testSingleInferenceModeWithBatchInferenceFalse() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", false);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            "<em>highlighted text</em>"
+        );
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNotNull(result);
+        verify(semanticHighlighterEngine, times(1)).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
+    public void testSingleInferenceModeReturnsNullWhenNoQueryText() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn(null);
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNull(result);
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
+    public void testSingleInferenceModeThrowsExceptionWhenNotInitialized() {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        // Don't initialize the engine
+        highlighter.setClusterService(clusterService);
+
+        // Execute & Verify
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> highlighter.highlight(fieldContext));
+
+        assertTrue(exception.getMessage().contains("SemanticHighlighter has not been initialized"));
+    }
+
+    // ============= Tests for Batch Inference Mode =============
+
+    public void testBatchInferenceModeWithSystemProcessorEnabled() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", true);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        // Mock system processor enabled
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.settings()).thenReturn(settings);
+        List<String> enabledFactories = Arrays.asList("semantic-highlighter");
+        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNull(result); // Should return null to defer to processor
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
+    public void testBatchInferenceModeThrowsExceptionWhenSystemProcessorDisabled() {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", true);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        // Mock system processor disabled
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.settings()).thenReturn(settings);
+        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(
+            Collections.emptyList()
+        );
+
+        // Execute & Verify
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> highlighter.highlight(fieldContext));
+
+        // Updated assertions to match new error message
+        assertTrue(exception.getMessage().contains("Batch inference for semantic highlighting is disabled"));
+        assertTrue(exception.getMessage().contains("Enable it by adding"));
+        assertTrue(exception.getMessage().contains("semantic-highlighter"));
+        assertTrue(exception.getMessage().contains("cluster.search.enabled_system_generated_factories"));
+    }
+
+    public void testBatchInferenceModeWithStringValue() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", "true"); // String instead of boolean
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        // Mock system processor enabled
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.settings()).thenReturn(settings);
+        List<String> enabledFactories = Arrays.asList("semantic-highlighter");
+        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNull(result); // Should return null to defer to processor
+    }
+
+    // ============= Tests for Custom Tags =============
+
+    public void testCustomPreAndPostTags() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+        when(fieldOptions.preTags()).thenReturn(new String[] { "<mark>" });
+        when(fieldOptions.postTags()).thenReturn(new String[] { "</mark>" });
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), eq("<mark>"), eq("</mark>")))
+            .thenReturn("<mark>highlighted text</mark>");
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNotNull(result);
+        assertEquals("<mark>highlighted text</mark>", result.fragments()[0].string());
+
+        verify(semanticHighlighterEngine, times(1)).getHighlightedSentences(
+            eq("test_model"),
+            eq("test query"),
+            anyString(),
+            eq("<mark>"),
+            eq("</mark>")
+        );
+    }
+
+    // ============= Edge Case Tests =============
+
+    public void testSystemProcessorEnabledWithOtherFactories() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", true);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        // Mock system processor enabled among other factories
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.settings()).thenReturn(settings);
+        List<String> enabledFactories = Arrays.asList("other-factory", "semantic-highlighter", "another-factory");
+        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNull(result); // Should return null to defer to processor
+    }
+
+    public void testSingleInferenceModeReturnsNullWhenEmptyHighlightedText() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            ""
+        );
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify
+        assertNull(result);
+    }
+
+    // ============= Tests for Wildcard Support =============
+
+    public void testSystemProcessorEnabledWithWildcard() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", true);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        // Mock system processor enabled with wildcard "*"
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.settings()).thenReturn(settings);
+        List<String> enabledFactories = Arrays.asList("*");  // Wildcard enables all factories
+        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify - should return null to defer to processor
+        assertNull(result);
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
+    public void testSystemProcessorEnabledWithWildcardAndOthers() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", true);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        // Mock system processor enabled with wildcard and other factories
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.settings()).thenReturn(settings);
+        List<String> enabledFactories = Arrays.asList("some-factory", "*", "another-factory");
+        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify - should return null to defer to processor
+        assertNull(result);
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
+    public void testSystemProcessorDisabledWithOtherFactoriesOnly() {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("batch_inference", true);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        highlighter.setClusterService(clusterService);
+
+        // Mock system processor with only other factories (no semantic-highlighter, no wildcard)
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.settings()).thenReturn(settings);
+        List<String> enabledFactories = Arrays.asList("other-factory", "another-factory");
+        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+
+        // Execute & Verify - should throw exception
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> highlighter.highlight(fieldContext));
+
+        assertTrue(exception.getMessage().contains("Batch inference for semantic highlighting is disabled"));
+        assertTrue(exception.getMessage().contains("Enable it by adding"));
     }
 }
