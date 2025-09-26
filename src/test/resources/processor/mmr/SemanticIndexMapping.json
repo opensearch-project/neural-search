@@ -1,0 +1,18 @@
+{
+  "settings": {
+    "index.knn": true
+  },
+  "mappings": {
+    "properties": {
+      "semantic_field":{
+        "type":"semantic",
+        "model_id": "%s",
+        "dense_embedding_config": {
+          "method": {
+            "engine": "lucene"
+          }
+        }
+      }
+    }
+  }
+}
