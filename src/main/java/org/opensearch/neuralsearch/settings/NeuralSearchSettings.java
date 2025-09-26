@@ -88,7 +88,7 @@ public final class NeuralSearchSettings {
      */
     public static final Setting<Boolean> AGENTIC_SEARCH_ENABLED = Setting.boolSetting(
         "plugins.neural_search.agentic_search_enabled",
-        false,
+        true,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
