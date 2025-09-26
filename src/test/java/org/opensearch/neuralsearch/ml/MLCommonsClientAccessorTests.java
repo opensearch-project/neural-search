@@ -32,6 +32,8 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.cluster.node.DiscoveryNode;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
+import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.MLModel;
@@ -643,19 +645,16 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     public void testExecuteAgent_Success() throws Exception {
         final String agentId = "test-agent-id";
-        final ActionListener<String> listener = mock(ActionListener.class);
-        final String expectedResponse = "{\"query\":{\"match\":{\"field\":\"value\"}}}";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+        final String expectedDslQuery = "{\"query\":{\"match\":{\"field\":\"value\"}}}";
 
-        // Mock SearchRequest
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
         when(mockQuery.getQueryFields()).thenReturn(List.of("field1", "field2"));
 
-        // Mock the ML client execute method for conversational agent
         Mockito.doAnswer(invocation -> {
             final ActionListener actionListener = invocation.getArgument(2);
             MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
@@ -676,20 +675,24 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         );
 
         verify(client).execute(any(), any(), any());
-        verify(listener).onResponse(expectedResponse);
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals(expectedDslQuery, result.getDslQuery());
+        assertEquals("test summary", result.getAgentStepsSummary());
+        assertEquals("test-memory-123", result.getMemoryId());
         Mockito.verifyNoMoreInteractions(listener);
     }
 
     public void testExecuteAgent_Failure() throws Exception {
         final String agentId = "test-agent-id";
-        final ActionListener<String> listener = mock(ActionListener.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
         final RuntimeException exception = new RuntimeException("Agent execution failed");
 
-        // Mock SearchRequest
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
@@ -717,17 +720,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     public void testExecuteAgent_WithRetry() throws Exception {
         final String agentId = "test-agent-id";
-        final ActionListener<String> listener = mock(ActionListener.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
         final NodeNotConnectedException nodeNotConnectedException = new NodeNotConnectedException(
             mock(DiscoveryNode.class),
             "Node not connected"
         );
 
-        // Mock SearchRequest
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
@@ -748,7 +749,6 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             listener
         );
 
-        // Verify client.execute is called 4 times (1 initial + 3 retries)
         verify(client, times(4)).execute(any(), any(), any());
         verify(listener).onFailure(nodeNotConnectedException);
         Mockito.verifyNoMoreInteractions(listener);
@@ -852,18 +852,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final String agentType = "flow";
         final boolean hasSystemPrompt = false;
         final NamedXContentRegistry registry = mock(NamedXContentRegistry.class);
-        final ActionListener<String> listener = mock(ActionListener.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
         final String expectedResponse = "{\"query\": {\"match\": {\"field\": \"value\"}}}";
 
-        // Mock SearchRequest
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
-        // Mock the ML client execute method for flow agent
         Mockito.doAnswer(invocation -> {
             final ActionListener actionListener = invocation.getArgument(2);
             MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
@@ -877,7 +874,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
         verify(client).execute(any(), any(), any());
-        verify(listener).onResponse(expectedResponse);
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals(expectedResponse, result.getDslQuery());
+        assertNull(result.getAgentStepsSummary());
+        assertNull(result.getMemoryId());
     }
 
     public void testExecuteAgent_ConversationalAgent() throws Exception {
@@ -885,17 +888,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final String agentType = "conversational";
         final boolean hasSystemPrompt = true;
         final NamedXContentRegistry registry = mock(NamedXContentRegistry.class);
-        final ActionListener<String> listener = mock(ActionListener.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
 
-        // Mock SearchRequest
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
-        // Mock the ML client execute method for conversational agent
         Mockito.doAnswer(invocation -> {
             final ActionListener actionListener = invocation.getArgument(2);
             MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
@@ -909,7 +909,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
         verify(client).execute(any(), any(), any());
-        verify(listener).onResponse("{\"query\":{\"match\":{\"field\":\"value\"}}}");
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+        assertEquals("test summary", result.getAgentStepsSummary());
+        assertEquals("test-memory-123", result.getMemoryId());
     }
 
     public void testExecuteAgent_WithSystemPromptFalse() throws Exception {
@@ -917,17 +923,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final String agentType = "conversational";
         final boolean hasSystemPrompt = false;
         final NamedXContentRegistry registry = mock(NamedXContentRegistry.class);
-        final ActionListener<String> listener = mock(ActionListener.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
 
-        // Mock SearchRequest
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
-        // Mock the ML client execute method
         Mockito.doAnswer(invocation -> {
             final ActionListener actionListener = invocation.getArgument(2);
             MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
@@ -940,7 +943,6 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
-        // Verify that system prompt was added to parameters
         ArgumentCaptor<AgentMLInput> inputCaptor = ArgumentCaptor.forClass(AgentMLInput.class);
         verify(client).execute(any(), inputCaptor.capture(), any());
 
@@ -948,7 +950,11 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         RemoteInferenceInputDataSet dataset = (RemoteInferenceInputDataSet) capturedInput.getInputDataset();
         assertTrue(dataset.getParameters().containsKey("system_prompt"));
 
-        verify(listener).onResponse("{\"query\":{\"match\":{\"field\":\"value\"}}}");
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
     }
 
     public void testExecuteAgent_UnsupportedAgentType() throws Exception {
@@ -956,19 +962,16 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final String agentType = "unsupported";
         final boolean hasSystemPrompt = false;
         final NamedXContentRegistry registry = mock(NamedXContentRegistry.class);
-        final ActionListener<String> listener = mock(ActionListener.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
 
-        // Mock SearchRequest
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
         AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
 
-        // No need to mock client.execute since the method should fail before calling it
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
         ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
@@ -978,13 +981,11 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     public void testExecuteAgent_FlowAgentWithMultipleIndices() throws Exception {
         final String agentId = "test-agent-id";
-        final ActionListener<String> listener = mock(ActionListener.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
 
-        // Mock SearchRequest with multiple indices
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "index1", "index2" });
 
-        // Mock AgenticSearchQueryBuilder
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
@@ -1004,8 +1005,11 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         // Create proper conversational agent response format
         String responseJson = "{\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}},\"agent_steps_summary\":\"test summary\"}";
-        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, Map.of("response", responseJson));
-        mlModelTensorList.add(tensor);
+        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, null, Map.of("response", responseJson));
+        final ModelTensor memoryTensor = new ModelTensor("memory_id", null, null, null, null, "test-memory-123", Map.of());
+
+        mlModelTensorList.add(responseTensor);
+        mlModelTensorList.add(memoryTensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);

@@ -49,6 +49,8 @@ import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
+import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
+import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
 import org.opensearch.neuralsearch.processor.InferenceRequest;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
@@ -520,7 +522,7 @@ public class MLCommonsClientAccessor {
         @NonNull String agentId,
         @NonNull AgentInfoDTO agentInfo,
         @NonNull NamedXContentRegistry xContentRegistry,
-        @NonNull ActionListener<String> listener
+        @NonNull ActionListener<AgentExecutionDTO> listener
     ) throws IOException {
         retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, 0, listener);
     }
@@ -535,7 +537,7 @@ public class MLCommonsClientAccessor {
         AgentInfoDTO agentInfo,
         NamedXContentRegistry xContentRegistry,
         int retryTime,
-        ActionListener<String> listener
+        ActionListener<AgentExecutionDTO> listener
     ) throws IOException {
         String agentType = agentInfo.getType();
         boolean hasSystemPrompt = agentInfo.isHasSystemPrompt();
@@ -551,6 +553,10 @@ public class MLCommonsClientAccessor {
 
         Map<String, String> parameters = new HashMap<>();
         parameters.put("question", agenticQuery.getQueryText());
+
+        if (agenticQuery.getMemoryId() != null) {
+            parameters.put("memory_id", agenticQuery.getMemoryId());
+        }
 
         // Add index names if present
         String[] indices = request.indices();
@@ -583,15 +589,20 @@ public class MLCommonsClientAccessor {
 
         mlClient.execute(FunctionName.AGENT, agentMLInput, ActionListener.wrap(response -> {
             MLOutput mlOutput = (MLOutput) response.getOutput();
-            String result = null;
+            String dslQuery = null;
+            String agentStepsSummary = null;
+
+            String memoryId = null;
             if (type == MLAgentType.FLOW) {
-                result = extractFlowAgentResult(mlOutput);
+                dslQuery = extractFlowAgentResult(mlOutput);
             } else if (type == MLAgentType.CONVERSATIONAL) {
                 Map<String, String> conversationalResult = extractConversationalAgentResult(mlOutput, xContentRegistry);
-                result = conversationalResult.get("dsl_query");
+                dslQuery = conversationalResult.get("dsl_query");
+                agentStepsSummary = conversationalResult.get("agent_steps_summary");
+                memoryId = conversationalResult.get("memory_id");
             }
 
-            listener.onResponse(result);
+            listener.onResponse(new AgentExecutionDTO(dslQuery, agentStepsSummary, memoryId));
         }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> {
             try {
                 retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, retryTime + 1, listener);
@@ -634,10 +645,10 @@ public class MLCommonsClientAccessor {
     }
 
     /**
-     * Extract dsl_query and agent_steps_summary from conversational agent response
+     * Extract dsl_query, agent_steps_summary, and memory_id from conversational agent response
      * @param mlOutput ml output
      * @param xContentRegistry xContentRegistry
-     * @return result
+     * @return result map containing dsl_query, agent_steps_summary, and memory_id
      */
     private Map<String, String> extractConversationalAgentResult(MLOutput mlOutput, NamedXContentRegistry xContentRegistry) {
         if (!(mlOutput instanceof ModelTensorOutput)) {
@@ -651,12 +662,26 @@ public class MLCommonsClientAccessor {
             throw new IllegalStateException("Empty model result produced. Expected at least [1] tensor output, but got [0]");
         }
 
-        // Iterate through all ModelTensors to find the response
+        Map<String, String> result = new HashMap<>();
+
+        // Iterate through all ModelTensors to find response and memory_id
         for (ModelTensors tensors : tensorOutputList) {
             List<ModelTensor> tensorList = tensors.getMlModelTensors();
             if (!CollectionUtils.isEmpty(tensorList)) {
                 for (ModelTensor tensor : tensorList) {
-                    if (!"response".equals(tensor.getName())) {
+                    String tensorName = tensor.getName();
+
+                    // Extract memory_id
+                    if ("memory_id".equals(tensorName)) {
+                        String memoryId = tensor.getResult();
+                        if (memoryId != null && !memoryId.trim().isEmpty()) {
+                            result.put("memory_id", memoryId);
+                        }
+                        continue;
+                    }
+
+                    // Extract response containing dsl_query and agent_steps_summary
+                    if (!"response".equals(tensorName)) {
                         continue;
                     }
 
@@ -693,7 +718,6 @@ public class MLCommonsClientAccessor {
                         Object dslQueryObj = responseMap.get("dsl_query");
                         Object stepsSummaryObj = responseMap.get("agent_steps_summary");
 
-                        Map<String, String> result = new HashMap<>();
                         if (dslQueryObj != null) {
                             try {
                                 // Convert to proper JSON format using Gson
@@ -707,8 +731,6 @@ public class MLCommonsClientAccessor {
                             result.put("agent_steps_summary", stepsSummaryObj.toString());
                         }
 
-                        if (!result.isEmpty()) return result;
-
                     } catch (IOException e) {
                         log.error("Failed to parse agent response JSON: {}", responseJsonString, e);
                         throw new IllegalStateException("Failed to parse agent response using XContentParser: " + e.getMessage(), e);
@@ -717,7 +739,11 @@ public class MLCommonsClientAccessor {
             }
         }
 
-        throw new IllegalStateException("No valid 'dsl_query' found in conversational agent response");
+        if (!result.containsKey("dsl_query")) {
+            throw new IllegalStateException("No valid 'dsl_query' found in conversational agent response");
+        }
+
+        return result;
     }
 
     /**

@@ -11,7 +11,8 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.neuralsearch.ml.AgentInfoDTO;
+import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
+import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -233,8 +234,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String invalidAgentResponse = "{invalid json}";
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(invalidAgentResponse);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(invalidAgentResponse, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -463,8 +464,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(validAgentResponse);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -511,8 +512,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String oversizedResponse = "x".repeat(10_001);
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(oversizedResponse);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(oversizedResponse, null, "test-memory-id"));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -558,8 +559,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(null);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(null, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -619,9 +620,10 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(validAgentResponse);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -678,8 +680,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(validAgentResponse);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -737,8 +739,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(validAgentResponse);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -794,9 +796,10 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(validAgentResponse);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
             return null;
         }).when(mockMLClient)
             .executeAgent(
