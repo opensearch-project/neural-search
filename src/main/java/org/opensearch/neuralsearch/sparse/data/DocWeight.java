@@ -7,7 +7,7 @@ package org.opensearch.neuralsearch.sparse.data;
 import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 /**
  * DocWeight class to store docID and weight
@@ -25,6 +25,6 @@ public final class DocWeight implements Comparable<DocWeight> {
     }
 
     public int getIntWeight() {
-        return ByteQuantizer.getUnsignedByte(weight);
+        return ByteQuantizationUtil.getUnsignedByte(weight);
     }
 }

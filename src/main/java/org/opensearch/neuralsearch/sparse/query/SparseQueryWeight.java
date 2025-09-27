@@ -33,9 +33,11 @@ import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
+
+import static org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil.MAX_UNSIGNED_BYTE_VALUE;
 
 /**
  * Weight class for SparseVectorQuery
@@ -114,12 +116,17 @@ public class SparseQueryWeight extends Weight {
     @VisibleForTesting
     Scorer selectScorer(SparseVectorQuery query, LeafReaderContext context, SegmentInfo segmentInfo) throws IOException {
         SparseVectorReader cacheGatedForwardIndexReader = SparseVectorReader.NOOP_READER;
+        FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(query.getFieldName());
+        float rescaledBoost = boost * ByteQuantizationUtil.getCeilingValueIngest(fieldInfo) * ByteQuantizationUtil.getCeilingValueSearch(
+            fieldInfo
+        ) / MAX_UNSIGNED_BYTE_VALUE / MAX_UNSIGNED_BYTE_VALUE;
+
         if (segmentInfo != null) {
             CacheKey key = new CacheKey(segmentInfo, query.getFieldName());
             ForwardIndexCacheItem cacheItem = forwardIndexCache.getOrCreate(key, segmentInfo.maxDoc());
             cacheGatedForwardIndexReader = getCacheGatedForwardIndexReader(cacheItem, context.reader(), query.getFieldName());
         }
-        Similarity.SimScorer simScorer = ByteQuantizer.getSimScorer(boost);
+        Similarity.SimScorer simScorer = ByteQuantizationUtil.getSimScorer(rescaledBoost);
         BitSetIterator filterBitIterator = null;
         if (query.getFilterResults() != null) {
             BitSet filter = query.getFilterResults().get(context.id());

@@ -15,7 +15,7 @@ import org.opensearch.neuralsearch.sparse.common.DocWeightIterator;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 
@@ -91,7 +91,7 @@ public class SparsePostingsEnumTests extends AbstractSparseTestBase {
         int result = sparsePostingsEnum.freq();
 
         verify(mockDocWeightIterator, times(1)).weight();
-        assertEquals(ByteQuantizer.getUnsignedByte(expectedWeight), result);
+        assertEquals(ByteQuantizationUtil.getUnsignedByte(expectedWeight), result);
     }
 
     public void testNextPosition() {

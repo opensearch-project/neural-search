@@ -30,11 +30,15 @@ import java.util.Map;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_APPROXIMATE_THRESHOLD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_CLUSTER_RATIO;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_N_POSTINGS;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_SEARCH;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_SUMMARY_PRUNE_RATIO;
 
 /**
@@ -44,7 +48,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.
 public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
     public static final String CONTENT_TYPE = "sparse_vector";
 
-    private static final String METHOD = "method";
+    public static final String METHOD = "method";
     @NonNull
     private final SparseMethodContext sparseMethodContext;
     private FieldType tokenFieldType;
@@ -199,10 +203,16 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
                 .getFloatParameter(SUMMARY_PRUNE_RATIO_FIELD, DEFAULT_SUMMARY_PRUNE_RATIO);
             Integer algoTriggerThreshold = (Integer) sparseMethodContext.getMethodComponentContext()
                 .getParameter(APPROXIMATE_THRESHOLD_FIELD, DEFAULT_APPROXIMATE_THRESHOLD);
+            Float quantizationCeilIngest = sparseMethodContext.getMethodComponentContext()
+                .getFloatParameter(QUANTIZATION_CEILING_INGEST_FIELD, DEFAULT_QUANTIZATION_CEILING_INGEST);
+            Float quantizationCeilSearch = sparseMethodContext.getMethodComponentContext()
+                .getFloatParameter(QUANTIZATION_CEILING_SEARCH_FIELD, DEFAULT_QUANTIZATION_CEILING_SEARCH);
             fieldType.putAttribute(N_POSTINGS_FIELD, String.valueOf(nPostings));
             fieldType.putAttribute(SUMMARY_PRUNE_RATIO_FIELD, String.valueOf(summaryPruneRatio));
             fieldType.putAttribute(CLUSTER_RATIO_FIELD, String.valueOf(clusterRatio));
             fieldType.putAttribute(APPROXIMATE_THRESHOLD_FIELD, String.valueOf(algoTriggerThreshold));
+            fieldType.putAttribute(QUANTIZATION_CEILING_INGEST_FIELD, String.valueOf(quantizationCeilIngest));
+            fieldType.putAttribute(QUANTIZATION_CEILING_SEARCH_FIELD, String.valueOf(quantizationCeilSearch));
         }
     }
 

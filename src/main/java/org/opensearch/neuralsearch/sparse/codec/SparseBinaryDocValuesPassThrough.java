@@ -4,28 +4,38 @@
  */
 package org.opensearch.neuralsearch.sparse.codec;
 
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.apache.lucene.index.BinaryDocValues;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 
 /**
  * A pass-through wrapper for BinaryDocValues that provides sparse vector reading capabilities.
  */
-@AllArgsConstructor
 public class SparseBinaryDocValuesPassThrough extends BinaryDocValues implements SparseVectorReader {
 
-    /** The underlying BinaryDocValues instance that handles the actual binary data operations */
+    // The underlying BinaryDocValues instance that handles the actual binary data operations
     private final BinaryDocValues delegate;
 
-    /** The segment information associated with this binary doc values instance */
+    // The segment information associated with this binary doc values instance
     @Getter
     private final SegmentInfo segmentInfo;
+
+    // The byte quantizer instance
+    private final ByteQuantizer byteQuantizer;
+
+    public SparseBinaryDocValuesPassThrough(BinaryDocValues delegate, SegmentInfo segmentInfo, FieldInfo fieldInfo) {
+        this.delegate = delegate;
+        this.segmentInfo = segmentInfo;
+        this.byteQuantizer = ByteQuantizationUtil.getByteQuantizerIngest(fieldInfo);
+    }
 
     @Override
     public BytesRef binaryValue() throws IOException {
@@ -66,6 +76,6 @@ public class SparseBinaryDocValuesPassThrough extends BinaryDocValues implements
         if (bytesRef == null) {
             return null;
         }
-        return new SparseVector(bytesRef);
+        return new SparseVector(bytesRef, byteQuantizer);
     }
 }

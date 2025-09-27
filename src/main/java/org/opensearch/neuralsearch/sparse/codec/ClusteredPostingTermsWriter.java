@@ -40,6 +40,7 @@ import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -52,6 +53,7 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_N_POSTINGS;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_POSTING_MINIMUM_LENGTH;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_POSTING_PRUNE_RATIO;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
 
 /**
  * ClusteredPostingTermsWriter is used to write postings for each segment.
@@ -70,7 +72,14 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     private final int version;
     private SegmentWriteState state;
     private DocValuesProducer docValuesProducer;
+    private ByteQuantizer byteQuantizer = new ByteQuantizer(DEFAULT_QUANTIZATION_CEILING_INGEST);
     private final CodecUtilWrapper codecUtilWrapper;
+
+    @Override
+    public void setField(FieldInfo fieldInfo) {
+        super.setField(fieldInfo);
+        byteQuantizer = ByteQuantizationUtil.getByteQuantizerIngest(fieldInfo);
+    }
 
     public BlockTermState write(BytesRef text, TermsEnum termsEnum, NormsProducer norms) throws IOException {
         this.currentTerm = text;
@@ -85,7 +94,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
     }
 
     public void setFieldAndMaxDoc(FieldInfo fieldInfo, int maxDoc, boolean isMerge) {
-        super.setField(fieldInfo);
+        setField(fieldInfo);
         key = new CacheKey(this.state.segmentInfo, fieldInfo);
 
         if (!isMerge) {
@@ -118,7 +127,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
             this.docValuesProducer = fmt.fieldsProducer(readState);
             BinaryDocValues binaryDocValues = this.docValuesProducer.getBinary(fieldInfo);
             if (binaryDocValues != null) {
-                luceneReader = new SparseBinaryDocValuesPassThrough(binaryDocValues, this.state.segmentInfo);
+                luceneReader = new SparseBinaryDocValuesPassThrough(binaryDocValues, this.state.segmentInfo, fieldInfo);
             }
         } catch (Exception e) {
             log.error("Failed to retrieve lucene reader");
@@ -185,7 +194,7 @@ public class ClusteredPostingTermsWriter extends PushPostingsWriterBase {
         if (docID == -1) {
             throw new IllegalStateException("docId must be set before startDoc");
         }
-        docWeights.add(new DocWeight(docID, ByteQuantizer.quantizeFloatToByte(ValueEncoder.decodeFeatureValue(freq))));
+        docWeights.add(new DocWeight(docID, byteQuantizer.quantize(ValueEncoder.decodeFeatureValue(freq))));
     }
 
     @Override

@@ -18,6 +18,8 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
@@ -93,7 +95,7 @@ public class Seismic implements SparseAlgorithm {
                 int algoTriggerThreshold = NumberUtils.createInteger(fieldValueString);
                 if (algoTriggerThreshold < 0) {
                     errorMessages.add(
-                        String.format(Locale.ROOT, "Parameter [%s] must be a non-Negative integer", APPROXIMATE_THRESHOLD_FIELD)
+                        String.format(Locale.ROOT, "Parameter [%s] must be a non-negative integer", APPROXIMATE_THRESHOLD_FIELD)
                     );
                 }
             } catch (Exception e) {
@@ -102,6 +104,48 @@ public class Seismic implements SparseAlgorithm {
                 );
             }
             parameters.remove(APPROXIMATE_THRESHOLD_FIELD);
+        }
+        if (parameters.containsKey(QUANTIZATION_CEILING_INGEST_FIELD)) {
+            try {
+                String fieldValueString = parameters.get(QUANTIZATION_CEILING_INGEST_FIELD).toString();
+                float quantizationCeilValue = NumberUtils.createFloat(fieldValueString);
+                if (quantizationCeilValue <= 0) {
+                    errorMessages.add(
+                        String.format(Locale.ROOT, "Parameter [%s] must be a positive float number", QUANTIZATION_CEILING_INGEST_FIELD)
+                    );
+                }
+            } catch (Exception e) {
+                errorMessages.add(
+                    String.format(
+                        Locale.ROOT,
+                        "Parameter [%s] must be of %s type",
+                        QUANTIZATION_CEILING_INGEST_FIELD,
+                        Float.class.getName()
+                    )
+                );
+            }
+            parameters.remove(QUANTIZATION_CEILING_INGEST_FIELD);
+        }
+        if (parameters.containsKey(QUANTIZATION_CEILING_SEARCH_FIELD)) {
+            try {
+                String fieldValueString = parameters.get(QUANTIZATION_CEILING_SEARCH_FIELD).toString();
+                float quantizationCeilValue = NumberUtils.createFloat(fieldValueString);
+                if (quantizationCeilValue <= 0) {
+                    errorMessages.add(
+                        String.format(Locale.ROOT, "Parameter [%s] must be a positive float number", QUANTIZATION_CEILING_SEARCH_FIELD)
+                    );
+                }
+            } catch (Exception e) {
+                errorMessages.add(
+                    String.format(
+                        Locale.ROOT,
+                        "Parameter [%s] must be of %s type",
+                        QUANTIZATION_CEILING_SEARCH_FIELD,
+                        Float.class.getName()
+                    )
+                );
+            }
+            parameters.remove(QUANTIZATION_CEILING_SEARCH_FIELD);
         }
         for (String key : parameters.keySet()) {
             errorMessages.add(String.format(Locale.ROOT, "Unknown parameter '%s' found", key));

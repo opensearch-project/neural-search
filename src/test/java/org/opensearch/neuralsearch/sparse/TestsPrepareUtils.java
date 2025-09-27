@@ -514,7 +514,7 @@ public class TestsPrepareUtils {
                             if (original != null && field.equals("sparse_field")) {
                                 // Wrap with SparseBinaryDocValuesPassThrough for sparse fields
                                 SegmentInfo segmentInfo = prepareSegmentInfo();
-                                return new SparseBinaryDocValuesPassThrough(original, segmentInfo);
+                                return new SparseBinaryDocValuesPassThrough(original, segmentInfo, prepareKeyFieldInfo());
                             }
                             return original;
                         }

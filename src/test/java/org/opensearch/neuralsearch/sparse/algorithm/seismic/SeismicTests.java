@@ -33,7 +33,7 @@ public class SeismicTests extends AbstractSparseTestBase {
         ValidationException result = Seismic.INSTANCE.validateMethod(context);
 
         assertNotNull(result);
-        String expectedError = String.format(Locale.ROOT, "Parameter [%s] must be a non-Negative integer", APPROXIMATE_THRESHOLD_FIELD);
+        String expectedError = String.format(Locale.ROOT, "Parameter [%s] must be a non-negative integer", APPROXIMATE_THRESHOLD_FIELD);
         assertTrue(result.validationErrors().contains(expectedError));
     }
 
@@ -305,7 +305,7 @@ public class SeismicTests extends AbstractSparseTestBase {
         assertNotNull(validationException);
         String expectedError1 = String.format(Locale.ROOT, "Parameter [%s] must be a positive integer", N_POSTINGS_FIELD);
         String expectedError2 = String.format(Locale.ROOT, "Parameter [%s] must be in (0, 1)", CLUSTER_RATIO_FIELD);
-        String expectedError3 = String.format(Locale.ROOT, "Parameter [%s] must be a non-Negative integer", APPROXIMATE_THRESHOLD_FIELD);
+        String expectedError3 = String.format(Locale.ROOT, "Parameter [%s] must be a non-negative integer", APPROXIMATE_THRESHOLD_FIELD);
         assertTrue(validationException.validationErrors().contains(expectedError1));
         assertTrue(validationException.validationErrors().contains(expectedError2));
         assertTrue(validationException.validationErrors().contains(expectedError3));
@@ -361,7 +361,7 @@ public class SeismicTests extends AbstractSparseTestBase {
         assertNotNull(result);
         String expectedError1 = String.format(Locale.ROOT, "Parameter [%s] must be a positive integer", N_POSTINGS_FIELD);
         String expectedError2 = String.format(Locale.ROOT, "Parameter [%s] must be in (0, 1)", CLUSTER_RATIO_FIELD);
-        String expectedError3 = String.format(Locale.ROOT, "Parameter [%s] must be a non-Negative integer", APPROXIMATE_THRESHOLD_FIELD);
+        String expectedError3 = String.format(Locale.ROOT, "Parameter [%s] must be a non-negative integer", APPROXIMATE_THRESHOLD_FIELD);
         String expectedError4 = String.format(Locale.ROOT, "Parameter [%s] must be in (0, 1]", SUMMARY_PRUNE_RATIO_FIELD);
         assertTrue(result.validationErrors().contains(expectedError1));
         assertTrue(result.validationErrors().contains(expectedError2));

@@ -32,6 +32,8 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.NAME_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.mapper.SparseVectorField.SPARSE_FIELD;
@@ -51,6 +53,8 @@ public class SparseVectorFieldMapperTests extends AbstractSparseTestBase {
         parameters.put(N_POSTINGS_FIELD, 10);
         parameters.put(CLUSTER_RATIO_FIELD, 0.3f);
         parameters.put(APPROXIMATE_THRESHOLD_FIELD, 100);
+        parameters.put(QUANTIZATION_CEILING_SEARCH_FIELD, 3.0f);
+        parameters.put(QUANTIZATION_CEILING_INGEST_FIELD, 3.0f);
 
         Map<String, Object> methodMap = new HashMap<>();
         methodMap.put(NAME_FIELD, SEISMIC);

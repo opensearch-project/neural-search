@@ -23,6 +23,8 @@ import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
 
@@ -82,7 +84,8 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
             }
             if (!written) {
                 BytesRef bytesRef = binaryDocValues.binaryValue();
-                writer.insert(docId, new SparseVector(bytesRef));
+                ByteQuantizer byteQuantizer = ByteQuantizationUtil.getByteQuantizerIngest(field);
+                writer.insert(docId, new SparseVector(bytesRef, byteQuantizer));
             }
             docId = binaryDocValues.nextDoc();
         }
