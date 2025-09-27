@@ -97,10 +97,12 @@ public enum InfoStatName implements StatName {
     /** Counts agentic query translator processors */
     AGENTIC_QUERY_TRANSLATOR_PROCESSORS(
         "agentic_query_translator_processors",
-        "processors.search",
+        "processors.search.agentic",
         InfoStatType.INFO_COUNTER,
         Version.V_3_2_0
-    ),;
+    ),
+    /** Counts agentic context processors */
+    AGENTIC_CONTEXT_PROCESSORS("agentic_context_processors", "processors.search.agentic", InfoStatType.INFO_COUNTER, Version.V_3_3_0);
 
     private final String nameString;
     private final String path;

@@ -8,6 +8,7 @@ import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
+import org.opensearch.neuralsearch.processor.AgenticContextResponseProcessor;
 import com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
@@ -220,6 +221,7 @@ public class InfoStatsManager {
                         Map<String, Object> processorConfig = asMap(entry.getValue());
                         switch (processorType) {
                             case RerankProcessor.TYPE -> countRerankProcessorStats(stats, processorConfig);
+                            case AgenticContextResponseProcessor.TYPE -> increment(stats, InfoStatName.AGENTIC_CONTEXT_PROCESSORS);
                         }
                     }
                 }
