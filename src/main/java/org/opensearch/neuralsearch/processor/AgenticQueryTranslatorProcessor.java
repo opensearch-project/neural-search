@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor;
 
-import com.google.gson.Gson;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.xcontent.XContentType;
@@ -30,6 +29,9 @@ import java.util.Locale;
 import java.util.Map;
 
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 
 @Log4j2
 public class AgenticQueryTranslatorProcessor extends AbstractProcessor implements SearchRequestProcessor {
@@ -39,7 +41,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
     private final MLCommonsClientAccessor mlClient;
     private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
-    private static final Gson gson = new Gson();
 
     AgenticQueryTranslatorProcessor(
         String tag,
@@ -87,7 +88,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             return;
         }
 
-        executeAgentAsync(agenticQuery, request, requestListener);
+        executeAgentAsync(agenticQuery, request, requestContext, requestListener);
     }
 
     private boolean hasOtherSearchFeatures(SearchSourceBuilder sourceBuilder) {
@@ -103,14 +104,18 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
     private void executeAgentAsync(
         AgenticSearchQueryBuilder agenticQuery,
         SearchRequest request,
+        PipelineProcessingContext requestContext,
         ActionListener<SearchRequest> requestListener
     ) {
         // First get agent type and prompts info
         mlClient.getAgentDetails(agentId, ActionListener.wrap(agentInfo -> {
             mlClient.executeAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, ActionListener.wrap(agentResponse -> {
                 try {
+                    String dslQuery = agentResponse.getDslQuery();
+                    String agentStepsSummary = agentResponse.getAgentStepsSummary();
+                    String memoryId = agentResponse.getMemoryId();
                     // Validate response size to prevent memory exhaustion
-                    if (agentResponse == null) {
+                    if (dslQuery == null) {
                         String errorMessage = String.format(
                             Locale.ROOT,
                             "Agentic search failed - Null response from agent - Agent ID: [%s]",
@@ -119,19 +124,30 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                         throw new IllegalArgumentException(errorMessage);
                     }
 
-                    if (agentResponse.length() > MAX_AGENT_RESPONSE_SIZE) {
+                    if (dslQuery.length() > MAX_AGENT_RESPONSE_SIZE) {
                         String errorMessage = String.format(
                             Locale.ROOT,
                             "Agentic search blocked - Response size exceeded limit - Agent ID: [%s], Size: [%d]. Maximum allowed size is %d characters.",
                             agentId,
-                            agentResponse.length(),
+                            dslQuery.length(),
                             MAX_AGENT_RESPONSE_SIZE
                         );
                         throw new IllegalArgumentException(errorMessage);
                     }
 
+                    // Store agent steps summary in request context for response processing
+                    if (agentStepsSummary != null && !agentStepsSummary.trim().isEmpty()) {
+                        requestContext.setAttribute(AGENT_STEPS_FIELD_NAME, agentStepsSummary);
+                    }
+
+                    if (memoryId != null && !memoryId.trim().isEmpty()) {
+                        requestContext.setAttribute(MEMORY_ID_FIELD_NAME, memoryId);
+                    }
+
+                    requestContext.setAttribute(DSL_QUERY_FIELD_NAME, dslQuery);
+
                     // Parse the agent response to get the new search source
-                    BytesReference bytes = new BytesArray(agentResponse);
+                    BytesReference bytes = new BytesArray(dslQuery);
                     try (XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry, null, bytes.streamInput())) {
                         SearchSourceBuilder newSourceBuilder = SearchSourceBuilder.fromXContent(parser);
                         request.source(newSourceBuilder);

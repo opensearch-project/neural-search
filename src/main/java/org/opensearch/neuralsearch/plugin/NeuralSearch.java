@@ -55,6 +55,7 @@ import org.opensearch.neuralsearch.highlight.SemanticHighlighterEngine;
 import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
+import org.opensearch.neuralsearch.processor.AgenticContextResponseProcessor;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
@@ -79,6 +80,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFac
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
+import org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
@@ -343,7 +345,9 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory()
+            new ExplanationResponseProcessorFactory(),
+            AgenticContextResponseProcessor.TYPE,
+            new AgenticContextResponseProcessor.Factory()
         );
     }
 
@@ -354,7 +358,10 @@ public class NeuralSearch extends Plugin
                 RerankSearchExtBuilder.PARAM_FIELD_NAME,
                 in -> new RerankSearchExtBuilder(in),
                 parser -> RerankSearchExtBuilder.parse(parser)
-            )
+            ),
+            new SearchExtSpec<>(AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME, in -> new AgentStepsSearchExtBuilder(in), parser -> {
+                throw new UnsupportedOperationException("AgentStepsSearchExtBuilder should not be parsed from request");
+            })
         );
     }
 

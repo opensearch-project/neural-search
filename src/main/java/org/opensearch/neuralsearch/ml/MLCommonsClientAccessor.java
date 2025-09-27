@@ -6,6 +6,9 @@ package org.opensearch.neuralsearch.ml;
 
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 
 import com.google.gson.Gson;
 import java.io.IOException;
@@ -49,6 +52,8 @@ import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
+import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
+import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
 import org.opensearch.neuralsearch.processor.InferenceRequest;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
@@ -520,7 +525,7 @@ public class MLCommonsClientAccessor {
         @NonNull String agentId,
         @NonNull AgentInfoDTO agentInfo,
         @NonNull NamedXContentRegistry xContentRegistry,
-        @NonNull ActionListener<String> listener
+        @NonNull ActionListener<AgentExecutionDTO> listener
     ) throws IOException {
         retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, 0, listener);
     }
@@ -535,7 +540,7 @@ public class MLCommonsClientAccessor {
         AgentInfoDTO agentInfo,
         NamedXContentRegistry xContentRegistry,
         int retryTime,
-        ActionListener<String> listener
+        ActionListener<AgentExecutionDTO> listener
     ) throws IOException {
         String agentType = agentInfo.getType();
         boolean hasSystemPrompt = agentInfo.isHasSystemPrompt();
@@ -549,8 +554,17 @@ public class MLCommonsClientAccessor {
             return;
         }
 
+        // Validate flow agent and memory id
+        if (type == MLAgentType.FLOW && agenticQuery.getMemoryId() != null) {
+            throw new IllegalArgumentException("Flow agent does not support memory_id");
+        }
+
         Map<String, String> parameters = new HashMap<>();
         parameters.put("question", agenticQuery.getQueryText());
+
+        if (agenticQuery.getMemoryId() != null) {
+            parameters.put(MEMORY_ID_FIELD_NAME, agenticQuery.getMemoryId());
+        }
 
         // Add index names if present
         String[] indices = request.indices();
@@ -583,15 +597,20 @@ public class MLCommonsClientAccessor {
 
         mlClient.execute(FunctionName.AGENT, agentMLInput, ActionListener.wrap(response -> {
             MLOutput mlOutput = (MLOutput) response.getOutput();
-            String result = null;
+            String dslQuery = null;
+            String agentStepsSummary = null;
+
+            String memoryId = null;
             if (type == MLAgentType.FLOW) {
-                result = extractFlowAgentResult(mlOutput);
+                dslQuery = extractFlowAgentResult(mlOutput);
             } else if (type == MLAgentType.CONVERSATIONAL) {
                 Map<String, String> conversationalResult = extractConversationalAgentResult(mlOutput, xContentRegistry);
-                result = conversationalResult.get("dsl_query");
+                dslQuery = conversationalResult.get(DSL_QUERY_FIELD_NAME);
+                agentStepsSummary = conversationalResult.get(AGENT_STEPS_FIELD_NAME);
+                memoryId = conversationalResult.get(MEMORY_ID_FIELD_NAME);
             }
 
-            listener.onResponse(result);
+            listener.onResponse(new AgentExecutionDTO(dslQuery, agentStepsSummary, memoryId));
         }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> {
             try {
                 retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, retryTime + 1, listener);
@@ -634,10 +653,10 @@ public class MLCommonsClientAccessor {
     }
 
     /**
-     * Extract dsl_query and agent_steps_summary from conversational agent response
+     * Extract dsl_query, agent_steps_summary, and memory_id from conversational agent response
      * @param mlOutput ml output
      * @param xContentRegistry xContentRegistry
-     * @return result
+     * @return result map containing dsl_query, agent_steps_summary, and memory_id
      */
     private Map<String, String> extractConversationalAgentResult(MLOutput mlOutput, NamedXContentRegistry xContentRegistry) {
         if (!(mlOutput instanceof ModelTensorOutput)) {
@@ -651,12 +670,26 @@ public class MLCommonsClientAccessor {
             throw new IllegalStateException("Empty model result produced. Expected at least [1] tensor output, but got [0]");
         }
 
-        // Iterate through all ModelTensors to find the response
+        Map<String, String> result = new HashMap<>();
+
+        // Iterate through all ModelTensors to find response and memory_id
         for (ModelTensors tensors : tensorOutputList) {
             List<ModelTensor> tensorList = tensors.getMlModelTensors();
             if (!CollectionUtils.isEmpty(tensorList)) {
                 for (ModelTensor tensor : tensorList) {
-                    if (!"response".equals(tensor.getName())) {
+                    String tensorName = tensor.getName();
+
+                    // Extract memory_id
+                    if (MEMORY_ID_FIELD_NAME.equals(tensorName)) {
+                        String memoryId = tensor.getResult();
+                        if (memoryId != null && !memoryId.trim().isEmpty()) {
+                            result.put(MEMORY_ID_FIELD_NAME, memoryId);
+                        }
+                        continue;
+                    }
+
+                    // Extract response containing dsl_query and agent_steps_summary
+                    if (!"response".equals(tensorName)) {
                         continue;
                     }
 
@@ -690,24 +723,21 @@ public class MLCommonsClientAccessor {
                         }
 
                         Map<String, Object> responseMap = parser.map();
-                        Object dslQueryObj = responseMap.get("dsl_query");
-                        Object stepsSummaryObj = responseMap.get("agent_steps_summary");
+                        Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD_NAME);
+                        Object stepsSummaryObj = responseMap.get(AGENT_STEPS_FIELD_NAME);
 
-                        Map<String, String> result = new HashMap<>();
                         if (dslQueryObj != null) {
                             try {
                                 // Convert to proper JSON format using Gson
                                 String dslJson = gson.toJson(dslQueryObj);
-                                result.put("dsl_query", dslJson);
+                                result.put(DSL_QUERY_FIELD_NAME, dslJson);
                             } catch (Exception e) {
                                 throw new IllegalStateException("Failed to serialize dsl_query to JSON", e);
                             }
                         }
                         if (stepsSummaryObj != null) {
-                            result.put("agent_steps_summary", stepsSummaryObj.toString());
+                            result.put(AGENT_STEPS_FIELD_NAME, stepsSummaryObj.toString());
                         }
-
-                        if (!result.isEmpty()) return result;
 
                     } catch (IOException e) {
                         log.error("Failed to parse agent response JSON: {}", responseJsonString, e);
@@ -717,7 +747,11 @@ public class MLCommonsClientAccessor {
             }
         }
 
-        throw new IllegalStateException("No valid 'dsl_query' found in conversational agent response");
+        if (!result.containsKey(DSL_QUERY_FIELD_NAME)) {
+            throw new IllegalStateException("No valid 'dsl_query' found in conversational agent response");
+        }
+
+        return result;
     }
 
     /**

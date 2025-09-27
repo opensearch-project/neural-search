@@ -40,6 +40,7 @@ import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
+import org.opensearch.neuralsearch.processor.AgenticContextResponseProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.TextEmbeddingProcessor;
 import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
@@ -216,12 +217,13 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         Map<String, Factory<SearchResponseProcessor>> processors = plugin.getResponseProcessors(searchParameters);
         assertNotNull(processors);
         assertNotNull(processors.get(RerankProcessor.TYPE));
+        assertNotNull(processors.get(AgenticContextResponseProcessor.TYPE));
     }
 
     public void testSearchExts() {
         List<SearchExtSpec<?>> searchExts = plugin.getSearchExts();
 
-        assertEquals(1, searchExts.size());
+        assertEquals(2, searchExts.size());
     }
 
     public void testExecutionBuilders() {

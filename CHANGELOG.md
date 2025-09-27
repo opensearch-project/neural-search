@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Agentic Search] Adds validations and logging for agentic query
 - [Performance Improvement] Introduce QueryCollectContextSpec in Hybrid Query to improve search performance.
 - [Agentic Search] Add support for conversational agent
+- [Agentic Search] Add support for agent summary and memory id for conversational agent
 
 ### Bug Fixes
 - Fix reversed order of values in nested list with embedding processor [#1570](https://github.com/opensearch-project/neural-search/pull/1570)
@@ -24,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 
 - [Unit Test] Enable mocking of final classes and static functions ([#1528](https://github.com/opensearch-project/neural-search/pull/1528)).
-- [BWC Test] Remove CodeQL from BWC's CI node to increase available disk size ([#1584](https://github.com/opensearch-project/neural-search/pull/1584)) 
+- [BWC Test] Remove CodeQL from BWC's CI node to increase available disk size ([#1584](https://github.com/opensearch-project/neural-search/pull/1584))
 
 ### Documentation
 
