@@ -972,6 +972,28 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Execute a search request
+     * @param index target index
+     * @param query the query in json string
+     * @param resultSize query size
+     * @return search response
+     * @throws IOException
+     */
+    protected Map<String, Object> search(String index, String query, int resultSize) throws IOException, ParseException {
+        Request request = new Request("POST", "/" + index + "/_search");
+        request.setJsonEntity(query);
+
+        request.addParameter("size", Integer.toString(resultSize));
+        request.addParameter("search_type", "query_then_fetch");
+
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        String responseBody = EntityUtils.toString(response.getEntity());
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+    }
+
+    /**
      * Execute a search request with neural highlighting and source filtering
      *
      * @param index Index to search against
