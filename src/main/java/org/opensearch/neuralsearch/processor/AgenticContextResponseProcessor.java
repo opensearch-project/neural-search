@@ -11,6 +11,8 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.Processor;
@@ -50,6 +52,7 @@ public class AgenticContextResponseProcessor implements SearchResponseProcessor 
 
     @Override
     public SearchResponse processResponse(SearchRequest request, SearchResponse response, PipelineProcessingContext requestContext) {
+        EventStatsManager.increment(EventStatName.AGENTIC_CONTEXT_PROCESSOR_EXECUTIONS);
         if (requestContext == null) {
             return response;
         }

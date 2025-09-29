@@ -13,6 +13,7 @@ import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,6 +26,12 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
 
     private static final String PROCESSOR_TAG = "test-tag";
     private static final String DESCRIPTION = "test-description";
+
+    @Override
+    public void setUp() throws Exception {
+        super.setUp();
+        TestUtils.initializeEventStatsManager();
+    }
 
     public void testConstructor() {
         AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
