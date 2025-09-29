@@ -21,6 +21,7 @@ import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.E
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_DIMENSION_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_DEFAULT_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_FIELD_NAME;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_INDEX_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_NAME_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME;
 
@@ -265,5 +266,71 @@ public class SemanticInfoConfigBuilderTests extends OpenSearchTestCase {
         final String expectedErrorMessage =
             "Cannot build the semantic info config because the dense(text embedding) model cannot support sparse_encoding_config.";
         assertEquals(expectedErrorMessage, exception.getMessage());
+    }
+
+    public void testBuild_whenDenseEmbeddingConfigWithIndexTrue_thenEmbeddingIncludesIndex() {
+        final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(namedXContentRegistry);
+
+        // prepare mock model config
+        final String modelId = "dummyModelId";
+        final Integer embeddingDimension = 768;
+        final String allConfig = "{}";
+        final RemoteModelConfig remoteTextEmbeddingModelConfig = RemoteModelConfig.builder()
+            .embeddingDimension(embeddingDimension)
+            .allConfig(allConfig)
+            .modelType(FunctionName.TEXT_EMBEDDING.name())
+            .frameworkType(RemoteModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
+            .build();
+        final MLModel remoteTextEmbeddingModel = MLModel.builder()
+            .modelId(modelId)
+            .algorithm(FunctionName.REMOTE)
+            .modelConfig(remoteTextEmbeddingModelConfig)
+            .build();
+        builder.mlModel(remoteTextEmbeddingModel, modelId);
+        builder.denseEmbeddingConfig(Map.of(KNN_VECTOR_INDEX_FIELD_NAME, true));
+
+        final Map<String, Object> semanticInfoConfig = builder.build();
+
+        // verify embedding config includes index field
+        final Map<String, Object> properties = (Map<String, Object>) semanticInfoConfig.get(PROPERTIES);
+        final Map<String, Object> embeddingConfig = (Map<String, Object>) properties.get(EMBEDDING_FIELD_NAME);
+        assertTrue("Embedding config should contain index field", embeddingConfig.containsKey(KNN_VECTOR_INDEX_FIELD_NAME));
+        assertEquals("Index field should be true", true, embeddingConfig.get(KNN_VECTOR_INDEX_FIELD_NAME));
+    }
+
+    public void testBuild_whenDenseEmbeddingConfigWithIndexFalse_thenEmbeddingIncludesIndex() {
+        final SemanticInfoConfigBuilder builder = new SemanticInfoConfigBuilder(namedXContentRegistry);
+
+        // prepare mock model config
+        final String modelId = "dummyModelId";
+        final Integer embeddingDimension = 768;
+        final String allConfig = "{}";
+        final RemoteModelConfig remoteTextEmbeddingModelConfig = RemoteModelConfig.builder()
+            .embeddingDimension(embeddingDimension)
+            .allConfig(allConfig)
+            .modelType(FunctionName.TEXT_EMBEDDING.name())
+            .frameworkType(RemoteModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
+            .build();
+        final MLModel remoteTextEmbeddingModel = MLModel.builder()
+            .modelId(modelId)
+            .algorithm(FunctionName.REMOTE)
+            .modelConfig(remoteTextEmbeddingModelConfig)
+            .build();
+        builder.mlModel(remoteTextEmbeddingModel, modelId);
+        builder.denseEmbeddingConfig(Map.of(KNN_VECTOR_INDEX_FIELD_NAME, false));
+
+        final Map<String, Object> semanticInfoConfig = builder.build();
+
+        // verify embedding config includes index field and no method config
+        final Map<String, Object> properties = (Map<String, Object>) semanticInfoConfig.get(PROPERTIES);
+        final Map<String, Object> embeddingConfig = (Map<String, Object>) properties.get(EMBEDDING_FIELD_NAME);
+        assertTrue("Embedding config should contain index field", embeddingConfig.containsKey(KNN_VECTOR_INDEX_FIELD_NAME));
+        assertEquals("Index field should be false", false, embeddingConfig.get(KNN_VECTOR_INDEX_FIELD_NAME));
+        assertFalse(
+            "Embedding config should not contain method when index is false",
+            embeddingConfig.containsKey(KNN_VECTOR_METHOD_FIELD_NAME)
+        );
     }
 }

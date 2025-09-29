@@ -494,6 +494,66 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         assertEquals(expectedErrorMessage, capturedException.getMessage());
     }
 
+    public void testTransform_whenSemanticFieldsWithIndexField_thenTransformMappingsSuccessfully() throws URISyntaxException, IOException {
+        // prepare original mappings
+        final String textEmbeddingModelId1 = "textEmbeddingModelId";
+        final String textEmbeddingModelId2 = "textEmbeddingModelId2";
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+
+        // Semantic field with index=true
+        final Map<String, Object> semanticField1 = new HashMap<>();
+        properties.put("semantic_field_with_index", semanticField1);
+        semanticField1.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField1.put(SemanticFieldConstants.MODEL_ID, textEmbeddingModelId1);
+        semanticField1.put(
+            SemanticFieldConstants.DENSE_EMBEDDING_CONFIG,
+            Map.of("index", true, "method", Map.of("engine", "lucene", "name", "hnsw"))
+        );
+
+        // Semantic field with index=false
+        final Map<String, Object> semanticField2 = new HashMap<>();
+        properties.put("semantic_field_no_index", semanticField2);
+        semanticField2.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField2.put(SemanticFieldConstants.MODEL_ID, textEmbeddingModelId2);
+        semanticField2.put(SemanticFieldConstants.DENSE_EMBEDDING_CONFIG, Map.of("index", false));
+
+        // prepare mock model config
+        final Integer embeddingDimension = 768;
+        final TextEmbeddingModelConfig textEmbeddingModelConfig = TextEmbeddingModelConfig.builder()
+            .embeddingDimension(embeddingDimension)
+            .additionalConfig(Map.of(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, "l2"))
+            .modelType("modelType")
+            .frameworkType(TextEmbeddingModelConfig.FrameworkType.HUGGINGFACE_TRANSFORMERS)
+            .build();
+        final MLModel textEmbeddingModel = MLModel.builder()
+            .algorithm(FunctionName.TEXT_EMBEDDING)
+            .modelConfig(textEmbeddingModelConfig)
+            .build();
+
+        // mock
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(textEmbeddingModelId1, textEmbeddingModel, textEmbeddingModelId2, textEmbeddingModel));
+            return null;
+        }).when(mlClientAccessor).getModels(any(), any(), any());
+
+        // call
+        transformer.transform(mappings, null, listener);
+
+        // verify
+        final String expectedTransformedMappingString = Files.readString(
+            Path.of(classLoader.getResource("mappingtransformer/transformedMappingWithIndexField.json").toURI())
+        );
+
+        final Map<String, Object> expectedTransformedMapping = MapperService.parseMapping(
+            namedXContentRegistry,
+            expectedTransformedMappingString
+        );
+        assertEquals(expectedTransformedMapping, mappings);
+    }
+
     private Map<String, Object> getBaseMappingsWithOneSemanticField(@NonNull final String modelId) {
         final Map<String, Object> mappings = new HashMap<>();
         final Map<String, Object> properties = new HashMap<>();

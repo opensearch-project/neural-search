@@ -1,0 +1,77 @@
+{
+  "properties": {
+    "semantic_field_with_index": {
+      "dense_embedding_config": {
+        "index": true,
+        "method": {
+          "engine": "lucene",
+          "name": "hnsw"
+        }
+      },
+      "model_id": "textEmbeddingModelId",
+      "type": "semantic"
+    },
+    "semantic_field_with_index_semantic_info": {
+      "properties": {
+        "model": {
+          "properties": {
+            "name": {
+              "type": "text",
+              "index": false
+            },
+            "id": {
+              "type": "text",
+              "index": false
+            },
+            "type": {
+              "type": "text",
+              "index": false
+            }
+          }
+        },
+        "embedding": {
+          "method": {
+            "name": "hnsw",
+            "engine": "lucene",
+            "space_type": "l2"
+          },
+          "index": true,
+          "type": "knn_vector",
+          "dimension": 768
+        }
+      }
+    },
+    "semantic_field_no_index_semantic_info": {
+      "properties": {
+        "model": {
+          "properties": {
+            "name": {
+              "type": "text",
+              "index": false
+            },
+            "id": {
+              "type": "text",
+              "index": false
+            },
+            "type": {
+              "type": "text",
+              "index": false
+            }
+          }
+        },
+        "embedding": {
+          "index": false,
+          "type": "knn_vector",
+          "dimension": 768
+        }
+      }
+    },
+    "semantic_field_no_index": {
+      "dense_embedding_config": {
+        "index": false
+      },
+      "model_id": "textEmbeddingModelId2",
+      "type": "semantic"
+    }
+  }
+}

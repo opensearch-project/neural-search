@@ -32,6 +32,7 @@ import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.C
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.DEFAULT_MODEL_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_DATA_TYPE_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_DIMENSION_FIELD_NAME;
+import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_INDEX_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_DEFAULT_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_NAME_FIELD_NAME;
@@ -165,35 +166,52 @@ public class SemanticInfoConfigBuilder {
         config.put(TYPE, KNNVectorFieldMapper.CONTENT_TYPE);
         config.put(KNN_VECTOR_DIMENSION_FIELD_NAME, this.embeddingDimension);
 
+        boolean indexEnabled = true;
+        if (denseEmbeddingConfig != null) {
+            validateDenseEmbeddingConfig(denseEmbeddingConfig);
+
+            if (denseEmbeddingConfig.containsKey(KNN_VECTOR_INDEX_FIELD_NAME)) {
+                Object indexValue = denseEmbeddingConfig.get(KNN_VECTOR_INDEX_FIELD_NAME);
+                indexEnabled = indexValue instanceof Boolean ? (Boolean) indexValue : true;
+                config.put(KNN_VECTOR_INDEX_FIELD_NAME, indexValue);
+            }
+
+            denseEmbeddingConfig.entrySet()
+                .stream()
+                .filter(
+                    entry -> !KNN_VECTOR_INDEX_FIELD_NAME.equals(entry.getKey()) && !KNN_VECTOR_METHOD_FIELD_NAME.equals(entry.getKey())
+                )
+                .forEach(entry -> config.put(entry.getKey(), entry.getValue()));
+        }
+
+        if (indexEnabled) {
+            config.put(KNN_VECTOR_METHOD_FIELD_NAME, buildMethodConfig());
+        }
+
+        return config;
+    }
+
+    private Map<String, Object> buildMethodConfig() {
         final Map<String, Object> methodConfig = new HashMap<>();
 
         if (denseEmbeddingConfig != null) {
-            validateDenseEmbeddingConfig(denseEmbeddingConfig);
-            config.putAll(denseEmbeddingConfig);
-
-            final Object methodConfigObj = denseEmbeddingConfig.get(KNN_VECTOR_METHOD_FIELD_NAME);
-            if (methodConfigObj != null) {
-                if (methodConfigObj instanceof Map<?, ?> methodConfigMap) {
-                    // Create a shallow copy so we don't modify the original
-                    methodConfig.putAll((Map<String, Object>) methodConfigMap);
-                } else {
-                    throw new IllegalArgumentException(
-                        String.format(
-                            Locale.ROOT,
-                            "Cannot build the semantic info config because %s must be a Map when provided.",
-                            KNN_VECTOR_METHOD_FIELD_NAME
-                        )
-                    );
-                }
+            Object methodConfigObj = denseEmbeddingConfig.get(KNN_VECTOR_METHOD_FIELD_NAME);
+            if (methodConfigObj instanceof Map<?, ?>) {
+                methodConfig.putAll((Map<String, Object>) methodConfigObj);
+            } else if (methodConfigObj != null) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "Cannot build the semantic info config because %s must be a Map when provided.",
+                        KNN_VECTOR_METHOD_FIELD_NAME
+                    )
+                );
             }
         }
 
-        // Safe to override or add new method values
         methodConfig.putIfAbsent(KNN_VECTOR_METHOD_NAME_FIELD_NAME, this.knnMethodName);
-        // Always use the one we found from the model config
         methodConfig.put(KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME, this.spaceType);
-        config.put(KNN_VECTOR_METHOD_FIELD_NAME, methodConfig);
-        return config;
+        return methodConfig;
     }
 
     private void validateDenseEmbeddingConfig(@NonNull final Map<String, Object> denseEmbeddingConfig) {
