@@ -397,24 +397,66 @@ EOF
     local container_id=$(docker ps --format "{{.ID}}" --filter "name=${CONTAINER_NAME}" | head -1)
     docker cp "model_store/${model_name}.mar" "${container_id}:/home/model-server/model-store/"
 
-    # Create config
-    cat > config.properties << EOF
+    # Try to register model using Management API first (no restart needed)
+    log_info "Registering model via Management API..."
+    local register_response=$(curl -s -X POST "http://localhost:${MANAGEMENT_PORT}/models" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"url\": \"${model_name}.mar\",
+            \"model_name\": \"${model_name}\",
+            \"initial_workers\": 1,
+            \"synchronous\": true,
+            \"batch_size\": 1
+        }" 2>/dev/null)
+
+    if echo "$register_response" | grep -q "Model.*registered\|${model_name}"; then
+        log_info "✓ Model '${model_name}' registered successfully via Management API"
+    else
+        # Fallback: If Management API fails, use restart method with all models
+        log_warning "Management API registration failed, falling back to restart method"
+
+        # Get list of existing models
+        local existing_models=$(curl -s http://localhost:${MANAGEMENT_PORT}/models 2>/dev/null | python3 -c "
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    models = [m['modelName'] + '.mar' for m in data.get('models', [])]
+    print(','.join(models))
+except:
+    pass
+" 2>/dev/null || echo "")
+
+        # Build comma-separated list of all models
+        if [ -z "$existing_models" ]; then
+            local all_models="${model_name}.mar"
+        else
+            # Check if model is already in the list
+            if echo "$existing_models" | grep -q "${model_name}.mar"; then
+                local all_models="$existing_models"
+            else
+                local all_models="${existing_models},${model_name}.mar"
+            fi
+        fi
+
+        # Create config with ALL models
+        cat > config.properties << EOF
 inference_address=http://0.0.0.0:8080
 management_address=http://0.0.0.0:8081
 model_store=/home/model-server/model-store
-load_models=${model_name}.mar
+load_models=${all_models}
 default_workers_per_model=1
 EOF
 
-    docker cp config.properties "${container_id}:/home/model-server/"
+        docker cp config.properties "${container_id}:/home/model-server/"
 
-    # Restart TorchServe with model
-    log_info "Restarting TorchServe with model..."
-    docker exec ${container_id} bash -c "torchserve --stop || true"
-    sleep 3
-    docker exec -d ${container_id} torchserve --start \
-        --model-store /home/model-server/model-store \
-        --ts-config /home/model-server/config.properties
+        # Restart TorchServe with all models
+        log_info "Restarting TorchServe with all models: ${all_models}..."
+        docker exec ${container_id} bash -c "torchserve --stop || true"
+        sleep 3
+        docker exec -d ${container_id} torchserve --start \
+            --model-store /home/model-server/model-store \
+            --ts-config /home/model-server/config.properties
+    fi
 
     # Clean up temp directory
     cd - > /dev/null
@@ -495,8 +537,8 @@ test() {
         return 1
     fi
 
-    # Test first available model
-    local model_name=${models[0]}
+    # Test semantic_highlighter model specifically
+    local model_name="semantic_highlighter"
 
     # Log memory before inference
     log_memory_checkpoint "Before single inference"
