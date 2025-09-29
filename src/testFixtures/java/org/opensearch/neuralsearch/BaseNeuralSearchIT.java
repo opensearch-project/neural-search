@@ -2856,6 +2856,51 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         assertEquals(failedIds.size(), failedDocCount);
     }
 
+    /**
+     * Register an agent with the ML Commons plugin
+     *
+     * @param requestBody JSON request body for agent registration
+     * @return agent ID of the registered agent
+     * @throws Exception if registration fails
+     */
+    @SneakyThrows
+    protected String registerAgent(final String requestBody) {
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/agents/_register",
+            null,
+            toHttpEntity(requestBody),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+        Map<String, Object> responseJson = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        String agentId = responseJson.get("agent_id").toString();
+        assertNotNull(agentId);
+        return agentId;
+    }
+
+    /**
+     * Delete an agent by its ID
+     *
+     * @param agentId ID of the agent to delete
+     * @throws Exception if deletion fails
+     */
+    @SneakyThrows
+    protected void deleteAgent(final String agentId) {
+        makeRequest(
+            client(),
+            "DELETE",
+            String.format(LOCALE, "/_plugins/_ml/agents/%s", agentId),
+            null,
+            toHttpEntity(""),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+    }
+
     protected void deleteDocById(String index, String docId) throws IOException {
         Response response = makeRequest(
             client(),
