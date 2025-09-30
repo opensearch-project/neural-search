@@ -158,7 +158,6 @@ import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
-import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
@@ -399,7 +398,6 @@ public class NeuralSearch extends Plugin
             RerankProcessor.TYPE,
             new RerankProcessorFactory(clientAccessor, parameters.searchPipelineService.getClusterService()),
             ExplanationResponseProcessor.TYPE,
-            new ExplanationResponseProcessorFactory()
             new ExplanationResponseProcessorFactory(),
             AgenticContextResponseProcessor.TYPE,
             new AgenticContextResponseProcessor.Factory()

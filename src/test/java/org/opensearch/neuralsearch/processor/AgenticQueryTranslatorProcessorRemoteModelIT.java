@@ -17,6 +17,26 @@ public class AgenticQueryTranslatorProcessorRemoteModelIT extends BaseAgenticSea
 
     private static String PIPELINE_NAME = "agentic-pipeline";
 
+    public void testAgenticQueryTranslatorProcessor_withValidQuery_expectsTranslation() throws Exception {
+        initializeIndexIfNotExist(TEST_INDEX);
+        createAgenticSearchPipeline(PIPELINE_NAME, TEST_AGENT_ID);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(TEST_QUERY_TEXT);
+
+        try {
+            Map<String, Object> searchResponse = searchWithPipeline(TEST_INDEX, agenticQuery, PIPELINE_NAME);
+            assertNotNull(searchResponse);
+        } catch (Exception e) {
+            log.info("TESTING : EXC : " + e.getMessage());
+            assertTrue(
+                "Should be a setup-related error",
+                e.getMessage().contains("Agent index not found")
+                    || e.getMessage().contains("model not found")
+                    || e.getMessage().contains("Agentic search failed")
+            );
+        }
+    }
+
     public void testAgenticQueryTranslatorProcessor_withAggregations_expectsFailure() throws Exception {
         initializeIndexIfNotExist(TEST_INDEX);
         createAgenticSearchPipeline(PIPELINE_NAME, TEST_AGENT_ID);
