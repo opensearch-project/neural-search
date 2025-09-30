@@ -161,18 +161,26 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
         assertNotNull("Hits list should not be null", hitsList);
         assertTrue("Should have at least one hit", !hitsList.isEmpty());
 
-        // At least one document should have highlights
-        boolean foundHighlight = false;
+        // At least one document should have highlights with tags
+        boolean foundHighlightWithTags = false;
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
             if (highlight != null && highlight.containsKey(TEST_FIELD)) {
                 List<String> fragments = (List<String>) highlight.get(TEST_FIELD);
                 if (fragments != null && !fragments.isEmpty()) {
-                    foundHighlight = true;
-                    break;
+                    // Verify that at least one fragment contains highlight tags
+                    for (String fragment : fragments) {
+                        if (fragment.contains("<em>") && fragment.contains("</em>")) {
+                            foundHighlightWithTags = true;
+                            break;
+                        }
+                    }
+                    if (foundHighlightWithTags) {
+                        break;
+                    }
                 }
             }
         }
-        assertTrue("At least one document should have highlights", foundHighlight);
+        assertTrue("At least one document should have highlights with <em> tags", foundHighlightWithTags);
     }
 }
