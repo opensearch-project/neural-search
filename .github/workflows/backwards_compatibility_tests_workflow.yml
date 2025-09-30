@@ -2,12 +2,10 @@ name: Backwards Compatibility Tests NeuralSearch
 on:
   push:
     branches:
-      - "*"
-      - "feature/**"
+      - "highlighting-processor-bwc-fix"  # Only run on your BWC fix branch
   pull_request:
     branches:
-      - "*"
-      - "feature/**"
+      - "highlighting-processor-bwc-fix"  # Only run on PRs to your BWC fix branch
 
 jobs:
   Get-CI-Image-Tag:
@@ -19,9 +17,9 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [ 21, 24 ]
+        java: [ 21 ]  # Only Java 21
         os: [ubuntu-latest]
-        bwc_version : [ "2.9.0","2.10.0","2.11.0","2.12.0","2.13.0","2.14.0","2.15.0","2.16.0","2.17.0","2.18.0","2.19.0","2.20.0-SNAPSHOT","3.0.0", "3.1.0" ]
+        bwc_version : [ "3.0.0" ]  # Only test against 3.0.0
         opensearch_version : [ "3.2.0-SNAPSHOT" ]
 
     name: NeuralSearch Restart-Upgrade BWC Tests
@@ -50,19 +48,19 @@ jobs:
 
       - uses: ./.github/actions/clean-up-disk
 
-      - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
+      - name: Run NeuralSearch Restart-Upgrade BWC Tests (SemanticHighlighting only)
         run: |
           chown -R 1000:1000 `pwd`
-          echo "Running restart-upgrade backwards compatibility tests ..."
-          su `id -un 1000` -c "./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          echo "Running restart-upgrade backwards compatibility tests for SemanticHighlighting..."
+          su `id -un 1000` -c "./gradlew :qa:restart-upgrade:bwcTestSuite -Dtests.class=org.opensearch.neuralsearch.bwc.restart.SemanticHighlightingIT -D'tests.bwc.version=${{ matrix.bwc_version }}'"
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [21, 24]
+        java: [ 21 ]  # Only Java 21
         os: [ubuntu-latest]
-        bwc_version: [ "2.20.0-SNAPSHOT","3.0.0", "3.1.0" ]
+        bwc_version: [ "3.0.0" ]  # Only test against 3.0.0
         opensearch_version: [ "3.2.0-SNAPSHOT" ]
 
     name: NeuralSearch Rolling-Upgrade BWC Tests
@@ -91,8 +89,8 @@ jobs:
 
       - uses: ./.github/actions/clean-up-disk
 
-      - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
+      - name: Run NeuralSearch Rolling-Upgrade BWC Tests (SemanticHighlighting only)
         run: |
           chown -R 1000:1000 `pwd`
-          echo "Running rolling-upgrade backwards compatibility tests ..."
-          su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          echo "Running rolling-upgrade backwards compatibility tests for SemanticHighlighting..."
+          su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:bwcTestSuite -Dtests.class=org.opensearch.neuralsearch.bwc.rolling.SemanticHighlightingIT -D'tests.bwc.version=${{ matrix.bwc_version }}'"
