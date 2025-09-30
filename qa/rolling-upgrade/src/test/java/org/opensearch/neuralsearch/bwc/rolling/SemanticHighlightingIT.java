@@ -53,7 +53,7 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
                 // Deploy models and create resources in old cluster
                 highlightModelId = prepareSemanticHighlightingLocalModel();
                 embeddingModelId = uploadTextEmbeddingModel();
-                createPipelineProcessor(embeddingModelId, PIPELINE_NAME);
+                createPipelineForSemanticHighlighting(embeddingModelId, PIPELINE_NAME);
 
                 URL indexMappingURL = classLoader.getResource(INDEX_MAPPING_PATH);
                 Objects.requireNonNull(indexMappingURL, "Index mapping file not found: " + INDEX_MAPPING_PATH);

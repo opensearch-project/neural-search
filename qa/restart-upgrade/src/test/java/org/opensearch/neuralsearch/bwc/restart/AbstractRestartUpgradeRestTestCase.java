@@ -60,6 +60,13 @@ public abstract class AbstractRestartUpgradeRestTestCase extends BaseUpgradeTest
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
+    protected void createPipelineForSemanticHighlighting(final String modelId, final String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/SemanticHighlightingPipelineConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, modelId, null);
+    }
+
     protected void createPipelineForTextImageProcessor(final String modelId, final String pipelineName) throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())

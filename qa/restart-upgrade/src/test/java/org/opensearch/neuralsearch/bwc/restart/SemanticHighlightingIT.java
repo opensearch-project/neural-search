@@ -47,7 +47,7 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
             // Deploy models and create resources in old cluster
             String highlightModelId = prepareSemanticHighlightingLocalModel();
             String embeddingModelId = uploadTextEmbeddingModel();
-            createPipelineProcessor(embeddingModelId, PIPELINE_NAME);
+            createPipelineForSemanticHighlighting(embeddingModelId, PIPELINE_NAME);
 
             URL indexMappingURL = classLoader.getResource(INDEX_MAPPING_PATH);
             Objects.requireNonNull(indexMappingURL, "Index mapping file not found: " + INDEX_MAPPING_PATH);

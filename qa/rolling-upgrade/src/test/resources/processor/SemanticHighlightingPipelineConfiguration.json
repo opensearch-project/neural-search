@@ -1,0 +1,13 @@
+{
+  "description": "text embedding pipeline for semantic highlighting",
+  "processors": [
+    {
+      "text_embedding": {
+        "model_id": "%s",
+        "field_map": {
+          "text": "text_knn"
+        }
+      }
+    }
+  ]
+}
