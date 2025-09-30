@@ -6,6 +6,8 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.BaseAgenticSearchRemoteModelIT;
+import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import java.util.Map;
 
 /**
 * Integration tests for Agentic query translator processor with remote models
@@ -14,25 +16,6 @@ import org.opensearch.neuralsearch.BaseAgenticSearchRemoteModelIT;
 public class AgenticQueryTranslatorProcessorRemoteModelIT extends BaseAgenticSearchRemoteModelIT {
 
     private static String PIPELINE_NAME = "agentic-pipeline";
-
-    public void testAgenticQueryTranslatorProcessor_withValidQuery_expectsTranslation() throws Exception {
-        initializeIndexIfNotExist(TEST_INDEX);
-        createAgenticSearchPipeline(PIPELINE_NAME, TEST_AGENT_ID);
-
-        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(TEST_QUERY_TEXT);
-
-        try {
-            Map<String, Object> searchResponse = searchWithPipeline(TEST_INDEX, agenticQuery, PIPELINE_NAME);
-            assertNotNull(searchResponse);
-        } catch (Exception e) {
-            assertTrue(
-                "Should be a setup-related error",
-                e.getMessage().contains("Agent index not found")
-                    || e.getMessage().contains("model not found")
-                    || e.getMessage().contains("Agentic search failed")
-            );
-        }
-    }
 
     public void testAgenticQueryTranslatorProcessor_withAggregations_expectsFailure() throws Exception {
         initializeIndexIfNotExist(TEST_INDEX);

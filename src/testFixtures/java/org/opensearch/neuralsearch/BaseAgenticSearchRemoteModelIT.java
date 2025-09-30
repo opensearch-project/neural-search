@@ -17,6 +17,7 @@ import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 
 import org.junit.After;
 import org.junit.Before;
@@ -35,16 +36,16 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 @Log4j2
 public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT {
 
-    private static final String TEST_INDEX = "test-agentic-index";
-    private static final String TEST_QUERY_TEXT = "Find documents about machine learning";
+    protected static final String TEST_INDEX = "test-agentic-index";
+    protected static final String TEST_QUERY_TEXT = "Find documents about machine learning";
 
-    private static String TEST_AGENT_ID;
-    private static String TEST_MODEL_ID;
-    private static String TEST_CONNECTOR_ID;
+    protected static String TEST_AGENT_ID;
+    protected static String TEST_MODEL_ID;
+    protected static String TEST_CONNECTOR_ID;
     protected static final String ML_COMMONS_AGENTIC_SEARCH_ENABLED = "plugins.ml_commons.agentic_search_enabled";
 
-    private boolean isTorchServeAvailable = false;
-    private String torchServeEndpoint;
+    protected boolean isTorchServeAvailable = false;
+    protected String torchServeEndpoint;
 
     @Before
     @SneakyThrows
@@ -128,11 +129,11 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         super.tearDown();
     }
 
-    private void initializeIndexIfNotExist(String indexName) throws Exception {
+    public void initializeIndexIfNotExist(String indexName) throws Exception {
         initializeIndexIfNotExist(indexName, 1);
     }
 
-    private void initializeIndexIfNotExist(String indexName, int numberOfShards) throws Exception {
+    public void initializeIndexIfNotExist(String indexName, int numberOfShards) throws Exception {
         if (!indexExists(indexName)) {
             createIndexWithConfiguration(
                 indexName,
@@ -152,7 +153,7 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         }
     }
 
-    private String createTestConnector(String endpoint) throws Exception {
+    public String createTestConnector(String endpoint) throws Exception {
         try {
             String createConnectorRequestBody = Files.readString(
                 Path.of(classLoader.getResource("agenticsearch/CreateConnectorRequestBody.json").toURI())
@@ -165,7 +166,7 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         }
     }
 
-    private void createAgenticSearchPipeline(String pipelineName, String agentId) throws Exception {
+    public void createAgenticSearchPipeline(String pipelineName, String agentId) throws Exception {
         final String pipelineRequestBody = String.format(
             Locale.ROOT,
             Files.readString(Path.of(classLoader.getResource("agenticsearch/AgenticSearchPipelineRequestBody.json").toURI())),
@@ -181,7 +182,7 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         );
     }
 
-    private String registerTestAgent(String modelId) throws Exception {
+    public String registerTestAgent(String modelId) throws Exception {
         final String registerAgentRequestBody = String.format(
             Locale.ROOT,
             Files.readString(Path.of(classLoader.getResource("agenticsearch/RegisterAgentRequestBody.json").toURI())),
@@ -190,12 +191,11 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         return registerAgent(registerAgentRequestBody);
     }
 
-    private Map<String, Object> searchWithPipeline(String indexName, AgenticSearchQueryBuilder query, String pipelineName)
-        throws Exception {
+    public Map<String, Object> searchWithPipeline(String indexName, AgenticSearchQueryBuilder query, String pipelineName) throws Exception {
         return search(indexName, query, null, 10, Map.of("search_pipeline", pipelineName));
     }
 
-    private Map<String, Object> searchWithPipelineAndAggregations(String indexName, AgenticSearchQueryBuilder query, String pipelineName)
+    public Map<String, Object> searchWithPipelineAndAggregations(String indexName, AgenticSearchQueryBuilder query, String pipelineName)
         throws Exception {
         String searchBody = String.format(Locale.ROOT, """
             {
@@ -226,7 +226,7 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 
-    private Map<String, Object> searchWithPipelineAndSort(String indexName, AgenticSearchQueryBuilder query, String pipelineName)
+    public Map<String, Object> searchWithPipelineAndSort(String indexName, AgenticSearchQueryBuilder query, String pipelineName)
         throws Exception {
         String searchBody = String.format(Locale.ROOT, """
             {
