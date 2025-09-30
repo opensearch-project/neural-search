@@ -91,6 +91,13 @@ public abstract class AbstractRollingUpgradeTestCase extends BaseUpgradeTestCase
         createPipelineProcessor(requestBody, pipelineName, modelId, null);
     }
 
+    protected void createPipelineForSemanticHighlighting(String modelId, String pipelineName) throws Exception {
+        String requestBody = Files.readString(
+            Path.of(classLoader.getResource("processor/SemanticHighlightingPipelineConfiguration.json").toURI())
+        );
+        createPipelineProcessor(requestBody, pipelineName, modelId, null);
+    }
+
     protected void createPipelineForTextImageProcessor(String modelId, String pipelineName) throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/PipelineForTextImageProcessorConfiguration.json").toURI())

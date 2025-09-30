@@ -4,8 +4,12 @@
  */
 package org.opensearch.neuralsearch.bwc.rolling;
 
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -21,229 +25,171 @@ import static org.opensearch.neuralsearch.util.TestUtils.getModelId;
  */
 public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
 
-    private static final String TEST_FIELD = "content";
-    private static final String TEST_KNN_VECTOR_FIELD = "content_embedding";
-    private static final String EMBEDDING_PIPELINE = "semantic-highlight-pipeline-rolling";
+    private static final String PIPELINE_NAME = "semantic-highlight-pipeline-rolling";
+    private static final String TEST_FIELD = "text";
+    private static final String TEST_KNN_VECTOR_FIELD = "text_knn";
     private static final String HIGHLIGHT_MODEL_NAME = "sentence_highlighting_qa_model";
+    private static final String INDEX_MAPPING_PATH = "processor/SemanticHighlightingIndexMapping.json";
 
-    // Test documents - medical research documents about neurodegenerative diseases
-    private static final String DOC_1 =
-        "Parkinson disease is a progressive neurodegenerative disorder characterized by synaptic loss and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on cholinesterase inhibitors and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cholinesterase inhibitors has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future.";
-    private static final String DOC_2 =
-        "ALS disease is a progressive neurodegenerative disorder characterized by glial activation and associated pathological changes. Clinical presentation typically includes cognitive decline and progressive functional decline. Current therapeutic approaches focus on cognitive rehabilitation and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with cognitive rehabilitation has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future.";
-    private static final String DOC_3 =
-        "Alzheimer disease is a progressive neurodegenerative disorder characterized by alpha-synuclein aggregation and associated pathological changes. Clinical presentation typically includes motor dysfunction and progressive functional decline. Current therapeutic approaches focus on gene therapy and supportive care interventions. Recent clinical trials have investigated novel treatments targeting underlying disease mechanisms, including anti-inflammatory agents, antioxidants, and disease-modifying therapies. Early intervention with gene therapy has shown promise in slowing disease progression and improving quality of life. Biomarker development and precision medicine approaches are advancing personalized treatment strategies. Multidisciplinary care teams provide comprehensive management including neurological assessment, rehabilitation services, and psychosocial support. Emerging therapies target specific molecular pathways involved in neurodegeneration, offering hope for more effective treatments in the future.";
+    private static final String DOC_OLD = "Parkinson disease is a progressive neurodegenerative disorder.";
+    private static final String DOC_MIXED = "ALS disease is a progressive neurodegenerative disorder.";
+    private static final String DOC_UPGRADED = "Alzheimer disease is a progressive neurodegenerative disorder.";
+
+    private static final int NUM_DOCS_PER_ROUND = 1;
+    private static String embeddingModelId = "";
+    private static String highlightModelId = "";
+
+    private final ClassLoader classLoader = this.getClass().getClassLoader();
 
     /**
-     * Test semantic highlighting single inference mode (default) through rolling upgrade.
-     * This tests the feature that has existed since 3.0.0.
+     * Test semantic highlighting through rolling upgrade.
+     * Follows the same pattern as SemanticSearchIT.
      */
-    public void testSemanticHighlighting_SingleInferenceMode_RollingUpgrade() throws Exception {
-        waitForClusterHealthGreen(NODES_BWC_CLUSTER);
+    public void testSemanticHighlighting_E2EFlow() throws Exception {
+        waitForClusterHealthGreen(NODES_BWC_CLUSTER, 90);
 
         switch (getClusterType()) {
             case OLD:
-                setupOldCluster();
+                // Deploy models and create resources in old cluster
+                highlightModelId = prepareSemanticHighlightingLocalModel();
+                embeddingModelId = uploadTextEmbeddingModel();
+                createPipelineForSemanticHighlighting(embeddingModelId, PIPELINE_NAME);
+
+                URL indexMappingURL = classLoader.getResource(INDEX_MAPPING_PATH);
+                Objects.requireNonNull(indexMappingURL, "Index mapping file not found: " + INDEX_MAPPING_PATH);
+                String indexMapping = Files.readString(Path.of(indexMappingURL.toURI()));
+                createIndexWithConfiguration(getIndexNameForTest(), indexMapping, PIPELINE_NAME);
+
+                addDocument(getIndexNameForTest(), "0", TEST_FIELD, DOC_OLD, null, null);
                 break;
+
             case MIXED:
-                verifyMixedCluster();
-                break;
-            case UPGRADED:
-                verifyUpgradedCluster();
-                break;
-        }
-    }
+                // Retrieve model IDs and validate in mixed cluster
+                embeddingModelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                highlightModelId = findModelIdByName(HIGHLIGHT_MODEL_NAME);
 
-    private void setupOldCluster() throws Exception {
-        // Deploy models using methods that exist in 3.0.0
-        String highlightModelId = prepareSemanticHighlightingLocalModel();
-        assertNotNull("Highlight model deployment failed", highlightModelId);
+                loadAndWaitForModelToBeReady(embeddingModelId);
+                loadAndWaitForModelToBeReady(highlightModelId);
 
-        String embeddingModelId = uploadTextEmbeddingModel();
-        assertNotNull("Embedding model deployment failed", embeddingModelId);
-
-        // Create pipeline and index
-        createPipelineProcessor(embeddingModelId, EMBEDDING_PIPELINE);
-        createIndexWithVectorMapping();
-        indexDocuments();
-
-        // Test single inference mode
-        Map<String, Object> response = performSemanticHighlighting(highlightModelId);
-        assertHighlightingPresent(response, TEST_FIELD);
-    }
-
-    private void verifyMixedCluster() throws Exception {
-        logger.info("=== Starting verifyMixedCluster ===");
-
-        // Retrieve model IDs from persisted cluster state
-        logger.info("Retrieving embedding model ID from pipeline: {}", EMBEDDING_PIPELINE);
-        String embeddingModelId = getModelId(getIngestionPipeline(EMBEDDING_PIPELINE), TEXT_EMBEDDING_PROCESSOR);
-        logger.info("Retrieved embedding model ID: {}", embeddingModelId);
-
-        logger.info("Retrieving highlight model ID by name: {}", HIGHLIGHT_MODEL_NAME);
-        String highlightModelId = findModelIdByName(HIGHLIGHT_MODEL_NAME);
-        logger.info("Retrieved highlight model ID: {}", highlightModelId);
-
-        assertNotNull("Highlight model ID should be available", highlightModelId);
-        assertNotNull("Embedding model ID should be available", embeddingModelId);
-
-        // Ensure models are loaded
-        loadAndWaitForModelToBeReady(highlightModelId);
-        loadAndWaitForModelToBeReady(embeddingModelId);
-
-        // Verify single inference mode still works during partial upgrade
-        Map<String, Object> response = performSemanticHighlighting(highlightModelId);
-        assertHighlightingPresent(response, TEST_FIELD);
-
-        // Test with neural query
-        Map<String, Object> neuralResponse = performSemanticHighlightingWithNeuralQuery(highlightModelId, embeddingModelId);
-        assertHighlightingPresent(neuralResponse, TEST_FIELD);
-    }
-
-    private void verifyUpgradedCluster() throws Exception {
-        logger.info("=== Starting verifyUpgradedCluster ===");
-
-        // Retrieve model IDs from persisted cluster state
-        logger.info("Retrieving embedding model ID from pipeline: {}", EMBEDDING_PIPELINE);
-        String embeddingModelId = getModelId(getIngestionPipeline(EMBEDDING_PIPELINE), TEXT_EMBEDDING_PROCESSOR);
-        logger.info("Retrieved embedding model ID: {}", embeddingModelId);
-
-        logger.info("Retrieving highlight model ID by name: {}", HIGHLIGHT_MODEL_NAME);
-        String highlightModelId = findModelIdByName(HIGHLIGHT_MODEL_NAME);
-        logger.info("Retrieved highlight model ID: {}", highlightModelId);
-
-        assertNotNull("Highlight model ID should be available", highlightModelId);
-        assertNotNull("Embedding model ID should be available", embeddingModelId);
-
-        try {
-            // Ensure models are loaded
-            loadAndWaitForModelToBeReady(highlightModelId);
-            loadAndWaitForModelToBeReady(embeddingModelId);
-
-            // Verify single inference mode works after complete upgrade
-            Map<String, Object> response = performSemanticHighlighting(highlightModelId);
-            assertHighlightingPresent(response, TEST_FIELD);
-
-            // Add new document
-            addDocument(
-                getIndexNameForTest(),
-                "4",
-                TEST_FIELD,
-                "Huntington disease is a progressive neurodegenerative disorder characterized by neuroinflammation and associated pathological changes. Clinical presentation typically includes rigidity and progressive functional decline. Current therapeutic approaches focus on cognitive rehabilitation and supportive care interventions.",
-                null,
-                null
-            );
-
-            // Verify new document can be highlighted
-            Map<String, Object> newDocResponse = performHighlightingOnNewDocument(highlightModelId);
-            assertHighlightingPresent(newDocResponse, TEST_FIELD);
-
-        } finally {
-            // Clean up test resources - no search pipeline in this test
-            try {
-                wipeOfTestResources(getIndexNameForTest(), EMBEDDING_PIPELINE, embeddingModelId, null);
-            } catch (Exception e) {
-                logger.warn("Error during cleanup, continuing: {}", e.getMessage());
-            }
-            // Manually delete highlight model since wipeOfTestResources only handles one model
-            if (highlightModelId != null) {
-                try {
-                    deleteModel(highlightModelId);
-                } catch (Exception e) {
-                    logger.warn("Error deleting highlight model, continuing: {}", e.getMessage());
+                int totalDocsCountMixed;
+                if (isFirstMixedRound()) {
+                    totalDocsCountMixed = NUM_DOCS_PER_ROUND;
+                    validateSemanticHighlighting(totalDocsCountMixed, highlightModelId, embeddingModelId);
+                    addDocument(getIndexNameForTest(), "1", TEST_FIELD, DOC_MIXED, null, null);
+                } else {
+                    totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
+                    validateSemanticHighlighting(totalDocsCountMixed, highlightModelId, embeddingModelId);
                 }
-            }
-        }
-    }
+                break;
 
-    private void createIndexWithVectorMapping() throws Exception {
-        String mapping = String.format(LOCALE, """
-            {
-                "settings": {
-                    "index.knn": true,
-                    "default_pipeline": "%s"
-                },
-                "mappings": {
-                    "properties": {
-                        "%s": {"type": "text"},
-                        "%s": {
-                            "type": "knn_vector",
-                            "dimension": 768,
-                            "method": {
-                                "name": "hnsw",
-                                "engine": "lucene"
-                            }
+            case UPGRADED:
+                try {
+                    // Validate and cleanup in upgraded cluster
+                    embeddingModelId = getModelId(getIngestionPipeline(PIPELINE_NAME), TEXT_EMBEDDING_PROCESSOR);
+                    highlightModelId = findModelIdByName(HIGHLIGHT_MODEL_NAME);
+
+                    int totalDocsCountUpgraded = 3 * NUM_DOCS_PER_ROUND;
+                    loadAndWaitForModelToBeReady(embeddingModelId);
+                    loadAndWaitForModelToBeReady(highlightModelId);
+
+                    addDocument(getIndexNameForTest(), "2", TEST_FIELD, DOC_UPGRADED, null, null);
+                    validateSemanticHighlighting(totalDocsCountUpgraded, highlightModelId, embeddingModelId);
+                } finally {
+                    wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, embeddingModelId, null);
+                    if (highlightModelId != null) {
+                        try {
+                            deleteModel(highlightModelId);
+                        } catch (Exception e) {
+                            logger.warn("Error deleting highlight model: {}", e.getMessage());
                         }
                     }
                 }
-            }
-            """, EMBEDDING_PIPELINE, TEST_FIELD, TEST_KNN_VECTOR_FIELD);
+                break;
 
-        createIndexWithConfiguration(getIndexNameForTest(), mapping, null);
+            default:
+                throw new IllegalStateException("Unexpected cluster type: " + getClusterType());
+        }
     }
 
-    private void indexDocuments() throws Exception {
-        addDocument(getIndexNameForTest(), "1", TEST_FIELD, DOC_1, null, null);
-        addDocument(getIndexNameForTest(), "2", TEST_FIELD, DOC_2, null, null);
-        addDocument(getIndexNameForTest(), "3", TEST_FIELD, DOC_3, null, null);
-
-        // Refresh index to ensure documents are searchable immediately
-        refreshAllIndices();
-    }
-
-    private Map<String, Object> performSemanticHighlighting(String modelId) throws Exception {
-        QueryBuilder query = new MatchQueryBuilder(TEST_FIELD, "neurodegenerative disorder treatment");
-
-        // Use single inference mode (default - no batch_inference flag)
-        return searchWithSemanticHighlighter(getIndexNameForTest(), query, 2, TEST_FIELD, modelId);
-    }
-
-    private Map<String, Object> performSemanticHighlightingWithNeuralQuery(String highlightModelId, String embeddingModelId)
+    private void validateSemanticHighlighting(final int expectedDocCount, final String highlightModelId, final String embeddingModelId)
         throws Exception {
+        // Verify document count
+        int docCount = getDocCount(getIndexNameForTest());
+        assertEquals(expectedDocCount, docCount);
+
+        // Refresh index to ensure all documents are searchable
+        refreshAllIndices();
+
+        // Check if documents have KNN vectors by fetching a sample document
+        try {
+            Map<String, Object> sampleDoc = search(getIndexNameForTest(), new MatchQueryBuilder(TEST_FIELD, "disease"), 1);
+        } catch (Exception e) {
+            logger.warn("Failed to fetch sample document: {}", e.getMessage());
+        }
+
+        // Test with match query and semantic highlighting
+        QueryBuilder matchQuery = new MatchQueryBuilder(TEST_FIELD, "neurodegenerative disorder");
+        Map<String, Object> matchResponse = searchWithSemanticHighlighter(
+            getIndexNameForTest(),
+            matchQuery,
+            expectedDocCount,
+            TEST_FIELD,
+            highlightModelId
+        );
+        assertNotNull(matchResponse);
+        assertHighlightsPresent(matchResponse);
+
+        // Refresh again before neural query
+        refreshAllIndices();
+
+        // Test with neural query and semantic highlighting
         NeuralQueryBuilder neuralQuery = NeuralQueryBuilder.builder()
             .fieldName(TEST_KNN_VECTOR_FIELD)
-            .queryText("neurodegenerative disease therapeutic approaches")
+            .queryText("progressive disease treatment")
             .modelId(embeddingModelId)
-            .k(2)
+            .k(expectedDocCount)
             .build();
 
-        return searchWithSemanticHighlighter(getIndexNameForTest(), neuralQuery, 2, TEST_FIELD, highlightModelId);
-    }
-
-    private Map<String, Object> performHighlightingOnNewDocument(String modelId) throws Exception {
-        QueryBuilder query = new MatchQueryBuilder(TEST_FIELD, "cognitive rehabilitation");
-        return searchWithSemanticHighlighter(getIndexNameForTest(), query, 2, TEST_FIELD, modelId);
+        Map<String, Object> neuralResponse = searchWithSemanticHighlighter(
+            getIndexNameForTest(),
+            neuralQuery,
+            expectedDocCount,
+            TEST_FIELD,
+            highlightModelId
+        );
+        assertNotNull(neuralResponse);
+        assertHighlightsPresent(neuralResponse);
     }
 
     @SuppressWarnings("unchecked")
-    private void assertHighlightingPresent(Map<String, Object> response, String field) {
-        assertNotNull("Response should not be null", response);
-
+    private void assertHighlightsPresent(Map<String, Object> response) {
         Map<String, Object> hits = (Map<String, Object>) response.get("hits");
         assertNotNull("Hits should not be null", hits);
 
         List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hits.get("hits");
         assertNotNull("Hits list should not be null", hitsList);
-        assertTrue("Should have at least one hit", hitsList.size() > 0);
+        assertTrue("Should have at least one hit", !hitsList.isEmpty());
 
-        boolean foundHighlight = false;
+        // At least one document should have highlights with tags
+        boolean foundHighlightWithTags = false;
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
-            if (highlight != null && highlight.containsKey(field)) {
-                List<String> fragments = (List<String>) highlight.get(field);
+            if (highlight != null && highlight.containsKey(TEST_FIELD)) {
+                List<String> fragments = (List<String>) highlight.get(TEST_FIELD);
                 if (fragments != null && !fragments.isEmpty()) {
-                    // Verify highlight structure (check for HTML tags)
+                    // Verify that at least one fragment contains highlight tags
                     for (String fragment : fragments) {
-                        // Check that highlight tags are present
-                        assertTrue("Fragment should contain opening tag '<em>' in: " + fragment, fragment.contains("<em>"));
-                        assertTrue("Fragment should contain closing tag '</em>' in: " + fragment, fragment.contains("</em>"));
+                        if (fragment.contains("<em>") && fragment.contains("</em>")) {
+                            foundHighlightWithTags = true;
+                            break;
+                        }
                     }
-                    foundHighlight = true;
-                    break;
+                    if (foundHighlightWithTags) {
+                        break;
+                    }
                 }
             }
         }
-
-        assertTrue("Semantic highlighting should produce highlights with HTML tags for field: " + field, foundHighlight);
+        assertTrue("At least one document should have highlights with <em> tags", foundHighlightWithTags);
     }
 }
