@@ -121,6 +121,8 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
     private void assertHighlightsPresent(Map<String, Object> response) {
         Map<String, Object> hits = (Map<String, Object>) response.get("hits");
         assertNotNull("Hits should not be null", hits);
+        // log the hits for debugging
+        logger.info("Search hits: {}", hits);
 
         List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hits.get("hits");
         assertNotNull("Hits list should not be null", hitsList);

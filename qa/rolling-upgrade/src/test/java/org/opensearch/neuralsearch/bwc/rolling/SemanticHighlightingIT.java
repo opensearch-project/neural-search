@@ -74,11 +74,11 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
                 int totalDocsCountMixed;
                 if (isFirstMixedRound()) {
                     totalDocsCountMixed = NUM_DOCS_PER_ROUND;
-                    validateSemanticHighlighting(totalDocsCountMixed, highlightModelId, embeddingModelId, DOC_OLD);
+                    validateSemanticHighlighting(totalDocsCountMixed, highlightModelId, embeddingModelId);
                     addDocument(getIndexNameForTest(), "1", TEST_FIELD, DOC_MIXED, null, null);
                 } else {
                     totalDocsCountMixed = 2 * NUM_DOCS_PER_ROUND;
-                    validateSemanticHighlighting(totalDocsCountMixed, highlightModelId, embeddingModelId, DOC_MIXED);
+                    validateSemanticHighlighting(totalDocsCountMixed, highlightModelId, embeddingModelId);
                 }
                 break;
 
@@ -93,7 +93,7 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
                     loadAndWaitForModelToBeReady(highlightModelId);
 
                     addDocument(getIndexNameForTest(), "2", TEST_FIELD, DOC_UPGRADED, null, null);
-                    validateSemanticHighlighting(totalDocsCountUpgraded, highlightModelId, embeddingModelId, DOC_UPGRADED);
+                    validateSemanticHighlighting(totalDocsCountUpgraded, highlightModelId, embeddingModelId);
                 } finally {
                     wipeOfTestResources(getIndexNameForTest(), PIPELINE_NAME, embeddingModelId, null);
                     if (highlightModelId != null) {
@@ -114,11 +114,11 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
     private void validateSemanticHighlighting(
         final int expectedDocCount,
         final String highlightModelId,
-        final String embeddingModelId,
-        final String searchText
-    ) throws Exception {
+        final String embeddingModelId
+    ) {
         // Verify document count
         int docCount = getDocCount(getIndexNameForTest());
+        logger.info("Document count in index {}: {}", getIndexNameForTest(), docCount);
         assertEquals(expectedDocCount, docCount);
 
         // Test with match query and semantic highlighting
@@ -156,6 +156,7 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
     private void assertHighlightsPresent(Map<String, Object> response) {
         Map<String, Object> hits = (Map<String, Object>) response.get("hits");
         assertNotNull("Hits should not be null", hits);
+        logger.info("Search hits: {}", hits);
 
         List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hits.get("hits");
         assertNotNull("Hits list should not be null", hitsList);
