@@ -25,7 +25,6 @@ import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 
@@ -60,13 +59,6 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     public List<String> queryFields;
     public String memoryId;
 
-    // setting accessor to retrieve agentic search feature flag
-    private static NeuralSearchSettingsAccessor SETTINGS_ACCESSOR;
-
-    public static void initialize(NeuralSearchSettingsAccessor settingsAccessor) {
-        AgenticSearchQueryBuilder.SETTINGS_ACCESSOR = settingsAccessor;
-    }
-
     public AgenticSearchQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.queryText = in.readString();
@@ -88,12 +80,6 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
-        // feature flag check
-        if (!SETTINGS_ACCESSOR.isAgenticSearchEnabled()) {
-            throw new IllegalStateException(
-                "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
-            );
-        }
         out.writeString(this.queryText);
         out.writeOptionalStringCollection(this.queryFields);
         out.writeOptionalString(this.memoryId);
@@ -101,12 +87,6 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected void doXContent(XContentBuilder xContentBuilder, Params params) throws IOException {
-        // feature flag check
-        if (!SETTINGS_ACCESSOR.isAgenticSearchEnabled()) {
-            throw new IllegalStateException(
-                "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
-            );
-        }
         xContentBuilder.startObject(NAME);
         if (Objects.nonNull(QUERY_TEXT_FIELD)) {
             xContentBuilder.field(QUERY_TEXT_FIELD.getPreferredName(), queryText);

@@ -129,7 +129,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.AGENTIC_SEARCH_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.DEFAULT_INDEX_THREAD_QTY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
@@ -195,7 +194,6 @@ public class NeuralSearch extends Plugin
         HybridQueryExecutor.initialize(threadPool);
         normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner());
         settingsAccessor = new NeuralSearchSettingsAccessor(clusterService, environment.settings());
-        AgenticSearchQueryBuilder.initialize(settingsAccessor);
         pipelineServiceUtil = new PipelineServiceUtil(clusterService);
         infoStatsManager = new InfoStatsManager(NeuralSearchClusterUtil.instance(), settingsAccessor, pipelineServiceUtil);
         EventStatsManager.instance().initialize(settingsAccessor);
@@ -315,7 +313,6 @@ public class NeuralSearch extends Plugin
             NEURAL_STATS_ENABLED,
             SEMANTIC_INGEST_BATCH_SIZE,
             HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
-            AGENTIC_SEARCH_ENABLED,
             SparseSettings.IS_SPARSE_INDEX_SETTING,
             NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
             NEURAL_CIRCUIT_BREAKER_LIMIT,
