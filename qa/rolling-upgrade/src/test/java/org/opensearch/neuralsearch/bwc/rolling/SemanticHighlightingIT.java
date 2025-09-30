@@ -139,7 +139,20 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
             assertHighlightingPresent(newDocResponse, TEST_FIELD);
 
         } finally {
-            wipeOfTestResources(getIndexNameForTest(), EMBEDDING_PIPELINE, highlightModelId, embeddingModelId);
+            // Clean up test resources - no search pipeline in this test
+            try {
+                wipeOfTestResources(getIndexNameForTest(), EMBEDDING_PIPELINE, embeddingModelId, null);
+            } catch (Exception e) {
+                logger.warn("Error during cleanup, continuing: {}", e.getMessage());
+            }
+            // Manually delete highlight model since wipeOfTestResources only handles one model
+            if (highlightModelId != null) {
+                try {
+                    deleteModel(highlightModelId);
+                } catch (Exception e) {
+                    logger.warn("Error deleting highlight model, continuing: {}", e.getMessage());
+                }
+            }
         }
     }
 
