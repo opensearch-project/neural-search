@@ -250,7 +250,14 @@ public enum EventStatName implements StatName {
     AGENTIC_QUERY_REQUESTS("agentic_query_requests", "query.agentic", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_2_0),
 
     /** Counts seismic query requests */
-    SEISMIC_QUERY_REQUESTS("seismic_query_requests", "query.neural_sparse", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_3_0);
+    SEISMIC_QUERY_REQUESTS("seismic_query_requests", "query.neural_sparse", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_3_0),
+    /** Tracks executions of the mmr neural query transformer */
+    MMR_NEURAL_QUERY_TRANSFORMER(
+        "mmr_neural_query_transformer_executions",
+        "processors.search",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_3_0
+    );
 
     private final String nameString;
     private final String path;
