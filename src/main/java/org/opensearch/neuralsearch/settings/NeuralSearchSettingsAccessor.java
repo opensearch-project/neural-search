@@ -33,7 +33,6 @@ public class NeuralSearchSettingsAccessor {
      */
     public NeuralSearchSettingsAccessor(ClusterService clusterService, Settings settings) {
         isStatsEnabled = NeuralSearchSettings.NEURAL_STATS_ENABLED.get(settings);
-        isAgenticSearchEnabled = NeuralSearchSettings.AGENTIC_SEARCH_ENABLED.get(settings);
         registerSettingsCallbacks(clusterService, settings);
     }
 
@@ -44,9 +43,6 @@ public class NeuralSearchSettingsAccessor {
                 EventStatsManager.instance().reset();
             }
             isStatsEnabled = value;
-        });
-        clusterService.getClusterSettings().addSettingsUpdateConsumer(NeuralSearchSettings.AGENTIC_SEARCH_ENABLED, value -> {
-            isAgenticSearchEnabled = value;
         });
         clusterService.getClusterSettings()
             .addSettingsUpdateConsumer(NEURAL_CIRCUIT_BREAKER_LIMIT, NEURAL_CIRCUIT_BREAKER_OVERHEAD, (limit, overhead) -> {

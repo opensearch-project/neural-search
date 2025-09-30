@@ -389,30 +389,6 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         verifyNoInteractions(mockMLClient);
     }
 
-    public void testFactory_create_feature_disabled() {
-        NeuralSearchSettingsAccessor accessor = mock(NeuralSearchSettingsAccessor.class);
-        when(accessor.isAgenticSearchEnabled()).thenReturn(false);
-        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
-            mockMLClient,
-            mockXContentRegistry,
-            accessor
-        );
-
-        Map<String, Object> config = new HashMap<>();
-        config.put("agent_id", AGENT_ID);
-
-        IllegalStateException exception = expectThrows(
-            IllegalStateException.class,
-            () -> factory.create(null, "test-tag", "test-description", false, config, null)
-        );
-
-        assertEquals(
-            "Exception message should match",
-            "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting.",
-            exception.getMessage()
-        );
-    }
-
     public void testProcessRequestAsync_withAgenticQuery_success() throws IOException {
         // Mock cluster service components
         ClusterService mockClusterService = mock(ClusterService.class);

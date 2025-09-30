@@ -217,12 +217,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             Map<String, Object> config,
             PipelineContext pipelineContext
         ) throws IllegalArgumentException, IllegalStateException {
-            // feature flag check
-            if (!settingsAccessor.isAgenticSearchEnabled()) {
-                throw new IllegalStateException(
-                    "Agentic search is currently disabled. Enable it using the 'plugins.neural_search.agentic_search_enabled' setting."
-                );
-            }
             String agentId = readStringProperty(TYPE, tag, config, "agent_id");
             if (agentId == null || agentId.trim().isEmpty()) {
                 throw new IllegalArgumentException("agent_id is required for agentic_query_translator processor");

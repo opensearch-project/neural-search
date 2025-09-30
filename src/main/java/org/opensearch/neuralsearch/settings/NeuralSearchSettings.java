@@ -83,16 +83,6 @@ public final class NeuralSearchSettings {
         Setting.Property.Dynamic
     );
 
-    /**
-     * Enables or disables agentic query clause
-     */
-    public static final Setting<Boolean> AGENTIC_SEARCH_ENABLED = Setting.boolSetting(
-        "plugins.neural_search.agentic_search_enabled",
-        true,
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
-    );
-
     public static Setting<Integer> SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING = Setting.intSetting(
         SPARSE_ALGO_PARAM_INDEX_THREAD_QTY,
         DEFAULT_INDEX_THREAD_QTY,

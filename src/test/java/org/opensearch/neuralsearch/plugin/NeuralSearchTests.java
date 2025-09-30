@@ -122,7 +122,6 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             settings,
             Set.of(
                 NeuralSearchSettings.NEURAL_STATS_ENABLED,
-                NeuralSearchSettings.AGENTIC_SEARCH_ENABLED,
                 NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT,
                 NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD,
                 NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING
@@ -200,7 +199,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(9, settings.size());
+        assertEquals(8, settings.size());
     }
 
     public void testRequestProcessors() {
