@@ -84,9 +84,27 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
     private void validateSemanticHighlighting(final String highlightModelId, final String embeddingModelId) throws Exception {
         // Verify document count
         int docCount = getDocCount(getIndexNameForTest());
+        logger.info("=== Validation Start (New Cluster) ===");
+        logger.info("Document count in index {}: {}", getIndexNameForTest(), docCount);
+        logger.info("Expected doc count: 2");
+        logger.info("Highlight model ID: {}", highlightModelId);
+        logger.info("Embedding model ID: {}", embeddingModelId);
         assertEquals(2, docCount);
 
+        // Refresh index to ensure all documents are searchable
+        refreshAllIndices();
+        logger.info("Index refreshed");
+
+        // Check if documents have KNN vectors by fetching a sample document
+        try {
+            Map<String, Object> sampleDoc = search(getIndexNameForTest(), new MatchQueryBuilder(TEST_FIELD, "disease"), 1);
+            logger.info("Sample document for KNN vector check: {}", sampleDoc);
+        } catch (Exception e) {
+            logger.warn("Failed to fetch sample document: {}", e.getMessage());
+        }
+
         // Test with match query and semantic highlighting
+        logger.info("=== Testing Match Query with Semantic Highlighting ===");
         QueryBuilder matchQuery = new MatchQueryBuilder(TEST_FIELD, "neurodegenerative disorder");
         Map<String, Object> matchResponse = searchWithSemanticHighlighter(
             getIndexNameForTest(),
@@ -95,10 +113,21 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
             TEST_FIELD,
             highlightModelId
         );
+        logger.info("Match query response: {}", matchResponse);
         assertNotNull(matchResponse);
         assertHighlightsPresent(matchResponse);
+        logger.info("Match query validation PASSED");
+
+        // Refresh again before neural query
+        refreshAllIndices();
+        logger.info("Index refreshed before neural query");
 
         // Test with neural query and semantic highlighting
+        logger.info("=== Testing Neural Query with Semantic Highlighting ===");
+        logger.info("Neural query field: {}", TEST_KNN_VECTOR_FIELD);
+        logger.info("Neural query text: progressive disease treatment");
+        logger.info("Neural query k: 2");
+
         NeuralQueryBuilder neuralQuery = NeuralQueryBuilder.builder()
             .fieldName(TEST_KNN_VECTOR_FIELD)
             .queryText("progressive disease treatment")
@@ -113,8 +142,11 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
             TEST_FIELD,
             highlightModelId
         );
+        logger.info("Neural query response: {}", neuralResponse);
         assertNotNull(neuralResponse);
         assertHighlightsPresent(neuralResponse);
+        logger.info("Neural query validation PASSED");
+        logger.info("=== Validation Complete ===");
     }
 
     @SuppressWarnings("unchecked")
