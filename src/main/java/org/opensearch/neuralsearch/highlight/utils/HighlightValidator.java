@@ -52,8 +52,6 @@ public class HighlightValidator {
             }
         }
 
-        log.debug("Validation successful for field: {}, modelId: {}", config.getFieldName(), config.getModelId());
-
         return config; // Valid as-is
     }
 
@@ -87,8 +85,6 @@ public class HighlightValidator {
                 return config.toBuilder().validationError("Invalid batch size: " + config.getMaxBatchSize()).build();
             }
         }
-
-        log.debug("Basic validation successful for field: {}, modelId: {}", config.getFieldName(), config.getModelId());
 
         return config; // Valid as-is
     }

@@ -46,7 +46,6 @@ public class HighlightResultApplier {
             List<Map<String, Object>> highlights = batchResults.get(i);
             if (highlights == null) {
                 highlights = new ArrayList<>();
-                log.debug("No highlights returned for hit at index {}", i);
             }
             applyHighlightsToHit(validHits.get(i), highlights, fieldName, preTag, postTag);
         }
@@ -86,7 +85,6 @@ public class HighlightResultApplier {
             List<Map<String, Object>> highlights = batchResults.get(batchIndex);
             if (highlights == null) {
                 highlights = new ArrayList<>();
-                log.debug("No highlights returned for hit at index {}", i);
             }
             applyHighlightsToHit(allValidHits.get(i), highlights, fieldName, preTag, postTag);
         }
@@ -110,14 +108,12 @@ public class HighlightResultApplier {
         String postTag
     ) {
         if (highlightResults == null || highlightResults.isEmpty()) {
-            log.debug("No highlight results for hit: {}", hit.getId());
             applyHighlightsToHit(hit, new ArrayList<>(), fieldName, preTag, postTag);
             return;
         }
 
         Map<String, Object> mlResponse = highlightResults.get(0);
         if (mlResponse == null || !mlResponse.containsKey(SemanticHighlightingConstants.HIGHLIGHTS_KEY)) {
-            log.debug("ML response missing highlights for hit: {}", hit.getId());
             applyHighlightsToHit(hit, new ArrayList<>(), fieldName, preTag, postTag);
             return;
         }
