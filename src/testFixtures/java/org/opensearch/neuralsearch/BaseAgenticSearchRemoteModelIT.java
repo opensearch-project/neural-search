@@ -11,7 +11,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import com.google.common.collect.ImmutableList;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentHelper;
@@ -54,8 +53,6 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         super.setUp();
         updateClusterSettings();
         updateClusterSettings("plugins.ml_commons.connector.private_ip_enabled", true);
-        updateClusterSettings(NeuralSearchSettings.AGENTIC_SEARCH_ENABLED.getKey(), true);
-        updateClusterSettings(ML_COMMONS_AGENTIC_SEARCH_ENABLED, true);
         updateClusterSettings(
             "plugins.ml_commons.trusted_connector_endpoints_regex",
             List.of(
