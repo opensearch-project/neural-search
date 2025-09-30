@@ -52,7 +52,7 @@ jobs:
         run: |
           chown -R 1000:1000 `pwd`
           echo "Running restart-upgrade backwards compatibility tests for SemanticHighlighting..."
-          su `id -un 1000` -c "./gradlew :qa:restart-upgrade:bwcTestSuite -Dtests.class=org.opensearch.neuralsearch.bwc.restart.SemanticHighlightingIT -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          su `id -un 1000` -c "./gradlew :qa:restart-upgrade:testAgainstNewCluster -Dtests.class=org.opensearch.neuralsearch.bwc.restart.SemanticHighlightingIT -D'tests.bwc.version=${{ matrix.bwc_version }}'"
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
@@ -93,4 +93,4 @@ jobs:
         run: |
           chown -R 1000:1000 `pwd`
           echo "Running rolling-upgrade backwards compatibility tests for SemanticHighlighting..."
-          su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:bwcTestSuite -Dtests.class=org.opensearch.neuralsearch.bwc.rolling.SemanticHighlightingIT -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:testRollingUpgrade -Dtests.class=org.opensearch.neuralsearch.bwc.rolling.SemanticHighlightingIT -D'tests.bwc.version=${{ matrix.bwc_version }}'"
