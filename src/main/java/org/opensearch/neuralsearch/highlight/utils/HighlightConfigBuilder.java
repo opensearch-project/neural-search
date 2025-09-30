@@ -26,13 +26,11 @@ public class HighlightConfigBuilder {
     public static HighlightConfig buildFromSearchRequest(SearchRequest request, SearchResponse response) {
         try {
             if (request == null || request.source() == null) {
-                log.debug("No search request source to extract from");
                 return HighlightConfig.empty();
             }
 
             HighlightBuilder highlighter = request.source().highlighter();
             if (highlighter == null) {
-                log.debug("No highlighter in request");
                 return HighlightConfig.empty();
             }
 

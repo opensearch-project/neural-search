@@ -964,7 +964,6 @@ public class MLCommonsClientAccessor {
             Object highlightsObj = dataMap.get(SemanticHighlightingConstants.HIGHLIGHTS_KEY);
 
             if (highlightsObj == null) {
-                log.debug("No highlights key in response, adding empty result");
                 results.add(new ArrayList<>());
                 continue;
             }
@@ -975,7 +974,6 @@ public class MLCommonsClientAccessor {
             }
 
             if (highlightsList.isEmpty()) {
-                log.debug("Empty highlights list, adding empty result");
                 results.add(new ArrayList<>());
                 continue;
             }
@@ -983,7 +981,6 @@ public class MLCommonsClientAccessor {
             // Check if it's a batch response (list of lists) or single document response
             Object firstElement = highlightsList.get(0);
             if (firstElement == null) {
-                log.debug("First element in highlights list is null, adding empty result");
                 results.add(new ArrayList<>());
                 continue;
             }
@@ -1018,7 +1015,6 @@ public class MLCommonsClientAccessor {
         List<Map<String, Object>> highlights = new ArrayList<>();
 
         if (docHighlights == null) {
-            log.debug("Null document highlights, returning empty list");
             return highlights;
         }
 
@@ -1031,7 +1027,6 @@ public class MLCommonsClientAccessor {
 
         for (Object item : highlightList) {
             if (item == null) {
-                log.debug("Null highlight item, skipping");
                 continue;
             }
 

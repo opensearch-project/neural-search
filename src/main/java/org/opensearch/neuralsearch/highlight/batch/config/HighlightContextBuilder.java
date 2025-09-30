@@ -33,7 +33,6 @@ public class HighlightContextBuilder {
         List<SearchHit> validHits = new ArrayList<>();
 
         if (response.getHits() == null || response.getHits().getHits().length == 0) {
-            log.debug("No hits to process for highlighting");
             return createEmptyContext(config, response, startTime);
         }
 
@@ -49,14 +48,8 @@ public class HighlightContextBuilder {
 
                 requests.add(request);
                 validHits.add(hit);
-
-                log.debug("Created highlighting request for hit ID: {}", hit.getId());
-            } else {
-                log.debug("Skipping hit ID: {} - no text found in field: {}", hit.getId(), config.getFieldName());
             }
         }
-
-        log.debug("Built highlight context with {} requests for field: {}", requests.size(), config.getFieldName());
 
         return HighlightContext.builder()
             .requests(requests)
