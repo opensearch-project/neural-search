@@ -33,5 +33,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 - Remove commons-lang:commons-lang dependency and use gradle version catalog for commons-lang3 ([#1551](https://github.com/opensearch-project/neural-search/pull/1551))
 - Update Lucene101 codec path to backward path & force errorprone version to 2.21.1 to resolve conflict ([#1574](https://github.com/opensearch-project/neural-search/pull/1574))
+- Upgrade QA Gradle Dependency Version with commons-lang3 ([#1589](https://github.com/opensearch-project/neural-search/pull/1589))
 
 ### Refactoring
