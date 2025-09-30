@@ -1,0 +1,21 @@
+{
+    "name": "LLM Judgments Connector",
+    "description": "Connector for LLM-based judgment generation",
+    "version": "1.0.0",
+    "protocol": "http",
+    "credential": {
+      "access_key": "",
+      "secret_key": ""
+    },
+    "actions": [
+      {
+        "action_type": "predict",
+        "method": "POST",
+        "url": "%s/predictions/agentic_search",
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "request_body": "{ \"system\": [{\"text\": \"${parameters.query_planner_system_prompt}\"}], \"messages\": [{\"role\":\"user\",\"content\":[{\"text\":\"${parameters.query_planner_user_prompt}\"}]}]}"
+      }
+    ]
+  }
