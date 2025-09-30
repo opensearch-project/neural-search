@@ -5,19 +5,28 @@
 package org.opensearch.neuralsearch.processor.util;
 
 import lombok.NonNull;
+import org.opensearch.action.search.SearchResponse;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.IndexFieldMapper;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.search.SearchHit;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -412,5 +421,67 @@ public class ProcessorUtils {
         }
         // if the index is specified in the metadata, read maxTokenCount from the index setting
         return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(indexMetadata.getSettings());
+    }
+
+    /**
+     * Extract query text from QueryBuilder for highlighting purposes
+     */
+    public static String extractQueryTextFromBuilder(QueryBuilder queryBuilder) {
+        switch (queryBuilder) {
+            case null -> throw new IllegalArgumentException("query builder cannot be null");
+            case MatchQueryBuilder matchQueryBuilder -> {
+                return matchQueryBuilder.value().toString();
+            }
+            case NeuralQueryBuilder neuralQueryBuilder -> {
+                return neuralQueryBuilder.queryText();
+            }
+            case NeuralKNNQueryBuilder neuralKNNQueryBuilder -> {
+                return neuralKNNQueryBuilder.getOriginalQueryText();
+            }
+            case TermQueryBuilder termQueryBuilder -> {
+                return termQueryBuilder.value().toString();
+            }
+            case HybridQueryBuilder hybridQuery -> {
+                StringBuilder text = new StringBuilder();
+
+                for (QueryBuilder subQuery : hybridQuery.queries()) {
+                    String subText = extractQueryTextFromBuilder(subQuery);
+                    if (!subText.isEmpty()) {
+                        if (!text.isEmpty()) text.append(" ");
+                        text.append(subText);
+                    }
+                }
+
+                return text.toString();
+            }
+            case NestedQueryBuilder nestedQuery -> {
+                return extractQueryTextFromBuilder(nestedQuery.query());
+            }
+            default -> {
+            }
+        }
+
+        throw new IllegalArgumentException(
+            String.format(Locale.ROOT, "Query type %s not supported for semantic highlighting.", queryBuilder.getClass().getSimpleName())
+        );
+    }
+
+    /**
+     * Update SearchResponse with additional processing time
+     */
+    public static SearchResponse updateResponseTookTime(SearchResponse response, long additionalTimeMs) {
+        long originalTook = response.getTook().millis();
+        long newTook = originalTook + additionalTimeMs;
+        return new SearchResponse(
+            response.getInternalResponse(),
+            response.getScrollId(),
+            response.getTotalShards(),
+            response.getSuccessfulShards(),
+            response.getSkippedShards(),
+            newTook,
+            response.getShardFailures(),
+            response.getClusters(),
+            response.pointInTimeId()
+        );
     }
 }

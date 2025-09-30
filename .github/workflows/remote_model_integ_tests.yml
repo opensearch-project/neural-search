@@ -1,0 +1,57 @@
+name: Remote Model Integration Tests
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # every night
+  push:
+    branches:
+      - "*"
+      - "feature/**"
+  pull_request:
+    branches:
+      - "*"
+      - "feature/**"
+
+jobs:
+  remote-model-single-node-integration-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        java: [21, 24]
+    steps:
+      - name: Checkout neural-search
+        uses: actions/checkout@v4
+
+      - name: Setup Java ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java }}
+
+      - name: Run single-node remote model tests
+        env:
+          CI: true
+        run: |
+          ./gradlew remoteModelIntegTest --info
+
+  remote-model-multi-node-integration-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        nodes: [3]
+        java: [21]
+    steps:
+      - name: Checkout neural-search
+        uses: actions/checkout@v4
+
+      - name: Setup Java ${{ matrix.java }}
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ matrix.java }}
+
+      - name: Run multi-node remote model tests
+        env:
+          CI: true
+        run: |
+          ./gradlew remoteModelIntegTest -PnumNodes=${{ matrix.nodes }} --info

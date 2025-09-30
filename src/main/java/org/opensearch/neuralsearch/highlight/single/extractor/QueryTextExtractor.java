@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.highlight.extractor;
+package org.opensearch.neuralsearch.highlight.single.extractor;
 
 import org.apache.lucene.search.Query;
 

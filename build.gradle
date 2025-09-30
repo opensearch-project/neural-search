@@ -478,3 +478,173 @@ task updateVersion {
         ant.replaceregexp(file:'build.gradle', match: '"opensearch.version", "\\d.*"', replace: '"opensearch.version", "' + newVersion.tokenize('-')[0] + '-SNAPSHOT"', flags:'g', byline:true)
     }
 }
+
+
+// Remote Model Integration Tests
+def isDockerAvailable() {
+    try {
+        def process = "docker version".execute()
+        process.waitFor()
+        return process.exitValue() == 0
+    } catch (Exception e) {
+        return false
+    }
+}
+
+task remoteModelIntegTest(type: RestIntegTestTask) {
+    description = "Run all remote model integration tests with auto-discovered models"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+
+    // Filter to only run remote model tests
+    filter {
+        includeTestsMatching "*RemoteModelIT*"
+    }
+
+    // Path to handlers directory for auto-discovery
+    def handlersDir = file("src/test/resources/remote-models/torchserve/handlers")
+    def discoveredModels = []
+
+    // Auto-discover all models from handler files
+    if (handlersDir.exists()) {
+        handlersDir.eachFile { file ->
+            if (file.name.endsWith("_handler.py")) {
+                def modelName = file.name.replace("_handler.py", "")
+                discoveredModels.add(modelName)
+            }
+        }
+    }
+
+    // Set endpoint for each discovered model
+    discoveredModels.each { model ->
+        def envVarName = "${model.toUpperCase().replace('_', '_')}_ENDPOINT"
+        def endpoint = "http://localhost:8080/predictions/${model}"
+        environment envVarName, endpoint
+        systemProperty "tests.${model}.endpoint", endpoint
+    }
+
+    // Common endpoints for backward compatibility
+    environment "TORCHSERVE_ENDPOINT", "http://localhost:8080"
+    systemProperty "tests.torchserve.endpoint", "http://localhost:8080"
+
+    // System properties from integTest
+    systemProperty 'tests.security.manager', 'false'
+    systemProperty 'java.io.tmpdir', opensearch_tmp_dir.absolutePath
+    systemProperty('project.root', project.rootDir.absolutePath)
+
+    // Path to the run.sh script
+    def runScript = file("src/test/resources/remote-models/torchserve/scripts/run.sh")
+
+    doFirst {
+        // Check Docker availability
+        if (!isDockerAvailable()) {
+            throw new GradleException("Docker is not available. Please install Docker to run remote model tests.")
+        }
+
+        // Ensure script exists
+        if (!runScript.exists()) {
+            throw new GradleException("run.sh script not found at: ${runScript.absolutePath}")
+        }
+
+        // Make script executable
+        runScript.setExecutable(true)
+
+        // Display discovered models
+        if (!discoveredModels.isEmpty()) {
+            println "Auto-discovered models: ${discoveredModels.join(', ')}"
+        } else {
+            println "WARNING: No models discovered in ${handlersDir.absolutePath}"
+        }
+
+        // Start TorchServe and setup all discovered models
+        println "Setting up TorchServe and deploying all models..."
+        exec {
+            commandLine runScript.absolutePath, "lifecycle", "setup"
+            standardOutput = System.out
+            errorOutput = System.err
+        }
+    }
+
+    doLast {
+        // Teardown TorchServe
+        println "Stopping TorchServe..."
+        exec {
+            commandLine runScript.absolutePath, "lifecycle", "teardown"
+            ignoreExitValue true  // Do not fail if already stopped
+        }
+    }
+
+    // Test logging configuration
+    testLogging {
+        events "passed", "skipped", "failed"
+        showExceptions true
+        showCauses true
+        showStackTraces true
+        exceptionFormat = "full"
+    }
+
+    // Generate separate test report
+    reports {
+        html.destination = file("$buildDir/reports/remote-model-tests")
+        junitXml.destination = file("$buildDir/test-results/remote-model-tests")
+    }
+}
+
+// Configure test cluster for remoteModelIntegTest
+testClusters.remoteModelIntegTest {
+    testDistribution = "ARCHIVE"
+
+    // Install plugins
+    configurations.zipArchive.asFileTree.each {
+        plugin(provider(new Callable<RegularFile>(){
+                @Override
+                RegularFile call() throws Exception {
+                    return new RegularFile() {
+                        @Override
+                        File getAsFile() {
+                            return it
+                        }
+                    }
+                }
+        }))
+    }
+
+    // This installs our neural-search plugin into the testClusters
+    plugin(project.tasks.bundlePlugin.archiveFile)
+
+    // Increase heap size to avoid memory issues
+    jvmArgs("-Xms1g", "-Xmx2g")
+}
+
+// Helper tasks for manual control (optional)
+task startTorchServe(type: Exec) {
+    group = "Remote Model Testing"
+    description = "Start TorchServe container manually"
+
+    def runScript = file("src/test/resources/remote-models/torchserve/scripts/run.sh")
+    commandLine runScript.absolutePath, "start"
+}
+
+task stopTorchServe(type: Exec) {
+    group = "Remote Model Testing"
+    description = "Stop TorchServe container manually"
+
+    def runScript = file("src/test/resources/remote-models/torchserve/scripts/run.sh")
+    commandLine runScript.absolutePath, "stop"
+}
+
+task torchServeStatus(type: Exec) {
+    group = "Remote Model Testing"
+    description = "Check TorchServe status"
+
+    def runScript = file("src/test/resources/remote-models/torchserve/scripts/run.sh")
+    commandLine runScript.absolutePath, "status"
+}
+
+task listRemoteModels(type: Exec) {
+    group = "Remote Model Testing"
+    description = "List all discovered remote models"
+
+    def runScript = file("src/test/resources/remote-models/torchserve/scripts/run.sh")
+    commandLine runScript.absolutePath, "list-models"
+}

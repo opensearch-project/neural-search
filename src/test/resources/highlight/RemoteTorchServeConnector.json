@@ -1,0 +1,21 @@
+{
+    "name": "%s",
+    "description": "Unified TorchServe connector for semantic highlighter (supports both single and batch)",
+    "version": 1,
+    "protocol": "http",
+    "credential": {
+        "key": "test"
+    },
+    "actions": [
+        {
+            "action_type": "predict",
+            "method": "POST",
+            "url": "%s/predictions/semantic_highlighter",
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "request_body": "{ \"question\": \"${parameters.question:-}\", \"context\": \"${parameters.context:-}\", \"inputs\": ${parameters.inputs:-null} }",
+            "pre_process_function": "// Unified pre-process function for backward compatibility\nif (params.question != null && params.context != null && params.inputs == null) {\n  // Single document format from older versions\n  return '{\"parameters\":{\"question\":\"' + params.question + '\",\"context\":\"' + params.context + '\"}}';\n}\nelse if (params.inputs != null) {\n  // Batch format from newer versions - pass inputs as JSON string\n  String inputsJson = params.inputs.toString();\n  return '{\"parameters\":{\"inputs\":' + inputsJson + '}}';\n}\nelse {\n  throw new IllegalArgumentException(\"Invalid input format: must provide either (question and context) or (inputs)\");\n}"
+        }
+    ]
+}

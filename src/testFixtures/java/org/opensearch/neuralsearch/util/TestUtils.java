@@ -12,6 +12,7 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.test.OpenSearchTestCase.randomFloat;
+import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -358,11 +359,6 @@ public class TestUtils {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
-    public static List<Map<String, Object>> getNestedHits(Map<String, Object> searchResponseAsMap) {
-        Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
-        return (List<Map<String, Object>>) hitsMap.get("hits");
-    }
-
     public static Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return (Map<String, Object>) hitsMap.get("total");
@@ -423,4 +419,5 @@ public class TestUtils {
         when(settingsAccessor.isStatsEnabled()).thenReturn(true);
         EventStatsManager.instance().initialize(settingsAccessor);
     }
+
 }

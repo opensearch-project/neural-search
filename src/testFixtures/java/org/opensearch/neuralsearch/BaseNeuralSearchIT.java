@@ -51,7 +51,7 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.ml.common.model.MLModelState;
-import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -97,6 +97,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUE
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
+
+import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
@@ -401,11 +403,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelId;
     }
 
-    @SneakyThrows
-    protected String prepareSentenceHighlightingModel() {
-        String requestBody = Files.readString(
-            Path.of(Objects.requireNonNull(classLoader.getResource("highlight/UploadSentenceHighlightingModelRequestBody.json")).toURI())
-        );
+    protected String prepareSemanticHighlightingLocalModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("highlight/LocalQuestionAnsweringModel.json").toURI()));
         String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
         return modelId;
@@ -1055,7 +1054,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String fieldToHighlight,
         final String modelId
     ) {
-        Map<String, Map<String, Object>> highlightFields = Map.of(fieldToHighlight, Map.of("type", SemanticHighlighter.NAME));
+        Map<String, Map<String, Object>> highlightFields = Map.of(
+            fieldToHighlight,
+            Map.of("type", SemanticHighlightingConstants.HIGHLIGHTER_TYPE)
+        );
 
         Map<String, Object> highlightOptions = Map.of("model_id", modelId);
 
@@ -2101,8 +2103,21 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             waitForClusterHealthGreen(numOfNodes, 60);
         } catch (ResponseException e) {
             // Perform additional API calls to log the cause of the yellow cluster state
-            Request explain = new Request("GET", "/_cluster/allocation/explain");
-            logger.info(EntityUtils.toString(client().performRequest(explain).getEntity()));
+            try {
+                // Only call allocation/explain if there are unassigned shards
+                Request healthCheck = new Request("GET", "/_cluster/health");
+                Response healthResponse = client().performRequest(healthCheck);
+                Map<String, Object> health = entityAsMap(healthResponse);
+                int unassignedShards = ((Number) health.getOrDefault("unassigned_shards", 0)).intValue();
+
+                if (unassignedShards > 0) {
+                    Request explain = new Request("GET", "/_cluster/allocation/explain");
+                    logger.info(EntityUtils.toString(client().performRequest(explain).getEntity()));
+                }
+            } catch (Exception explainError) {
+                logger.warn("Could not get allocation explanation: " + explainError.getMessage());
+            }
+
             Request shards = new Request("GET", "/_cat/shards?v");
             logger.info(EntityUtils.toString(client().performRequest(shards).getEntity()));
             Request health = new Request("GET", "/_cat/health?v");
@@ -2442,6 +2457,70 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .toList();
     }
 
+    /**
+     * Finds a model ID by model name using the ML models search API
+     * @param modelName the name of the model to find
+     * @return the model ID if found, null otherwise
+     */
+    @SneakyThrows
+    protected String findModelIdByName(String modelName) {
+        logger.info("Searching for model with name: {}", modelName);
+
+        String searchQuery = String.format(LOCALE, """
+            {
+                "query": {
+                    "term": {
+                        "name.keyword": "%s"
+                    }
+                }
+            }
+            """, modelName);
+
+        logger.info("Search query: {}", searchQuery);
+
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/models/_search",
+            null,
+            toHttpEntity(searchQuery),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        final String responseBody = EntityUtils.toString(response.getEntity());
+        assertNotNull(responseBody);
+
+        logger.info("Search response: {}", responseBody);
+
+        final XContentParser parser = createParser(MediaTypeRegistry.getDefaultMediaType().xContent(), responseBody);
+        final SearchResponse searchResponse = SearchResponse.fromXContent(parser);
+
+        SearchHit[] hits = searchResponse.getHits().getHits();
+        logger.info("Found {} hits for model name: {}", hits.length, modelName);
+
+        if (hits.length > 0) {
+            String documentId = hits[0].getId();
+            logger.info("Found document ID: {} for model name: {}", documentId, modelName);
+
+            // Extract the actual model_id from the source (not the document _id which includes chunk info)
+            Map<String, Object> source = hits[0].getSourceAsMap();
+            if (source.containsKey("model_id")) {
+                String modelId = (String) source.get("model_id");
+                logger.info("Extracted model_id from source: {}", modelId);
+                return modelId;
+            }
+
+            // Fallback to document ID if model_id not in source
+            logger.warn("model_id not found in source, using document ID: {}", documentId);
+            return documentId;
+        }
+
+        logger.warn("No model found with name: {}", modelName);
+        return null;
+    }
+
     private void deleteExistingModels() {
         List<String> modelIds = retrieveModels();
         modelIds.forEach(m -> {
@@ -2724,139 +2803,6 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return null;
     }
 
-    /**
-     * Execute a search request with all possible parameters including highlighting
-     *
-     * @param index Index to search against
-     * @param queryBuilder queryBuilder to produce source of query
-     * @param rescorer used for rescorer query builder
-     * @param resultSize number of results to return in the search
-     * @param requestParams additional request params for search
-     * @param aggs aggregations to include in the search
-     * @param postFilterBuilder post filter query builder
-     * @param sortBuilders sort builders for the search
-     * @param trackScores whether to track scores
-     * @param searchAfter search after parameters
-     * @param from from parameter for pagination
-     * @param highlightFields map of field names to highlight configurations
-     * @param highlightOptions global highlight options
-     * @return Search results represented as a map
-     */
-    @SneakyThrows
-    protected Map<String, Object> search(
-        String index,
-        QueryBuilder queryBuilder,
-        QueryBuilder rescorer,
-        int resultSize,
-        Map<String, String> requestParams,
-        List<Object> aggs,
-        QueryBuilder postFilterBuilder,
-        List<SortBuilder<?>> sortBuilders,
-        boolean trackScores,
-        List<Object> searchAfter,
-        int from,
-        Map<String, Map<String, Object>> highlightFields,
-        Map<String, Object> highlightOptions
-    ) {
-        return search(
-            index,
-            queryBuilder,
-            rescorer,
-            resultSize,
-            requestParams,
-            aggs,
-            postFilterBuilder,
-            sortBuilders,
-            trackScores,
-            searchAfter,
-            from,
-            highlightFields,
-            highlightOptions,
-            null,
-            null,
-            null
-        );
-    }
-
-    /**
-     * Execute a search request with highlighting
-     *
-     * @param index Index to search against
-     * @param queryBuilder queryBuilder to produce source of query
-     * @param resultSize number of results to return in the search
-     * @param highlightFields map of field names to highlight configurations
-     * @param highlightOptions global highlight options
-     * @return Search results represented as a map
-     */
-    @SneakyThrows
-    protected Map<String, Object> searchWithHighlight(
-        final String index,
-        final QueryBuilder queryBuilder,
-        final int resultSize,
-        final Map<String, Map<String, Object>> highlightFields,
-        final Map<String, Object> highlightOptions
-    ) {
-        return search(
-            index,
-            queryBuilder,
-            null,
-            resultSize,
-            Map.of(),
-            null,
-            null,
-            null,
-            false,
-            null,
-            0,
-            highlightFields,
-            highlightOptions,
-            null,
-            null,
-            null
-        );
-    }
-
-    /**
-     * Execute a search request with highlighting and custom tags
-     *
-     * @param index Index to search against
-     * @param queryBuilder queryBuilder to produce source of query
-     * @param resultSize number of results to return in the search
-     * @param highlightFields map of field names to highlight configurations
-     * @param highlightOptions global highlight options
-     * @param preTags array of pre-tags for highlighting
-     * @param postTags array of post-tags for highlighting
-     * @return Search results represented as a map
-     */
-    protected Map<String, Object> searchWithHighlight(
-        final String index,
-        final QueryBuilder queryBuilder,
-        final int resultSize,
-        final Map<String, Map<String, Object>> highlightFields,
-        final Map<String, Object> highlightOptions,
-        final String[] preTags,
-        final String[] postTags
-    ) {
-        return search(
-            index,
-            queryBuilder,
-            null,
-            resultSize,
-            Map.of(),
-            null,
-            null,
-            null,
-            false,
-            null,
-            0,
-            highlightFields,
-            highlightOptions,
-            Arrays.asList(preTags),
-            Arrays.asList(postTags),
-            null
-        );
-    }
-
     protected void ingestBatchDocumentWithBulk(
         String index,
         String idPrefix,
@@ -2920,5 +2866,22 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
         );
         assertOK(response);
+    }
+
+    protected String createRemoteModelConnector(String endpoint) throws Exception {
+        return RemoteModelTestUtils.createTorchServeConnector(client(), endpoint);
+    }
+
+    protected String deployRemoteModel(String connectorId, String modelName) throws Exception {
+        return RemoteModelTestUtils.deployRemoteModel(client(), connectorId, modelName);
+    }
+
+    protected void cleanupRemoteModelResources(String connectorId, String modelId) {
+        if (modelId != null) {
+            RemoteModelTestUtils.deleteModel(client(), modelId);
+        }
+        if (connectorId != null) {
+            RemoteModelTestUtils.deleteConnector(client(), connectorId);
+        }
     }
 }

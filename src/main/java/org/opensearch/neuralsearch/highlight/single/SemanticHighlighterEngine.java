@@ -2,15 +2,16 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.highlight;
+package org.opensearch.neuralsearch.highlight.single;
 
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.Query;
 import org.opensearch.OpenSearchException;
+import org.opensearch.neuralsearch.highlight.single.extractor.QueryTextExtractorRegistry;
+import org.opensearch.neuralsearch.highlight.utils.HighlightExtractorUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.fetch.subphase.highlight.FieldHighlightContext;
-import org.opensearch.neuralsearch.highlight.extractor.QueryTextExtractorRegistry;
 import org.opensearch.action.support.PlainActionFuture;
 import lombok.NonNull;
 import lombok.Builder;
@@ -19,7 +20,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Engine class for semantic highlighting operations
@@ -40,69 +40,40 @@ public class SemanticHighlighterEngine {
 
     /**
      * Gets the field text from the document
+     * @deprecated Use HighlightExtractorUtils.getFieldText instead
      *
      * @param fieldContext The field highlight context
      * @return The field text
      */
+    @Deprecated
     public String getFieldText(FieldHighlightContext fieldContext) {
-        if (fieldContext.hitContext == null || fieldContext.hitContext.sourceLookup() == null) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Field %s is not found in the hit", fieldContext.fieldName));
-        }
-        Object fieldTextObject = fieldContext.hitContext.sourceLookup().extractValue(fieldContext.fieldName, null);
-        if (fieldTextObject == null) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Field %s is not found in the document", fieldContext.fieldName));
-        }
-        if (fieldTextObject instanceof String == false) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Field %s must be a string for highlighting, but was %s",
-                    fieldContext.fieldName,
-                    fieldTextObject.getClass().getSimpleName()
-                )
-            );
-        }
-        String fieldTextString = (String) fieldTextObject;
-        if (fieldTextString.isEmpty()) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Field %s is empty", fieldContext.fieldName));
-        }
-        return fieldTextString;
+        return HighlightExtractorUtils.getFieldText(fieldContext);
     }
 
     /**
      * Extracts the original query text from the search query object.
+     * @deprecated Use HighlightExtractorUtils.extractOriginalQuery instead
      *
      * @param query The query object from which to extract the original text
      * @param fieldName The name of the field being highlighted
      * @return The extracted original query text for highlighting
      * @throws IllegalArgumentException if the extracted query text is empty
      */
+    @Deprecated
     public String extractOriginalQuery(Query query, String fieldName) {
-        if (fieldName == null) {
-            log.warn("Field name is null, extraction may be less accurate");
-        }
-        return queryTextExtractorRegistry.extractQueryText(query, fieldName);
+        return HighlightExtractorUtils.extractOriginalQuery(query, fieldName, queryTextExtractorRegistry);
     }
 
     /**
      * Gets the model ID from the options
+     * @deprecated Use HighlightExtractorUtils.getModelId instead
      *
      * @param options The options map
      * @return The model ID
      */
+    @Deprecated
     public String getModelId(Map<String, Object> options) {
-        Object modelId = options.get(MODEL_ID_FIELD);
-        if (Objects.isNull(modelId) || (modelId instanceof String) == false) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "%s must be a non-null string, but was %s",
-                    MODEL_ID_FIELD,
-                    modelId == null ? "null" : modelId.getClass().getSimpleName()
-                )
-            );
-        }
-        return (String) modelId;
+        return HighlightExtractorUtils.getModelId(options);
     }
 
     /**
@@ -118,6 +89,7 @@ public class SemanticHighlighterEngine {
     public String getHighlightedSentences(String modelId, String question, String context, String preTag, String postTag) {
         List<Map<String, Object>> results = fetchModelResults(modelId, question, context);
         if (results == null || results.isEmpty()) {
+            log.warn("[SEMANTIC_HIGHLIGHT] SINGLE INFERENCE ENGINE - No results from model, returning null");
             return null;
         }
 

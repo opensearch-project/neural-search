@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.ml;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -36,6 +37,7 @@ import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
 import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.ml.client.MachineLearningNodeClient;
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
@@ -421,6 +423,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             )
         );
 
+        // Mock getModel to return REMOTE function
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(highlights));
@@ -435,6 +446,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
                     "Global temperatures have risen significantly over the past century. Polar ice caps are melting at an alarming rate."
                 )
                 .build(),
+            FunctionName.QUESTION_ANSWERING,
             resultListener
         );
 
@@ -450,6 +462,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
         final Map<String, Object> emptyHighlights = Map.of("highlights", Collections.emptyList());
 
+        // Mock getModel to return REMOTE function
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(emptyHighlights));
@@ -462,6 +483,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
                 .question("test question")
                 .context("test context")
                 .build(),
+            FunctionName.QUESTION_ANSWERING,
             resultListener
         );
 
@@ -480,6 +502,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             "Node not connected"
         );
 
+        // Mock getModel to return REMOTE function (will be called 4 times due to retries)
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(nodeNotConnectedException);
@@ -492,6 +523,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
                 .question("test question")
                 .context("test context")
                 .build(),
+            FunctionName.QUESTION_ANSWERING,
             resultListener
         );
 
@@ -509,6 +541,15 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
         final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
 
+        // Mock getModel to return REMOTE function
+        MLModel mockModel = mock(MLModel.class);
+        when(mockModel.getAlgorithm()).thenReturn(FunctionName.REMOTE);
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(illegalStateException);
@@ -521,6 +562,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
                 .question("test question")
                 .context("test context")
                 .build(),
+            FunctionName.QUESTION_ANSWERING,
             resultListener
         );
 
@@ -1034,5 +1076,223 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);
+    }
+
+    /**
+     * Tests successful batch sentence highlighting inference with valid input.
+     */
+    public void testBatchInferenceSentenceHighlighting_whenValidInput_thenSuccess() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder()
+                .modelId("test-model")
+                .question("What is AI?")
+                .context("Artificial Intelligence is a field of computer science.")
+                .build(),
+            SentenceHighlightingRequest.builder()
+                .modelId("test-model")
+                .question("What is ML?")
+                .context("Machine Learning is a subset of AI.")
+                .build()
+        );
+
+        // Create batch response with highlights for both documents
+        Map<String, Object> dataMap = new HashMap<>();
+        dataMap.put(
+            "highlights",
+            List.of(
+                List.of(Map.of("start", 0, "end", 22), Map.of("start", 26, "end", 31)),
+                List.of(Map.of("start", 0, "end", 16), Map.of("start", 20, "end", 25))
+            )
+        );
+
+        ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataMap);
+        ModelTensors tensors = new ModelTensors(List.of(tensor));
+        ModelTensorOutput mlOutput = new ModelTensorOutput(List.of(tensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mlOutput);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, FunctionName.REMOTE, batchResultListener);
+
+        ArgumentCaptor<List<List<Map<String, Object>>>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(batchResultListener).onResponse(resultCaptor.capture());
+
+        List<List<Map<String, Object>>> result = resultCaptor.getValue();
+        assertEquals(2, result.size());
+        assertEquals(2, result.get(0).size()); // First doc has 2 highlights
+        assertEquals(2, result.get(1).size()); // Second doc has 2 highlights
+    }
+
+    /**
+     * Tests batch sentence highlighting with mixed results (some with highlights, some without).
+     */
+    public void testBatchInferenceSentenceHighlighting_whenMixedResults_thenHandleCorrectly() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q1").context("C1").build(),
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q2").context("C2").build()
+        );
+
+        // Create response with highlights for first doc, empty for second
+        Map<String, Object> dataMap = new HashMap<>();
+        dataMap.put("highlights", List.of(List.of(Map.of("start", 0, "end", 10)), Collections.emptyList()));
+
+        ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataMap);
+        ModelTensors tensors = new ModelTensors(List.of(tensor));
+        ModelTensorOutput mlOutput = new ModelTensorOutput(List.of(tensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mlOutput);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, FunctionName.REMOTE, batchResultListener);
+
+        ArgumentCaptor<List<List<Map<String, Object>>>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(batchResultListener).onResponse(resultCaptor.capture());
+
+        List<List<Map<String, Object>>> result = resultCaptor.getValue();
+        assertEquals(2, result.size());
+        assertEquals(1, result.get(0).size()); // First doc has 1 highlight
+        assertEquals(0, result.get(1).size()); // Second doc has no highlights
+    }
+
+    /**
+     * Tests batch sentence highlighting with malformed response.
+     */
+    public void testBatchInferenceSentenceHighlighting_whenMalformedResponse_thenHandleGracefully() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q1").context("C1").build()
+        );
+
+        // Create malformed response without highlights key
+        Map<String, Object> dataMap = new HashMap<>();
+        dataMap.put("wrong_key", "wrong_value");
+
+        ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataMap);
+        ModelTensors tensors = new ModelTensors(List.of(tensor));
+        ModelTensorOutput mlOutput = new ModelTensorOutput(List.of(tensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mlOutput);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, FunctionName.REMOTE, batchResultListener);
+
+        ArgumentCaptor<List<List<Map<String, Object>>>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(batchResultListener).onResponse(resultCaptor.capture());
+
+        List<List<Map<String, Object>>> result = resultCaptor.getValue();
+        assertEquals(1, result.size());
+        assertEquals(0, result.get(0).size()); // Should return empty list for malformed response
+    }
+
+    /**
+     * Tests batch sentence highlighting with failure handling.
+     */
+    public void testBatchInferenceSentenceHighlighting_whenException_thenPropagateFailure() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+        final RuntimeException exception = new RuntimeException("Batch inference failed");
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder().modelId("test-model").question("Q1").context("C1").build()
+        );
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(exception);
+            return null;
+        }).when(client).predict(eq("test-model"), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.batchInferenceSentenceHighlighting("test-model", requests, FunctionName.REMOTE, batchResultListener);
+
+        verify(batchResultListener).onFailure(exception);
+    }
+
+    public void testBatchInferenceSentenceHighlighting_whenNonRemoteModel_thenFailure() {
+        final ActionListener<List<List<Map<String, Object>>>> batchResultListener = mock(ActionListener.class);
+
+        List<SentenceHighlightingRequest> requests = List.of(
+            SentenceHighlightingRequest.builder().modelId("local-model").question("Q1").context("C1").build()
+        );
+
+        // Test with QUESTION_ANSWERING model
+        accessor.batchInferenceSentenceHighlighting("local-model", requests, FunctionName.QUESTION_ANSWERING, batchResultListener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(batchResultListener).onFailure(exceptionCaptor.capture());
+
+        Exception capturedError = exceptionCaptor.getValue();
+        assertTrue(capturedError instanceof IllegalArgumentException);
+        assertTrue(capturedError.getMessage().contains("does not support batch inference"));
+        assertTrue(capturedError.getMessage().contains("QUESTION_ANSWERING"));
+
+        // Test with TEXT_EMBEDDING model
+        final ActionListener<List<List<Map<String, Object>>>> embeddingListener = mock(ActionListener.class);
+        accessor.batchInferenceSentenceHighlighting("embed-model", requests, FunctionName.TEXT_EMBEDDING, embeddingListener);
+
+        ArgumentCaptor<Exception> embeddingExceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(embeddingListener).onFailure(embeddingExceptionCaptor.capture());
+
+        Exception embeddingError = embeddingExceptionCaptor.getValue();
+        assertTrue(embeddingError instanceof IllegalArgumentException);
+        assertTrue(embeddingError.getMessage().contains("does not support batch inference"));
+        assertTrue(embeddingError.getMessage().contains("TEXT_EMBEDDING"));
+    }
+
+    public void testInferenceSentenceHighlighting_withDifferentModelTypes() {
+        final ActionListener<List<Map<String, Object>>> resultListener = mock(ActionListener.class);
+        final ActionListener<List<Map<String, Object>>> remoteListener = mock(ActionListener.class);
+
+        // Mock ML client to return an empty result
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            ModelTensor tensor = ModelTensor.builder().dataAsMap(Map.of()).build();
+            ModelTensorOutput output = ModelTensorOutput.builder()
+                .mlModelOutputs(List.of(ModelTensors.builder().mlModelTensors(List.of(tensor)).build()))
+                .build();
+            actionListener.onResponse(output);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        // Test with QUESTION_ANSWERING model (should work)
+        accessor.inferenceSentenceHighlighting(
+            SentenceHighlightingRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .question("test question")
+                .context("test context")
+                .build(),
+            FunctionName.QUESTION_ANSWERING,
+            resultListener
+        );
+
+        // Verify that the method was called and completed without error
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        verify(resultListener).onResponse(anyList());
+
+        // Test with REMOTE model (should also work)
+        accessor.inferenceSentenceHighlighting(
+            SentenceHighlightingRequest.builder()
+                .modelId(TestCommonConstants.MODEL_ID)
+                .question("test question")
+                .context("test context")
+                .build(),
+            FunctionName.REMOTE,
+            remoteListener
+        );
+
+        // Verify that it was called without error
+        verify(remoteListener).onResponse(anyList());
     }
 }
