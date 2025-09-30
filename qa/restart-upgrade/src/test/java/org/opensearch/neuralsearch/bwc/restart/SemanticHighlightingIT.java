@@ -86,12 +86,18 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
             loadAndWaitForModelToBeReady(highlightModelId);
             loadAndWaitForModelToBeReady(embeddingModelId);
 
+            // Ensure index is refreshed
+            refreshAllIndices();
+
             // Verify document count
             int docCount = getDocCount(TEST_INDEX);
             assertEquals("Document count mismatch after restart", 3, docCount);
 
             // Verify single inference mode still works (backward compatibility)
             verifySemanticHighlightingWithMatchQuery(highlightModelId);
+
+            // Refresh before neural query to ensure KNN vectors are available
+            refreshAllIndices();
             verifySemanticHighlightingWithNeuralQuery(highlightModelId, embeddingModelId);
 
             // Add new document and verify highlighting continues to work
@@ -103,6 +109,9 @@ public class SemanticHighlightingIT extends AbstractRestartUpgradeRestTestCase {
                 null,
                 null
             );
+
+            // Refresh before querying new document
+            refreshAllIndices();
 
             // Verify new document can be highlighted
             verifyHighlightingWithNewDocument(highlightModelId);

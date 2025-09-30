@@ -91,12 +91,19 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
         loadAndWaitForModelToBeReady(highlightModelId);
         loadAndWaitForModelToBeReady(embeddingModelId);
 
+        // Ensure index is refreshed before queries
+        refreshAllIndices();
+
         // Verify single inference mode still works during partial upgrade
         Map<String, Object> response = performSemanticHighlighting(highlightModelId);
         assertHighlightingPresent(response, TEST_FIELD);
 
+        // Refresh again before neural query to ensure KNN vectors are available
+        refreshAllIndices();
+
         // Test with neural query
         Map<String, Object> neuralResponse = performSemanticHighlightingWithNeuralQuery(highlightModelId, embeddingModelId);
+        logger.info("Neural query response: {}", neuralResponse);
         assertHighlightingPresent(neuralResponse, TEST_FIELD);
     }
 
@@ -120,6 +127,9 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
             loadAndWaitForModelToBeReady(highlightModelId);
             loadAndWaitForModelToBeReady(embeddingModelId);
 
+            // Ensure index is refreshed
+            refreshAllIndices();
+
             // Verify single inference mode works after complete upgrade
             Map<String, Object> response = performSemanticHighlighting(highlightModelId);
             assertHighlightingPresent(response, TEST_FIELD);
@@ -133,6 +143,9 @@ public class SemanticHighlightingIT extends AbstractRollingUpgradeTestCase {
                 null,
                 null
             );
+
+            // Refresh before querying new document
+            refreshAllIndices();
 
             // Verify new document can be highlighted
             Map<String, Object> newDocResponse = performHighlightingOnNewDocument(highlightModelId);
