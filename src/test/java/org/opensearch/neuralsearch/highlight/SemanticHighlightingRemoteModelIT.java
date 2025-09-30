@@ -17,6 +17,7 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.util.AggregationsTestUtils;
 import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 
@@ -101,6 +102,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
     public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithRemoteModel() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
 
+        // Enable stats to verify single inference tracking
+        enableStats();
+
         XContentBuilder searchBody = XContentFactory.jsonBuilder()
             .startObject()
             .field("size", 2)
@@ -128,6 +132,23 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
         assertSemanticHighlighting(responseMap, TEST_FIELD, "treatments");
+
+        // Verify stats - single inference mode should track per document
+        String statsResponseBody = executeNeuralStatRequest(new java.util.ArrayList<>(), new java.util.ArrayList<>());
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(statsResponseBody);
+
+        // Get number of hits that were highlighted
+        Map<String, Object> hits = (Map<String, Object>) responseMap.get("hits");
+        List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hits.get("hits");
+        int hitCount = hitsList.size();
+
+        // Verify single inference count matches number of documents highlighted
+        int singleInferenceCount = (int) getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
+        assertEquals("Single inference count should match number of documents highlighted", hitCount, singleInferenceCount);
+
+        // Batch count should be 0 for single inference mode
+        int batchInferenceCount = (int) getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT);
+        assertEquals("Batch inference count should be 0 for single mode", 0, batchInferenceCount);
     }
 
     /**
@@ -135,6 +156,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
      */
     public void testSemanticHighlightingWithQueryMatchWithBatchEnabledWithRemoteModel() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
+
+        // Enable stats to verify batch inference tracking
+        enableStats();
 
         XContentBuilder searchBody = XContentFactory.jsonBuilder()
             .startObject()
@@ -152,6 +176,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
             .endObject()
             .endObject()
             .endObject();
@@ -163,6 +188,18 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
         assertSemanticHighlighting(responseMap, TEST_FIELD, "clinical trials");
+
+        // Verify stats - batch inference mode should track per request
+        String statsResponseBody = executeNeuralStatRequest(new java.util.ArrayList<>(), new java.util.ArrayList<>());
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(statsResponseBody);
+
+        // Batch inference mode: one request = one batch stat increment
+        int batchInferenceCount = (int) getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT);
+        assertEquals("Batch inference count should be 1 for batch mode", 1, batchInferenceCount);
+
+        // Single inference count should be 0 for batch mode
+        int singleInferenceCount = (int) getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
+        assertEquals("Single inference count should be 0 for batch mode", 0, singleInferenceCount);
     }
 
     /**
@@ -191,6 +228,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
             .endObject()
             .endObject()
             .endObject();
@@ -242,24 +280,8 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-        // Check that at least one hit has disease or therapy highlighted
-        // (neural search ordering can vary, so we check any hit)
-        boolean foundHighlight = false;
-        List<Map<String, Object>> hits = AggregationsTestUtils.getNestedHits(responseMap);
-        for (Map<String, Object> hit : hits) {
-            Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
-            if (highlight != null && highlight.containsKey(TEST_FIELD)) {
-                List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
-                if (contentHighlights != null && !contentHighlights.isEmpty()) {
-                    String highlightText = contentHighlights.get(0);
-                    if (highlightText.contains("disease") || highlightText.contains("therapy")) {
-                        foundHighlight = true;
-                        break;
-                    }
-                }
-            }
-        }
-        assertTrue("Should have found disease or therapy in highlights", foundHighlight);
+        // Use helper method - checks all hits for disease or therapy highlights
+        assertSemanticHighlighting(responseMap, TEST_FIELD, "disease");
     }
 
     /**
@@ -454,6 +476,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
             .endObject()
             .endObject()
             .endObject();
@@ -465,23 +488,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         String responseBody = EntityUtils.toString(response.getEntity());
         Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-        // Verify semantic highlighting worked
-        List<Map<String, Object>> hits = AggregationsTestUtils.getNestedHits(responseMap);
-        assertNotNull("Should have search hits", hits);
-        assertTrue("Should have at least one hit", !hits.isEmpty());
-
-        // Check that highlights exist
-        boolean foundHighlight = false;
-        for (Map<String, Object> hit : hits) {
-            Map<String, Object> highlight = (Map<String, Object>) hit.get("highlight");
-            if (highlight != null && highlight.containsKey(TEST_FIELD)) {
-                foundHighlight = true;
-                List<String> contentHighlights = (List<String>) highlight.get(TEST_FIELD);
-                log.info("Hybrid query highlights: {}", contentHighlights);
-                assertNotNull("Highlights should not be null", contentHighlights);
-                assertTrue("Should have at least one highlight", !contentHighlights.isEmpty());
-            }
-        }
-        assertTrue("Should have found at least one highlight", foundHighlight);
+        // Use helper method - verifies highlights exist with expected terms
+        assertSemanticHighlighting(responseMap, TEST_FIELD, "trials");
     }
 }
