@@ -83,7 +83,7 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.security.manager', 'false'
 
     // Excluding stats tests because we introduce this feature in 3.0
-    // Excluding semantic highlighting tests because we introduce this feature in 3.0
+    // Excluding semantic highlighting BWC tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"
@@ -135,7 +135,7 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.security.manager', 'false'
 
     // Excluding stats tests because we introduce this feature in 3.0
-    // Excluding semantic highlighting tests because we introduce this feature in 3.0
+    // Excluding semantic highlighting BWC tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"
@@ -186,7 +186,7 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.security.manager', 'false'
 
     // Excluding stats tests because we introduce this feature in 3.0
-    // Excluding semantic highlighting tests because we introduce this feature in 3.0
+    // Excluding semantic highlighting BWC tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"
@@ -238,7 +238,7 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     systemProperty 'tests.security.manager', 'false'
 
     // Excluding stats tests because we introduce this feature in 3.0
-    // Excluding semantic highlighting tests because we introduce this feature in 3.0
+    // Excluding semantic highlighting BWC tests because we introduce this feature in 3.0
     if (versionsBelow3_0.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.RestNeuralStatsActionIT.*"

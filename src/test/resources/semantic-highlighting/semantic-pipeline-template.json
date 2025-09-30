@@ -1,9 +1,0 @@
-{
-  "description": "Semantic highlighting pipeline template for testing",
-  "response_processors": [
-    {
-      "semantic_highlighting": {
-      }
-    }
-  ]
-}

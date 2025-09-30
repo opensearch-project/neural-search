@@ -51,6 +51,7 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.ml.common.model.MLModelState;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.processor.ExplanationResponseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -397,6 +398,13 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
+        String modelId = registerModelGroupAndUploadModel(requestBody);
+        loadModel(modelId);
+        return modelId;
+    }
+
+    protected String prepareSemanticHighlightingLocalModel() throws Exception {
+        String requestBody = Files.readString(Path.of(classLoader.getResource("highlight/LocalQuestionAnsweringModel.json").toURI()));
         String modelId = registerModelGroupAndUploadModel(requestBody);
         loadModel(modelId);
         return modelId;
@@ -1046,7 +1054,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final String fieldToHighlight,
         final String modelId
     ) {
-        Map<String, Map<String, Object>> highlightFields = Map.of(fieldToHighlight, Map.of("type", SemanticHighlighter.NAME));
+        Map<String, Map<String, Object>> highlightFields = Map.of(
+            fieldToHighlight,
+            Map.of("type", SemanticHighlightingConstants.HIGHLIGHTER_TYPE)
+        );
 
         Map<String, Object> highlightOptions = Map.of("model_id", modelId);
 
@@ -2444,6 +2455,70 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .filter(h -> !h.getSourceAsMap().containsKey("chunk_number"))
             .map(SearchHit::getId)
             .toList();
+    }
+
+    /**
+     * Finds a model ID by model name using the ML models search API
+     * @param modelName the name of the model to find
+     * @return the model ID if found, null otherwise
+     */
+    @SneakyThrows
+    protected String findModelIdByName(String modelName) {
+        logger.info("Searching for model with name: {}", modelName);
+
+        String searchQuery = String.format(LOCALE, """
+            {
+                "query": {
+                    "term": {
+                        "name.keyword": "%s"
+                    }
+                }
+            }
+            """, modelName);
+
+        logger.info("Search query: {}", searchQuery);
+
+        Response response = makeRequest(
+            client(),
+            "POST",
+            "/_plugins/_ml/models/_search",
+            null,
+            toHttpEntity(searchQuery),
+            ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+        );
+
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        final String responseBody = EntityUtils.toString(response.getEntity());
+        assertNotNull(responseBody);
+
+        logger.info("Search response: {}", responseBody);
+
+        final XContentParser parser = createParser(MediaTypeRegistry.getDefaultMediaType().xContent(), responseBody);
+        final SearchResponse searchResponse = SearchResponse.fromXContent(parser);
+
+        SearchHit[] hits = searchResponse.getHits().getHits();
+        logger.info("Found {} hits for model name: {}", hits.length, modelName);
+
+        if (hits.length > 0) {
+            String documentId = hits[0].getId();
+            logger.info("Found document ID: {} for model name: {}", documentId, modelName);
+
+            // Extract the actual model_id from the source (not the document _id which includes chunk info)
+            Map<String, Object> source = hits[0].getSourceAsMap();
+            if (source.containsKey("model_id")) {
+                String modelId = (String) source.get("model_id");
+                logger.info("Extracted model_id from source: {}", modelId);
+                return modelId;
+            }
+
+            // Fallback to document ID if model_id not in source
+            logger.warn("model_id not found in source, using document ID: {}", documentId);
+            return documentId;
+        }
+
+        logger.warn("No model found with name: {}", modelName);
+        return null;
     }
 
     private void deleteExistingModels() {

@@ -8,6 +8,11 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import org.apache.hc.core5.http.ParseException;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ml.common.model.MLModelState;
 
 import java.io.IOException;
@@ -245,5 +250,48 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
 
     protected String uploadSparseEncodingModel() throws Exception {
         return getOrCreateSharedSparseEmbeddingModel(this);
+    }
+
+    /**
+     * Search with semantic highlighter using single inference mode (default).
+     * This method works with OpenSearch 3.0.0+ and does NOT use batch_inference flag.
+     *
+     * @param index The index to search
+     * @param query The query builder
+     * @param size The number of results to return
+     * @param fieldName The field name to highlight
+     * @param modelId The model ID for semantic highlighting
+     * @return The search response as a map
+     */
+    @SneakyThrows
+    protected Map<String, Object> searchWithSemanticHighlighter(
+        String index,
+        QueryBuilder query,
+        int size,
+        String fieldName,
+        String modelId
+    ) {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("query", query)
+            .field("size", size)
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject(fieldName)
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", modelId)
+            // NOTE: No batch_inference flag - using default single inference mode
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request request = new Request("POST", "/" + index + "/_search");
+        request.setJsonEntity(builder.toString());
+
+        Response response = client().performRequest(request);
+        return entityAsMap(response);
     }
 }
