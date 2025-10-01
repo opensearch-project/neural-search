@@ -1,0 +1,15 @@
+{
+    "name": "Agentic Search with Claude 3.7",
+    "type": "flow",
+    "description": "A test agent for query planning.",
+    "tools": [
+      {
+        "type": "QueryPlanningTool",
+        "description": "A general tool to answer any question.",
+        "parameters": {
+          "model_id": "%s",
+          "response_filter": "$.output.message.content[0].text"
+        }
+      }
+    ]
+  }
