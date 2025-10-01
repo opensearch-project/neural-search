@@ -18,6 +18,8 @@ import org.opensearch.neuralsearch.highlight.utils.HighlightConfigBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
@@ -54,6 +56,8 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
         ActionListener<SearchResponse> responseListener
     ) {
         long startTime = System.currentTimeMillis();
+        // Increment batch stat
+        EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT);
 
         try {
             // Use unified config builder that includes extraction and validation

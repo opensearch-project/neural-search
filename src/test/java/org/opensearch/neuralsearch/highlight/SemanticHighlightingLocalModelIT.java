@@ -18,6 +18,7 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.util.AggregationsTestUtils;
 
 import lombok.SneakyThrows;
@@ -86,6 +87,9 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
      * This tests backward compatibility with OpenSearch 3.1 local models
      */
     public void testSemanticHighlightingWithQueryMatchWithBatchDisabledWithLocalModel() throws Exception {
+        // Enable stats to verify single inference tracking
+        enableStats();
+
         // Use the already prepared local model from setUp()
         log.info("Using pre-prepared local model with ID: {}", localHighlightModelId);
 
@@ -120,7 +124,28 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
         // Verify semantic highlighting worked
         assertSemanticHighlighting(searchResponse, TEST_FIELD, "treatments");
 
-        log.info("Local model test completed successfully");
+        // Verify stats - single inference mode should track per document
+        String statsResponseBody = executeNeuralStatRequest(new java.util.ArrayList<>(), new java.util.ArrayList<>());
+        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(statsResponseBody);
+
+        // Get number of hits that were highlighted
+        Map<String, Object> hits = (Map<String, Object>) searchResponse.get("hits");
+        List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hits.get("hits");
+        int hitCount = hitsList.size();
+
+        // Verify single inference count matches number of documents highlighted
+        int singleInferenceCount = (int) getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
+        assertEquals("Single inference count should match number of documents highlighted", hitCount, singleInferenceCount);
+
+        // Batch count should be 0 for single inference mode
+        int batchInferenceCount = (int) getNestedValue(allNodesStats, EventStatName.SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT);
+        assertEquals("Batch inference count should be 0 for single mode", 0, batchInferenceCount);
+
+        log.info(
+            "Local model test completed successfully - Stats verified: single={}, batch={}",
+            singleInferenceCount,
+            batchInferenceCount
+        );
     }
 
     /**

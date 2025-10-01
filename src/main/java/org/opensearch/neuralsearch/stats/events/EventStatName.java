@@ -78,6 +78,13 @@ public enum EventStatName implements StatName {
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_1_0
     ),
+    /** Counts semantic highlighting batch inference requests */
+    SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT(
+        "semantic_highlighting_batch_request_count",
+        "semantic_highlighting",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_3_0
+    ),
     /** Tracks executions of the normalization processor */
     NORMALIZATION_PROCESSOR_EXECUTIONS(
         "normalization_processor_executions",

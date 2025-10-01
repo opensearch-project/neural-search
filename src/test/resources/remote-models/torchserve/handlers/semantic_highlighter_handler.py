@@ -361,13 +361,13 @@ def handle(data, context):
 
             if isinstance(inputs, list) and len(inputs) > 0:
                 logger.info(f"Processing batch with {len(inputs)} documents")
-                # Process as batch - return nested structure for neural search
+                # Process as batch - return array of arrays to match SageMaker format
                 batch_highlights = []
                 for item in inputs:
                     result = _process_single(item["question"], item["context"])
-                    # For batch, each document gets wrapped with {"highlights": [...]}
-                    batch_highlights.append({"highlights": result["highlights"]})
-                # Return nested structure for batch
+                    # For batch, append highlights array directly (not wrapped in object)
+                    batch_highlights.append(result["highlights"])
+                # Return flat array structure for batch (matches SageMaker)
                 results.append({"highlights": batch_highlights})
             else:
                 logger.error(f"Invalid inputs format: {inputs}")
