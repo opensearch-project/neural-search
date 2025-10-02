@@ -58,12 +58,14 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
     public String queryText;
     public List<String> queryFields;
     public String memoryId;
+    private transient String agentFailureReason;
 
     public AgenticSearchQueryBuilder(StreamInput in) throws IOException {
         super(in);
         this.queryText = in.readString();
         this.queryFields = in.readOptionalStringList();
         this.memoryId = in.readOptionalString();
+        this.agentFailureReason = in.readOptionalString();
     }
 
     public String getQueryText() {
@@ -78,11 +80,20 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
         return memoryId;
     }
 
+    public void setAgentFailureReason(String reason) {
+        this.agentFailureReason = reason;
+    }
+
+    public String getAgentFailureReason() {
+        return agentFailureReason;
+    }
+
     @Override
     protected void doWriteTo(StreamOutput out) throws IOException {
         out.writeString(this.queryText);
         out.writeOptionalStringCollection(this.queryFields);
         out.writeOptionalString(this.memoryId);
+        out.writeOptionalString(this.agentFailureReason);
     }
 
     @Override
@@ -164,6 +175,10 @@ public final class AgenticSearchQueryBuilder extends AbstractQueryBuilder<Agenti
 
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
+        if (this.agentFailureReason != null) {
+            throw new IllegalStateException("Agentic search failed: " + this.agentFailureReason);
+        }
+
         throw new IllegalStateException(
             "Agentic search query must be used as top-level query, not nested inside other queries. Should be used with agentic_query_translator search processor"
         );
