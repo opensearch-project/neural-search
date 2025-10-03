@@ -81,10 +81,11 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         if (hasOtherSearchFeatures(sourceBuilder)) {
             String errorMessage = String.format(
                 Locale.ROOT,
-                "Agentic search blocked - Invalid usage with other search features like aggregation, sort, filters, collapse - Agent ID: [%s]",
+                "Invalid usage with other search features like aggregation, sort, filters, collapse - Agent ID: [%s]",
                 agentId
             );
-            requestListener.onFailure(new IllegalArgumentException(errorMessage));
+            agenticQuery.setAgentFailureReason(errorMessage);
+            requestListener.onFailure(new IllegalArgumentException("Agentic search blocked - " + errorMessage));
             return;
         }
 
@@ -116,23 +117,21 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     String memoryId = agentResponse.getMemoryId();
                     // Validate response size to prevent memory exhaustion
                     if (dslQuery == null) {
-                        String errorMessage = String.format(
-                            Locale.ROOT,
-                            "Agentic search failed - Null response from agent - Agent ID: [%s]",
-                            agentId
-                        );
-                        throw new IllegalArgumentException(errorMessage);
+                        String errorMessage = String.format(Locale.ROOT, "Null response from agent - Agent ID: [%s]", agentId);
+                        agenticQuery.setAgentFailureReason(errorMessage);
+                        throw new IllegalArgumentException("Agentic search failed - " + errorMessage);
                     }
 
                     if (dslQuery.length() > MAX_AGENT_RESPONSE_SIZE) {
                         String errorMessage = String.format(
                             Locale.ROOT,
-                            "Agentic search blocked - Response size exceeded limit - Agent ID: [%s], Size: [%d]. Maximum allowed size is %d characters.",
+                            "Response size exceeded limit - Agent ID: [%s], Size: [%d]. Maximum allowed size is %d characters.",
                             agentId,
                             dslQuery.length(),
                             MAX_AGENT_RESPONSE_SIZE
                         );
-                        throw new IllegalArgumentException(errorMessage);
+                        agenticQuery.setAgentFailureReason(errorMessage);
+                        throw new IllegalArgumentException("Agentic search blocked - " + errorMessage);
                     }
 
                     // Store agent steps summary in request context for response processing
@@ -155,31 +154,29 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
                     requestListener.onResponse(request);
                 } catch (IOException e) {
-                    String errorMessage = String.format(
-                        Locale.ROOT,
-                        "Agentic search failed - Parse error - Agent ID: [%s], Error: [%s]",
-                        agentId,
-                        e.getMessage()
-                    );
-                    requestListener.onFailure(new IOException(errorMessage, e));
+                    String errorMessage = String.format(Locale.ROOT, "Parse error - Agent ID: [%s], Error: [%s]", agentId, e.getMessage());
+                    agenticQuery.setAgentFailureReason(errorMessage);
+                    requestListener.onFailure(new IOException("Agentic search failed - " + errorMessage, e));
                 }
             }, e -> {
                 String errorMessage = String.format(
                     Locale.ROOT,
-                    "Agentic search failed - Agent execution error - Agent ID: [%s], Error: [%s]",
+                    "Agent execution error - Agent ID: [%s], Error: [%s]",
                     agentId,
                     e.getMessage()
                 );
-                requestListener.onFailure(new RuntimeException(errorMessage, e));
+                agenticQuery.setAgentFailureReason(errorMessage);
+                requestListener.onFailure(new RuntimeException("Agentic search failed - " + errorMessage, e));
             }));
         }, e -> {
             String errorMessage = String.format(
                 Locale.ROOT,
-                "Agentic search failed - Failed to get agent info - Agent ID: [%s], Error: [%s]",
+                "Failed to get agent info - Agent ID: [%s], Error: [%s]",
                 agentId,
                 e.getMessage()
             );
-            requestListener.onFailure(new RuntimeException(errorMessage, e));
+            agenticQuery.setAgentFailureReason(errorMessage);
+            requestListener.onFailure(new RuntimeException("Agentic search failed - " + errorMessage, e));
         }));
     }
 

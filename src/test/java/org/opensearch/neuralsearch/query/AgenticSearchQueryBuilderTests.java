@@ -313,4 +313,15 @@ public class AgenticSearchQueryBuilderTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         assertNull("Memory ID should be null by default", queryBuilder.getMemoryId());
     }
+
+    public void testDoToQuery_withAgentFailureReason() throws IOException {
+        AgenticSearchQueryBuilder queryBuilder = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        String failureReason = "Agent execution failed";
+        queryBuilder.setAgentFailureReason(failureReason);
+
+        QueryShardContext mockContext = mock(QueryShardContext.class);
+
+        IllegalStateException exception = expectThrows(IllegalStateException.class, () -> queryBuilder.doToQuery(mockContext));
+        assertEquals("Should throw agent failure exception", "Agentic search failed: " + failureReason, exception.getMessage());
+    }
 }
