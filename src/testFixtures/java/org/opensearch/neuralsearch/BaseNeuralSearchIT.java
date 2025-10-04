@@ -13,6 +13,35 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
+import org.junit.After;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.client.ResponseException;
+import org.opensearch.core.xcontent.DeprecationHandler;
+import org.opensearch.core.xcontent.MediaType;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.XContentParser;
+import org.opensearch.ml.common.model.MLModelState;
+
+import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.ArrayList;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Collectors;
+
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.Header;
@@ -89,7 +118,6 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
-import static org.opensearch.knn.common.KNNConstants.MODEL_INDEX_NAME;
 import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_COMBINATION_METHOD;
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_NORMALIZATION_METHOD;
@@ -2331,8 +2359,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private boolean shouldDeleteIndex(String indexName) {
         return indexName != null
             && !OPENDISTRO_SECURITY.equals(indexName)
-            && IMMUTABLE_INDEX_PREFIXES.stream().noneMatch(indexName::startsWith)
-            && !MODEL_INDEX_NAME.equals(indexName);
+            && IMMUTABLE_INDEX_PREFIXES.stream().noneMatch(indexName::startsWith);
+        // && !MODEL_INDEX_NAME.equals(indexName);
     }
 
     /**
