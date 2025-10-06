@@ -1295,4 +1295,70 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         // Verify that it was called without error
         verify(remoteListener).onResponse(anyList());
     }
+
+    public void testExecuteAgent_ConversationalAgentWithTrailingZeros() throws Exception {
+        final String agentId = "test-agent-id";
+        final String agentType = "conversational";
+        final boolean hasSystemPrompt = true;
+        final NamedXContentRegistry registry = mock(NamedXContentRegistry.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Create conversational agent response with trailing decimal zeros that should be normalized
+        String responseJson =
+            "{\"dsl_query\":{\"size\": 12.00, \"track_total_hits\": 7.0, \"terminate_after\": 1.0e5, \"query\":{\"match\":{\"message\":\"ip 192.168.1.0 version 1.0.0\"}}},\"agent_steps_summary\":\"test summary\"}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithTrailingZeros(responseJson));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        String dslQuery = result.getDslQuery();
+
+        // Assertions for normalized numbers (JSON format has no spaces after colons)
+        assertTrue(dslQuery.contains("\"size\":12")); // 12.00 -> 12
+        assertFalse(dslQuery.contains("\"size\":12.00"));
+        assertTrue(dslQuery.contains("\"track_total_hits\":7")); // 7.0 -> 7
+        assertFalse(dslQuery.contains("\"track_total_hits\":7.0"));
+
+        // Assertions for preserved values
+        assertTrue(dslQuery.contains("192.168.1.0")); // IP preserved
+        assertTrue(dslQuery.contains("1.0.0")); // version preserved
+        assertTrue(dslQuery.contains("100000")); // scientific notation 1.0e5 converted to 100000
+
+        assertEquals("test summary", result.getAgentStepsSummary());
+        assertEquals("test-memory-123", result.getMemoryId());
+    }
+
+    private ModelTensorOutput createConversationalAgentResponseWithTrailingZeros(String responseJson) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        // Create proper conversational agent response format with trailing zeros
+        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, null, Map.of("response", responseJson));
+        final ModelTensor memoryTensor = new ModelTensor("memory_id", null, null, null, null, "test-memory-123", Map.of());
+
+        mlModelTensorList.add(responseTensor);
+        mlModelTensorList.add(memoryTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
 }
