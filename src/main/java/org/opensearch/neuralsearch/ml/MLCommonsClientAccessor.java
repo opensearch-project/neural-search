@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchRequest;
@@ -772,7 +773,7 @@ public class MLCommonsClientAccessor {
                 memoryId = conversationalResult.get(MEMORY_ID_FIELD_NAME);
             }
 
-            listener.onResponse(new AgentExecutionDTO(dslQuery, agentStepsSummary, memoryId));
+            listener.onResponse(new AgentExecutionDTO(removeTrailingDecimalZeros(dslQuery), agentStepsSummary, memoryId));
         }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> {
             try {
                 retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, retryTime + 1, listener);
@@ -780,6 +781,17 @@ public class MLCommonsClientAccessor {
                 throw new RuntimeException(ex);
             }
         }, listener)));
+    }
+
+    private String removeTrailingDecimalZeros(String query) {
+        if (query == null || query.isBlank()) {
+            return query;
+        }
+
+        // Remove trailing .0+ from standalone numbers (e.g., 123.00 -> 123); ignore IPs (e.g., 192.168.1.0),
+        // versions (e.g., 1.0.0), and scientific notation (e.g., 1.0e5).
+        final Pattern TRAILING_ZEROS_PATTERN = Pattern.compile("(?<![0-9A-Za-z.])(-?\\d+)\\.0+(?![0-9Ee.])");
+        return TRAILING_ZEROS_PATTERN.matcher(query).replaceAll("$1");
     }
 
     /**
