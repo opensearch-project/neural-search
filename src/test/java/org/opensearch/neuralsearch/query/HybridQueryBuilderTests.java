@@ -113,7 +113,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         TestUtils.initializeEventStatsManager();
         // detect whether JVector or Knn plugin is loaded, and set KNNEngine accordingly
-        String jarPath = VectorDataType.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+        String jarPath = VectorDataType.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
         String jarFileName = jarPath.substring(jarPath.lastIndexOf('/') + 1);
         if (jarFileName.contains("jvector")) knnEngine = KNNEngine.valueOf("JVECTOR");
         else knnEngine = KNNEngine.valueOf("FAISS");

@@ -2360,7 +2360,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return indexName != null
             && !OPENDISTRO_SECURITY.equals(indexName)
             && IMMUTABLE_INDEX_PREFIXES.stream().noneMatch(indexName::startsWith);
-        // && !MODEL_INDEX_NAME.equals(indexName);
+        // && !KNNConstants.MODEL_INDEX_NAME.equals(indexName);
     }
 
     /**

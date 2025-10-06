@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Set;
@@ -37,7 +38,12 @@ public class ValidateDependentPluginInstallationIT extends OpenSearchSecureRestT
         final Set<String> installedPlugins = getAllInstalledPlugins();
 
         // detect whether JVector or Knn plugin is loaded, and update dependent plugin list accordingly
-        String jarPath = VectorDataType.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+        String jarPath = null;
+        try {
+            jarPath = VectorDataType.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
         String jarFileName = jarPath.substring(jarPath.lastIndexOf('/') + 1);
         if (jarFileName.contains("jvector")) {
             DEPENDENT_PLUGINS.remove("opensearch-knn");

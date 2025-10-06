@@ -17,7 +17,7 @@ buildscript {
         opensearch_version = System.getProperty("opensearch.version", "3.3.0-SNAPSHOT")
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
-        isJVectorEngine = "true" == System.getProperty("opensearch.knn.isJVectorEngine", "false")
+        isJVectorEngine = "true" == System.getProperty("opensearch.knn.isJVectorEngine", "true")
         version_tokens = opensearch_version.tokenize('-')
         opensearch_build = version_tokens[0] + '.0'
         plugin_no_snapshot = opensearch_build

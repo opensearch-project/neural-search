@@ -47,7 +47,7 @@ public class NeuralKNNQueryBuilderTests extends OpenSearchTestCase {
         mockContext = mock(QueryShardContext.class);
 
         // detect whether JVector or Knn plugin is loaded, and set KNNEngine accordingly
-        String jarPath = VectorDataType.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+        String jarPath = VectorDataType.class.getProtectionDomain().getCodeSource().getLocation().toURI().getPath();
         KNNEngine knnEngine;
         String jarFileName = jarPath.substring(jarPath.lastIndexOf('/') + 1);
         if (jarFileName.contains("jvector")) knnEngine = KNNEngine.valueOf("JVECTOR");
