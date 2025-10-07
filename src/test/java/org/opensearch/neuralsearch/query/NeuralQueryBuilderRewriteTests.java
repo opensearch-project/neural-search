@@ -1265,7 +1265,12 @@ public class NeuralQueryBuilderRewriteTests extends OpenSearchTestCase {
         final QueryShardContext queryShardContext = mock(QueryShardContext.class);
         when(queryShardContext.fieldMapper(FIELD_NAME)).thenReturn(null);
 
-        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder().fieldName(FIELD_NAME).queryText(QUERY_TEXT).k(K).build();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .build();
 
         // first rewrite on the coordinate level
         QueryBuilder rewritten = neuralQueryBuilder.doRewrite(queryShardContext);

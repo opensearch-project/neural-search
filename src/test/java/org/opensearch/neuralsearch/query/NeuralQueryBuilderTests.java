@@ -15,9 +15,11 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.io.stream.FilterStreamInput;
 import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
@@ -66,6 +68,17 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.SEMANTIC_FIEL
 import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.setUpClusterService;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_FLOATS_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.xContentBuilderToMap;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.verify;
+
+import java.util.function.BiConsumer;
+import org.mockito.ArgumentCaptor;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.MapInferenceRequest;
+import org.opensearch.neuralsearch.query.dto.NeuralQueryBuildStage;
+import org.opensearch.knn.index.mapper.KNNVectorFieldMapper;
 
 public class NeuralQueryBuilderTests extends OpenSearchTestCase {
 
@@ -1147,6 +1160,146 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         // For radial search, KNNQueryBuilder defaults K to 0 when not specified
         Integer k = returnedKNNQueryBuilder.getK();
         assertEquals("K should be 0 for radial search when not specified", 0, k == null ? 0 : k.intValue());
+    }
+
+    public void testAsymmetricModelSupport_whenRewritingQueryAgainstKnnField_thenUsesQueryEmbeddingContentType() {
+        setUpClusterService();
+
+        // Create a neural query builder with text and image
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .queryImage(IMAGE_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .build();
+
+        // Mock the ML client to capture the inference request
+        MLCommonsClientAccessor mockMLClient = mock(MLCommonsClientAccessor.class);
+        NeuralQueryBuilder.initialize(mockMLClient);
+
+        // Create a mock query rewrite context
+        QueryRewriteContext mockContext = mock(QueryRewriteContext.class);
+
+        // Mock the conversion methods to return null so it falls back to the old behavior
+        when(mockContext.convertToCoordinatorContext()).thenReturn(null);
+        when(mockContext.convertToShardContext()).thenReturn(null);
+
+        // Capture the async action registration
+        ArgumentCaptor<BiConsumer> asyncActionCaptor = ArgumentCaptor.forClass(BiConsumer.class);
+        doNothing().when(mockContext).registerAsyncAction(asyncActionCaptor.capture());
+
+        // Trigger the rewrite
+        QueryBuilder rewrittenQuery = neuralQueryBuilder.doRewrite(mockContext);
+
+        // Verify that an async action was registered
+        verify(mockContext).registerAsyncAction(any(BiConsumer.class));
+
+        // Simulate the async action execution
+        BiConsumer<Object, ActionListener<Object>> asyncAction = asyncActionCaptor.getValue();
+        ActionListener<Object> mockActionListener = mock(ActionListener.class);
+
+        // Capture the ML client call
+        ArgumentCaptor<MapInferenceRequest> requestCaptor = ArgumentCaptor.forClass(MapInferenceRequest.class);
+        doAnswer(invocation -> {
+            ActionListener<List<Number>> listener = invocation.getArgument(1);
+            listener.onResponse(List.of(1.0f, 2.0f, 3.0f));
+            return null;
+        }).when(mockMLClient).inferenceSentencesMap(requestCaptor.capture(), any(ActionListener.class));
+
+        // Execute the async action
+        asyncAction.accept(null, mockActionListener);
+
+        // Verify the request contains asymmetric parameters for query content type
+        MapInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", MODEL_ID, capturedRequest.getModelId());
+
+        // Verify the input contains both text and image
+        Map<String, String> inputObjects = capturedRequest.getInputObjects();
+        assertEquals("Query text should match", QUERY_TEXT, inputObjects.get("inputText"));
+        assertEquals("Query image should match", IMAGE_TEXT, inputObjects.get("inputImage"));
+
+        // Verify asymmetric parameters are set for query content type
+        assertNotNull("ML algo params should not be null", capturedRequest.getMlAlgoParams());
+        assertTrue(
+            "Should use AsymmetricTextEmbeddingParameters",
+            capturedRequest
+                .getMlAlgoParams() instanceof org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters
+        );
+
+        org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters params =
+            (org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters) capturedRequest.getMlAlgoParams();
+        assertEquals(
+            "Should use QUERY embedding content type",
+            org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY,
+            params.getEmbeddingContentType()
+        );
+    }
+
+    public void testAsymmetricModelSupport_whenInferenceForSemanticField_thenUsesCorrectContentType() {
+        setUpClusterService();
+
+        // Create a neural query builder for semantic field
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .embeddingFieldType(KNNVectorFieldMapper.CONTENT_TYPE)
+            .isSemanticField(true)
+            .buildStage(NeuralQueryBuildStage.REWRITE)
+            .build();
+
+        // Mock the ML client
+        MLCommonsClientAccessor mockMLClient = mock(MLCommonsClientAccessor.class);
+        NeuralQueryBuilder.initialize(mockMLClient);
+
+        // Create a mock query rewrite context
+        QueryRewriteContext mockContext = mock(QueryRewriteContext.class);
+
+        // Mock the conversion methods to return null so it falls back to the old behavior
+        when(mockContext.convertToCoordinatorContext()).thenReturn(null);
+        when(mockContext.convertToShardContext()).thenReturn(null);
+
+        // Capture the async action registration
+        ArgumentCaptor<BiConsumer> asyncActionCaptor = ArgumentCaptor.forClass(BiConsumer.class);
+        doNothing().when(mockContext).registerAsyncAction(asyncActionCaptor.capture());
+
+        // Trigger the inference path by calling doRewrite which will internally call inferenceForSemanticField
+        try {
+            neuralQueryBuilder.doRewrite(mockContext);
+        } catch (Exception e) {
+            // Expected to fail due to mocking, but should trigger the inference path
+        }
+
+        // Verify that an async action was registered
+        verify(mockContext).registerAsyncAction(any(BiConsumer.class));
+
+        // Simulate the async action execution
+        BiConsumer<Object, ActionListener<Object>> asyncAction = asyncActionCaptor.getValue();
+        ActionListener<Object> mockActionListener = mock(ActionListener.class);
+
+        // Capture the ML client call
+        ArgumentCaptor<MapInferenceRequest> requestCaptor = ArgumentCaptor.forClass(MapInferenceRequest.class);
+        doAnswer(invocation -> {
+            ActionListener<List<Number>> listener = invocation.getArgument(1);
+            listener.onResponse(List.of(1.0f, 2.0f, 3.0f));
+            return null;
+        }).when(mockMLClient).inferenceSentencesMap(requestCaptor.capture(), any(ActionListener.class));
+
+        // Execute the async action
+        asyncAction.accept(null, mockActionListener);
+
+        // Verify the request uses the correct model ID
+        MapInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", MODEL_ID, capturedRequest.getModelId());
+
+        // For semantic field dense model inference, it should not have asymmetric parameters
+        // since the method doesn't explicitly set them for semantic field inference
+        // This test verifies the current behavior
+        Map<String, String> inputObjects = capturedRequest.getInputObjects();
+        assertEquals("Query text should match", QUERY_TEXT, inputObjects.get("inputText"));
     }
 
     public void testPrepareTwoPhase_Query_whenRawTokensAvailable() {

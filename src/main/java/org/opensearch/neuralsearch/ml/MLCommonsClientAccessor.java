@@ -30,6 +30,7 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.opensearch.common.CheckedConsumer;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.xcontent.XContentType;
@@ -50,6 +51,8 @@ import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
 import org.opensearch.ml.common.input.parameter.MLAlgoParams;
+import org.opensearch.ml.common.model.MLModelConfig;
+import org.opensearch.ml.common.model.TextEmbeddingModelConfig;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
@@ -80,6 +83,8 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
+    private final Map<String, Boolean> modelAsymmetryCache = new ConcurrentHashMap<>();
+
     private static final Gson gson = new Gson();
 
     /**
@@ -127,13 +132,16 @@ public class MLCommonsClientAccessor {
         @NonNull final TextInferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<List<Number>>> listener
     ) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createMLTextInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputTexts()),
-            this::buildVectorFromResponse,
-            listener
-        );
+        checkModelAsymmetryAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, isAsymmetric -> {
+            MLAlgoParams params = isAsymmetric ? inferenceRequest.getMlAlgoParams() : null;
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> createMLTextInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputTexts(), params),
+                this::buildVectorFromResponse,
+                listener
+            );
+        });
     }
 
     public void inferenceSentencesWithMapResult(
@@ -141,13 +149,16 @@ public class MLCommonsClientAccessor {
         @Nullable MLAlgoParams mlAlgoParams,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
-        retryableInference(inferenceRequest, 0, () -> {
-            MLInput input = createMLTextInput(null, inferenceRequest.getInputTexts());
-            if (mlAlgoParams != null) {
-                input.setParameters(mlAlgoParams);
-            }
-            return input;
-        }, this::buildMapResultFromResponse, listener);
+        checkModelAsymmetryAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, isAsymmetric -> {
+            MLAlgoParams params = isAsymmetric ? (mlAlgoParams != null ? mlAlgoParams : inferenceRequest.getMlAlgoParams()) : mlAlgoParams;
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> createMLTextInput(null, inferenceRequest.getInputTexts(), params),
+                this::buildMapResultFromResponse,
+                listener
+            );
+        });
     }
 
     /**
@@ -159,13 +170,16 @@ public class MLCommonsClientAccessor {
      * @param listener         {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentencesMap(@NonNull MapInferenceRequest inferenceRequest, @NonNull final ActionListener<List<Number>> listener) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createMLMultimodalInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputObjects()),
-            this::buildSingleVectorFromResponse,
-            listener
-        );
+        checkModelAsymmetryAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, isAsymmetric -> {
+            MLAlgoParams params = isAsymmetric ? inferenceRequest.getMlAlgoParams() : null;
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> createMLMultimodalInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputObjects(), params),
+                this::buildSingleVectorFromResponse,
+                listener
+            );
+        });
     }
 
     /**
@@ -221,10 +235,10 @@ public class MLCommonsClientAccessor {
         ));
     }
 
-    private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText) {
+    private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText, MLAlgoParams mlAlgoParams) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, mlAlgoParams, inputDataset);
     }
 
     private MLInput createMLTextPairsInput(final String query, final List<String> inputText) {
@@ -342,7 +356,11 @@ public class MLCommonsClientAccessor {
         }
     }
 
-    private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, final Map<String, String> input) {
+    private MLInput createMLMultimodalInput(
+        final List<String> targetResponseFilters,
+        final Map<String, String> input,
+        MLAlgoParams mlAlgoParams
+    ) {
         List<String> inputText = new ArrayList<>();
         inputText.add(input.get(INPUT_TEXT));
         if (input.containsKey(INPUT_IMAGE)) {
@@ -350,7 +368,7 @@ public class MLCommonsClientAccessor {
         }
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, mlAlgoParams, inputDataset);
     }
 
     public void getModel(@NonNull final String modelId, @NonNull final ActionListener<MLModel> listener) {
@@ -1063,4 +1081,36 @@ public class MLCommonsClientAccessor {
         return highlights;
     }
 
+    /**
+     * Check if the model is asymmetric and then run the prediction. Model asymmetry is a concept
+     * that is specific to TextEmbeddingModelConfig. If the model is not a TextEmbeddingModel, then
+     * this check is not applicable.
+     *
+     * The asymmetry of a model is static for a given model. To avoid repeated checks for the same
+     * model, we cache the model asymmetry status. Non-TextEmbeddingModels are cached as false.
+     *
+     * @param modelId    The model id to check
+     * @param onFailure The action to take if the model cannot be retrieved
+     * @param runPrediction The action to take if the model is successfully retrieved
+     */
+    private void checkModelAsymmetryAndThenPredict(String modelId, Consumer<Exception> onFailure, Consumer<Boolean> runPrediction) {
+        CheckedConsumer<MLModel, ? extends Exception> checkModelAsymmetryListener = model -> {
+            MLModelConfig modelConfig = model.getModelConfig();
+            if (!(modelConfig instanceof TextEmbeddingModelConfig textEmbeddingModelConfig)) {
+                modelAsymmetryCache.computeIfAbsent(modelId, k -> false);
+                return;
+            }
+            final boolean isAsymmetricModel = textEmbeddingModelConfig.getPassagePrefix() != null
+                || textEmbeddingModelConfig.getQueryPrefix() != null;
+            modelAsymmetryCache.computeIfAbsent(modelId, k -> isAsymmetricModel);
+        };
+        if (modelAsymmetryCache.get(modelId) != null) {
+            runPrediction.accept(modelAsymmetryCache.get(modelId));
+        } else {
+            mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
+                checkModelAsymmetryListener.accept(mlModel);
+                runPrediction.accept(modelAsymmetryCache.get(modelId));
+            }, onFailure));
+        }
+    }
 }
