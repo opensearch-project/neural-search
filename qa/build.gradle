@@ -117,7 +117,7 @@ ext{
             return new RegularFile() {
                 @Override
                 File getAsFile() {
-                    return configurations.zipArchive.asFileTree.matching{include "**/opensearch-jvector-plugin-${opensearch_build}.zip"}.getSingleFile()
+                    return configurations.zipArchive.asFileTree.matching{include "**/opensearch-knn-${opensearch_build}.zip"}.getSingleFile()
                 }
             }
         }
