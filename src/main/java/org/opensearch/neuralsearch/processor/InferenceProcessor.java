@@ -25,6 +25,8 @@ import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.AbstractBatchingProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType;
 import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.optimization.InferenceFilter;
@@ -779,7 +781,11 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentences(
-            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            TextInferenceRequest.builder()
+                .modelId(this.modelId)
+                .inputTexts(inferenceList)
+                .mlAlgoParams(AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.PASSAGE).build())
+                .build(),
             ActionListener.wrap(vectors -> {
                 setVectorFieldsToDocument(ingestDocument, processMap, vectors);
                 handler.accept(ingestDocument, null);

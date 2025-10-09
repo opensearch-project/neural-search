@@ -19,6 +19,8 @@ import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import lombok.extern.log4j.Log4j2;
@@ -105,7 +107,11 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
         mlCommonsClientAccessor.inferenceSentences(
-            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            TextInferenceRequest.builder()
+                .modelId(this.modelId)
+                .inputTexts(inferenceList)
+                .mlAlgoParams(AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.PASSAGE).build())
+                .build(),
             ActionListener.wrap(handler::accept, onException)
         );
     }

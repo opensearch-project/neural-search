@@ -91,7 +91,8 @@ import org.opensearch.neuralsearch.query.dto.NeuralQueryBuildStage;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
-
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -686,11 +687,8 @@ public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBu
             return rewriteQueryWithQueryShardContext(queryShardContext);
         }
 
-        // We can rewrite with a BaseQueryRewriteContext on the shard level:
-        // In SearchService do a quick rewrite to handle AliasFilters rewrite. This happens after the
-        // coordinate rewrite, and we do not need to rewrite the neural query for this case. We will do rewrite later
-        // with queryShardContext.
-        return this;
+        // Fall back to the old logic when both conversions return null
+        return rewriteQueryAgainstKnnField(queryRewriteContext);
     }
 
     private QueryBuilder rewriteQueryWithCoordinatorContext(@NonNull final QueryCoordinatorContext queryRewriteContext) {
@@ -918,7 +916,11 @@ public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBu
 
         queryRewriteContext.registerAsyncAction(
             ((client, actionListener) -> ML_CLIENT.inferenceSentencesMap(
-                MapInferenceRequest.builder().modelId(modelId()).inputObjects(inferenceInput).build(),
+                MapInferenceRequest.builder()
+                    .modelId(modelId())
+                    .inputObjects(inferenceInput)
+                    .mlAlgoParams(AsymmetricTextEmbeddingParameters.builder().embeddingContentType(EmbeddingContentType.QUERY).build())
+                    .build(),
                 ActionListener.wrap(floatList -> {
                     vectorSetOnce.set(vectorAsListToArray(floatList));
                     actionListener.onResponse(null);
