@@ -24,6 +24,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.opensearch.ingest.ConfigurationUtils.readBooleanProperty;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 
 /**
  * Response processor that adds agent context information to search response extensions
@@ -57,21 +60,23 @@ public class AgenticContextResponseProcessor implements SearchResponseProcessor 
             return response;
         }
 
-        Object agentStepsSummary = requestContext.getAttribute("agent_steps_summary");
-        Object memoryId = requestContext.getAttribute("memory_id");
-        Object dslQuery = requestContext.getAttribute("dsl_query");
+        Object agentStepsSummary = requestContext.getAttribute(AGENT_STEPS_FIELD_NAME);
+        Object memoryId = requestContext.getAttribute(MEMORY_ID_FIELD_NAME);
+        Object dslQuery = requestContext.getAttribute(DSL_QUERY_FIELD_NAME);
 
         // Validate types when attributes are present
         if (agentStepsSummary != null && !(agentStepsSummary instanceof String)) {
-            throw new RuntimeException("agent_steps_summary must be a String, but got: " + agentStepsSummary.getClass().getSimpleName());
+            throw new IllegalArgumentException(
+                "agent_steps_summary must be a String, but got: " + agentStepsSummary.getClass().getSimpleName()
+            );
         }
 
         if (memoryId != null && !(memoryId instanceof String)) {
-            throw new RuntimeException("memory_id must be a String, but got: " + memoryId.getClass().getSimpleName());
+            throw new IllegalArgumentException("memory_id must be a String, but got: " + memoryId.getClass().getSimpleName());
         }
 
         if (dslQuery != null && !(dslQuery instanceof String)) {
-            throw new RuntimeException("dsl_query must be a String, but got: " + dslQuery.getClass().getSimpleName());
+            throw new IllegalArgumentException("dsl_query must be a String, but got: " + dslQuery.getClass().getSimpleName());
         }
 
         String agentStepsStr = null;

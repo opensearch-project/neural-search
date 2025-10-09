@@ -113,7 +113,9 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         PipelineProcessingContext context = new PipelineProcessingContext();
         context.setAttribute("agent_steps_summary", 123);
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> { processor.processResponse(request, response, context); });
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            processor.processResponse(request, response, context);
+        });
         assertEquals("agent_steps_summary must be a String, but got: Integer", exception.getMessage());
     }
 
@@ -189,7 +191,9 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         PipelineProcessingContext context = new PipelineProcessingContext();
         context.setAttribute("memory_id", 456); // Non-string value
 
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> { processor.processResponse(request, response, context); });
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
+            processor.processResponse(request, response, context);
+        });
         assertEquals("memory_id must be a String, but got: Integer", exception.getMessage());
     }
 

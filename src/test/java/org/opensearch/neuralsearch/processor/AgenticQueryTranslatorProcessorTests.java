@@ -187,7 +187,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<String> agentListener = invocation.getArgument(5);
-            agentListener.onFailure(new RuntimeException("Agent failed"));
+            agentListener.onFailure(new IllegalArgumentException("Agent failed"));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -210,7 +210,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
-        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error"));
     }
@@ -273,14 +273,14 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         // Mock getAgentDetails failure
         doAnswer(invocation -> {
             ActionListener<Map<String, Object>> agentInfoListener = invocation.getArgument(1);
-            agentInfoListener.onFailure(new RuntimeException("Failed to get agent info"));
+            agentInfoListener.onFailure(new IllegalArgumentException("Failed to get agent info"));
             return null;
         }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         processor.processRequestAsync(request, mockContext, listener);
 
         verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
-        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Failed to get agent info"));
     }
@@ -512,9 +512,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
-        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        RuntimeException exception = exceptionCaptor.getValue();
+        IllegalArgumentException exception = exceptionCaptor.getValue();
         assertTrue(exception.getMessage().contains("Agentic search blocked - Response size exceeded limit"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
     }
@@ -559,9 +559,9 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
-        ArgumentCaptor<RuntimeException> exceptionCaptor = ArgumentCaptor.forClass(RuntimeException.class);
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
-        RuntimeException exception = exceptionCaptor.getValue();
+        IllegalArgumentException exception = exceptionCaptor.getValue();
         assertTrue(exception.getMessage().contains("Agentic search failed - Null response from agent"));
         assertTrue(exception.getCause() instanceof IllegalArgumentException);
     }
@@ -799,5 +799,43 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(ActionListener.class)
         );
         verify(listener).onResponse(request);
+    }
+
+    public void testFactoryCreateAgentIdTooLong() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        // Create agent ID longer than MAX_AGENT_ID_LENGTH (100 characters)
+        String longAgentId = "a".repeat(101);
+        config.put("agent_id", longAgentId);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals("agent_id exceeds maximum length of 100 characters", exception.getMessage());
+    }
+
+    public void testFactoryCreateAgentIdInvalidFormat() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", "invalid@agent#id");
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals("agent_id must contain only alphanumeric characters, hyphens, and underscores", exception.getMessage());
     }
 }
