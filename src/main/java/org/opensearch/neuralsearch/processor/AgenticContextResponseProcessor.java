@@ -64,19 +64,19 @@ public class AgenticContextResponseProcessor implements SearchResponseProcessor 
         Object memoryId = requestContext.getAttribute(MEMORY_ID_FIELD_NAME);
         Object dslQuery = requestContext.getAttribute(DSL_QUERY_FIELD_NAME);
 
-        // Validate types when attributes are present
         if (agentStepsSummary != null && !(agentStepsSummary instanceof String)) {
-            throw new IllegalArgumentException(
-                "agent_steps_summary must be a String, but got: " + agentStepsSummary.getClass().getSimpleName()
-            );
+            log.error("Invalid type for agent_steps_summary: expected String, got {}", agentStepsSummary.getClass().getSimpleName());
+            agentStepsSummary = null;
         }
 
         if (memoryId != null && !(memoryId instanceof String)) {
-            throw new IllegalArgumentException("memory_id must be a String, but got: " + memoryId.getClass().getSimpleName());
+            log.error("Invalid type for memory_id: expected String, got {}", memoryId.getClass().getSimpleName());
+            memoryId = null;
         }
 
         if (dslQuery != null && !(dslQuery instanceof String)) {
-            throw new IllegalArgumentException("dsl_query must be a String, but got: " + dslQuery.getClass().getSimpleName());
+            log.error("Invalid type for dsl_query: expected String, got {}", dslQuery.getClass().getSimpleName());
+            dslQuery = null;
         }
 
         String agentStepsStr = null;

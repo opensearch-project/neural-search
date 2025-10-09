@@ -113,10 +113,8 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         PipelineProcessingContext context = new PipelineProcessingContext();
         context.setAttribute("agent_steps_summary", 123);
 
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            processor.processResponse(request, response, context);
-        });
-        assertEquals("agent_steps_summary must be a String, but got: Integer", exception.getMessage());
+        SearchResponse result = processor.processResponse(request, response, context);
+        assertEquals(response, result);
     }
 
     public void testProcessResponse_withValidAgentSteps() {
@@ -191,10 +189,8 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         PipelineProcessingContext context = new PipelineProcessingContext();
         context.setAttribute("memory_id", 456); // Non-string value
 
-        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> {
-            processor.processResponse(request, response, context);
-        });
-        assertEquals("memory_id must be a String, but got: Integer", exception.getMessage());
+        SearchResponse result = processor.processResponse(request, response, context);
+        assertEquals(response, result);
     }
 
     public void testProcessResponse_withOnlyMemoryId_AlwaysShown() {
@@ -351,5 +347,17 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         assertNotNull(processor);
         assertFalse(processor.isIncludeAgentSteps()); // Should use default false
         assertTrue(processor.isIncludeDslQuery()); // Should use configured true
+    }
+
+    public void testProcessResponse_withNonStringDslQuery() {
+        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, true);
+        SearchRequest request = mock(SearchRequest.class);
+        SearchResponse response = createMockSearchResponse();
+        PipelineProcessingContext context = new PipelineProcessingContext();
+        context.setAttribute("dsl_query", 789); // Non-string value
+
+        // Should handle gracefully and return original response since no valid data
+        SearchResponse result = processor.processResponse(request, response, context);
+        assertEquals(response, result);
     }
 }
