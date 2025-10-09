@@ -60,40 +60,9 @@ public class AgenticContextResponseProcessor implements SearchResponseProcessor 
             return response;
         }
 
-        Object agentStepsSummary = requestContext.getAttribute(AGENT_STEPS_FIELD_NAME);
-        Object memoryId = requestContext.getAttribute(MEMORY_ID_FIELD_NAME);
-        Object dslQuery = requestContext.getAttribute(DSL_QUERY_FIELD_NAME);
-
-        if (agentStepsSummary != null && !(agentStepsSummary instanceof String)) {
-            log.error("Invalid type for agent_steps_summary: expected String, got {}", agentStepsSummary.getClass().getSimpleName());
-            agentStepsSummary = null;
-        }
-
-        if (memoryId != null && !(memoryId instanceof String)) {
-            log.error("Invalid type for memory_id: expected String, got {}", memoryId.getClass().getSimpleName());
-            memoryId = null;
-        }
-
-        if (dslQuery != null && !(dslQuery instanceof String)) {
-            log.error("Invalid type for dsl_query: expected String, got {}", dslQuery.getClass().getSimpleName());
-            dslQuery = null;
-        }
-
-        String agentStepsStr = null;
-        if (includeAgentSteps && agentStepsSummary != null && !((String) agentStepsSummary).trim().isEmpty()) {
-            agentStepsStr = (String) agentStepsSummary;
-        }
-
-        // Always include memory_id when available
-        String memoryIdStr = null;
-        if (memoryId != null && !((String) memoryId).trim().isEmpty()) {
-            memoryIdStr = (String) memoryId;
-        }
-
-        String dslQueryStr = null;
-        if (includeDslQuery && dslQuery != null && !((String) dslQuery).trim().isEmpty()) {
-            dslQueryStr = (String) dslQuery;
-        }
+        String agentStepsStr = includeAgentSteps ? (String) requestContext.getAttribute(AGENT_STEPS_FIELD_NAME) : null;
+        String memoryIdStr = (String) requestContext.getAttribute(MEMORY_ID_FIELD_NAME);
+        String dslQueryStr = includeDslQuery ? (String) requestContext.getAttribute(DSL_QUERY_FIELD_NAME) : null;
 
         if (agentStepsStr == null && memoryIdStr == null && dslQueryStr == null) {
             return response;

@@ -84,39 +84,6 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         assertEquals(response, result);
     }
 
-    public void testProcessResponse_withEmptyAgentSteps() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("agent_steps_summary", "");
-
-        SearchResponse result = processor.processResponse(request, response, context);
-        assertEquals(response, result);
-    }
-
-    public void testProcessResponse_withWhitespaceAgentSteps() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("agent_steps_summary", "   ");
-
-        SearchResponse result = processor.processResponse(request, response, context);
-        assertEquals(response, result);
-    }
-
-    public void testProcessResponse_withNonStringAgentSteps() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("agent_steps_summary", 123);
-
-        SearchResponse result = processor.processResponse(request, response, context);
-        assertEquals(response, result);
-    }
-
     public void testProcessResponse_withValidAgentSteps() {
         AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
@@ -180,17 +147,6 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         AgentStepsSearchExtBuilder extBuilder = (AgentStepsSearchExtBuilder) extensions.get(0);
         assertEquals(agentSteps, extBuilder.getAgentStepsSummary());
         assertEquals(memoryId, extBuilder.getMemoryId());
-    }
-
-    public void testProcessResponse_withNonStringMemoryId() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("memory_id", 456); // Non-string value
-
-        SearchResponse result = processor.processResponse(request, response, context);
-        assertEquals(response, result);
     }
 
     public void testProcessResponse_withOnlyMemoryId_AlwaysShown() {
@@ -349,15 +305,4 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         assertTrue(processor.isIncludeDslQuery()); // Should use configured true
     }
 
-    public void testProcessResponse_withNonStringDslQuery() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, true);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("dsl_query", 789); // Non-string value
-
-        // Should handle gracefully and return original response since no valid data
-        SearchResponse result = processor.processResponse(request, response, context);
-        assertEquals(response, result);
-    }
 }
