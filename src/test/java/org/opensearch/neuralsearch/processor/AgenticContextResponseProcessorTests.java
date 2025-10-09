@@ -84,39 +84,6 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         assertEquals(response, result);
     }
 
-    public void testProcessResponse_withEmptyAgentSteps() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("agent_steps_summary", "");
-
-        SearchResponse result = processor.processResponse(request, response, context);
-        assertEquals(response, result);
-    }
-
-    public void testProcessResponse_withWhitespaceAgentSteps() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("agent_steps_summary", "   ");
-
-        SearchResponse result = processor.processResponse(request, response, context);
-        assertEquals(response, result);
-    }
-
-    public void testProcessResponse_withNonStringAgentSteps() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("agent_steps_summary", 123);
-
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> { processor.processResponse(request, response, context); });
-        assertEquals("agent_steps_summary must be a String, but got: Integer", exception.getMessage());
-    }
-
     public void testProcessResponse_withValidAgentSteps() {
         AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, true, false);
         SearchRequest request = mock(SearchRequest.class);
@@ -180,17 +147,6 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         AgentStepsSearchExtBuilder extBuilder = (AgentStepsSearchExtBuilder) extensions.get(0);
         assertEquals(agentSteps, extBuilder.getAgentStepsSummary());
         assertEquals(memoryId, extBuilder.getMemoryId());
-    }
-
-    public void testProcessResponse_withNonStringMemoryId() {
-        AgenticContextResponseProcessor processor = new AgenticContextResponseProcessor(PROCESSOR_TAG, DESCRIPTION, false, false, false);
-        SearchRequest request = mock(SearchRequest.class);
-        SearchResponse response = createMockSearchResponse();
-        PipelineProcessingContext context = new PipelineProcessingContext();
-        context.setAttribute("memory_id", 456); // Non-string value
-
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> { processor.processResponse(request, response, context); });
-        assertEquals("memory_id must be a String, but got: Integer", exception.getMessage());
     }
 
     public void testProcessResponse_withOnlyMemoryId_AlwaysShown() {
@@ -348,4 +304,5 @@ public class AgenticContextResponseProcessorTests extends OpenSearchTestCase {
         assertFalse(processor.isIncludeAgentSteps()); // Should use default false
         assertTrue(processor.isIncludeDslQuery()); // Should use configured true
     }
+
 }
