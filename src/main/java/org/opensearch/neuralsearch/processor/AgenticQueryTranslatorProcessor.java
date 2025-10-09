@@ -38,6 +38,8 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
     public static final String TYPE = "agentic_query_translator";
     private static final int MAX_AGENT_RESPONSE_SIZE = 10_000;
+    private static final int MAX_AGENT_ID_LENGTH = 100;
+    private static final String AGENT_ID_PATTERN = "^[a-zA-Z0-9_-]+$";
     private final MLCommonsClientAccessor mlClient;
     private final String agentId;
     private final NamedXContentRegistry xContentRegistry;
@@ -166,7 +168,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     e.getMessage()
                 );
                 agenticQuery.setAgentFailureReason(errorMessage);
-                requestListener.onFailure(new RuntimeException("Agentic search failed - " + errorMessage, e));
+                requestListener.onFailure(new IllegalArgumentException("Agentic search failed - " + errorMessage, e));
             }));
         }, e -> {
             String errorMessage = String.format(
@@ -176,7 +178,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                 e.getMessage()
             );
             agenticQuery.setAgentFailureReason(errorMessage);
-            requestListener.onFailure(new RuntimeException("Agentic search failed - " + errorMessage, e));
+            requestListener.onFailure(new IllegalArgumentException("Agentic search failed - " + errorMessage, e));
         }));
     }
 
@@ -217,6 +219,18 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             String agentId = readStringProperty(TYPE, tag, config, "agent_id");
             if (agentId == null || agentId.trim().isEmpty()) {
                 throw new IllegalArgumentException("agent_id is required for agentic_query_translator processor");
+            }
+
+            // Validate agent ID length
+            if (agentId.length() > MAX_AGENT_ID_LENGTH) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "agent_id exceeds maximum length of %d characters", MAX_AGENT_ID_LENGTH)
+                );
+            }
+
+            // Validate agent ID format
+            if (!agentId.matches(AGENT_ID_PATTERN)) {
+                throw new IllegalArgumentException("agent_id must contain only alphanumeric characters, hyphens, and underscores");
             }
             return new AgenticQueryTranslatorProcessor(tag, description, ignoreFailure, mlClient, agentId, xContentRegistry);
         }
