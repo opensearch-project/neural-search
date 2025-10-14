@@ -23,6 +23,7 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Minal Shah              | [minalsha](https://github.com/minalsha)                   | Amazon      |
 | Bo Zhang                | [bzhangam](https://github.com/bzhangam)                   | Amazon      |
 | Liyun Xiu               | [chishui](https://github.com/chishui)                     | Amazon      |
+| Owais Kazi              | [owaiskazi19](https://github.com/owaiskazi19)                 | Amazon      |
 
 ## Emeritus
 
