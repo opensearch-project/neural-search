@@ -57,10 +57,10 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-            .queryText("Hello World")
-            .k(1)
-            .build();
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText("Hello World")
+                .k(1)
+                .build();
         Map<String, Object> response = search(index, neuralQueryBuilder, 2);
         assertFalse(response.isEmpty());
     }
@@ -88,9 +88,11 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
         Request request = new Request("POST", "/" + index + "/_search");
         Response response = client().performRequest(request);
-        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK,
+                RestStatus.fromCode(response.getStatusLine().getStatusCode()));
         String responseBody = EntityUtils.toString(response.getEntity());
-        Map<String, Object> responseInMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+        Map<String, Object> responseInMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody,
+                false);
         assertFalse(responseInMap.isEmpty());
         assertEquals(3, ((Map) responseInMap.get("hits")).size());
     }
@@ -104,10 +106,10 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-            .queryText("Hello World")
-            .k(1)
-            .build();
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText("Hello World")
+                .k(1)
+                .build();
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
         hybridQueryBuilder.add(neuralQueryBuilder);
         Map<String, Object> response = search(index, hybridQueryBuilder, 2);
@@ -126,10 +128,10 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         createPipelineProcessor(modelId, ingest_pipeline, ProcessorType.TEXT_EMBEDDING);
         updateIndexSettings(index, Settings.builder().put("index.search.default_pipeline", search_pipeline));
         NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
-            .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
-            .queryText("Hello World")
-            .k(1)
-            .build();
+                .fieldName(TEST_KNN_VECTOR_FIELD_NAME_1)
+                .queryText("Hello World")
+                .k(1)
+                .build();
         Map<String, Object> response = search(index, neuralQueryBuilder, 2);
         assertFalse(response.isEmpty());
 
@@ -142,7 +144,8 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
         Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
 
         // Parse json to get stats
-        assertEquals(2, getNestedValue(allNodesStats, EventStatName.NEURAL_QUERY_ENRICHER_PROCESSOR_EXECUTIONS.getFullPath()));
+        assertEquals(2,
+                getNestedValue(allNodesStats, EventStatName.NEURAL_QUERY_ENRICHER_PROCESSOR_EXECUTIONS.getFullPath()));
         assertEquals(1, getNestedValue(stats, InfoStatName.NEURAL_QUERY_ENRICHER_PROCESSORS.getFullPath()));
 
         // Reset stats
@@ -153,21 +156,21 @@ public class NeuralQueryEnricherProcessorIT extends BaseNeuralSearchIT {
     private void initializeIndexIfNotExist(String indexName) {
         if (indexName.equals(NeuralQueryEnricherProcessorIT.index) && !indexExists(indexName)) {
             prepareKnnIndex(
-                indexName,
-                Collections.singletonList(new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE))
-            );
+                    indexName,
+                    Collections.singletonList(
+                            new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE)));
             addKnnDoc(
-                indexName,
-                "1",
-                Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
-                Collections.singletonList(Floats.asList(testVector).toArray())
-            );
+                    indexName,
+                    "1",
+                    Collections.singletonList(TEST_KNN_VECTOR_FIELD_NAME_1),
+                    Collections.singletonList(Floats.asList(testVector).toArray()));
             assertEquals(1, getDocCount(indexName));
         }
 
         if (sparseIndex.equals(indexName) && !indexExists(indexName)) {
             prepareSparseEncodingIndex(indexName, List.of(TEST_RANK_FEATURES_FIELD_NAME_1));
-            addSparseEncodingDoc(indexName, "1", List.of(TEST_RANK_FEATURES_FIELD_NAME_1), List.of(Map.of("hi", 1.0f, "hello", 1.1f)));
+            addSparseEncodingDoc(indexName, "1", List.of(TEST_RANK_FEATURES_FIELD_NAME_1),
+                    List.of(Map.of("hi", 1.0f, "hello", 1.1f)));
             assertEquals(1, getDocCount(indexName));
         }
     }
