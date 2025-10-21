@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Agentic Search] Add conversation search support with agentic search ([#1626](https://github.com/opensearch-project/neural-search/pull/1626))
 
 ### Bug Fixes
+- Fix flaky test in `NeuralQueryEnricherProcessorIT` by waiting for model deployment ([#1617](https://github.com/opensearch-project/neural-search/pull/1617))
 
 ### Infrastructure
 - Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))

@@ -320,8 +320,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             logger.info("Model is already deployed. Skip loading.");
             return;
         }
-        loadModel(modelId);
-        waitForModelToBeReady(modelId);
+        loadAndWaitForModelToBeReady(modelId);
     }
 
     protected void loadAndWaitForModelToBeReady(String modelId) throws Exception {
@@ -370,9 +369,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         throw new RuntimeException("Model " + modelId + " failed to be ready for inference after " + MAX_ATTEMPTS + " attempts");
     }
 
+    /**
+     * LOADED is same as DEPLOYED but it is deprecated at OS2.7. As Neural Search is introduced after OS2.7, we could exclude that state.
+     */
     protected boolean isModelReadyForInference(@NonNull final String modelId) throws IOException, ParseException {
         MLModelState state = getModelState(modelId);
-        return MLModelState.LOADED.equals(state) || MLModelState.DEPLOYED.equals(state);
+        return MLModelState.DEPLOYED.equals(state);
     }
 
     /**
@@ -384,7 +386,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected String prepareModel() {
         String requestBody = Files.readString(Path.of(classLoader.getResource("processor/UploadModelRequestBody.json").toURI()));
         String modelId = registerModelGroupAndUploadModel(requestBody);
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         return modelId;
     }
 
@@ -399,14 +401,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             Path.of(classLoader.getResource("processor/UploadSparseEncodingModelRequestBody.json").toURI())
         );
         String modelId = registerModelGroupAndUploadModel(requestBody);
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         return modelId;
     }
 
     protected String prepareSemanticHighlightingLocalModel() throws Exception {
         String requestBody = Files.readString(Path.of(classLoader.getResource("highlight/LocalQuestionAnsweringModel.json").toURI()));
         String modelId = registerModelGroupAndUploadModel(requestBody);
-        loadModel(modelId);
+        loadAndWaitForModelToBeReady(modelId);
         return modelId;
     }
 
