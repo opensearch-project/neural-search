@@ -1969,7 +1969,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
-    public void testInferenceSentences_whenSymmetricModel_thenNoParams() {
+    public void testInferenceSentences_whenSymmetricModel_thenUsesRequestParams() {
         final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
         final MLAlgoParams algoParams = mock(MLAlgoParams.class);
@@ -1996,11 +1996,11 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSentences(requestWithParams, resultListener);
 
-        // Verify getModel called once, predict called once without params
+        // Verify getModel called once, predict called once with params from request
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
-        assertNull(mlInputCaptor.getValue().getParameters());
+        assertEquals(algoParams, mlInputCaptor.getValue().getParameters());
         verify(resultListener).onResponse(vectorList);
         Mockito.verifyNoMoreInteractions(resultListener);
     }
@@ -2206,5 +2206,37 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         verify(listener1).onResponse(vectorList);
         verify(listener2).onResponse(vectorList);
         verify(listener3).onResponse(vectorList);
+    }
+
+    public void testInferenceSentences_whenSymmetricModelWithParams_thenUsesParams() {
+        final List<List<Number>> vectorList = new ArrayList<>();
+        vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        final MLAlgoParams customParams = mock(MLAlgoParams.class);
+        final TextInferenceRequest requestWithParams = TextInferenceRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .inputTexts(TestCommonConstants.SENTENCES_LIST)
+            .mlAlgoParams(customParams)
+            .build();
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(requestWithParams, resultListener);
+
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertEquals(customParams, mlInputCaptor.getValue().getParameters());
+        verify(resultListener).onResponse(vectorList);
+        Mockito.verifyNoMoreInteractions(resultListener);
     }
 }

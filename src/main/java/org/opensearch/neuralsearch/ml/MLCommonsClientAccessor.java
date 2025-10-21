@@ -1218,32 +1218,25 @@ public class MLCommonsClientAccessor {
     /**
      * Creates MLAlgoParams for model inference based on model type and request context.
      *
-     * For symmetric models: Returns null (no special parameters needed)
-     * For asymmetric models: Creates AsymmetricTextEmbeddingParameters with appropriate content type:
+     * For symmetric models: Returns pre-set parameters from request (can be null)
+     * For asymmetric models: Returns pre-set parameters if provided, otherwise creates
+     *   AsymmetricTextEmbeddingParameters with appropriate content type:
      *   - QUERY: for search queries (default if not specified)
      *   - PASSAGE: for document ingestion (explicitly set by processors)
      *
      * @param isAsymmetric Whether the model is asymmetric (has different query/passage prefixes)
      * @param inferenceRequest The inference request containing content type and any pre-set parameters
-     * @return MLAlgoParams for asymmetric models, null for symmetric models
+     * @return MLAlgoParams from request or generated for asymmetric models
      */
     private MLAlgoParams createMLAlgoParams(boolean isAsymmetric, InferenceRequest inferenceRequest) {
-        // Symmetric models don't need special parameters
-        if (!isAsymmetric) {
-            return null;
-        }
-
-        // Use pre-set parameters if provided
-        if (inferenceRequest.getMlAlgoParams() != null) {
+        if (inferenceRequest.getMlAlgoParams() != null || !isAsymmetric) {
             return inferenceRequest.getMlAlgoParams();
         }
 
-        // Determine content type: QUERY (default for search) or PASSAGE (for ingestion)
         EmbeddingContentType contentType = inferenceRequest.getEmbeddingContentType() != null
             ? inferenceRequest.getEmbeddingContentType()
             : EmbeddingContentType.QUERY;
 
-        // Convert to ML Commons content type
         AsymmetricTextEmbeddingParameters.EmbeddingContentType mlContentType = contentType == EmbeddingContentType.QUERY
             ? AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
             : AsymmetricTextEmbeddingParameters.EmbeddingContentType.PASSAGE;
