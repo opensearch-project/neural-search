@@ -2173,4 +2173,38 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         verify(client, times(10)).getModel(any(), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(10)).predict(any(), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
     }
+
+    public void testCheckModelAsymmetryAndThenPredict_whenConcurrentRequests_thenSingleGetModelCall() {
+        final List<List<Number>> vectorList = new ArrayList<>();
+        vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        final ActionListener<List<List<Number>>> listener1 = mock(ActionListener.class);
+        final ActionListener<List<List<Number>>> listener2 = mock(ActionListener.class);
+        final ActionListener<List<List<Number>>> listener3 = mock(ActionListener.class);
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        // Simulate 3 concurrent requests for the same uncached model
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, listener1);
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, listener2);
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, listener3);
+
+        // Verify getModel called only once (request coalescing)
+        verify(client, times(1)).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        // Verify predict called 3 times (one for each request)
+        verify(client, times(3)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        // Verify all listeners received responses
+        verify(listener1).onResponse(vectorList);
+        verify(listener2).onResponse(vectorList);
+        verify(listener3).onResponse(vectorList);
+    }
 }

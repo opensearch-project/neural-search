@@ -74,6 +74,9 @@ import java.util.HashMap;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.XContentBuilder;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
+
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -85,8 +88,8 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
-    private final Map<String, Boolean> modelAsymmetryCache = new ConcurrentHashMap<>();
-    private static final int MAX_CACHE_SIZE = 1000;
+    private final Cache<String, Boolean> modelAsymmetryCache = CacheBuilder.newBuilder().maximumSize(1000).build();
+    private final Map<String, List<Consumer<Boolean>>> pendingRequests = new ConcurrentHashMap<>();
 
     private static final Gson gson = new Gson();
 
@@ -1249,42 +1252,38 @@ public class MLCommonsClientAccessor {
     }
 
     /**
-     * Evict oldest entry from cache when size exceeds limit
-     */
-    private void evictCacheIfNeeded() {
-        if (modelAsymmetryCache.size() >= MAX_CACHE_SIZE) {
-            String firstKey = modelAsymmetryCache.keySet().iterator().next();
-            modelAsymmetryCache.remove(firstKey);
-        }
-    }
-
-    /**
      * Checks if a model is asymmetric and executes inference with appropriate parameters.
-     *
-     * Asymmetric models have different embeddings for queries vs passages (e.g., query_prefix/passage_prefix).
-     * This check is cached to avoid repeated model lookups:
-     * - Cache hit: Immediately runs inference with cached asymmetry status
-     * - Cache miss: Fetches model config, caches result, then runs inference
-     *
-     * Cache size is limited to 1000 entries with FIFO eviction.
+     * Cache hit: runs immediately. Cache miss: first request fetches, others wait.
      *
      * @param modelId The model ID to check for asymmetry
      * @param onFailure Callback if model retrieval fails
      * @param runPrediction Callback with asymmetry status (true/false) to execute inference
      */
     private void checkModelAsymmetryAndThenPredict(String modelId, Consumer<Exception> onFailure, Consumer<Boolean> runPrediction) {
-        Boolean cachedAsymmetry = modelAsymmetryCache.get(modelId);
-        if (cachedAsymmetry != null) {
-            // Use cached result - no model lookup needed
-            runPrediction.accept(cachedAsymmetry);
-        } else {
-            // Fetch model config, cache asymmetry status, then run inference
+        Boolean cached = modelAsymmetryCache.getIfPresent(modelId);
+        if (cached != null) {
+            runPrediction.accept(cached);
+            return;
+        }
+
+        List<Consumer<Boolean>> callbacks = pendingRequests.compute(modelId, (k, existing) -> {
+            List<Consumer<Boolean>> list = existing != null ? existing : Collections.synchronizedList(new ArrayList<>());
+            list.add(runPrediction);
+            return list;
+        });
+
+        if (callbacks.size() == 1) {
             mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
                 boolean isAsymmetric = isAsymmetricModel(mlModel);
-                evictCacheIfNeeded();
                 modelAsymmetryCache.put(modelId, isAsymmetric);
-                runPrediction.accept(isAsymmetric);
-            }, onFailure));
+                List<Consumer<Boolean>> pending = pendingRequests.remove(modelId);
+                if (pending != null) {
+                    pending.forEach(cb -> cb.accept(isAsymmetric));
+                }
+            }, e -> {
+                pendingRequests.remove(modelId);
+                onFailure.accept(e);
+            }));
         }
     }
 
