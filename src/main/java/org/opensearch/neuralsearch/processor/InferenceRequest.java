@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import java.util.List;
 
+import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,4 +35,14 @@ public abstract class InferenceRequest {
      */
     @Builder.Default
     private List<String> targetResponseFilters = List.of("sentence_embedding");
+    /**
+     * ML algorithm parameters for asymmetric models.
+     * Contains parameters like passage_prefix and query_prefix for asymmetric embedding models.
+     */
+    private MLAlgoParams mlAlgoParams;
+    /**
+     * Content type for embedding (QUERY or PASSAGE).
+     * Used for asymmetric models to determine which prefix to apply.
+     */
+    private EmbeddingContentType embeddingContentType;
 }

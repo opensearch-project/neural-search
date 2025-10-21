@@ -50,6 +50,8 @@ import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
 import org.opensearch.ml.common.input.parameter.MLAlgoParams;
+import org.opensearch.ml.common.model.MLModelConfig;
+import org.opensearch.ml.common.model.TextEmbeddingModelConfig;
 import org.opensearch.ml.common.output.MLOutput;
 import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
@@ -57,10 +59,12 @@ import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
 import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
+import org.opensearch.neuralsearch.processor.EmbeddingContentType;
 import org.opensearch.neuralsearch.processor.InferenceRequest;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
+import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.util.AgentQueryUtil;
 import org.opensearch.neuralsearch.util.RetryUtil;
@@ -81,6 +85,9 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
+    private final Map<String, Boolean> modelAsymmetryCache = new ConcurrentHashMap<>();
+    private static final int MAX_CACHE_SIZE = 1000;
+
     private static final Gson gson = new Gson();
 
     // Error message constants for conversational agent responses
@@ -138,12 +145,16 @@ public class MLCommonsClientAccessor {
         @NonNull final TextInferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<List<Number>>> listener
     ) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createMLTextInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputTexts()),
-            this::buildVectorFromResponse,
-            listener
+        checkModelAsymmetryAndThenPredict(
+            inferenceRequest.getModelId(),
+            listener::onFailure,
+            isAsymmetric -> runInference(
+                inferenceRequest,
+                isAsymmetric,
+                inferenceRequest.getTargetResponseFilters(),
+                this::buildVectorFromResponse,
+                listener
+            )
         );
     }
 
@@ -152,13 +163,18 @@ public class MLCommonsClientAccessor {
         @Nullable MLAlgoParams mlAlgoParams,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
-        retryableInference(inferenceRequest, 0, () -> {
-            MLInput input = createMLTextInput(null, inferenceRequest.getInputTexts());
-            if (mlAlgoParams != null) {
-                input.setParameters(mlAlgoParams);
-            }
-            return input;
-        }, this::buildMapResultFromResponse, listener);
+        checkModelAsymmetryAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, isAsymmetric -> {
+            MLAlgoParams params = isAsymmetric
+                ? (inferenceRequest.getMlAlgoParams() != null ? inferenceRequest.getMlAlgoParams() : mlAlgoParams)
+                : mlAlgoParams;
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> createMLTextInput(null, inferenceRequest.getInputTexts(), params),
+                this::buildMapResultFromResponse,
+                listener
+            );
+        });
     }
 
     /**
@@ -170,13 +186,16 @@ public class MLCommonsClientAccessor {
      * @param listener         {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentencesMap(@NonNull MapInferenceRequest inferenceRequest, @NonNull final ActionListener<List<Number>> listener) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createMLMultimodalInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputObjects()),
-            this::buildSingleVectorFromResponse,
-            listener
-        );
+        checkModelAsymmetryAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, isAsymmetric -> {
+            MLAlgoParams params = createMLAlgoParams(isAsymmetric, inferenceRequest);
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> createMLMultimodalInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputObjects(), params),
+                this::buildSingleVectorFromResponse,
+                listener
+            );
+        });
     }
 
     /**
@@ -232,10 +251,10 @@ public class MLCommonsClientAccessor {
         ));
     }
 
-    private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText) {
+    private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText, MLAlgoParams mlAlgoParams) {
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, mlAlgoParams, inputDataset);
     }
 
     private MLInput createMLTextPairsInput(final String query, final List<String> inputText) {
@@ -353,7 +372,11 @@ public class MLCommonsClientAccessor {
         }
     }
 
-    private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, final Map<String, String> input) {
+    private MLInput createMLMultimodalInput(
+        final List<String> targetResponseFilters,
+        final Map<String, String> input,
+        MLAlgoParams mlAlgoParams
+    ) {
         List<String> inputText = new ArrayList<>();
         inputText.add(input.get(INPUT_TEXT));
         if (input.containsKey(INPUT_IMAGE)) {
@@ -361,7 +384,7 @@ public class MLCommonsClientAccessor {
         }
         final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, mlAlgoParams, inputDataset);
     }
 
     public void getModel(@NonNull final String modelId, @NonNull final ActionListener<MLModel> listener) {
@@ -1169,4 +1192,116 @@ public class MLCommonsClientAccessor {
         return highlights;
     }
 
+    /**
+     * Helper method to run inference with proper MLAlgoParams handling
+     */
+    private <T> void runInference(
+        TextInferenceRequest inferenceRequest,
+        boolean isAsymmetric,
+        List<String> targetResponseFilters,
+        Function<MLOutput, T> mlOutputBuilder,
+        ActionListener<T> listener
+    ) {
+        MLAlgoParams params = createMLAlgoParams(isAsymmetric, inferenceRequest);
+        retryableInference(
+            inferenceRequest,
+            0,
+            () -> createMLTextInput(targetResponseFilters, inferenceRequest.getInputTexts(), params),
+            mlOutputBuilder,
+            listener
+        );
+    }
+
+    /**
+     * Creates MLAlgoParams for model inference based on model type and request context.
+     *
+     * For symmetric models: Returns null (no special parameters needed)
+     * For asymmetric models: Creates AsymmetricTextEmbeddingParameters with appropriate content type:
+     *   - QUERY: for search queries (default if not specified)
+     *   - PASSAGE: for document ingestion (explicitly set by processors)
+     *
+     * @param isAsymmetric Whether the model is asymmetric (has different query/passage prefixes)
+     * @param inferenceRequest The inference request containing content type and any pre-set parameters
+     * @return MLAlgoParams for asymmetric models, null for symmetric models
+     */
+    private MLAlgoParams createMLAlgoParams(boolean isAsymmetric, InferenceRequest inferenceRequest) {
+        // Symmetric models don't need special parameters
+        if (!isAsymmetric) {
+            return null;
+        }
+
+        // Use pre-set parameters if provided
+        if (inferenceRequest.getMlAlgoParams() != null) {
+            return inferenceRequest.getMlAlgoParams();
+        }
+
+        // Determine content type: QUERY (default for search) or PASSAGE (for ingestion)
+        EmbeddingContentType contentType = inferenceRequest.getEmbeddingContentType() != null
+            ? inferenceRequest.getEmbeddingContentType()
+            : EmbeddingContentType.QUERY;
+
+        // Convert to ML Commons content type
+        AsymmetricTextEmbeddingParameters.EmbeddingContentType mlContentType = contentType == EmbeddingContentType.QUERY
+            ? AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
+            : AsymmetricTextEmbeddingParameters.EmbeddingContentType.PASSAGE;
+
+        return AsymmetricTextEmbeddingParameters.builder().embeddingContentType(mlContentType).build();
+    }
+
+    /**
+     * Evict oldest entry from cache when size exceeds limit
+     */
+    private void evictCacheIfNeeded() {
+        if (modelAsymmetryCache.size() >= MAX_CACHE_SIZE) {
+            String firstKey = modelAsymmetryCache.keySet().iterator().next();
+            modelAsymmetryCache.remove(firstKey);
+        }
+    }
+
+    /**
+     * Checks if a model is asymmetric and executes inference with appropriate parameters.
+     *
+     * Asymmetric models have different embeddings for queries vs passages (e.g., query_prefix/passage_prefix).
+     * This check is cached to avoid repeated model lookups:
+     * - Cache hit: Immediately runs inference with cached asymmetry status
+     * - Cache miss: Fetches model config, caches result, then runs inference
+     *
+     * Cache size is limited to 1000 entries with FIFO eviction.
+     *
+     * @param modelId The model ID to check for asymmetry
+     * @param onFailure Callback if model retrieval fails
+     * @param runPrediction Callback with asymmetry status (true/false) to execute inference
+     */
+    private void checkModelAsymmetryAndThenPredict(String modelId, Consumer<Exception> onFailure, Consumer<Boolean> runPrediction) {
+        Boolean cachedAsymmetry = modelAsymmetryCache.get(modelId);
+        if (cachedAsymmetry != null) {
+            // Use cached result - no model lookup needed
+            runPrediction.accept(cachedAsymmetry);
+        } else {
+            // Fetch model config, cache asymmetry status, then run inference
+            mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
+                boolean isAsymmetric = isAsymmetricModel(mlModel);
+                evictCacheIfNeeded();
+                modelAsymmetryCache.put(modelId, isAsymmetric);
+                runPrediction.accept(isAsymmetric);
+            }, onFailure));
+        }
+    }
+
+    /**
+     * Determines if a model is asymmetric by checking for query/passage prefixes.
+     *
+     * Asymmetric models have different prefixes for queries and passages.
+     * Non-TextEmbeddingModels are considered symmetric (return false).
+     *
+     * @param model The ML model to check
+     * @return true if model has query or passage prefix, false otherwise
+     */
+    private boolean isAsymmetricModel(MLModel model) {
+        MLModelConfig modelConfig = model.getModelConfig();
+        if (!(modelConfig instanceof TextEmbeddingModelConfig textEmbeddingModelConfig)) {
+            return false;
+        }
+        return textEmbeddingModelConfig.getPassagePrefix() != null || textEmbeddingModelConfig.getQueryPrefix() != null;
+    }
 }
