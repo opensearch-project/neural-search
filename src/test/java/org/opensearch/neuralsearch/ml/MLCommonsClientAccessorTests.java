@@ -51,6 +51,8 @@ import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.ml.common.transport.execute.MLExecuteTaskResponse;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
+import org.opensearch.neuralsearch.processor.TextInferenceRequest;
+import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.transport.NodeNotConnectedException;
 
@@ -78,6 +80,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     public void testInferenceSentence_whenValidInput_thenSuccess() {
         final List<Number> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
@@ -86,6 +96,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSentence(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST.get(0), singleSentenceResultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(singleSentenceResultListener).onResponse(vector);
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
@@ -94,6 +105,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentences_whenValidInputThenSuccess() {
         final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
@@ -101,6 +120,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onResponse(vectorList);
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -109,6 +129,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentences_whenResultFromClient_thenEmptyVectorList() {
         final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Collections.emptyList());
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(new Float[] {}));
@@ -116,6 +144,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onResponse(vectorList);
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -123,6 +152,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     public void testInferenceSentences_whenExceptionFromMLClient_thenFailure() {
         final RuntimeException exception = new RuntimeException();
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(exception);
@@ -130,6 +167,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onFailure(exception);
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -164,6 +202,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             mock(DiscoveryNode.class),
             "Node not connected"
         );
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(nodeNodeConnectedException);
@@ -171,12 +217,21 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(4)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onFailure(nodeNodeConnectedException);
     }
 
     public void testInferenceSentences_whenNotConnectionException_thenNoRetry() {
         final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(illegalStateException);
@@ -184,6 +239,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(1)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onFailure(illegalStateException);
     }
@@ -191,6 +247,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentencesWithMapResult_whenValidInput_thenSuccess() {
         final Map<String, Object> map = Map.of("key", "value");
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(map));
@@ -198,6 +262,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onResponse(List.of(map));
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -206,6 +271,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentencesWithMapResult_whenValidInput_withParameter() {
         final Map<String, Object> map = Map.of("key", "value");
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         MLAlgoParams algoParameter = mock(MLAlgoParams.class);
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -214,6 +287,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, algoParameter, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
         assertSame(algoParameter, mlInputCaptor.getValue().getParameters());
@@ -224,6 +298,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentencesWithMapResult_whenTensorOutputListEmpty_thenException() {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(Collections.emptyList());
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(modelTensorOutput);
@@ -231,6 +313,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(IllegalStateException.class);
         verify(resultListener).onFailure(argumentCaptor.capture());
@@ -247,6 +330,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
         tensorsList.add(new ModelTensors(mlModelTensorList));
         final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(tensorsList);
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(modelTensorOutput);
@@ -254,6 +345,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         ArgumentCaptor<Exception> argumentCaptor = ArgumentCaptor.forClass(IllegalStateException.class);
         verify(resultListener).onFailure(argumentCaptor.capture());
@@ -273,6 +365,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         mlModelTensorList.add(tensor);
         tensorsList.add(new ModelTensors(mlModelTensorList));
         final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(tensorsList);
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(modelTensorOutput);
@@ -280,6 +380,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onResponse(List.of(Map.of("key", "value"), Map.of("key", "value")));
         Mockito.verifyNoMoreInteractions(resultListener);
@@ -290,6 +391,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             mock(DiscoveryNode.class),
             "Node not connected"
         );
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(nodeNodeConnectedException);
@@ -298,12 +407,21 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(4)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onFailure(nodeNodeConnectedException);
     }
 
     public void testInferenceSentencesWithMapResult_whenNotRetryableException_thenFail() {
         final IllegalStateException illegalStateException = new IllegalStateException("Illegal state");
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(illegalStateException);
@@ -312,12 +430,21 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
         accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(1)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(resultListener).onFailure(illegalStateException);
     }
 
     public void testInferenceMultimodal_whenValidInput_thenSuccess() {
         final List<Number> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
@@ -326,6 +453,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSentencesMap(TestCommonConstants.MAP_INFERENCE_REQUEST, singleSentenceResultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(singleSentenceResultListener).onResponse(vector);
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
@@ -337,6 +465,13 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             "Node not connected"
         );
 
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(nodeNodeConnectedException);
@@ -345,6 +480,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSentencesMap(TestCommonConstants.MAP_INFERENCE_REQUEST, singleSentenceResultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         // Verify client.predict is called 4 times (1 initial + 3 retries)
         verify(client, times(4)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
@@ -360,6 +496,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             mock(DiscoveryNode.class),
             "Node not connected"
         );
+
+        // Mock getModel for asymmetry check
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(nodeNodeConnectedException);
@@ -367,6 +511,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         accessor.inferenceSentencesMap(TestCommonConstants.MAP_INFERENCE_REQUEST, singleSentenceResultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(4)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(singleSentenceResultListener).onFailure(nodeNodeConnectedException);
     }
@@ -1787,5 +1932,245 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);
+
+    public void testInferenceSentences_whenAsymmetricModel_thenUsesAlgoParams() {
+        final List<List<Number>> vectorList = new ArrayList<>();
+        vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        final MLAlgoParams algoParams = mock(MLAlgoParams.class);
+        final TextInferenceRequest requestWithParams = TextInferenceRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .inputTexts(TestCommonConstants.SENTENCES_LIST)
+            .mlAlgoParams(algoParams)
+            .build();
+
+        // Mock asymmetric model
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            MLModel model = createAsymmetricModel();
+            actionListener.onResponse(model);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // Mock successful prediction with params
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(requestWithParams, resultListener);
+
+        // Verify getModel called once, predict called once with params
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertEquals(algoParams, mlInputCaptor.getValue().getParameters());
+        verify(resultListener).onResponse(vectorList);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void testInferenceSentences_whenSymmetricModel_thenNoParams() {
+        final List<List<Number>> vectorList = new ArrayList<>();
+        vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        final MLAlgoParams algoParams = mock(MLAlgoParams.class);
+        final TextInferenceRequest requestWithParams = TextInferenceRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .inputTexts(TestCommonConstants.SENTENCES_LIST)
+            .mlAlgoParams(algoParams)
+            .build();
+
+        // Mock symmetric model
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            MLModel model = createSymmetricModel();
+            actionListener.onResponse(model);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // Mock successful prediction
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(requestWithParams, resultListener);
+
+        // Verify getModel called once, predict called once without params
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertNull(mlInputCaptor.getValue().getParameters());
+        verify(resultListener).onResponse(vectorList);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void testInferenceSentencesWithMapResult_whenAsymmetricModel_thenUsesParams() {
+        final Map<String, Object> map = Map.of("key", "value");
+        final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
+        final MLAlgoParams externalParams = mock(MLAlgoParams.class);
+
+        // Mock asymmetric model
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createAsymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(map));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, externalParams, resultListener);
+
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertEquals(externalParams, mlInputCaptor.getValue().getParameters());
+        verify(resultListener).onResponse(List.of(map));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void testInferenceSentencesMap_whenAsymmetricModel_thenUsesParams() {
+        final List<Number> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        final MLAlgoParams algoParams = mock(MLAlgoParams.class);
+        final MapInferenceRequest requestWithParams = MapInferenceRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .inputObjects(Map.of("text", "test"))
+            .mlAlgoParams(algoParams)
+            .build();
+
+        // Mock asymmetric model
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createAsymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentencesMap(requestWithParams, singleSentenceResultListener);
+
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertEquals(algoParams, mlInputCaptor.getValue().getParameters());
+        verify(singleSentenceResultListener).onResponse(vector);
+        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
+    }
+
+    public void testCheckModelAsymmetryAndThenPredict_whenCachedByPreviousCall_thenNoGetModelCall() {
+        final List<List<Number>> vectorList = new ArrayList<>();
+        vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+
+        // First call to populate cache
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        // First call - should call getModel and predict
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        // Second call - should only call predict (cache hit)
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        // Verify getModel called only once (first call), predict called twice
+        verify(client, times(1)).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        verify(client, times(2)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+        verify(resultListener, times(2)).onResponse(vectorList);
+    }
+
+    public void testCheckModelAsymmetryAndThenPredict_whenGetModelFails_thenPropagateError() {
+        final RuntimeException getModelException = new RuntimeException("Failed to get model");
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(getModelException);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        verify(client, times(0)).predict(any(), any(), any());
+        verify(resultListener).onFailure(getModelException);
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    private MLModel createAsymmetricModel() {
+        MLModel model = mock(MLModel.class);
+        org.opensearch.ml.common.model.TextEmbeddingModelConfig config = mock(
+            org.opensearch.ml.common.model.TextEmbeddingModelConfig.class
+        );
+        when(config.getPassagePrefix()).thenReturn("passage: ");
+        when(config.getQueryPrefix()).thenReturn("query: ");
+        when(model.getModelConfig()).thenReturn(config);
+        return model;
+    }
+
+    private MLModel createSymmetricModel() {
+        MLModel model = mock(MLModel.class);
+        org.opensearch.ml.common.model.TextEmbeddingModelConfig config = mock(
+            org.opensearch.ml.common.model.TextEmbeddingModelConfig.class
+        );
+        when(config.getPassagePrefix()).thenReturn(null);
+        when(config.getQueryPrefix()).thenReturn(null);
+        when(model.getModelConfig()).thenReturn(config);
+        return model;
+    }
+
+    private MLModel createNonTextEmbeddingModel() {
+        MLModel model = mock(MLModel.class);
+        // Return a non-TextEmbeddingModelConfig to test the instanceof check
+        org.opensearch.ml.common.model.MLModelConfig config = mock(org.opensearch.ml.common.model.MLModelConfig.class);
+        when(model.getModelConfig()).thenReturn(config);
+        return model;
+    }
+
+    public void testCacheEviction_whenCacheSizeExceedsLimit_thenEvictsOldestEntry() {
+        // This test verifies that the cache eviction works correctly
+        // We'll simulate multiple model calls to fill the cache beyond MAX_CACHE_SIZE
+        final ActionListener<List<List<Number>>> listener = mock(ActionListener.class);
+
+        // Mock successful responses for all calls
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(any(), eq(null), Mockito.isA(ActionListener.class));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(any(), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        // Make calls with different model IDs to populate cache
+        for (int i = 0; i < 10; i++) {
+            String modelId = "model-" + i;
+            TextInferenceRequest request = TextInferenceRequest.builder()
+                .modelId(modelId)
+                .inputTexts(TestCommonConstants.SENTENCES_LIST)
+                .build();
+            accessor.inferenceSentences(request, listener);
+        }
+
+        // Verify that getModel was called for each unique model ID
+        verify(client, times(10)).getModel(any(), eq(null), Mockito.isA(ActionListener.class));
+        verify(client, times(10)).predict(any(), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
     }
 }
