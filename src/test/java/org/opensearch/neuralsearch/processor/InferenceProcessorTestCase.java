@@ -5,7 +5,7 @@
 package org.opensearch.neuralsearch.processor;
 
 import com.google.common.collect.ImmutableList;
-import org.apache.commons.lang.math.RandomUtils;
+import org.apache.commons.lang3.RandomUtils;
 import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
@@ -65,7 +65,7 @@ public class InferenceProcessorTestCase extends OpenSearchTestCase {
         for (int i = 0; i < numOfVectors; i++) {
             List<Float> numbers = new ArrayList<>();
             for (int j = 0; j < vectorDimension; j++) {
-                Float nextFloat = RandomUtils.nextFloat() * (max - min) + min;
+                Float nextFloat = RandomUtils.nextFloat(0.0f, 1.0f) * (max - min) + min;
                 numbers.add(nextFloat);
             }
             result.add(numbers);
