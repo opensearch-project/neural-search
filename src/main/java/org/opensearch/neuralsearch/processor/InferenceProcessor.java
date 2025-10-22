@@ -50,6 +50,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
 
@@ -817,8 +818,12 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
-            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
-            mlAlgoParams,
+            TextInferenceRequest.builder()
+                .modelId(this.modelId)
+                .inputTexts(inferenceList)
+                .mlAlgoParams(mlAlgoParams)
+                .embeddingContentType(PASSAGE)
+                .build(),
             ActionListener.wrap(resultMaps -> {
                 List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                     .stream()

@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
-
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
@@ -718,7 +718,11 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             final boolean isDenseModel = isDenseModel(modelIdToModelTypeMap.get(modelId));
             final List<String> values = new ArrayList<>(entry.getValue());
 
-            final TextInferenceRequest textInferenceRequest = TextInferenceRequest.builder().inputTexts(values).modelId(modelId).build();
+            final TextInferenceRequest textInferenceRequest = TextInferenceRequest.builder()
+                .inputTexts(values)
+                .modelId(modelId)
+                .embeddingContentType(PASSAGE)
+                .build();
 
             final ActionListener<?> listener = ActionListener.wrap(embeddings -> {
                 List<?> formattedEmbeddings = (List<?>) embeddings;
@@ -748,7 +752,6 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             } else {
                 mlCommonsClientAccessor.inferenceSentencesWithMapResult(
                     textInferenceRequest,
-                    null,
                     (ActionListener<List<Map<String, ?>>>) listener
                 );
             }
