@@ -1185,16 +1185,18 @@ public class MLCommonsClientAccessor {
     /**
      * Creates MLAlgoParams for model inference based on model type and request context.
      *
-     * For symmetric models: Returns pre-set parameters from request (can be null)
-     * For asymmetric models: Returns pre-set parameters if provided, otherwise throw exception
-     *   AsymmetricTextEmbeddingParameters with appropriate content type (QUERY or PASSAGE)
+     * For symmetric models:
+     *     Returns pre-set parameters from request (can be null)
+     * For asymmetric models:
+     *     Returns pre-set parameters if provided, with embeddingContentType overridden from request,
+     *     otherwise creates new AsymmetricTextEmbeddingParameters with appropriate content type (QUERY or PASSAGE)
      *
      * @param isAsymmetric Whether the model is asymmetric (has different query/passage prefixes)
      * @param inferenceRequest The inference request containing content type and any pre-set parameters
      * @return MLAlgoParams from request or generated for asymmetric models
      */
     private MLAlgoParams createMLAlgoParams(boolean isAsymmetric, InferenceRequest inferenceRequest) {
-        if (inferenceRequest.getMlAlgoParams() != null || !isAsymmetric) {
+        if (!isAsymmetric) {
             return inferenceRequest.getMlAlgoParams();
         }
 
@@ -1203,12 +1205,16 @@ public class MLCommonsClientAccessor {
             throw new IllegalArgumentException("embeddingContentType must be set to either QUERY or PASSAGE for asymmetric models");
         }
 
-        AsymmetricTextEmbeddingParameters.EmbeddingContentType mlContentType = switch (contentType) {
-            case QUERY -> AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY;
-            case PASSAGE -> AsymmetricTextEmbeddingParameters.EmbeddingContentType.PASSAGE;
-        };
+        AsymmetricTextEmbeddingParameters.EmbeddingContentType mlContentType = contentType == EmbeddingContentType.QUERY
+            ? AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
+            : AsymmetricTextEmbeddingParameters.EmbeddingContentType.PASSAGE;
 
-        return AsymmetricTextEmbeddingParameters.builder().embeddingContentType(mlContentType).build();
+        MLAlgoParams presetParams = inferenceRequest.getMlAlgoParams();
+        AsymmetricTextEmbeddingParameters.AsymmetricTextEmbeddingParametersBuilder builder = presetParams != null
+            ? ((AsymmetricTextEmbeddingParameters) presetParams).toBuilder()
+            : AsymmetricTextEmbeddingParameters.builder();
+
+        return builder.embeddingContentType(mlContentType).build();
     }
 
     /**

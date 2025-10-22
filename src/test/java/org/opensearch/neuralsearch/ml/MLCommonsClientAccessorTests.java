@@ -1917,11 +1917,17 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentences_whenAsymmetricModel_thenUsesAlgoParams() {
         final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
-        final MLAlgoParams algoParams = mock(MLAlgoParams.class);
+        final org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters algoParams =
+            org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.builder()
+                .embeddingContentType(
+                    org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
+                )
+                .build();
         final TextInferenceRequest requestWithParams = TextInferenceRequest.builder()
             .modelId(TestCommonConstants.MODEL_ID)
             .inputTexts(TestCommonConstants.SENTENCES_LIST)
             .mlAlgoParams(algoParams)
+            .embeddingContentType(org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE)
             .build();
 
         // Mock asymmetric model
@@ -1941,11 +1947,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSentences(requestWithParams, resultListener);
 
-        // Verify getModel called once, predict called once with params
+        // Verify getModel called once, predict called once with AsymmetricTextEmbeddingParameters
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
-        assertEquals(algoParams, mlInputCaptor.getValue().getParameters());
+        assertTrue(
+            mlInputCaptor.getValue()
+                .getParameters() instanceof org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters
+        );
         verify(resultListener).onResponse(vectorList);
         Mockito.verifyNoMoreInteractions(resultListener);
     }
@@ -1989,7 +1998,12 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
     public void testInferenceSentencesWithMapResult_whenAsymmetricModel_thenUsesParams() {
         final Map<String, Object> map = Map.of("key", "value");
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
-        final MLAlgoParams externalParams = mock(MLAlgoParams.class);
+        final org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters externalParams =
+            org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.builder()
+                .embeddingContentType(
+                    org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
+                )
+                .build();
 
         // Mock asymmetric model
         Mockito.doAnswer(invocation -> {
@@ -2002,6 +2016,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             .modelId(TestCommonConstants.MODEL_ID)
             .inputTexts(TestCommonConstants.SENTENCES_LIST)
             .mlAlgoParams(externalParams)
+            .embeddingContentType(org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE)
             .build();
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
@@ -2014,18 +2029,27 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
-        assertEquals(externalParams, mlInputCaptor.getValue().getParameters());
+        assertTrue(
+            mlInputCaptor.getValue()
+                .getParameters() instanceof org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters
+        );
         verify(resultListener).onResponse(List.of(map));
         Mockito.verifyNoMoreInteractions(resultListener);
     }
 
     public void testInferenceSentencesMap_whenAsymmetricModel_thenUsesParams() {
         final List<Number> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
-        final MLAlgoParams algoParams = mock(MLAlgoParams.class);
+        final org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters algoParams =
+            org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.builder()
+                .embeddingContentType(
+                    org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
+                )
+                .build();
         final MapInferenceRequest requestWithParams = MapInferenceRequest.builder()
             .modelId(TestCommonConstants.MODEL_ID)
             .inputObjects(Map.of("text", "test"))
             .mlAlgoParams(algoParams)
+            .embeddingContentType(org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE)
             .build();
 
         // Mock asymmetric model
@@ -2046,7 +2070,10 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
-        assertEquals(algoParams, mlInputCaptor.getValue().getParameters());
+        assertTrue(
+            mlInputCaptor.getValue()
+                .getParameters() instanceof org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters
+        );
         verify(singleSentenceResultListener).onResponse(vector);
         Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
     }
