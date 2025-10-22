@@ -78,30 +78,6 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         MockitoAnnotations.openMocks(this);
     }
 
-    public void testInferenceSentence_whenValidInput_thenSuccess() {
-        final List<Number> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
-
-        // Mock getModel for asymmetry check
-        Mockito.doAnswer(invocation -> {
-            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
-            actionListener.onResponse(createSymmetricModel());
-            return null;
-        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
-
-        Mockito.doAnswer(invocation -> {
-            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
-            actionListener.onResponse(createModelTensorOutput(TestCommonConstants.PREDICT_VECTOR_ARRAY));
-            return null;
-        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-
-        accessor.inferenceSentence(TestCommonConstants.MODEL_ID, TestCommonConstants.SENTENCES_LIST.get(0), singleSentenceResultListener);
-
-        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
-        verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        verify(singleSentenceResultListener).onResponse(vector);
-        Mockito.verifyNoMoreInteractions(singleSentenceResultListener);
-    }
-
     public void testInferenceSentences_whenValidInputThenSuccess() {
         final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
@@ -260,7 +236,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(createModelTensorOutput(map));
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -280,12 +256,17 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
 
         MLAlgoParams algoParameter = mock(MLAlgoParams.class);
+        TextInferenceRequest requestWithParams = TextInferenceRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .inputTexts(TestCommonConstants.SENTENCES_LIST)
+            .mlAlgoParams(algoParameter)
+            .build();
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(map));
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, algoParameter, resultListener);
+        accessor.inferenceSentencesWithMapResult(requestWithParams, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
@@ -311,7 +292,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(modelTensorOutput);
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -343,7 +324,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(modelTensorOutput);
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -378,7 +359,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             actionListener.onResponse(modelTensorOutput);
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -405,7 +386,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(4)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -428,7 +409,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         final ActionListener<List<Map<String, ?>>> resultListener = mock(ActionListener.class);
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, null, resultListener);
+        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client, times(1)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
@@ -2017,13 +1998,18 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
 
+        TextInferenceRequest requestWithParams = TextInferenceRequest.builder()
+            .modelId(TestCommonConstants.MODEL_ID)
+            .inputTexts(TestCommonConstants.SENTENCES_LIST)
+            .mlAlgoParams(externalParams)
+            .build();
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createModelTensorOutput(map));
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        accessor.inferenceSentencesWithMapResult(TestCommonConstants.TEXT_INFERENCE_REQUEST, externalParams, resultListener);
+        accessor.inferenceSentencesWithMapResult(requestWithParams, resultListener);
 
         verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);

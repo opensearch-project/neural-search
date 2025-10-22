@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.Nullable;
+import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -104,37 +105,6 @@ public class MLCommonsClientAccessor {
             + "Please check the agent configuration and prompts.";
 
     /**
-     * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
-     * point vector as a response.
-     *
-     * @param modelId   {@link String}
-     * @param inputText {@link String}
-     * @param listener  {@link ActionListener} which will be called when prediction is completed or errored out
-     */
-    public void inferenceSentence(
-        @NonNull final String modelId,
-        @NonNull final String inputText,
-        @NonNull final ActionListener<List<Number>> listener
-    ) {
-
-        inferenceSentences(
-            TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(inputText)).build(),
-            ActionListener.wrap(response -> {
-                if (response.size() != 1) {
-                    listener.onFailure(
-                        new IllegalStateException(
-                            "Unexpected number of vectors produced. Expected 1 vector to be returned, but got [" + response.size() + "]"
-                        )
-                    );
-                    return;
-                }
-
-                listener.onResponse(response.getFirst());
-            }, listener::onFailure)
-        );
-    }
-
-    /**
      * Abstraction to call predict function of api of MLClient with provided targetResponse filters. It uses the
      * custom model provided as modelId and run the {@link FunctionName#TEXT_EMBEDDING}. The return will be sent
      * using the actionListener which will have a {@link List} of {@link List} of {@link Float} in the order of
@@ -163,13 +133,10 @@ public class MLCommonsClientAccessor {
 
     public void inferenceSentencesWithMapResult(
         @NonNull final TextInferenceRequest inferenceRequest,
-        @Nullable MLAlgoParams mlAlgoParams,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
         checkModelAsymmetryAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, isAsymmetric -> {
-            MLAlgoParams params = isAsymmetric
-                ? (inferenceRequest.getMlAlgoParams() != null ? inferenceRequest.getMlAlgoParams() : mlAlgoParams)
-                : mlAlgoParams;
+            MLAlgoParams params = createMLAlgoParams(isAsymmetric, inferenceRequest);
             retryableInference(
                 inferenceRequest,
                 0,
@@ -1219,10 +1186,8 @@ public class MLCommonsClientAccessor {
      * Creates MLAlgoParams for model inference based on model type and request context.
      *
      * For symmetric models: Returns pre-set parameters from request (can be null)
-     * For asymmetric models: Returns pre-set parameters if provided, otherwise creates
-     *   AsymmetricTextEmbeddingParameters with appropriate content type:
-     *   - QUERY: for search queries (default if not specified)
-     *   - PASSAGE: for document ingestion (explicitly set by processors)
+     * For asymmetric models: Returns pre-set parameters if provided, otherwise throw exception
+     *   AsymmetricTextEmbeddingParameters with appropriate content type (QUERY or PASSAGE)
      *
      * @param isAsymmetric Whether the model is asymmetric (has different query/passage prefixes)
      * @param inferenceRequest The inference request containing content type and any pre-set parameters
@@ -1233,13 +1198,15 @@ public class MLCommonsClientAccessor {
             return inferenceRequest.getMlAlgoParams();
         }
 
-        EmbeddingContentType contentType = inferenceRequest.getEmbeddingContentType() != null
-            ? inferenceRequest.getEmbeddingContentType()
-            : EmbeddingContentType.QUERY;
+        EmbeddingContentType contentType = inferenceRequest.getEmbeddingContentType();
+        if (contentType == null) {
+            throw new IllegalArgumentException("embeddingContentType must be set to either QUERY or PASSAGE for asymmetric models");
+        }
 
-        AsymmetricTextEmbeddingParameters.EmbeddingContentType mlContentType = contentType == EmbeddingContentType.QUERY
-            ? AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
-            : AsymmetricTextEmbeddingParameters.EmbeddingContentType.PASSAGE;
+        AsymmetricTextEmbeddingParameters.EmbeddingContentType mlContentType = switch (contentType) {
+            case QUERY -> AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY;
+            case PASSAGE -> AsymmetricTextEmbeddingParameters.EmbeddingContentType.PASSAGE;
+        };
 
         return AsymmetricTextEmbeddingParameters.builder().embeddingContentType(mlContentType).build();
     }
