@@ -2187,7 +2187,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         verify(client, times(10)).predict(any(), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
     }
 
-    public void testCheckModelAsymmetryAndThenPredict_whenConcurrentRequests_thenSingleGetModelCall() {
+    public void testCheckModelAsymmetryAndThenPredict_whenConcurrentRequests_thenAllowsConcurrentAccess() {
         final List<List<Number>> vectorList = new ArrayList<>();
         vectorList.add(Arrays.asList(TestCommonConstants.PREDICT_VECTOR_ARRAY));
         final ActionListener<List<List<Number>>> listener1 = mock(ActionListener.class);
@@ -2206,13 +2206,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
-        // Simulate 3 concurrent requests for the same uncached model
+        // Test that concurrent requests are allowed (no blocking/queuing)
+        // The first request will cache the model, subsequent requests use cache
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, listener1);
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, listener2);
         accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, listener3);
 
-        // Verify getModel called only once (request coalescing)
-        verify(client, times(1)).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+        // Verify getModel called at least once (first request fetches, others may use cache)
+        verify(client, Mockito.atLeast(1)).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         // Verify predict called 3 times (one for each request)
         verify(client, times(3)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         // Verify all listeners received responses
@@ -2251,5 +2252,67 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         assertEquals(customParams, mlInputCaptor.getValue().getParameters());
         verify(resultListener).onResponse(vectorList);
         Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    public void testGetCachedModel_whenModelNotCached_thenFetchFromClient() {
+        final String modelId = "test-model-id";
+        final ActionListener<MLModel> listener = mock(ActionListener.class);
+        final MLModel mockModel = createSymmetricModel();
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(modelId), eq(null), Mockito.isA(ActionListener.class));
+
+        accessor.getCachedModel(modelId, listener);
+
+        verify(client).getModel(eq(modelId), eq(null), Mockito.isA(ActionListener.class));
+        verify(listener).onResponse(mockModel);
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testGetCachedModel_whenModelCached_thenReturnFromCache() {
+        final String modelId = "test-model-id";
+        final ActionListener<MLModel> listener1 = mock(ActionListener.class);
+        final ActionListener<MLModel> listener2 = mock(ActionListener.class);
+        final MLModel mockModel = createSymmetricModel();
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(mockModel);
+            return null;
+        }).when(client).getModel(eq(modelId), eq(null), Mockito.isA(ActionListener.class));
+
+        // First call - should fetch from client and cache
+        accessor.getCachedModel(modelId, listener1);
+
+        // Second call - should return from cache
+        accessor.getCachedModel(modelId, listener2);
+
+        // Verify client called only once
+        verify(client, times(1)).getModel(eq(modelId), eq(null), Mockito.isA(ActionListener.class));
+        // Verify both listeners received the model
+        verify(listener1).onResponse(mockModel);
+        verify(listener2).onResponse(mockModel);
+        Mockito.verifyNoMoreInteractions(listener1, listener2);
+    }
+
+    public void testGetCachedModel_whenClientFails_thenPropagateError() {
+        final String modelId = "test-model-id";
+        final ActionListener<MLModel> listener = mock(ActionListener.class);
+        final RuntimeException exception = new RuntimeException("Model fetch failed");
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onFailure(exception);
+            return null;
+        }).when(client).getModel(eq(modelId), eq(null), Mockito.isA(ActionListener.class));
+
+        accessor.getCachedModel(modelId, listener);
+
+        verify(client).getModel(eq(modelId), eq(null), Mockito.isA(ActionListener.class));
+        verify(listener).onFailure(exception);
+        Mockito.verifyNoMoreInteractions(listener);
     }
 }

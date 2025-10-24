@@ -60,6 +60,7 @@ import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
 import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
+
 import org.opensearch.neuralsearch.processor.EmbeddingContentType;
 import org.opensearch.neuralsearch.processor.InferenceRequest;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
@@ -89,8 +90,7 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
-    private final Cache<String, Boolean> modelAsymmetryCache = CacheBuilder.newBuilder().maximumSize(1000).build();
-    private final Map<String, List<Consumer<Boolean>>> pendingRequests = new ConcurrentHashMap<>();
+    private final Cache<String, MLModel> modelCache = CacheBuilder.newBuilder().maximumSize(1000).build();
 
     private static final Gson gson = new Gson();
 
@@ -1185,15 +1185,9 @@ public class MLCommonsClientAccessor {
     /**
      * Creates MLAlgoParams for model inference based on model type and request context.
      *
-     * For symmetric models:
-     *     Returns pre-set parameters from request (can be null)
-     * For asymmetric models:
-     *     Returns pre-set parameters if provided, with embeddingContentType overridden from request,
-     *     otherwise creates new AsymmetricTextEmbeddingParameters with appropriate content type (QUERY or PASSAGE)
-     *
-     * @param isAsymmetric Whether the model is asymmetric (has different query/passage prefixes)
-     * @param inferenceRequest The inference request containing content type and any pre-set parameters
-     * @return MLAlgoParams from request or generated for asymmetric models
+     * @param isAsymmetric Whether the model is asymmetric
+     * @param inferenceRequest The inference request containing content type and parameters
+     * @return MLAlgoParams for the inference
      */
     private MLAlgoParams createMLAlgoParams(boolean isAsymmetric, InferenceRequest inferenceRequest) {
         if (!isAsymmetric) {
@@ -1205,59 +1199,58 @@ public class MLCommonsClientAccessor {
             throw new IllegalArgumentException("embeddingContentType must be set to either QUERY or PASSAGE for asymmetric models");
         }
 
-        AsymmetricTextEmbeddingParameters.EmbeddingContentType mlContentType = contentType == EmbeddingContentType.QUERY
-            ? AsymmetricTextEmbeddingParameters.EmbeddingContentType.QUERY
-            : AsymmetricTextEmbeddingParameters.EmbeddingContentType.PASSAGE;
-
         MLAlgoParams presetParams = inferenceRequest.getMlAlgoParams();
-        AsymmetricTextEmbeddingParameters.AsymmetricTextEmbeddingParametersBuilder builder = presetParams != null
-            ? ((AsymmetricTextEmbeddingParameters) presetParams).toBuilder()
-            : AsymmetricTextEmbeddingParameters.builder();
+        if (presetParams != null && !(presetParams instanceof AsymmetricTextEmbeddingParameters)) {
+            throw new IllegalArgumentException("MLAlgoParams must be AsymmetricTextEmbeddingParameters for asymmetric models");
+        }
 
-        return builder.embeddingContentType(mlContentType).build();
+        return (presetParams != null
+            ? ((AsymmetricTextEmbeddingParameters) presetParams).toBuilder()
+            : AsymmetricTextEmbeddingParameters.builder()).embeddingContentType(contentType.toMLContentType()).build();
     }
 
     /**
      * Checks if a model is asymmetric and executes inference with appropriate parameters.
-     * Cache hit: runs immediately. Cache miss: first request fetches, others wait.
+     * Cache hit: runs immediately. Cache miss: fetches model info concurrently.
      *
      * @param modelId The model ID to check for asymmetry
      * @param onFailure Callback if model retrieval fails
      * @param runPrediction Callback with asymmetry status (true/false) to execute inference
      */
     private void checkModelAsymmetryAndThenPredict(String modelId, Consumer<Exception> onFailure, Consumer<Boolean> runPrediction) {
-        Boolean cached = modelAsymmetryCache.getIfPresent(modelId);
+        MLModel cached = modelCache.getIfPresent(modelId);
         if (cached != null) {
-            runPrediction.accept(cached);
+            runPrediction.accept(isAsymmetricModel(cached));
             return;
         }
 
-        List<Consumer<Boolean>> callbacks = pendingRequests.compute(modelId, (k, existing) -> {
-            List<Consumer<Boolean>> list = existing != null ? existing : Collections.synchronizedList(new ArrayList<>());
-            list.add(runPrediction);
-            return list;
-        });
+        mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
+            modelCache.put(modelId, mlModel);
+            runPrediction.accept(isAsymmetricModel(mlModel));
+        }, onFailure));
+    }
 
-        if (callbacks.size() == 1) {
-            mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
-                boolean isAsymmetric = isAsymmetricModel(mlModel);
-                modelAsymmetryCache.put(modelId, isAsymmetric);
-                List<Consumer<Boolean>> pending = pendingRequests.remove(modelId);
-                if (pending != null) {
-                    pending.forEach(cb -> cb.accept(isAsymmetric));
-                }
-            }, e -> {
-                pendingRequests.remove(modelId);
-                onFailure.accept(e);
-            }));
+    /**
+     * Get cached model or fetch from ML client
+     *
+     * @param modelId The model ID
+     * @param listener Callback with MLModel or failure
+     */
+    public void getCachedModel(String modelId, ActionListener<MLModel> listener) {
+        MLModel cached = modelCache.getIfPresent(modelId);
+        if (cached != null) {
+            listener.onResponse(cached);
+            return;
         }
+
+        mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
+            modelCache.put(modelId, mlModel);
+            listener.onResponse(mlModel);
+        }, listener::onFailure));
     }
 
     /**
      * Determines if a model is asymmetric by checking for query/passage prefixes.
-     *
-     * Asymmetric models have different prefixes for queries and passages.
-     * Non-TextEmbeddingModels are considered symmetric (return false).
      *
      * @param model The ML model to check
      * @return true if model has query or passage prefix, false otherwise
@@ -1269,4 +1262,5 @@ public class MLCommonsClientAccessor {
         }
         return textEmbeddingModelConfig.getPassagePrefix() != null || textEmbeddingModelConfig.getQueryPrefix() != null;
     }
+
 }
