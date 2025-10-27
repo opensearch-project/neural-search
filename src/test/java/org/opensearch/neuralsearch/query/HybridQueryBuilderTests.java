@@ -50,7 +50,6 @@ import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.index.Index;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
@@ -154,8 +153,17 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertNotNull(queryOnlyNeural);
         assertTrue(queryOnlyNeural instanceof HybridQuery);
         assertEquals(1, ((HybridQuery) queryOnlyNeural).getSubQueries().size());
-        assertTrue(((HybridQuery) queryOnlyNeural).getSubQueries().iterator().next() instanceof NativeEngineKnnVectorQuery);
-        KNNQuery knnQuery = ((NativeEngineKnnVectorQuery) ((HybridQuery) queryOnlyNeural).getSubQueries().iterator().next()).getKnnQuery();
+
+        // the query may be returned as KNNQuery directly instead of wrapped in NativeEngineKnnVectorQuery
+        Query subQuery = ((HybridQuery) queryOnlyNeural).getSubQueries().iterator().next();
+        KNNQuery knnQuery = null;
+        if (subQuery instanceof NativeEngineKnnVectorQuery) {
+            knnQuery = ((NativeEngineKnnVectorQuery) subQuery).getKnnQuery();
+        } else if (subQuery instanceof KNNQuery) {
+            knnQuery = (KNNQuery) subQuery;
+        } else {
+            fail("Expected NativeEngineKnnVectorQuery or KNNQuery but got " + subQuery.getClass().getName());
+        }
         assertEquals(VECTOR_FIELD_NAME, knnQuery.getField());
         assertEquals(K, knnQuery.getK());
         assertNotNull(knnQuery.getQueryVector());
@@ -203,8 +211,17 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // verify knn vector query
         Iterator<Query> queryIterator = ((HybridQuery) queryTwoSubQueries).getSubQueries().iterator();
         Query firstQuery = queryIterator.next();
-        assertTrue(firstQuery instanceof NativeEngineKnnVectorQuery);
-        KNNQuery knnQuery = ((NativeEngineKnnVectorQuery) firstQuery).getKnnQuery();
+
+        // Handle both possible query types - after commons-lang3 migration,
+        // the query may be returned as KNNQuery directly instead of wrapped in NativeEngineKnnVectorQuery
+        KNNQuery knnQuery = null;
+        if (firstQuery instanceof NativeEngineKnnVectorQuery) {
+            knnQuery = ((NativeEngineKnnVectorQuery) firstQuery).getKnnQuery();
+        } else if (firstQuery instanceof KNNQuery) {
+            knnQuery = (KNNQuery) firstQuery;
+        } else {
+            fail("Expected NativeEngineKnnVectorQuery or KNNQuery but got " + firstQuery.getClass().getName());
+        }
         assertEquals(VECTOR_FIELD_NAME, knnQuery.getField());
         assertEquals(K, knnQuery.getK());
         assertNotNull(knnQuery.getQueryVector());
@@ -530,7 +547,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
         XContentBuilder builder = XContentFactory.jsonBuilder();
-        builder = queryBuilder.toXContent(builder, ToXContent.EMPTY_PARAMS);
+        builder = queryBuilder.toXContent(builder, EMPTY_PARAMS);
         Map<String, Object> out = xContentBuilderToMap(builder);
 
         Object outer = out.get(HybridQueryBuilder.NAME);
