@@ -257,10 +257,9 @@ dependencies {
     secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: "opensearch-knn-${opensearch_build}.jar")
     compileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
-    compileOnly group: 'commons-lang', name: 'commons-lang', version: '2.6'
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
-    implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
+    compileOnly group: 'org.apache.commons', name: 'commons-lang3', version: "${versions.commonslang}"
     // ml-common excluded reflection for runtime so we need to add it by ourselves.
     // https://github.com/opensearch-project/ml-commons/commit/464bfe34c66d7a729a00dd457f03587ea4e504d9
     // TODO: Remove following three lines of dependencies if ml-common include them in their jar
@@ -281,7 +280,7 @@ dependencies {
     runtimeOnly("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}")
     runtimeOnly("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
     testFixturesImplementation "org.opensearch:common-utils:${version}"
-    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
+    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: "${versions.commonslang}"
     testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     testFixturesCompileOnly fileTree(dir: knnJarDirectory, include: "opensearch-knn-${opensearch_build}.jar")
 }
