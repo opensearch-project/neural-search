@@ -124,13 +124,15 @@ public class TransportUtilsTests extends TransportNeuralSparseTestCase {
         String[] concreteIndices = { "non-existent-index" };
         setupNullIndexMetadata();
 
-        // Execute & Verify
-        IllegalStateException exception = expectThrows(
-            IllegalStateException.class,
+        // Execute & Verify - null index metadata is treated as non-sparse (invalid)
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> TransportUtils.validateSparseIndices(clusterState, concreteIndices, "neural_sparse_warmup_action")
         );
 
-        assertTrue(exception.getMessage().contains("Index metadata not found for concrete index: non-existent-index"));
+        assertEquals(RestStatus.BAD_REQUEST, exception.status());
+        assertTrue(exception.getMessage().contains("[non-existent-index]"));
+        assertTrue(exception.getMessage().contains("neural_sparse_warmup_action"));
     }
 
     public void testValidateSparseIndicesWithMultipleNullIndexMetadata() {
@@ -138,25 +140,15 @@ public class TransportUtilsTests extends TransportNeuralSparseTestCase {
         String[] concreteIndices = { "non-existent-index-1", "non-existent-index-2" };
         setupNullIndexMetadata();
 
-        // Execute & Verify - should fail on the first index
-        IllegalStateException exception = expectThrows(
-            IllegalStateException.class,
+        // Execute & Verify - null index metadata is treated as non-sparse (invalid)
+        OpenSearchStatusException exception = expectThrows(
+            OpenSearchStatusException.class,
             () -> TransportUtils.validateSparseIndices(clusterState, concreteIndices, "neural_sparse_warmup_action")
         );
 
-        assertTrue(exception.getMessage().contains("Index metadata not found for concrete index: non-existent-index-1"));
-    }
-
-    public void testValidateSparseIndicesWithNullMetadata() {
-        // Setup
-        String[] concreteIndices = { "test-index" };
-        setupNullMetadata();
-
-        // Execute & Verify
-        NullPointerException exception = expectThrows(
-            NullPointerException.class,
-            () -> TransportUtils.validateSparseIndices(clusterState, concreteIndices, "neural_sparse_warmup_action")
-        );
+        assertEquals(RestStatus.BAD_REQUEST, exception.status());
+        assertTrue(exception.getMessage().contains("[non-existent-index-1, non-existent-index-2]"));
+        assertTrue(exception.getMessage().contains("neural_sparse_warmup_action"));
     }
 
     public void testValidateSparseIndicesWithFalseSparseIndexSetting() {

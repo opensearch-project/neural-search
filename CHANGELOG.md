@@ -6,12 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
-- [SEISMIC]: Resolve a security risk of Sparse ANN - Move 'index.sparse' validation from REST to transport layer
 
 ### Enhancements
 - [Agentic Search] Add conversation search support with agentic search ([#1626](https://github.com/opensearch-project/neural-search/pull/1626))
 
 ### Bug Fixes
+- [SEISMIC]: Resolve a security risk of Sparse ANN - Move 'index.sparse' validation from REST to transport layer
 
 ### Infrastructure
 - Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))

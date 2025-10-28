@@ -17,7 +17,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 /**
- * A Utils class for transport layer operations
+ * A utility class for transport layer operations
  */
 public class TransportUtils {
     /**
@@ -29,11 +29,14 @@ public class TransportUtils {
      */
     public static void validateSparseIndices(ClusterState state, String[] concreteIndices, String operationName) {
         List<String> invalidIndexNames = Arrays.stream(concreteIndices).filter(indexName -> {
-            IndexMetadata indexMetadata = state.metadata().index(indexName);
-            if (indexMetadata == null) {
-                throw new IllegalStateException("Index metadata not found for concrete index: " + indexName);
-            }
-            return !Optional.ofNullable(indexMetadata.getSettings()).map(SparseSettings.IS_SPARSE_INDEX_SETTING::get).orElse(false);
+            Boolean isSparseIndex = Optional.ofNullable(state)
+                .map(ClusterState::metadata)
+                .map(metadata -> metadata.index(indexName))
+                .map(IndexMetadata::getSettings)
+                .map(SparseSettings.IS_SPARSE_INDEX_SETTING::get)
+                .orElse(false);
+
+            return !isSparseIndex;
         }).collect(Collectors.toList());
 
         if (!invalidIndexNames.isEmpty()) {
