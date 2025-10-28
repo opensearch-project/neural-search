@@ -2047,7 +2047,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
                 .build();
         final MapInferenceRequest requestWithParams = MapInferenceRequest.builder()
             .modelId(TestCommonConstants.MODEL_ID)
-            .inputObjects(Map.of("text", "test"))
+            .inputObjects(Map.of("inputText", "test"))
             .mlAlgoParams(algoParams)
             .embeddingContentType(org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE)
             .build();
