@@ -159,6 +159,9 @@ public class NeuralSparseClearCacheTransportAction extends TransportBroadcastByN
         NeuralSparseClearCacheRequest request,
         String[] concreteIndices
     ) {
+        // First validate that all indices are sparse indices
+        TransportUtils.validateSparseIndices(clusterState, concreteIndices, "neural_sparse_clear_cache_action");
+
         return clusterState.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_WRITE, concreteIndices);
     }
 }

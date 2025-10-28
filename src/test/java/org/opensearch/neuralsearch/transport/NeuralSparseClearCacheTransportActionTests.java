@@ -26,6 +26,11 @@ import org.opensearch.index.engine.Engine;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.indices.IndicesService;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.common.settings.Settings;
+
+import static org.opensearch.neuralsearch.sparse.SparseSettings.SPARSE_INDEX;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.transport.TransportService;
 
@@ -65,6 +70,12 @@ public class NeuralSparseClearCacheTransportActionTests extends AbstractSparseTe
 
     @Mock
     private RoutingTable routingTable;
+
+    @Mock
+    private Metadata metadata;
+
+    @Mock
+    private IndexMetadata indexMetadata;
 
     private NeuralSparseClearCacheTransportAction transportAction;
 
@@ -186,8 +197,15 @@ public class NeuralSparseClearCacheTransportActionTests extends AbstractSparseTe
         verify(clusterBlocks).globalBlockedException(any());
     }
 
-    public void testCheckRequestBlock() {
-        String[] concreteIndices = { "index1", "index2" };
+    public void testCheckRequestBlockWithValidSparseIndices() {
+        String[] concreteIndices = { "sparse-index1", "sparse-index2" };
+
+        // Setup valid sparse indices
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.index("sparse-index1")).thenReturn(indexMetadata);
+        when(metadata.index("sparse-index2")).thenReturn(indexMetadata);
+        when(indexMetadata.getSettings()).thenReturn(Settings.builder().put(SPARSE_INDEX, "true").build());
+
         when(clusterState.blocks()).thenReturn(clusterBlocks);
         when(clusterBlocks.indicesBlockedException(any(), any())).thenReturn(null);
 
