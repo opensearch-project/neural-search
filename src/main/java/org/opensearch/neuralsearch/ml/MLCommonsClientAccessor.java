@@ -909,6 +909,7 @@ public class MLCommonsClientAccessor {
                             String dslJson = gson.toJson(dslQueryObj);
                             result.put(DSL_QUERY_FIELD_NAME, dslJson);
                         } catch (Exception e) {
+                            log.error("Failed to convert DSL query object to JSON. {}", CONVERSATIONAL_AGENT_INVALID_JSON_ERROR, e);
                             throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR, e);
                         }
                     }
@@ -920,6 +921,7 @@ public class MLCommonsClientAccessor {
         }
 
         if (!result.containsKey(DSL_QUERY_FIELD_NAME)) {
+            log.error("DSL query field is missing from agent response. {}", CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
             throw new IllegalArgumentException(CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
         }
 
@@ -946,6 +948,7 @@ public class MLCommonsClientAccessor {
             int startBrace = text.indexOf('{');
 
             if (startBrace < 0) {
+                log.error("No JSON object found in text: missing opening brace. {}", CONVERSATIONAL_AGENT_INVALID_JSON_ERROR);
                 throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR);
             }
 
@@ -954,6 +957,7 @@ public class MLCommonsClientAccessor {
 
             // Only return if it's a JSON object
             if (!jsonNode.isObject()) {
+                log.error("Extracted JSON is not an object. {}", CONVERSATIONAL_AGENT_INVALID_JSON_ERROR);
                 throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR);
             }
 
