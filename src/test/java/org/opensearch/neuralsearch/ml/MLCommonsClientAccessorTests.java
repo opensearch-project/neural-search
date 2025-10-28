@@ -1361,4 +1361,158 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);
     }
+
+    public void testExecuteAgent_ConversationalAgentWithTextBeforeJSON() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with explanation text before JSON
+        String responseWithExplanation =
+            "Here is the query you requested: {\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}},\"agent_steps_summary\":\"test summary\"}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithCustomText(responseWithExplanation));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+        assertEquals("test summary", result.getAgentStepsSummary());
+        assertEquals("test-memory-456", result.getMemoryId());
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_ConversationalAgentWithNoValidJSON() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with no valid JSON
+        String responseWithoutJSON = "Sorry, I couldn't generate a query for your request.";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithCustomText(responseWithoutJSON));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        IllegalArgumentException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("Conversational agent response does not contain valid JSON"));
+        assertTrue(exception.getMessage().contains("dsl_query"));
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_ConversationalAgentWithMalformedJSON() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with malformed JSON (missing closing brace)
+        String responseWithMalformedJSON = "Here is the query: {\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithCustomText(responseWithMalformedJSON));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        IllegalArgumentException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("Conversational agent response does not contain valid JSON"));
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_ConversationalAgentWithEmptyResponse() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with empty text (will be skipped, resulting in missing dsl_query)
+        String emptyResponse = "   ";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithCustomText(emptyResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        IllegalArgumentException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("No valid 'dsl_query' found"));
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    private ModelTensorOutput createConversationalAgentResponseWithCustomText(String responseText) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, null, Map.of("response", responseText));
+        final ModelTensor memoryTensor = new ModelTensor("memory_id", null, null, null, null, "test-memory-456", Map.of());
+
+        mlModelTensorList.add(responseTensor);
+        mlModelTensorList.add(memoryTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
 }

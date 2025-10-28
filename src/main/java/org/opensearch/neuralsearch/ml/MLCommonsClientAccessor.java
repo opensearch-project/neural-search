@@ -10,6 +10,9 @@ import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.A
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -32,12 +35,9 @@ import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.Nullable;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
-import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLAgentType;
@@ -81,6 +81,16 @@ import lombok.extern.log4j.Log4j2;
 public class MLCommonsClientAccessor {
     private final MachineLearningNodeClient mlClient;
     private static final Gson gson = new Gson();
+
+    // Error message constants for conversational agent responses
+    private static final String CONVERSATIONAL_AGENT_INVALID_JSON_ERROR = "Conversational agent response does not contain valid JSON. "
+        + "The agent must return a response containing a JSON object with 'dsl_query' field. "
+        + "Please check the agent configuration and prompts to ensure the output is properly formatted as JSON.";
+
+    private static final String CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR =
+        "No valid 'dsl_query' found in conversational agent response. "
+            + "The agent must return a JSON object with 'dsl_query' field. "
+            + "Please check the agent configuration and prompts.";
 
     /**
      * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
@@ -823,7 +833,9 @@ public class MLCommonsClientAccessor {
             }
         }
 
-        throw new IllegalStateException("No valid DSL result found in model output");
+        throw new IllegalArgumentException(
+            "Flow agent did not return valid DSL query. Please check the agent configuration and ensure it returns a query."
+        );
     }
 
     /**
@@ -883,49 +895,76 @@ public class MLCommonsClientAccessor {
                         continue;
                     }
 
-                    try (
-                        XContentParser parser = XContentType.JSON.xContent()
-                            .createParser(xContentRegistry, null, new BytesArray(responseJsonString).streamInput())
-                    ) {
+                    // Extract JSON object from the response string (handles cases with text + JSON)
+                    // This will throw IllegalArgumentException if JSON is invalid
+                    Map<String, Object> responseMap = extractJsonObjectFromString(responseJsonString);
 
-                        if (parser.currentToken() == null) {
-                            parser.nextToken();
+                    // Extract dsl_query and agent_steps_summary from the response map
+                    Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD_NAME);
+                    Object stepsSummaryObj = responseMap.get(AGENT_STEPS_FIELD_NAME);
+
+                    if (dslQueryObj != null) {
+                        try {
+                            // Convert to proper JSON format using Gson
+                            String dslJson = gson.toJson(dslQueryObj);
+                            result.put(DSL_QUERY_FIELD_NAME, dslJson);
+                        } catch (Exception e) {
+                            throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR, e);
                         }
-
-                        if (parser.currentToken() != XContentParser.Token.START_OBJECT) {
-                            throw new IllegalStateException("Expected START_OBJECT in response, but got: " + parser.currentToken());
-                        }
-
-                        Map<String, Object> responseMap = parser.map();
-                        Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD_NAME);
-                        Object stepsSummaryObj = responseMap.get(AGENT_STEPS_FIELD_NAME);
-
-                        if (dslQueryObj != null) {
-                            try {
-                                // Convert to proper JSON format using Gson
-                                String dslJson = gson.toJson(dslQueryObj);
-                                result.put(DSL_QUERY_FIELD_NAME, dslJson);
-                            } catch (Exception e) {
-                                throw new IllegalStateException("Failed to serialize dsl_query to JSON", e);
-                            }
-                        }
-                        if (stepsSummaryObj != null) {
-                            result.put(AGENT_STEPS_FIELD_NAME, stepsSummaryObj.toString());
-                        }
-
-                    } catch (IOException e) {
-                        log.error("Failed to parse agent response JSON: {}", responseJsonString, e);
-                        throw new IllegalStateException("Failed to parse agent response using XContentParser: " + e.getMessage(), e);
+                    }
+                    if (stepsSummaryObj != null) {
+                        result.put(AGENT_STEPS_FIELD_NAME, stepsSummaryObj.toString());
                     }
                 }
             }
         }
 
         if (!result.containsKey(DSL_QUERY_FIELD_NAME)) {
-            throw new IllegalStateException("No valid 'dsl_query' found in conversational agent response");
+            throw new IllegalArgumentException(CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
         }
 
         return result;
+    }
+
+    /**
+    * Extracts the first JSON object from a string.
+    * This is useful when the response string contains text followed by or mixed with JSON.
+    *
+    * @param text Input string that may contain a JSON object
+    * @return Extracted JSON as Map
+    * @throws IllegalArgumentException if no valid JSON object is found
+    */
+    private static Map<String, Object> extractJsonObjectFromString(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR);
+        }
+
+        ObjectMapper mapper = new ObjectMapper();
+
+        try {
+            // Find first '{' - look for JSON object only
+            int startBrace = text.indexOf('{');
+
+            if (startBrace < 0) {
+                throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR);
+            }
+
+            // Parse JSON from the starting position - Jackson will handle finding the end
+            JsonNode jsonNode = mapper.readTree(text.substring(startBrace));
+
+            // Only return if it's a JSON object
+            if (!jsonNode.isObject()) {
+                throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR);
+            }
+
+            return mapper.convertValue(jsonNode, new TypeReference<Map<String, Object>>() {
+            });
+
+        } catch (Exception e) {
+            // Catch all JSON parsing errors and convert to IllegalArgumentException
+            log.debug("Failed to extract JSON object from text", e);
+            throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR, e);
+        }
     }
 
     /**
