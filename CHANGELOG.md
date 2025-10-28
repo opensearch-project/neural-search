@@ -9,7 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Enhancements
 - [Agentic Search] Add conversation search support with agentic search ([#1626](https://github.com/opensearch-project/neural-search/pull/1626))
-
+- [Agentic Search] Extract JSON from Agent Response ([#1631](https://github.com/opensearch-project/neural-search/pull/1631))
 ### Bug Fixes
 
 ### Infrastructure
