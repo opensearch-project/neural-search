@@ -62,6 +62,7 @@ import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.neuralsearch.util.AgentQueryUtil;
 import org.opensearch.neuralsearch.util.RetryUtil;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
@@ -672,7 +673,7 @@ public class MLCommonsClientAccessor {
             boolean hasUserPrompt = false;
             String llmType = null;
 
-            if (mlAgent.getMlAgent().getParameters() != null) {
+            if (mlAgent.getMlAgent() != null && mlAgent.getMlAgent().getParameters() != null) {
                 llmType = mlAgent.getMlAgent().getParameters().get("_llm_interface");
             }
 
@@ -766,6 +767,8 @@ public class MLCommonsClientAccessor {
             parameters.put("user_prompt", loadUserPrompt());
         }
 
+        // Add verbose as true so that the agent returns summary of agent tracing as well always
+        // https://docs.opensearch.org/latest/ml-commons-plugin/api/agent-apis/execute-agent/#request-body-fields
         parameters.put("verbose", "true");
 
         RemoteInferenceInputDataSet dataset = RemoteInferenceInputDataSet.builder().parameters(parameters).build();
@@ -858,8 +861,8 @@ public class MLCommonsClientAccessor {
         NamedXContentRegistry xContentRegistry,
         String llmType
     ) {
-        boolean isClaude = llmType != null && llmType.contains("claude");
-        boolean isOpenAI = llmType != null && llmType.contains("openai");
+        boolean isClaude = llmType != null && llmType.contains(AgentQueryUtil.CLAUDE_MODEL_PREFIX);
+        boolean isOpenAI = llmType != null && llmType.contains(AgentQueryUtil.OPENAI_MODEL_PREFIX);
         if (!(mlOutput instanceof ModelTensorOutput)) {
             throw new IllegalStateException("Expected ModelTensorOutput but got: " + mlOutput.getClass().getSimpleName());
         }
@@ -895,17 +898,17 @@ public class MLCommonsClientAccessor {
                         continue;
                     }
 
-                    String responseJsonString = tensor.getResult();
-                    if (responseJsonString == null || responseJsonString.isBlank()) {
+                    String modelResultString = tensor.getResult();
+                    if (modelResultString == null || modelResultString.isBlank()) {
                         continue;
                     }
 
                     // Try to extract JSON object from the response string
                     try {
-                        Map<String, Object> responseMap = extractJsonObjectFromString(responseJsonString);
+                        Map<String, Object> modelResponseMap = extractJsonObjectFromString(modelResultString);
 
                         // Check if this response has dsl_query (final response)
-                        Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD_NAME);
+                        Object dslQueryObj = modelResponseMap.get(DSL_QUERY_FIELD_NAME);
                         if (dslQueryObj != null) {
                             String dslJson = gson.toJson(dslQueryObj);
                             result.put(DSL_QUERY_FIELD_NAME, dslJson);
@@ -913,13 +916,13 @@ public class MLCommonsClientAccessor {
 
                         // Extract agent steps based on model type
                         if (isClaude) {
-                            agentSteps.addAll(extractClaudeAgentSteps(responseMap));
+                            agentSteps.addAll(extractClaudeAgentSteps(modelResponseMap));
                         } else if (isOpenAI) {
-                            agentSteps.addAll(extractOpenAIAgentSteps(responseMap));
+                            agentSteps.addAll(extractOpenAIAgentSteps(modelResponseMap));
                         }
                     } catch (Exception e) {
                         // If JSON parsing fails, skip this response
-                        log.debug("Skipping non-JSON response: {}", responseJsonString);
+                        log.debug("Skipping non-JSON response: {}", modelResultString);
                     }
                 }
             }
@@ -985,10 +988,13 @@ public class MLCommonsClientAccessor {
         List<String> steps = new ArrayList<>();
         if (!responseMap.containsKey("output")) return steps;
         Map<String, Object> output = (Map<String, Object>) responseMap.get("output");
+
         if (output == null || !output.containsKey("message")) return steps;
         Map<String, Object> message = (Map<String, Object>) output.get("message");
+
         if (message == null || !message.containsKey("content")) return steps;
         List<Map<String, Object>> content = (List<Map<String, Object>>) message.get("content");
+
         if (content == null) return steps;
 
         // Check if toolUse is present in the content array
@@ -1010,12 +1016,18 @@ public class MLCommonsClientAccessor {
     private List<String> extractOpenAIAgentSteps(Map<String, Object> responseMap) {
         List<String> steps = new ArrayList<>();
         if (!responseMap.containsKey("choices")) return steps;
+
         List<Map<String, Object>> choices = (List<Map<String, Object>>) responseMap.get("choices");
         if (choices == null || choices.isEmpty()) return steps;
+
         Map<String, Object> firstChoice = choices.get(0);
+        if (firstChoice == null) return steps;
+
         Map<String, Object> message = (Map<String, Object>) firstChoice.get("message");
         if (message == null || !message.containsKey("tool_calls")) return steps;
+
         String content = (String) message.get("content");
+
         if (content != null && !content.isBlank()) {
             steps.add(content);
         }
