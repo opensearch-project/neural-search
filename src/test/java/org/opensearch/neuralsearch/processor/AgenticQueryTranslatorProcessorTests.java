@@ -136,7 +136,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -179,7 +179,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -224,7 +224,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -430,7 +430,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -478,7 +478,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -528,7 +528,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -589,7 +589,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call for flow agent
-        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -648,7 +648,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call for agent with system prompt
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", true, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", true, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -707,7 +707,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -765,7 +765,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
         // Mock getAgentDetails call
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);
@@ -866,7 +866,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
             agentInfoListener.onResponse(agentInfo);

@@ -18,4 +18,5 @@ public class AgentInfoDTO {
     private final String type;
     private final boolean hasSystemPrompt;
     private final boolean hasUserPrompt;
+    private final String llmType;
 }

@@ -670,6 +670,11 @@ public class MLCommonsClientAccessor {
 
             boolean hasSystemPrompt = false;
             boolean hasUserPrompt = false;
+            String llmType = null;
+
+            if (mlAgent.getMlAgent().getParameters() != null) {
+                llmType = mlAgent.getMlAgent().getParameters().get("_llm_interface");
+            }
 
             if (mlAgent.getMlAgent().getLlm() != null && mlAgent.getMlAgent().getLlm().getParameters() != null) {
                 Map<String, String> parameters = mlAgent.getMlAgent().getLlm().getParameters();
@@ -677,7 +682,7 @@ public class MLCommonsClientAccessor {
                 hasUserPrompt = parameters.containsKey("user_prompt");
             }
 
-            AgentInfoDTO agentInfoDTO = new AgentInfoDTO(mlAgent.getMlAgent().getType(), hasSystemPrompt, hasUserPrompt);
+            AgentInfoDTO agentInfoDTO = new AgentInfoDTO(mlAgent.getMlAgent().getType(), hasSystemPrompt, hasUserPrompt, llmType);
 
             listener.onResponse(agentInfoDTO);
         }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> retryableGetAgentDetails(agentId, retryTime + 1, listener), listener)));
@@ -718,6 +723,7 @@ public class MLCommonsClientAccessor {
         String agentType = agentInfo.getType();
         boolean hasSystemPrompt = agentInfo.isHasSystemPrompt();
         boolean hasUserPrompt = agentInfo.isHasUserPrompt();
+        String llmType = agentInfo.getLlmType();
 
         MLAgentType type;
         try {
@@ -760,6 +766,8 @@ public class MLCommonsClientAccessor {
             parameters.put("user_prompt", loadUserPrompt());
         }
 
+        parameters.put("verbose", "true");
+
         RemoteInferenceInputDataSet dataset = RemoteInferenceInputDataSet.builder().parameters(parameters).build();
         AgentMLInput agentMLInput = new AgentMLInput(agentId, null, FunctionName.AGENT, dataset);
 
@@ -777,7 +785,7 @@ public class MLCommonsClientAccessor {
             if (type == MLAgentType.FLOW) {
                 dslQuery = extractFlowAgentResult(mlOutput);
             } else if (type == MLAgentType.CONVERSATIONAL) {
-                Map<String, String> conversationalResult = extractConversationalAgentResult(mlOutput, xContentRegistry);
+                Map<String, String> conversationalResult = extractConversationalAgentResult(mlOutput, xContentRegistry, llmType);
                 dslQuery = conversationalResult.get(DSL_QUERY_FIELD_NAME);
                 agentStepsSummary = conversationalResult.get(AGENT_STEPS_FIELD_NAME);
                 memoryId = conversationalResult.get(MEMORY_ID_FIELD_NAME);
@@ -842,9 +850,16 @@ public class MLCommonsClientAccessor {
      * Extract dsl_query, agent_steps_summary, and memory_id from conversational agent response
      * @param mlOutput ml output
      * @param xContentRegistry xContentRegistry
+     * @param llmType llmType to determine model type
      * @return result map containing dsl_query, agent_steps_summary, and memory_id
      */
-    private Map<String, String> extractConversationalAgentResult(MLOutput mlOutput, NamedXContentRegistry xContentRegistry) {
+    private Map<String, String> extractConversationalAgentResult(
+        MLOutput mlOutput,
+        NamedXContentRegistry xContentRegistry,
+        String llmType
+    ) {
+        boolean isClaude = llmType != null && llmType.contains("claude");
+        boolean isOpenAI = llmType != null && llmType.contains("openai");
         if (!(mlOutput instanceof ModelTensorOutput)) {
             throw new IllegalStateException("Expected ModelTensorOutput but got: " + mlOutput.getClass().getSimpleName());
         }
@@ -857,6 +872,7 @@ public class MLCommonsClientAccessor {
         }
 
         Map<String, String> result = new HashMap<>();
+        List<String> agentSteps = new ArrayList<>();
 
         // Iterate through all ModelTensors to find response and memory_id
         for (ModelTensors tensors : tensorOutputList) {
@@ -874,47 +890,36 @@ public class MLCommonsClientAccessor {
                         continue;
                     }
 
-                    // Extract response containing dsl_query and agent_steps_summary
+                    // Extract response containing dsl_query or agent steps
                     if (!"response".equals(tensorName)) {
                         continue;
                     }
 
-                    Map<String, Object> dataMap = (Map<String, Object>) tensor.getDataAsMap();
-                    if (dataMap == null || !dataMap.containsKey("response")) {
+                    String responseJsonString = tensor.getResult();
+                    if (responseJsonString == null || responseJsonString.isBlank()) {
                         continue;
                     }
 
-                    Object responseObj = dataMap.get("response");
-                    if (!(responseObj instanceof String)) {
-                        continue;
-                    }
+                    // Try to extract JSON object from the response string
+                    try {
+                        Map<String, Object> responseMap = extractJsonObjectFromString(responseJsonString);
 
-                    String responseJsonString = (String) responseObj;
-
-                    if (responseJsonString.isBlank()) {
-                        continue;
-                    }
-
-                    // Extract JSON object from the response string (handles cases with text + JSON)
-                    // This will throw IllegalArgumentException if JSON is invalid
-                    Map<String, Object> responseMap = extractJsonObjectFromString(responseJsonString);
-
-                    // Extract dsl_query and agent_steps_summary from the response map
-                    Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD_NAME);
-                    Object stepsSummaryObj = responseMap.get(AGENT_STEPS_FIELD_NAME);
-
-                    if (dslQueryObj != null) {
-                        try {
-                            // Convert to proper JSON format using Gson
+                        // Check if this response has dsl_query (final response)
+                        Object dslQueryObj = responseMap.get(DSL_QUERY_FIELD_NAME);
+                        if (dslQueryObj != null) {
                             String dslJson = gson.toJson(dslQueryObj);
                             result.put(DSL_QUERY_FIELD_NAME, dslJson);
-                        } catch (Exception e) {
-                            log.error("Failed to convert DSL query object to JSON. {}", CONVERSATIONAL_AGENT_INVALID_JSON_ERROR, e);
-                            throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR, e);
                         }
-                    }
-                    if (stepsSummaryObj != null) {
-                        result.put(AGENT_STEPS_FIELD_NAME, stepsSummaryObj.toString());
+
+                        // Extract agent steps based on model type
+                        if (isClaude) {
+                            agentSteps.addAll(extractClaudeAgentSteps(responseMap));
+                        } else if (isOpenAI) {
+                            agentSteps.addAll(extractOpenAIAgentSteps(responseMap));
+                        }
+                    } catch (Exception e) {
+                        // If JSON parsing fails, skip this response
+                        log.debug("Skipping non-JSON response: {}", responseJsonString);
                     }
                 }
             }
@@ -923,6 +928,11 @@ public class MLCommonsClientAccessor {
         if (!result.containsKey(DSL_QUERY_FIELD_NAME)) {
             log.error("DSL query field is missing from agent response. {}", CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
             throw new IllegalArgumentException(CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
+        }
+
+        // Combine agent steps if collected
+        if (!agentSteps.isEmpty()) {
+            result.put(AGENT_STEPS_FIELD_NAME, String.join("\n", agentSteps));
         }
 
         return result;
@@ -969,6 +979,47 @@ public class MLCommonsClientAccessor {
             log.debug("Failed to extract JSON object from text", e);
             throw new IllegalArgumentException(CONVERSATIONAL_AGENT_INVALID_JSON_ERROR, e);
         }
+    }
+
+    private List<String> extractClaudeAgentSteps(Map<String, Object> responseMap) {
+        List<String> steps = new ArrayList<>();
+        if (!responseMap.containsKey("output")) return steps;
+        Map<String, Object> output = (Map<String, Object>) responseMap.get("output");
+        if (output == null || !output.containsKey("message")) return steps;
+        Map<String, Object> message = (Map<String, Object>) output.get("message");
+        if (message == null || !message.containsKey("content")) return steps;
+        List<Map<String, Object>> content = (List<Map<String, Object>>) message.get("content");
+        if (content == null) return steps;
+
+        // Check if toolUse is present in the content array
+        boolean hasToolUse = content.stream().anyMatch(item -> item.containsKey("toolUse"));
+        if (!hasToolUse) return steps;
+
+        // Extract text only when toolUse is present (agent step, not final response)
+        for (Map<String, Object> item : content) {
+            if (item.containsKey("text")) {
+                String text = (String) item.get("text");
+                if (text != null && !text.isBlank()) {
+                    steps.add(text);
+                }
+            }
+        }
+        return steps;
+    }
+
+    private List<String> extractOpenAIAgentSteps(Map<String, Object> responseMap) {
+        List<String> steps = new ArrayList<>();
+        if (!responseMap.containsKey("choices")) return steps;
+        List<Map<String, Object>> choices = (List<Map<String, Object>>) responseMap.get("choices");
+        if (choices == null || choices.isEmpty()) return steps;
+        Map<String, Object> firstChoice = choices.get(0);
+        Map<String, Object> message = (Map<String, Object>) firstChoice.get("message");
+        if (message == null || !message.containsKey("tool_calls")) return steps;
+        String content = (String) message.get("content");
+        if (content != null && !content.isBlank()) {
+            steps.add(content);
+        }
+        return steps;
     }
 
     /**
