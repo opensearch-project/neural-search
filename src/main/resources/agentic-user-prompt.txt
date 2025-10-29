@@ -1,15 +1,1 @@
 NLQ is: ${parameters.question}, index_name is: ${parameters.index_name:-}, and the model ID for neural search is: ${parameters.embedding_model_id:-}.
-REMINDER: Your response must be only a valid JSON object with exactly the following two keys:
-
-{
-"dsl_query": <OpenSearch DSL JSON Object>,
-"agent_steps_summary": "<chronological agent steps string>"
-}
-
-STRICT FORMATTING RULES:
-- No markdown, no code fences, no explanations, and no additional text.
--Output must be a pure JSON object that can be parsed without errors.
-- "dsl_query" must be a valid JSON object representing the full OpenSearch DSL.
-- "agent_steps_summary" must be a plain string describing the chronological steps taken by the agent.
-
-The response must not contain any additional fields, comments, or formatting.
