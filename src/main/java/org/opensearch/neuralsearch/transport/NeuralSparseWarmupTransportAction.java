@@ -153,6 +153,9 @@ public class NeuralSparseWarmupTransportAction extends TransportBroadcastByNodeA
      */
     @Override
     protected ClusterBlockException checkRequestBlock(ClusterState state, NeuralSparseWarmupRequest request, String[] concreteIndices) {
+        // First validate that all indices are sparse indices
+        TransportUtils.validateSparseIndices(state, concreteIndices, "neural_sparse_warmup_action");
+
         return state.blocks().indicesBlockedException(ClusterBlockLevel.METADATA_READ, concreteIndices);
     }
 }
