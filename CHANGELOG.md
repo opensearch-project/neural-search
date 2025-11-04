@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
+- [SEISMIC]: Resolve a security risk of Sparse ANN - Move 'index.sparse' validation from REST to transport layer. [PR1630](https://github.com/opensearch-project/neural-search/pull/1630)
 
 ### Infrastructure
 
