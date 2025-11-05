@@ -240,7 +240,6 @@ public class NeuralSearch extends Plugin
 
         // Initialize the semantic highlighter
         this.semanticHighlighter.initialize(semanticHighlighterEngine);
-        this.semanticHighlighter.setClusterService(clusterService);
 
         return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
     }
@@ -408,6 +407,8 @@ public class NeuralSearch extends Plugin
     public Map<String, SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor>> getSystemGeneratedResponseProcessors(
         Parameters parameters
     ) {
+        NeuralSearchClusterUtil.instance().setSearchPipelineService(parameters.searchPipelineService);
+
         // System-generated semantic highlighting processor that automatically applies when semantic highlighting is detected
         return Map.of(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE, new SemanticHighlightingFactory(clientAccessor));
     }
