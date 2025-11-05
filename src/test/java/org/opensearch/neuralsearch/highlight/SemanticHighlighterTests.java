@@ -13,6 +13,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.highlight.single.SemanticHighlighterEngine;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.apache.lucene.search.Query;
 import org.opensearch.search.fetch.FetchContext;
@@ -24,10 +25,7 @@ import org.opensearch.search.lookup.SourceLookup;
 import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.test.OpenSearchTestCase;
 
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -82,12 +80,19 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
     @Mock
     private SourceLookup sourceLookup;
 
+    @Mock
+    private SearchPipelineService searchPipelineService;
+
     @Before
     public void setUp() throws Exception {
         super.setUp();
         MockitoAnnotations.openMocks(this);
         TestUtils.initializeEventStatsManager();
         highlighter = new SemanticHighlighter();
+
+        // Initialize NeuralSearchClusterUtil with mocked services
+        NeuralSearchClusterUtil.instance().initialize(clusterService, null);
+        NeuralSearchClusterUtil.instance().setSearchPipelineService(searchPipelineService);
 
         // Setup common mocks using reflection to set final fields
         fieldContext = mock(FieldHighlightContext.class);
@@ -152,7 +157,6 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
         when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
@@ -177,7 +181,6 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
         when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
@@ -199,7 +202,6 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn(null);
 
@@ -217,9 +219,6 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         options.put("model_id", "test_model");
         when(fieldOptions.options()).thenReturn(options);
 
-        // Don't initialize the engine
-        highlighter.setClusterService(clusterService);
-
         // Execute & Verify
         IllegalStateException exception = expectThrows(IllegalStateException.class, () -> highlighter.highlight(fieldContext));
 
@@ -236,14 +235,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         // Mock system processor enabled
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.settings()).thenReturn(settings);
-        List<String> enabledFactories = Arrays.asList("semantic-highlighter");
-        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(true);
 
         // Execute
         HighlightField result = highlighter.highlight(fieldContext);
@@ -261,15 +255,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         // Mock system processor disabled
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.settings()).thenReturn(settings);
-        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(
-            Collections.emptyList()
-        );
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(false);
 
         // Execute & Verify
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> highlighter.highlight(fieldContext));
@@ -289,14 +277,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         // Mock system processor enabled
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.settings()).thenReturn(settings);
-        List<String> enabledFactories = Arrays.asList("semantic-highlighter");
-        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(true);
 
         // Execute
         HighlightField result = highlighter.highlight(fieldContext);
@@ -316,7 +299,6 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.postTags()).thenReturn(new String[] { "</mark>" });
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
         when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), eq("<mark>"), eq("</mark>")))
@@ -348,14 +330,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         // Mock system processor enabled among other factories
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.settings()).thenReturn(settings);
-        List<String> enabledFactories = Arrays.asList("other-factory", "semantic-highlighter", "another-factory");
-        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(true);
 
         // Execute
         HighlightField result = highlighter.highlight(fieldContext);
@@ -371,7 +348,6 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
         when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
@@ -395,14 +371,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         // Mock system processor enabled with wildcard "*"
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.settings()).thenReturn(settings);
-        List<String> enabledFactories = Arrays.asList("*");  // Wildcard enables all factories
-        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(true);
 
         // Execute
         HighlightField result = highlighter.highlight(fieldContext);
@@ -420,14 +391,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         // Mock system processor enabled with wildcard and other factories
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.settings()).thenReturn(settings);
-        List<String> enabledFactories = Arrays.asList("some-factory", "*", "another-factory");
-        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(true);
 
         // Execute
         HighlightField result = highlighter.highlight(fieldContext);
@@ -445,14 +411,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         when(fieldOptions.options()).thenReturn(options);
 
         highlighter.initialize(semanticHighlighterEngine);
-        highlighter.setClusterService(clusterService);
 
         // Mock system processor with only other factories (no semantic-highlighter, no wildcard)
-        when(clusterService.state()).thenReturn(clusterState);
-        when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.settings()).thenReturn(settings);
-        List<String> enabledFactories = Arrays.asList("other-factory", "another-factory");
-        when(settings.getAsList(SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey())).thenReturn(enabledFactories);
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(false);
 
         // Execute & Verify - should throw exception
         IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> highlighter.highlight(fieldContext));

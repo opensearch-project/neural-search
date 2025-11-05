@@ -4,10 +4,7 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
-import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
-import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.common.settings.Settings;
 import org.opensearch.core.common.text.Text;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.highlight.single.SemanticHighlighterEngine;
@@ -20,7 +17,6 @@ import org.opensearch.search.fetch.subphase.highlight.HighlightField;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPipelineService;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -30,8 +26,6 @@ import java.util.Map;
 @Log4j2
 public class SemanticHighlighter implements Highlighter {
     private SemanticHighlighterEngine semanticHighlighterEngine;
-    @Setter
-    private ClusterService clusterService;
 
     public void initialize(SemanticHighlighterEngine semanticHighlighterEngine) {
         if (this.semanticHighlighterEngine != null) {
@@ -130,17 +124,6 @@ public class SemanticHighlighter implements Highlighter {
     }
 
     private boolean isSystemProcessorEnabled() {
-        if (clusterService == null) {
-            clusterService = NeuralSearchClusterUtil.instance().getClusterService();
-        }
-
-        Settings clusterSettings = clusterService.state().metadata().settings();
-        List<String> enabledFactories = clusterSettings.getAsList(
-            SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey()
-        );
-
-        // Check if semantic-highlighter is enabled explicitly or if all factories are enabled with "*"
-        return enabledFactories != null
-            && (enabledFactories.contains(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE) || enabledFactories.contains("*"));
+        return NeuralSearchClusterUtil.instance().isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE);
     }
 }
