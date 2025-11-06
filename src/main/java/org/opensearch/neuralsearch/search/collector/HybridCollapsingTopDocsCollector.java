@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import lombok.NonNull;
 import lombok.Setter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.LeafReaderContext;
@@ -64,7 +65,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     HybridCollapsingTopDocsCollector(
         GroupSelector<T> groupSelector,
         String collapseField,
-        Sort groupSort,
+        @NonNull Sort groupSort,
         int topNGroups,
         HitsThresholdChecker hitsThresholdChecker,
         int docsPerGroupPerSubQuery
