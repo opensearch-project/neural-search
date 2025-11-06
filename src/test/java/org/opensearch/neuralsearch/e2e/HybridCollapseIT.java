@@ -29,6 +29,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_FLOAT_FIELD = "price";
     private static final String SEARCH_PIPELINE = "test-pipeline";
     private static final int DOCS_PER_GROUP_PER_SUBQUERY = 5;
+    private static final int NUMBER_OF_SHARDS_FIVE = 5;
+    private static final int NUMBER_OF_SHARDS_ONE = 1;
 
     @Before
     public void setUp() throws Exception {
@@ -37,7 +39,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     }
 
     public void testCollapse_withSingleShard_thenSuccessful() {
-        createTestIndex(1);
+        createTestIndex(NUMBER_OF_SHARDS_ONE);
         indexTestDocuments();
         testCollapse_whenE2E_thenSuccessful();
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
@@ -45,7 +47,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     }
 
     public void testCollapse_withMultipleShard_thenSuccessful() {
-        createTestIndex(5);
+        createTestIndex(NUMBER_OF_SHARDS_FIVE);
         indexTestDocuments();
         testCollapse_whenE2E_thenSuccessful();
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
