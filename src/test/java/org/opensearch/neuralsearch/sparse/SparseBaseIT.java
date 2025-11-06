@@ -31,6 +31,7 @@ import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,6 +39,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_SEARCH;
@@ -369,6 +371,16 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         return lines.length;
     }
 
+    protected int getDataNodeCount() throws Exception {
+        Request request = new Request("GET", "/_cat/nodes/");
+        Response response = client().performRequest(request);
+        String str = EntityUtils.toString(response.getEntity());
+        String[] lines = str.split("\n");
+        // only keep line that contains "data"
+        List<String> dataLines = Arrays.stream(lines).filter(line -> line.contains("data")).collect(Collectors.toList());
+        return dataLines.size();
+    }
+
     @SneakyThrows
     protected void ingestDocumentsAndForceMerge(String index, String textField, String sparseField, List<Map<String, Float>> docTokens) {
         ingestDocumentsAndForceMerge(index, textField, sparseField, docTokens, null);
@@ -520,7 +532,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     @SneakyThrows
     protected int getEffectiveReplicaCount(int replicas) {
         // effective number of replica is capped by the number of OpenSearch nodes minus 1
-        return Math.min(replicas, getNodeCount() - 1);
+        return Math.min(replicas, getDataNodeCount() - 1);
     }
 
     @SuppressWarnings("unchecked")
