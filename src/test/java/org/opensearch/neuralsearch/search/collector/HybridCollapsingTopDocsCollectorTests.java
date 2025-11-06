@@ -227,25 +227,6 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testConstructor_whenZeroTopNGroups_thenFail() throws IOException {
-        Sort sort = new Sort(new SortField(INT_FIELD_NAME, SortField.Type.INT));
-        NumberFieldMapper.NumberFieldType fieldType = new NumberFieldMapper.NumberFieldType(
-            COLLAPSE_FIELD_NAME,
-            NumberFieldMapper.NumberType.LONG
-        );
-        expectThrows(
-            IllegalArgumentException.class,
-            () -> HybridCollapsingTopDocsCollector.createNumeric(
-                COLLAPSE_FIELD_NAME,
-                fieldType,
-                sort,
-                0,
-                new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-                DOCS_PER_GROUP_PER_SUBQUERY
-            )
-        );
-    }
-
     private void addNumericDoc(IndexWriter writer, int id, String textValue, int intValue, long collapseValue) throws IOException {
         Document doc = new Document();
         // ID field

@@ -72,30 +72,26 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         this.groupSelector = groupSelector;
         this.collapseField = collapseField;
         this.sort = groupSort;
-        if (topNGroups < 1) {
-            throw new IllegalArgumentException("topNGroups must be >= 1 (got " + topNGroups + ")");
-        } else {
-            SortField[] sortFields = groupSort.getSort();
-            this.reversed = new int[sortFields.length];
+        SortField[] sortFields = groupSort.getSort();
+        this.reversed = new int[sortFields.length];
 
-            for (int i = 0; i < sortFields.length; ++i) {
-                SortField sortField = sortFields[i];
-                this.reversed[i] = sortField.getReverse() ? -1 : 1;
-            }
-
-            this.groupQueueMap = new HashMap<>();
-            this.collectedHitsPerSubQueryMap = new HashMap<>();
-            this.fieldValueLeafTrackersMap = new HashMap<>();
-            this.comparatorsMap = new HashMap<>();
-            this.firstComparatorMap = new HashMap<>();
-            this.reverseMulMap = new HashMap<>();
-            this.queueFullMap = new HashMap<>();
-
-            this.numHits = topNGroups;
-            this.hitsThresholdChecker = hitsThresholdChecker;
-            // If docsPerGroupPerSubQuery is not larger than 0, use the size for hybrid search without collapse
-            this.docsPerGroupPerSubQuery = docsPerGroupPerSubQuery > 0 ? docsPerGroupPerSubQuery : topNGroups;
+        for (int i = 0; i < sortFields.length; ++i) {
+            SortField sortField = sortFields[i];
+            this.reversed[i] = sortField.getReverse() ? -1 : 1;
         }
+
+        this.groupQueueMap = new HashMap<>();
+        this.collectedHitsPerSubQueryMap = new HashMap<>();
+        this.fieldValueLeafTrackersMap = new HashMap<>();
+        this.comparatorsMap = new HashMap<>();
+        this.firstComparatorMap = new HashMap<>();
+        this.reverseMulMap = new HashMap<>();
+        this.queueFullMap = new HashMap<>();
+
+        this.numHits = topNGroups;
+        this.hitsThresholdChecker = hitsThresholdChecker;
+        // If docsPerGroupPerSubQuery is not larger than 0, use the size for hybrid search without collapse
+        this.docsPerGroupPerSubQuery = docsPerGroupPerSubQuery > 0 ? docsPerGroupPerSubQuery : topNGroups;
     }
 
     /**
