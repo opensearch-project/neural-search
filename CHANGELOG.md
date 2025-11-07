@@ -13,8 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [Agentic Search] Extract agent summary based on models ([#1633](https://github.com/opensearch-project/neural-search/pull/1633))
 
 ### Bug Fixes
-- [SEISMIC]: Resolve a security risk of Sparse ANN - Move 'index.sparse' validation from REST to transport layer. [PR1630](https://github.com/opensearch-project/neural-search/pull/1630)
-- [SEISMIC IT]: Fix some failed IT cases
+- [SEISMIC]: Resolve a security risk of Sparse ANN - Move 'index.sparse' validation from REST to transport layer. ([#1630](https://github.com/opensearch-project/neural-search/pull/1630))
+- [SEISMIC IT]: Fix some failed IT cases ([#1649](https://github.com/opensearch-project/neural-search/pull/1649))
 - [Hybrid Search]: Fix for hybrid search collapse bug when there are no documents in a shard ([#1647](https://github.com/opensearch-project/neural-search/pull/1647))
 
 ### Infrastructure
