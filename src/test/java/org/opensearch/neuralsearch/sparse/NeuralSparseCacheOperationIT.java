@@ -182,9 +182,13 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         double afterWarmUpSparseMemoryUsageSum = afterWarmUpSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
         assertTrue("Memory usage should increase after warm up", afterWarmUpSparseMemoryUsageSum > originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterWarmUpSparseMemoryUsageStats.size());
+        int nodesWithMemoryIncrease = 0;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
-            assertTrue(afterWarmUpSparseMemoryUsageStats.get(i) > originalSparseMemoryUsageStats.get(i));
+            if (afterWarmUpSparseMemoryUsageStats.get(i) > originalSparseMemoryUsageStats.get(i)) {
+                nodesWithMemoryIncrease++;
+            }
         }
+        assertEquals("At least data nodes should have memory increase", nodesWithMemoryIncrease, getDataNodeCount());
     }
 
     /**
@@ -220,9 +224,13 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
         double afterClearCacheSparseMemoryUsageSum = afterClearCacheSparseMemoryUsageStats.stream().mapToDouble(Double::doubleValue).sum();
         assertTrue("Memory usage should decrease after clear cache", afterClearCacheSparseMemoryUsageSum < originalSparseMemoryUsageSum);
         assertEquals(originalSparseMemoryUsageStats.size(), afterClearCacheSparseMemoryUsageStats.size());
+        int nodesWithMemoryDecrease = 0;
         for (int i = 0; i < originalSparseMemoryUsageStats.size(); i++) {
-            assertTrue(afterClearCacheSparseMemoryUsageStats.get(i) < originalSparseMemoryUsageStats.get(i));
+            if (afterClearCacheSparseMemoryUsageStats.get(i) < originalSparseMemoryUsageStats.get(i)) {
+                nodesWithMemoryDecrease++;
+            }
         }
+        assertEquals("At least data nodes should have memory decrease", nodesWithMemoryDecrease, getDataNodeCount());
     }
 
     /**
