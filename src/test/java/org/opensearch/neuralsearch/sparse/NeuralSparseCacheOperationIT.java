@@ -188,7 +188,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
                 nodesWithMemoryIncrease++;
             }
         }
-        assertEquals("At least data nodes should have memory increase", nodesWithMemoryIncrease, getDataNodeCount());
+        assertEquals("Only data nodes should have memory increase", nodesWithMemoryIncrease, getDataNodeCount());
     }
 
     /**
@@ -230,7 +230,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
                 nodesWithMemoryDecrease++;
             }
         }
-        assertEquals("At least data nodes should have memory decrease", nodesWithMemoryDecrease, getDataNodeCount());
+        assertEquals("Only data nodes should have memory decrease", nodesWithMemoryDecrease, getDataNodeCount());
     }
 
     /**
