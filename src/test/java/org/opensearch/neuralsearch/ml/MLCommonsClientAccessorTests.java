@@ -1913,6 +1913,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);
+    }
 
     public void testInferenceSentences_whenAsymmetricModel_thenUsesAlgoParams() {
         final List<List<Number>> vectorList = new ArrayList<>();

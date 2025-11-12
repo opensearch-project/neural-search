@@ -1,0 +1,21 @@
+{
+  "name": "asymmetric_text_embedding_model",
+  "version": "1.0.0",
+  "function_name": "TEXT_EMBEDDING",
+  "description": "Asymmetric text embedding model for testing query and passage embeddings",
+  "model_format": "TORCH_SCRIPT",
+  "model_group_id": "%s",
+  "model_content_hash_value": "e13b74006290a9d0f58c1376f9629d4ebc05a0f9385f40db837452b167ae9021",
+  "url": "https://github.com/opensearch-project/ml-commons/blob/2.x/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/text_embedding/traced_small_model.zip?raw=true",
+  "model_config": {
+    "model_type": "bert",
+    "framework_type": "sentence_transformers",
+    "embedding_dimension": 768,
+    "pooling_mode": "MEAN",
+    "normalize_result": true,
+    "all_config": "{\"architectures\":[\"BertModel\"],\"max_position_embeddings\":512,\"model_type\":\"bert\",\"num_attention_heads\":12,\"num_hidden_layers\":6}",
+    "additional_config": {
+      "space_type": "l2"
+    }
+  }
+}

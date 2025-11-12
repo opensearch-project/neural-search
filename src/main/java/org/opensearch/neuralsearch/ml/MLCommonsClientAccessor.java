@@ -34,8 +34,6 @@ import java.util.stream.Collectors;
 import com.google.gson.Gson;
 
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.Nullable;
-import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
