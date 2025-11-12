@@ -241,7 +241,6 @@ public class MLCommonsClientAccessor {
     /**
      * Extracts vectors from asymmetric remote embedding model response format.
      * Handles the simplified format used by asymmetric E5 remote embedding models: [[emb1], [emb2], [emb3]]
-     * This format is specific to our SageMaker E5 asymmetric model implementation.
      */
     private <T extends Number> List<List<T>> extractVectorsFromAsymmetricRemoteEmbeddingResponse(ModelTensor tensor) {
         final List<List<T>> vectors = new ArrayList<>();
