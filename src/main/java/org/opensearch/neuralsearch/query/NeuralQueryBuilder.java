@@ -20,6 +20,7 @@ import static org.opensearch.neuralsearch.common.VectorUtil.vectorAsListToArray;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.EMBEDDING_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_FIELD_NAME;
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.QUERY;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
 import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
 import static org.opensearch.neuralsearch.query.parser.NeuralQueryParser.modelIdToQueryTokensSupplierMapStreamInput;
@@ -108,6 +109,7 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.transport.RemoteClusterService;
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.QUERY;
 
 /**
  * NeuralQueryBuilder is responsible for producing "neural" query types. A "neural" query type is a wrapper around a
@@ -918,7 +920,7 @@ public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBu
 
         queryRewriteContext.registerAsyncAction(
             ((client, actionListener) -> ML_CLIENT.inferenceSentencesMap(
-                MapInferenceRequest.builder().modelId(modelId()).inputObjects(inferenceInput).build(),
+                MapInferenceRequest.builder().modelId(modelId()).inputObjects(inferenceInput).embeddingContentType(QUERY).build(),
                 ActionListener.wrap(floatList -> {
                     vectorSetOnce.set(vectorAsListToArray(floatList));
                     actionListener.onResponse(null);
@@ -1157,8 +1159,7 @@ public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBu
             modelIdToQueryTokensSupplierMap.put(modelId, setOnce::get);
             queryRewriteContext.registerAsyncAction(
                 ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
-                    TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(queryText)).build(),
-                    null,
+                    TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(queryText)).embeddingContentType(QUERY).build(),
                     ActionListener.wrap(mapResultList -> {
                         final Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                         if (isSparseTwoPhaseOne()) {
@@ -1186,7 +1187,7 @@ public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBu
             modelIdToVectorSupplierMap.put(modelId, vectorSetOnce::get);
             queryRewriteContext.registerAsyncAction(
                 ((client, actionListener) -> ML_CLIENT.inferenceSentencesMap(
-                    MapInferenceRequest.builder().modelId(modelId).inputObjects(inferenceInput).build(),
+                    MapInferenceRequest.builder().modelId(modelId).inputObjects(inferenceInput).embeddingContentType(QUERY).build(),
                     ActionListener.wrap(floatList -> {
                         vectorSetOnce.set(vectorAsListToArray(floatList));
                         actionListener.onResponse(null);
