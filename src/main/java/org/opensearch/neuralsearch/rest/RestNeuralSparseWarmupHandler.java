@@ -12,15 +12,12 @@ import com.google.common.collect.ImmutableList;
 import org.opensearch.transport.client.node.NodeClient;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.service.ClusterService;
-import org.opensearch.core.index.Index;
 import org.opensearch.rest.BaseRestHandler;
 import org.opensearch.rest.RestRequest;
 import org.opensearch.rest.action.RestToXContentListener;
 
 import java.util.List;
 import java.util.Locale;
-
-import static org.opensearch.action.support.IndicesOptions.strictExpandOpen;
 
 /**
  * RestHandler for SEISMIC index warmup API.
@@ -68,9 +65,6 @@ public class RestNeuralSparseWarmupHandler extends BaseRestHandler {
     // Create a warm up cache request by processing the rest request and validating the indices
     private NeuralSparseWarmupRequest createNeuralSparseWarmupRequest(RestRequest request) {
         String[] indexNames = Strings.splitStringByCommaToArray(request.param("index"));
-        Index[] indices = indexNameExpressionResolver.concreteIndices(clusterService.state(), strictExpandOpen(), indexNames);
-        RestUtils.validateSparseIndices(indices, clusterService, NAME);
-
         return new NeuralSparseWarmupRequest(indexNames);
     }
 }

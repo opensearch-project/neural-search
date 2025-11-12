@@ -29,16 +29,33 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_FLOAT_FIELD = "price";
     private static final String SEARCH_PIPELINE = "test-pipeline";
     private static final int DOCS_PER_GROUP_PER_SUBQUERY = 5;
+    private static final int NUMBER_OF_SHARDS_FIVE = 5;
+    private static final int NUMBER_OF_SHARDS_ONE = 1;
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        createTestIndex();
-        indexTestDocuments();
         createSearchPipeline(SEARCH_PIPELINE, "min_max", "arithmetic_mean", Map.of());
     }
 
-    public void testCollapse_whenE2E_thenSuccessful() {
+    public void testCollapse_withSingleShard_thenSuccessful() {
+        createTestIndex(NUMBER_OF_SHARDS_ONE);
+        indexTestDocuments();
+        testCollapse_whenE2E_thenSuccessful();
+        testCollapse_whenE2E_andSortEnabled_thenSuccessful();
+        testCollapse_whenE2EWithInnerHits_thenSuccessful();
+    }
+
+    public void testCollapse_withMultipleShard_thenSuccessful() {
+        createTestIndex(NUMBER_OF_SHARDS_FIVE);
+        indexTestDocuments();
+        testCollapse_whenE2E_thenSuccessful();
+        testCollapse_whenE2E_andSortEnabled_thenSuccessful();
+        testCollapse_whenE2EWithInnerHits_thenSuccessful();
+        testCollapse_whenShardHasNoDocuments_thenSuccessful();
+    }
+
+    private void testCollapse_whenE2E_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
 
@@ -67,7 +84,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
     }
 
-    public void testCollapse_whenE2E_andSortEnabled_thenSuccessful() {
+    private void testCollapse_whenE2E_andSortEnabled_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
 
@@ -98,7 +115,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         assertTrue(responseString.indexOf("Vanilla") < responseString.indexOf("Chocolate"));
     }
 
-    public void testCollapse_whenE2EWithInnerHits_thenSuccessful() {
+    private void testCollapse_whenE2EWithInnerHits_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
 
@@ -132,12 +149,43 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         assertTrue(responseString.contains("cheapest_items"));
     }
 
+    private void testCollapse_whenShardHasNoDocuments_thenSuccessful() {
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_1, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_2, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_1, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext
+        );
+
+        String collapseDuplicate = "Chocolate Cake";
+        assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
+    }
+
     @SneakyThrows
-    private void createTestIndex() {
+    private void createTestIndex(int numOfShards) {
         String indexConfiguration = XContentFactory.jsonBuilder()
             .startObject()
             .startObject("settings")
             .field(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), DOCS_PER_GROUP_PER_SUBQUERY)
+            .field("number_of_shards", numOfShards)
+            .field("number_of_replicas", 1)
             .endObject()
             .startObject("mappings")
             .startObject("properties")

@@ -17,6 +17,7 @@ import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.pipeline.AbstractProcessor;
 import org.opensearch.search.pipeline.Processor;
@@ -25,6 +26,7 @@ import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.core.action.ActionListener;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -149,8 +151,12 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
                     // Parse the agent response to get the new search source
                     BytesReference bytes = new BytesArray(dslQuery);
+                    List<SearchExtBuilder> originalExtBuilders = request.source() != null ? request.source().ext() : null;
                     try (XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry, null, bytes.streamInput())) {
                         SearchSourceBuilder newSourceBuilder = SearchSourceBuilder.fromXContent(parser);
+                        if (originalExtBuilders != null && !originalExtBuilders.isEmpty()) {
+                            newSourceBuilder.ext(originalExtBuilders);
+                        }
                         request.source(newSourceBuilder);
                     }
 

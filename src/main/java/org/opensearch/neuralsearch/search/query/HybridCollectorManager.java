@@ -11,6 +11,7 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.MultiCollector;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.SortField;
 import org.opensearch.common.Nullable;
@@ -26,7 +27,6 @@ import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollect
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.query.util.HybridSearchCollectorResultUtil;
 import org.opensearch.search.internal.SearchContext;
-import org.opensearch.search.query.MultiCollectorWrapper;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
 import org.opensearch.search.sort.SortAndFormats;
@@ -161,8 +161,8 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
     private List<HybridSearchCollector> getHybridSearchCollectors(final Collection<Collector> collectors) {
         final List<HybridSearchCollector> hybridSearchCollectors = new ArrayList<>();
         for (final Collector collector : collectors) {
-            if (collector instanceof MultiCollectorWrapper) {
-                for (final Collector sub : (((MultiCollectorWrapper) collector).getCollectors())) {
+            if (collector instanceof MultiCollector) {
+                for (final Collector sub : (((MultiCollector) collector).getCollectors())) {
                     if (sub instanceof HybridTopScoreDocCollector || sub instanceof HybridTopFieldDocSortCollector) {
                         hybridSearchCollectors.add((HybridSearchCollector) sub);
                     }

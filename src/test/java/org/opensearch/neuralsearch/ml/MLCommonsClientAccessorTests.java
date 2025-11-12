@@ -705,7 +705,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
 
         accessor.executeAgent(
             mockRequest,
@@ -744,7 +744,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
 
         accessor.executeAgent(
             mockRequest,
@@ -780,7 +780,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
 
         accessor.executeAgent(
             mockRequest,
@@ -911,7 +911,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false, "bedrock/converse/claude");
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -946,7 +946,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false, "bedrock/converse/claude");
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -981,7 +981,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false, "bedrock/converse/claude");
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -1012,7 +1012,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false, "bedrock/converse/claude");
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -1031,7 +1031,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false, "bedrock/converse/claude");
 
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
@@ -1052,7 +1052,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         when(mockQuery.getQueryText()).thenReturn("test query");
         when(mockQuery.getMemoryId()).thenReturn("test-memory-123");
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false, "bedrock/converse/claude");
 
         IllegalArgumentException exception = expectThrows(
             IllegalArgumentException.class,
@@ -1066,11 +1066,14 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
 
-        // Create proper conversational agent response format
-        String responseJson = "{\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}},\"agent_steps_summary\":\"test summary\"}";
-        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, null, Map.of("response", responseJson));
+        String agentStep =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"test summary\"},{\"toolUse\":{\"name\":\"QueryTool\"}}],\"role\":\"assistant\"}}}";
+        String finalResponse = "{\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}}}";
+        final ModelTensor agentStepTensor = new ModelTensor("response", null, null, null, null, agentStep, Map.of());
+        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, finalResponse, Map.of());
         final ModelTensor memoryTensor = new ModelTensor("memory_id", null, null, null, null, "test-memory-123", Map.of());
 
+        mlModelTensorList.add(agentStepTensor);
         mlModelTensorList.add(responseTensor);
         mlModelTensorList.add(memoryTensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
@@ -1321,7 +1324,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             return null;
         }).when(client).execute(any(), any(), any());
 
-        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false);
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false, "bedrock/converse/claude");
 
         accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, registry, listener);
 
@@ -1351,12 +1354,436 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         final List<ModelTensors> tensorsList = new ArrayList<>();
         final List<ModelTensor> mlModelTensorList = new ArrayList<>();
 
-        // Create proper conversational agent response format with trailing zeros
-        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, null, Map.of("response", responseJson));
+        String agentStep =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"test summary\"},{\"toolUse\":{\"name\":\"QueryTool\"}}],\"role\":\"assistant\"}}}";
+        final ModelTensor agentStepTensor = new ModelTensor("response", null, null, null, null, agentStep, Map.of());
+        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, responseJson, Map.of());
         final ModelTensor memoryTensor = new ModelTensor("memory_id", null, null, null, null, "test-memory-123", Map.of());
+
+        mlModelTensorList.add(agentStepTensor);
+        mlModelTensorList.add(responseTensor);
+        mlModelTensorList.add(memoryTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    public void testExecuteAgent_ConversationalAgentWithTextBeforeJSON() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with explanation text before JSON
+        String responseWithExplanation =
+            "Here is the query you requested: {\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}},\"agent_steps_summary\":\"test summary\"}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithClaudeFormat(responseWithExplanation));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+        assertEquals("test summary", result.getAgentStepsSummary());
+        assertEquals("test-memory-456", result.getMemoryId());
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_ConversationalAgentWithNoValidJSON() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with no valid JSON
+        String responseWithoutJSON = "Sorry, I couldn't generate a query for your request.";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithCustomText(responseWithoutJSON));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        IllegalArgumentException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("No valid 'dsl_query' found"));
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_ConversationalAgentWithMalformedJSON() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with malformed JSON (missing closing brace)
+        String responseWithMalformedJSON = "Here is the query: {\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithCustomText(responseWithMalformedJSON));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        IllegalArgumentException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("No valid 'dsl_query' found"));
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    public void testExecuteAgent_ConversationalAgentWithEmptyResponse() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Response with empty text (will be skipped, resulting in missing dsl_query)
+        String emptyResponse = "   ";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponseWithCustomText(emptyResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+
+        IllegalArgumentException exception = exceptionCaptor.getValue();
+        assertTrue(exception.getMessage().contains("No valid 'dsl_query' found"));
+        Mockito.verifyNoMoreInteractions(listener);
+    }
+
+    private ModelTensorOutput createConversationalAgentResponseWithCustomText(String responseText) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, responseText, Map.of());
+        final ModelTensor memoryTensor = new ModelTensor("memory_id", null, null, null, null, "test-memory-456", Map.of());
 
         mlModelTensorList.add(responseTensor);
         mlModelTensorList.add(memoryTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createConversationalAgentResponseWithClaudeFormat(String responseText) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        String agentStep =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"test summary\"},{\"toolUse\":{\"name\":\"QueryTool\"}}],\"role\":\"assistant\"}}}";
+        final ModelTensor agentStepTensor = new ModelTensor("response", null, null, null, null, agentStep, Map.of());
+        final ModelTensor responseTensor = new ModelTensor("response", null, null, null, null, responseText, Map.of());
+        final ModelTensor memoryTensor = new ModelTensor("memory_id", null, null, null, null, "test-memory-456", Map.of());
+
+        mlModelTensorList.add(agentStepTensor);
+        mlModelTensorList.add(responseTensor);
+        mlModelTensorList.add(memoryTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    public void testExecuteAgent_ClaudeWithToolUse_ExtractsAgentSteps() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("Find shoes under 200 dollars");
+
+        // Create Claude response with toolUse (agent step) and final response
+        String agentStepResponse =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"Now I'll use the QueryPlanningTool to generate the DSL for finding shows under $200.\"},{\"toolUse\":{\"input\":{\"question\":\"Find shows under 200 dollars\",\"index_name\":\"products-index\"},\"name\":\"QueryPlanningTool\",\"toolUseId\":\"tooluse_XaooYUw2Qg-bK8-bUqco3Q\",\"type\":\"tool_use\"}}],\"role\":\"assistant\"}}}";
+        String finalResponse =
+            "{\"dsl_query\":{\"query\":{\"bool\":{\"must\":[{\"match\":{\"category\":\"shoes\"}}],\"filter\":[{\"range\":{\"price\":{\"lt\":200}}}]}}}}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createClaudeAgentResponse(agentStepResponse, finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals(
+            "{\"query\":{\"bool\":{\"must\":[{\"match\":{\"category\":\"shoes\"}}],\"filter\":[{\"range\":{\"price\":{\"lt\":200}}}]}}}",
+            result.getDslQuery()
+        );
+        assertEquals("Now I'll use the QueryPlanningTool to generate the DSL for finding shows under $200.", result.getAgentStepsSummary());
+    }
+
+    public void testExecuteAgent_ClaudeWithoutToolUse_NoAgentSteps() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Create Claude response without toolUse (final response only)
+        String finalResponse =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"Here is your query\"}],\"role\":\"assistant\"}},\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}}}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createClaudeAgentResponseSingle(finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+        assertNull(result.getAgentStepsSummary());
+    }
+
+    public void testExecuteAgent_OpenAIWithToolCalls_ExtractsAgentSteps() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("Find products");
+
+        // Create OpenAI response with tool_calls (agent step) and final response
+        String agentStepResponse =
+            "{\"choices\":[{\"message\":{\"content\":\"I'll search for products using the query tool.\",\"tool_calls\":[{\"function\":{\"name\":\"query_tool\"}}]}}]}";
+        String finalResponse = "{\"dsl_query\":{\"query\":{\"match_all\":{}}}}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createOpenAIAgentResponse(agentStepResponse, finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "openai/v1/chat/completions");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match_all\":{}}}", result.getDslQuery());
+        assertEquals("I'll search for products using the query tool.", result.getAgentStepsSummary());
+    }
+
+    public void testExecuteAgent_OpenAIWithoutToolCalls_NoAgentSteps() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        // Create OpenAI response without tool_calls (final response only)
+        String finalResponse =
+            "{\"choices\":[{\"message\":{\"content\":\"Here is your query\"}}],\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}}}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createOpenAIAgentResponseSingle(finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "openai/v1/chat/completions");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+        assertNull(result.getAgentStepsSummary());
+    }
+
+    public void testExecuteAgent_ClaudeMultipleAgentSteps() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("complex query");
+
+        // Create Claude response with multiple agent steps
+        String step1 =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"First, I'll analyze the indices.\"},{\"toolUse\":{\"name\":\"IndexTool\"}}],\"role\":\"assistant\"}}}";
+        String step2 =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"Now I'll generate the query.\"},{\"toolUse\":{\"name\":\"QueryTool\"}}],\"role\":\"assistant\"}}}";
+        String finalResponse = "{\"dsl_query\":{\"query\":{\"match\":{\"field\":\"value\"}}}}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createClaudeAgentResponseMultiple(step1, step2, finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+        assertEquals("First, I'll analyze the indices.\nNow I'll generate the query.", result.getAgentStepsSummary());
+    }
+
+    private ModelTensorOutput createClaudeAgentResponse(String agentStepResponse, String finalResponse) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        final ModelTensor agentStepTensor = new ModelTensor("response", null, null, null, null, agentStepResponse, Map.of());
+        final ModelTensor finalTensor = new ModelTensor("response", null, null, null, null, finalResponse, Map.of());
+
+        mlModelTensorList.add(agentStepTensor);
+        mlModelTensorList.add(finalTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createClaudeAgentResponseSingle(String response) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, response, Map.of());
+        mlModelTensorList.add(tensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createClaudeAgentResponseMultiple(String step1, String step2, String finalResponse) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        final ModelTensor step1Tensor = new ModelTensor("response", null, null, null, null, step1, Map.of());
+        final ModelTensor step2Tensor = new ModelTensor("response", null, null, null, null, step2, Map.of());
+        final ModelTensor finalTensor = new ModelTensor("response", null, null, null, null, finalResponse, Map.of());
+
+        mlModelTensorList.add(step1Tensor);
+        mlModelTensorList.add(step2Tensor);
+        mlModelTensorList.add(finalTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createOpenAIAgentResponse(String agentStepResponse, String finalResponse) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        final ModelTensor agentStepTensor = new ModelTensor("response", null, null, null, null, agentStepResponse, Map.of());
+        final ModelTensor finalTensor = new ModelTensor("response", null, null, null, null, finalResponse, Map.of());
+
+        mlModelTensorList.add(agentStepTensor);
+        mlModelTensorList.add(finalTensor);
+        final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
+        tensorsList.add(modelTensors);
+        return new ModelTensorOutput(tensorsList);
+    }
+
+    private ModelTensorOutput createOpenAIAgentResponseSingle(String response) {
+        final List<ModelTensors> tensorsList = new ArrayList<>();
+        final List<ModelTensor> mlModelTensorList = new ArrayList<>();
+
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, response, Map.of());
+        mlModelTensorList.add(tensor);
         final ModelTensors modelTensors = new ModelTensors(mlModelTensorList);
         tensorsList.add(modelTensors);
         return new ModelTensorOutput(tensorsList);

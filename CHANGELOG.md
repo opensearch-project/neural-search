@@ -8,11 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 
 ### Enhancements
+- [Agentic Search] Add conversation search support with agentic search ([#1626](https://github.com/opensearch-project/neural-search/pull/1626))
+- [Agentic Search] Extract JSON from Agent Response ([#1631](https://github.com/opensearch-project/neural-search/pull/1631))
+- [Agentic Search] Extract agent summary based on models ([#1633](https://github.com/opensearch-project/neural-search/pull/1633))
 
 ### Bug Fixes
 - Fix flaky test in `NeuralQueryEnricherProcessorIT` by waiting for model deployment ([#1617](https://github.com/opensearch-project/neural-search/pull/1617))
+- [SEISMIC]: Resolve a security risk of Sparse ANN - Move 'index.sparse' validation from REST to transport layer. ([#1630](https://github.com/opensearch-project/neural-search/pull/1630))
+- [SEISMIC IT]: Fix some failed IT cases ([#1649](https://github.com/opensearch-project/neural-search/pull/1649))
+- [Hybrid Search]: Fix for hybrid search collapse bug when there are no documents in a shard ([#1647](https://github.com/opensearch-project/neural-search/pull/1647))
 
 ### Infrastructure
+- Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))
 
 ### Documentation
 
