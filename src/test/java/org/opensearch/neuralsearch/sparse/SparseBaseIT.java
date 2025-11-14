@@ -22,18 +22,8 @@ import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
-
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_SEARCH;
-import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 
 /**
  * Base Integration tests for seismic feature
