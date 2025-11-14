@@ -299,7 +299,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     public void testSeismicIndexWithDocDeletion() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             NON_SPARSE_TEST_INDEX_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -335,7 +335,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     public void testSeismicIndexWithDocUpdate() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             NON_SPARSE_TEST_INDEX_NAME,
             TEST_SPARSE_FIELD_NAME,

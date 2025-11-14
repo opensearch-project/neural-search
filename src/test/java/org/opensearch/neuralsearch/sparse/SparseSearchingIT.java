@@ -13,6 +13,7 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.neuralsearch.SparseTestCommon;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 
@@ -43,7 +44,7 @@ public class SparseSearchingIT extends SparseBaseIT {
     public void testSearchDocumentsAllSeismicPostingPruning() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -162,7 +163,7 @@ public class SparseSearchingIT extends SparseBaseIT {
     public void testSearchDocumentsAllSeismicWithCut() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -200,7 +201,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         List<Map<String, Float>> docs = prepareIngestDocuments(docCount);
 
-        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs);
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs);
 
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
             TEST_SPARSE_FIELD_NAME,
@@ -229,7 +230,7 @@ public class SparseSearchingIT extends SparseBaseIT {
     public void testSearchDocumentsAllSeismicWithPreFiltering() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -286,7 +287,7 @@ public class SparseSearchingIT extends SparseBaseIT {
     public void testSearchDocumentsAllSeismicWithPostFiltering() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -381,7 +382,7 @@ public class SparseSearchingIT extends SparseBaseIT {
                 text.add("tree");
             }
         }
-        List<String> routingIds = generateUniqueRoutingIds(shards);
+        List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
         for (int i = 0; i < shards; ++i) {
             ingestDocuments(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs, text, i * docCount + 1, routingIds.get(i));
         }
@@ -413,7 +414,7 @@ public class SparseSearchingIT extends SparseBaseIT {
     public void testSearchDocumentsWithTwoPhaseSearchProcessorThenThrowException() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -482,7 +483,7 @@ public class SparseSearchingIT extends SparseBaseIT {
     public void testQuerySeismicWithAnalyzer() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 1.0f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -579,7 +580,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         Response response = client().performRequest(request);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,

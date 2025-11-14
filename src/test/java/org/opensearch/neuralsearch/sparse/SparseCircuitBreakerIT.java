@@ -96,8 +96,8 @@ public class SparseCircuitBreakerIT extends SparseBaseIT {
         );
 
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, 100);
-        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs1);
-        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs2);
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs1);
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs2);
 
         MatchAllQueryBuilder matchAllQueryBuilder = new MatchAllQueryBuilder();
         Map<String, Object> expectedHits = getTotalHits(search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10));
@@ -106,9 +106,9 @@ public class SparseCircuitBreakerIT extends SparseBaseIT {
         // Delete index, ingest half documents and enable cache eviction by setting circuit breaker limit to zero
         deleteIndex(TEST_INDEX_NAME);
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 100, 0.4f, 0.1f, 100);
-        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs1);
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs1);
         updateClusterSettings(NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT.getKey(), "0%");
-        ingestDocumentsAndForceMerge(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs2);
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs2);
 
         Map<String, Object> hits = getTotalHits(search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10));
         Map<String, Object> ingestedDocuments = getTotalHits(search(TEST_INDEX_NAME, matchAllQueryBuilder, 200));
@@ -130,7 +130,7 @@ public class SparseCircuitBreakerIT extends SparseBaseIT {
         NeuralSparseQueryBuilder neuralSparseQueryBuilder
     ) {
         createSparseIndex(indexName, sparseField, nPostings, alpha, clusterRatio, approximateThreshold);
-        ingestDocumentsAndForceMerge(indexName, textField, sparseField, docs);
+        ingestDocumentsAndForceMergeForSingleShard(indexName, textField, sparseField, docs);
 
         // Verify that without cache, the search results remain the same
         return getTotalHits(search(indexName, neuralSparseQueryBuilder, 10));
