@@ -37,6 +37,12 @@ runs:
 
         # Remove CodeQL
         rm -rf /__t/CodeQL || true
+        
+        # Remove Node
+        rm -rf /__t/node || true
+       
+        # Remove Ruby
+        rm -rf /__t/Ruby || true
 
         # Remove Go
         if [[ "${{ inputs.remove-go }}" == "true" ]]; then
@@ -51,10 +57,11 @@ runs:
         # Remove Python
         if [[ "${{ inputs.remove-python }}" == "true" ]]; then
           rm -rf /__t/Python || true
+          rm -rf /__t/PyPy || true
         fi
 
       shell: bash
 
     - name: Check final disk space
-      run: df -h
+      run: du -sh /__t/* && df -h
       shell: bash
