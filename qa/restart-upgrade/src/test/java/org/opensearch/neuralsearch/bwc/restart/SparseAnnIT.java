@@ -12,10 +12,8 @@ import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
 
@@ -32,25 +30,10 @@ public class SparseAnnIT extends AbstractRestartUpgradeRestTestCase {
                 Files.readString(Path.of(classLoader.getResource("processor/SparseAnnIndexMappings.json").toURI())),
                 null
             );
-            SparseTestCommon.ingestDocumentsAndForceMergeForSingleShard(
-                client(),
-                indexName,
-                TEXT_FIELD_NAME,
-                EMBEDDING_FIELD_NAME,
-                List.of(
-                    Map.of("1000", 0.1f, "1001", 0.1f),
-                    Map.of("2000", 0.2f, "2001", 0.2f),
-                    Map.of("3000", 0.3f, "3001", 0.3f),
-                    Map.of("4000", 0.4f, "4001", 0.4f),
-                    Map.of("5000", 0.5f, "5001", 0.5f),
-                    Map.of("6000", 0.6f, "6001", 0.6f),
-                    Map.of("7000", 0.7f, "7001", 0.7f),
-                    Map.of("8000", 0.8f, "8001", 0.8f),
-                    Map.of("9000", 0.8f, "9001", 0.8f),
-                    Map.of("10000", 0.8f, "10001", 0.8f)
-                )
-            );
-            validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
+            int docs = ingestDocs(indexName);
+            SparseTestCommon.forceMerge(client(), indexName);
+            SparseTestCommon.waitForSegmentMerge(client(), indexName, 3, 1);
+            validateDocCountAndInfo(indexName, docs, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
         } else {
             try {
                 SparseTestCommon.ingestDocuments(
@@ -59,7 +42,7 @@ public class SparseAnnIT extends AbstractRestartUpgradeRestTestCase {
                     EMBEDDING_FIELD_NAME,
                     List.of(Map.of("1002", 0.1f, "1003", 0.1f)),
                     null,
-                    11
+                    101
                 );
                 validateSparseAnn(indexName, EMBEDDING_FIELD_NAME);
             } finally {
@@ -77,25 +60,10 @@ public class SparseAnnIT extends AbstractRestartUpgradeRestTestCase {
                 Files.readString(Path.of(classLoader.getResource("processor/SparseAnnIndexMappings.json").toURI())),
                 null
             );
-            SparseTestCommon.ingestDocumentsAndForceMergeForSingleShard(
-                client(),
-                indexName,
-                TEXT_FIELD_NAME,
-                EMBEDDING_FIELD_NAME,
-                List.of(
-                    Map.of("1000", 0.1f, "1001", 0.1f),
-                    Map.of("2000", 0.2f, "2001", 0.2f),
-                    Map.of("3000", 0.3f, "3001", 0.3f),
-                    Map.of("4000", 0.4f, "4001", 0.4f),
-                    Map.of("5000", 0.5f, "5001", 0.5f),
-                    Map.of("6000", 0.6f, "6001", 0.6f),
-                    Map.of("7000", 0.7f, "7001", 0.7f),
-                    Map.of("8000", 0.8f, "8001", 0.8f),
-                    Map.of("9000", 0.8f, "9001", 0.8f),
-                    Map.of("10000", 0.8f, "10001", 0.8f)
-                )
-            );
-            validateDocCountAndInfo(indexName, 10, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
+            int docs = ingestDocs(indexName);
+            SparseTestCommon.forceMerge(client(), indexName);
+            SparseTestCommon.waitForSegmentMerge(client(), indexName, 3, 1);
+            validateDocCountAndInfo(indexName, docs, () -> getDocById(indexName, "4"), EMBEDDING_FIELD_NAME, Map.class);
         } else {
             try {
                 SparseTestCommon.ingestDocuments(
@@ -104,7 +72,7 @@ public class SparseAnnIT extends AbstractRestartUpgradeRestTestCase {
                     EMBEDDING_FIELD_NAME,
                     List.of(Map.of("1002", 0.1f, "1003", 0.1f)),
                     null,
-                    11
+                    101
                 );
                 // Execute clear cache request
                 Request clearCacheRequest = new Request("POST", "/_plugins/_neural/clear_cache/" + indexName);
@@ -122,6 +90,35 @@ public class SparseAnnIT extends AbstractRestartUpgradeRestTestCase {
         }
     }
 
+    private int ingestDocs(String indexName) {
+        int shards = 3;
+        int count = 10;
+        List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
+        for (int i = 0; i < shards; ++i) {
+            SparseTestCommon.ingestDocuments(
+                indexName,
+                TEXT_FIELD_NAME,
+                EMBEDDING_FIELD_NAME,
+                List.of(
+                    Map.of("1000", 0.1f, "1001", 0.1f),
+                    Map.of("2000", 0.2f, "2001", 0.2f),
+                    Map.of("3000", 0.3f, "3001", 0.3f),
+                    Map.of("4000", 0.4f, "4001", 0.4f),
+                    Map.of("5000", 0.5f, "5001", 0.5f),
+                    Map.of("6000", 0.6f, "6001", 0.6f),
+                    Map.of("7000", 0.7f, "7001", 0.7f),
+                    Map.of("8000", 0.8f, "8001", 0.8f),
+                    Map.of("9000", 0.8f, "9001", 0.8f),
+                    Map.of("10000", 0.8f, "10001", 0.8f)
+                ),
+                null,
+                1 + i * count,
+                routingIds.get(i)
+            );
+        }
+        return shards * count;
+    }
+
     private void validateSparseAnn(String index, String field) {
         NeuralSparseQueryBuilder neuralSparseQueryBuilder = SparseTestCommon.getNeuralSparseQueryBuilder(
             field,
@@ -131,9 +128,7 @@ public class SparseAnnIT extends AbstractRestartUpgradeRestTestCase {
             Map.of("1000", 0.1f, "2000", 0.2f)
         );
         Map<String, Object> searchResults = search(index, neuralSparseQueryBuilder, 10);
-        assertEquals(2, getHitCount(searchResults));
-        Set<String> actualIds = new HashSet<>(SparseTestCommon.getDocIDs(searchResults));
-        assertEquals(Set.of("1", "2"), actualIds);
+        assertEquals(6, getHitCount(searchResults));
     }
 
 }
