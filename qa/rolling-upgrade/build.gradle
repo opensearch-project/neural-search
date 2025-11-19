@@ -67,6 +67,8 @@ def versionsBelow2_19 = versionsBelow2_18 + "2.18"
 def versionsBelow2_20 = versionsBelow2_19 + "2.19"
 def versionsBelow3_0 = versionsBelow2_20 + "2.20"
 def versionsBelow3_1 = versionsBelow3_0 + "3.0"
+def versionsBelow3_2 = versionsBelow3_1 + "3.1"
+def versionsBelow3_3 = versionsBelow3_2 + "3.2"
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
@@ -102,6 +104,13 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     if (ext.neural_search_bwc_version == "3.0.0") {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
+        }
+    }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
         }
     }
 }
@@ -157,6 +166,13 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
         }
     }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
+        }
+    }
 }
 
 // Part of rolling upgrade. Upgrades the second node to new OpenSearch version with upgraded plugin version after the
@@ -206,6 +222,13 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     if (ext.neural_search_bwc_version == "3.0.0") {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
+        }
+    }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
         }
     }
 }
@@ -258,6 +281,13 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     if (ext.neural_search_bwc_version == "3.0.0") {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
+        }
+    }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
         }
     }
 }

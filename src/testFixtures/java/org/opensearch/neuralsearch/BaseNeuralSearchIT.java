@@ -59,6 +59,7 @@ import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.collapse.CollapseContext;
@@ -97,8 +98,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUE
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
-
-import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
@@ -1312,12 +1311,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void bulkIngest(final String ingestBulkPayload, final String pipeline) {
+    public static void bulkIngest(final String ingestBulkPayload, final String pipeline) {
         bulkIngest(ingestBulkPayload, pipeline, null);
     }
 
     @SneakyThrows
-    protected void bulkIngest(final String ingestBulkPayload, final String pipeline, final String routing) {
+    public static void bulkIngest(final String ingestBulkPayload, final String pipeline, final String routing) {
         Map<String, String> params = new HashMap<>();
         params.put("refresh", "true");
         if (Objects.nonNull(pipeline)) {
@@ -1789,7 +1788,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return xContentBuilder.toString();
     }
 
-    protected static Response makeRequest(
+    public static Response makeRequest(
         RestClient client,
         String method,
         String endpoint,
@@ -1800,7 +1799,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return makeRequest(client, method, endpoint, params, entity, headers, false);
     }
 
-    protected static Response makeRequest(
+    public static Response makeRequest(
         RestClient client,
         String method,
         String endpoint,
@@ -1827,7 +1826,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return client.performRequest(request);
     }
 
-    protected static HttpEntity toHttpEntity(String jsonString) {
+    public static HttpEntity toHttpEntity(String jsonString) {
         return new StringEntity(jsonString, ContentType.APPLICATION_JSON);
     }
 
