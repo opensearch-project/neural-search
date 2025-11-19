@@ -268,9 +268,9 @@ dependencies {
 
     // gRPC transport dependencies for HybridQuery support
     compileOnly "org.opensearch.plugin:transport-grpc-spi:${opensearch_version}"
-    compileOnly "org.opensearch:protobufs:${versions.opensearchprotobufs}"
+    compileOnly "org.opensearch:protobufs:0.24.0-SNAPSHOT"
     testImplementation "org.opensearch.plugin:transport-grpc-spi:${opensearch_version}"
-    testImplementation "org.opensearch:protobufs:${versions.opensearchprotobufs}"
+    testImplementation "org.opensearch:protobufs:0.24.0-SNAPSHOT"
     compileOnly (group: 'com.google.guava', name: 'guava', version:'32.1.3-jre') {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
