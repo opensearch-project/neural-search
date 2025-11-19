@@ -329,6 +329,7 @@ compileTestFixturesJava {
 }
 
 def _numNodes = findProperty('numNodes') as Integer ?: 1
+def _configureNodeRoles = findProperty('configureNodeRoles') as Boolean ?: false
 
 test {
     include '**/*Tests.class'
@@ -416,6 +417,19 @@ testClusters.integTest {
     plugin(project.tasks.bundlePlugin.archiveFile)
     // Cluster shrink exception thrown if we try to set numberOfNodes to 1, so only apply if > 1
     if (_numNodes > 1) numberOfNodes = _numNodes
+
+    // Configure node roles if enabled
+    if (_configureNodeRoles && _numNodes > 1) {
+        nodes.eachWithIndex { node, index ->
+            if (index == 0) {
+                node.setting('node.roles', '["cluster_manager"]')
+            } else if (index == 1) {
+                node.setting('node.roles', '["cluster_manager", "data", "ingest", "ml"]')
+            } else {
+                node.setting('node.roles', '["data", "ingest"]')
+            }
+        }
+    }
     // When running integration tests it doesn't forward the --debug-jvm to the cluster anymore
     // i.e. we have to use a custom property to flag when we want to debug opensearch JVM
     // since we also support multi node integration tests we increase debugPort per node
