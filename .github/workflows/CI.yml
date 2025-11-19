@@ -137,7 +137,7 @@ jobs:
           java: [ 21 ]
           os: [ ubuntu-latest ]
           configureNodeRoles: [ false, true ]
-      name: Multi-Node Integ Test JDK${{ matrix.java }}, roles=${{ matrix.configureNodeRoles }}
+      name: Multi-Node Integ Test JDK${{ matrix.java }}, With Role Assignment ${{ matrix.configureNodeRoles }}
       runs-on: ${{ matrix.os }}
       steps:
         - uses: actions/checkout@v4
