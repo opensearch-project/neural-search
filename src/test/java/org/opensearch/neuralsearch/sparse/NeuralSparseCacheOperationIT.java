@@ -13,6 +13,7 @@ import org.opensearch.client.Response;
 import org.opensearch.client.ResponseException;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.neuralsearch.SparseTestCommon;
 
 import java.util.List;
 import java.util.Map;
@@ -188,7 +189,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
                 nodesWithMemoryIncrease++;
             }
         }
-        assertEquals("Only data nodes should have memory increase", nodesWithMemoryIncrease, getDataNodeCount());
+        assertEquals("Only data nodes should have memory increase", nodesWithMemoryIncrease, SparseTestCommon.getDataNodeCount(client()));
     }
 
     /**
@@ -230,7 +231,7 @@ public class NeuralSparseCacheOperationIT extends SparseBaseIT {
                 nodesWithMemoryDecrease++;
             }
         }
-        assertEquals("Only data nodes should have memory decrease", nodesWithMemoryDecrease, getDataNodeCount());
+        assertEquals("Only data nodes should have memory decrease", nodesWithMemoryDecrease, SparseTestCommon.getDataNodeCount(client()));
     }
 
     /**
