@@ -157,12 +157,13 @@ ext {
 allprojects {
     group = opensearch_group
     version = "${opensearch_build}"
-    targetCompatibility = JavaVersion.VERSION_21
-    sourceCompatibility = JavaVersion.VERSION_21
 
     apply from: rootProject.file('repositories.gradle').absoluteFile
     plugins.withId('java') {
-        sourceCompatibility = targetCompatibility = JavaVersion.VERSION_21
+        java {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+        }
     }
 
     configurations.all {
@@ -586,8 +587,8 @@ task remoteModelIntegTest(type: RestIntegTestTask) {
 
     // Generate separate test report
     reports {
-        html.destination = file("$buildDir/reports/remote-model-tests")
-        junitXml.destination = file("$buildDir/test-results/remote-model-tests")
+        html.outputLocation = file("$buildDir/reports/remote-model-tests")
+        junitXml.outputLocation = file("$buildDir/test-results/remote-model-tests")
     }
 }
 
