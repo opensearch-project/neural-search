@@ -157,12 +157,13 @@ ext {
 allprojects {
     group = opensearch_group
     version = "${opensearch_build}"
-    targetCompatibility = JavaVersion.VERSION_21
-    sourceCompatibility = JavaVersion.VERSION_21
 
     apply from: rootProject.file('repositories.gradle').absoluteFile
     plugins.withId('java') {
-        sourceCompatibility = targetCompatibility = JavaVersion.VERSION_21
+        java {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+        }
     }
 
     configurations.all {
@@ -559,19 +560,20 @@ task remoteModelIntegTest(type: RestIntegTestTask) {
 
         // Start TorchServe and setup all discovered models
         println "Setting up TorchServe and deploying all models..."
-        exec {
-            commandLine runScript.absolutePath, "lifecycle", "setup"
-            standardOutput = System.out
-            errorOutput = System.err
-        }
+        providers.exec {
+            commandLine(runScript.absolutePath, "lifecycle", "setup")
+        }.result.get().assertNormalExitValue()
     }
 
     doLast {
         // Teardown TorchServe
         println "Stopping TorchServe..."
-        exec {
-            commandLine runScript.absolutePath, "lifecycle", "teardown"
-            ignoreExitValue true  // Do not fail if already stopped
+        try {
+            providers.exec {
+                commandLine(runScript.absolutePath, "lifecycle", "teardown")
+            }.result.get().assertNormalExitValue()
+        } catch (Exception e) {
+            // Do not fail if already stopped
         }
     }
 
@@ -586,8 +588,8 @@ task remoteModelIntegTest(type: RestIntegTestTask) {
 
     // Generate separate test report
     reports {
-        html.destination = file("$buildDir/reports/remote-model-tests")
-        junitXml.destination = file("$buildDir/test-results/remote-model-tests")
+        html.outputLocation = file("$buildDir/reports/remote-model-tests")
+        junitXml.outputLocation = file("$buildDir/test-results/remote-model-tests")
     }
 }
 

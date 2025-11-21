@@ -19,5 +19,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Documentation
 
 ### Maintenance
+- Update to Gradle 9.2 and run CI checks with JDK 25 ([#1667](https://github.com/opensearch-project/neural-search/pull/1667))
 
 ### Refactoring
