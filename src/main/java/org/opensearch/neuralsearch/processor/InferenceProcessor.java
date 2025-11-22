@@ -350,7 +350,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
                 buildNestedMap(originalKey, targetKey, sourceAndMetadataMap, treeRes);
                 mapWithProcessorKeys.put(originalKey, treeRes.get(originalKey));
             } else {
-                mapWithProcessorKeys.put(String.valueOf(targetKey), sourceAndMetadataMap.get(originalKey));
+                mapWithProcessorKeys.put(String.valueOf(targetKey), normalizeSourceValue(sourceAndMetadataMap.get(originalKey)));
             }
         }
         return mapWithProcessorKeys;
@@ -388,8 +388,9 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             }
             treeRes.merge(parentKey, next, REMAPPING_FUNCTION);
         } else {
+            Object parentValue = sourceAndMetadataMap.get(parentKey);
             String key = String.valueOf(processorKey);
-            treeRes.put(key, sourceAndMetadataMap.get(parentKey));
+            treeRes.put(key, normalizeSourceValue(parentValue));
         }
     }
 
@@ -434,7 +435,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             indexName,
             clusterService,
             environment,
-            false
+            true
         );
     }
 

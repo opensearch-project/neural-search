@@ -1068,6 +1068,66 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         }
     }
 
+    public void testExecute_withPlainString_EmptyString_skipped() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put(KEY1, "");
+        sourceAndMetadata.put(KEY2, VALUE2);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        SparseEncodingProcessor processor = createInstance(false);
+
+        List<Map<String, ?>> dataAsMapList = createMockMapResult(1);
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onResponse(dataAsMapList);
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(
+                argThat(request -> request.getInputTexts().size() == 1 && request.getInputTexts().get(0).equals(VALUE2)),
+                isNull(),
+                isA(ActionListener.class)
+            );
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
+
+        assertFalse(ingestDocument.getSourceAndMetadata().containsKey(KEY1_MAPPED));
+        assertTrue(ingestDocument.getSourceAndMetadata().containsKey(KEY2_MAPPED));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testExecute_withNestedField_EmptyString_skipped() {
+        Map<String, String> map1 = new HashMap<>();
+        map1.put("test1", "");
+        Map<String, String> map2 = new HashMap<>();
+        map2.put("test4", "test5");
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put(KEY1, map1);
+        sourceAndMetadata.put(KEY2, map2);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        SparseEncodingProcessor processor = createNestedTypeInstance(false);
+
+        List<Map<String, ?>> dataAsMapList = createMockMapResult(1);
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onResponse(dataAsMapList);
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts().size() == 1), isNull(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
+
+        Map<String, Object> key1Map = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get(KEY1);
+        assertFalse(key1Map.containsKey("test1_knn"));
+
+        Map<String, Object> key2Map = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get(KEY2);
+        assertTrue(key2Map.containsKey("test4_knn"));
+    }
+
     private List<Map<String, ?>> createMockMapResult(int number) {
         List<Map<String, Float>> mockSparseEncodingResult = new ArrayList<>();
         IntStream.range(0, number)
