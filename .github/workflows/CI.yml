@@ -136,7 +136,8 @@ jobs:
         matrix:
           java: [ 21 ]
           os: [ ubuntu-latest ]
-      name: Multi-Node Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
+          configureNodeRoles: [ false, true ]
+      name: Multi-Node Integ Test JDK${{ matrix.java }}, With Role Assignment ${{ matrix.configureNodeRoles }}
       runs-on: ${{ matrix.os }}
       steps:
         - uses: actions/checkout@v4
@@ -147,4 +148,4 @@ jobs:
             distribution: temurin
         - name: Build and Run Tests
           run: |
-            ./gradlew integTest -PnumNodes=3
+            ./gradlew integTest -PnumNodes=3 -PconfigureNodeRoles=${{ matrix.configureNodeRoles }}
