@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 - [SEISMIC IT]: Fix some failed IT cases ([#1655](https://github.com/opensearch-project/neural-search/pull/1655))
+- Revert change in ([#1086](https://github.com/opensearch-project/neural-search/pull/1086)) to add support for empty string ([#1668](https://github.com/opensearch-project/neural-search/pull/1668))
 
 ### Infrastructure
 - Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))
