@@ -157,12 +157,13 @@ ext {
 allprojects {
     group = opensearch_group
     version = "${opensearch_build}"
-    targetCompatibility = JavaVersion.VERSION_21
-    sourceCompatibility = JavaVersion.VERSION_21
 
     apply from: rootProject.file('repositories.gradle').absoluteFile
     plugins.withId('java') {
-        sourceCompatibility = targetCompatibility = JavaVersion.VERSION_21
+        java {
+            sourceCompatibility = JavaVersion.VERSION_21
+            targetCompatibility = JavaVersion.VERSION_21
+        }
     }
 
     configurations.all {
@@ -329,6 +330,7 @@ compileTestFixturesJava {
 }
 
 def _numNodes = findProperty('numNodes') as Integer ?: 1
+def _configureNodeRoles = findProperty('configureNodeRoles') as Boolean ?: false
 
 test {
     include '**/*Tests.class'
@@ -416,6 +418,19 @@ testClusters.integTest {
     plugin(project.tasks.bundlePlugin.archiveFile)
     // Cluster shrink exception thrown if we try to set numberOfNodes to 1, so only apply if > 1
     if (_numNodes > 1) numberOfNodes = _numNodes
+
+    // Configure node roles if enabled
+    if (_configureNodeRoles && _numNodes > 1) {
+        nodes.eachWithIndex { node, index ->
+            if (index == 0) {
+                node.setting('node.roles', '["cluster_manager"]')
+            } else if (index == 1) {
+                node.setting('node.roles', '["cluster_manager", "data", "ingest", "ml"]')
+            } else {
+                node.setting('node.roles', '["data", "ingest"]')
+            }
+        }
+    }
     // When running integration tests it doesn't forward the --debug-jvm to the cluster anymore
     // i.e. we have to use a custom property to flag when we want to debug opensearch JVM
     // since we also support multi node integration tests we increase debugPort per node
@@ -559,19 +574,20 @@ task remoteModelIntegTest(type: RestIntegTestTask) {
 
         // Start TorchServe and setup all discovered models
         println "Setting up TorchServe and deploying all models..."
-        exec {
-            commandLine runScript.absolutePath, "lifecycle", "setup"
-            standardOutput = System.out
-            errorOutput = System.err
-        }
+        providers.exec {
+            commandLine(runScript.absolutePath, "lifecycle", "setup")
+        }.result.get().assertNormalExitValue()
     }
 
     doLast {
         // Teardown TorchServe
         println "Stopping TorchServe..."
-        exec {
-            commandLine runScript.absolutePath, "lifecycle", "teardown"
-            ignoreExitValue true  // Do not fail if already stopped
+        try {
+            providers.exec {
+                commandLine(runScript.absolutePath, "lifecycle", "teardown")
+            }.result.get().assertNormalExitValue()
+        } catch (Exception e) {
+            // Do not fail if already stopped
         }
     }
 
@@ -586,8 +602,8 @@ task remoteModelIntegTest(type: RestIntegTestTask) {
 
     // Generate separate test report
     reports {
-        html.destination = file("$buildDir/reports/remote-model-tests")
-        junitXml.destination = file("$buildDir/test-results/remote-model-tests")
+        html.outputLocation = file("$buildDir/reports/remote-model-tests")
+        junitXml.outputLocation = file("$buildDir/test-results/remote-model-tests")
     }
 }
 

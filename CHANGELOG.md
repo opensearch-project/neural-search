@@ -16,9 +16,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Infrastructure
 - Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))
 - Add BWC tests for Sparse ANN Seismic feature ([#1657](https://github.com/opensearch-project/neural-search/pull/1657))
+- Add role assignment multi-node integ testing in CI ([#1663](https://github.com/opensearch-project/neural-search/pull/1663)) 
 
 ### Documentation
 
 ### Maintenance
+- Update to Gradle 9.2 and run CI checks with JDK 25 ([#1667](https://github.com/opensearch-project/neural-search/pull/1667))
 
 ### Refactoring
