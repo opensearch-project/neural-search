@@ -11,12 +11,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 - [SEISMIC IT]: Fix some failed IT cases ([#1655](https://github.com/opensearch-project/neural-search/pull/1655))
+- [SEISMIC Query]: Sparse ANN query handle non-specified method_parameters ([#1674](https://github.com/opensearch-project/neural-search/pull/1674))
 - Revert change in ([#1086](https://github.com/opensearch-project/neural-search/pull/1086)) to add support for empty string ([#1668](https://github.com/opensearch-project/neural-search/pull/1668))
 
 ### Infrastructure
 - Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))
 - Add BWC tests for Sparse ANN Seismic feature ([#1657](https://github.com/opensearch-project/neural-search/pull/1657))
-- Add role assignment multi-node integ testing in CI ([#1663](https://github.com/opensearch-project/neural-search/pull/1663)) 
+- Add role assignment multi-node integ testing in CI ([#1663](https://github.com/opensearch-project/neural-search/pull/1663))
 
 ### Documentation
 
