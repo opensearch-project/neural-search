@@ -1038,7 +1038,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         PayloadAttribute payload = mock(PayloadAttribute.class);
         when(tokenStream.addAttribute(eq(PayloadAttribute.class))).thenReturn(payload);
         when(tokenStream.incrementToken()).thenReturn(true, true, false);
-        when(term.toString()).thenReturn("hello", "world");
+        when(term.toString()).thenReturn("1000", "2000");
 
         when(payload.getPayload()).thenReturn(
             new BytesRef(ByteBuffer.allocate(4).putFloat(1.0f).array()),
@@ -1046,11 +1046,14 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         );
 
         BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "1000", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "2000", 2.f), BooleanClause.Occur.SHOULD);
+
         Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
-        verify(typeAttr).setType(eq(SparseEmbeddingFormat.TOKEN_ID.toString()));
-        assertEquals(query, targetQueryBuilder.build());
+        assertTrue(query instanceof SparseVectorQuery);
+        SparseVectorQuery sparseVectorQuery = (SparseVectorQuery) query;
+        BooleanQuery booleanQuery = targetQueryBuilder.build();
+        assertEquals(booleanQuery, sparseVectorQuery.getFallbackQuery());
     }
 
     @SneakyThrows
@@ -1335,7 +1338,10 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         booleanQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "2000", 2.f), BooleanClause.Occur.SHOULD);
 
         Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
-        assertTrue(query instanceof BooleanQuery);
+        assertTrue(query instanceof SparseVectorQuery);
+        SparseVectorQuery sparseVectorQuery = (SparseVectorQuery) query;
+        BooleanQuery booleanQuery = booleanQueryBuilder.build();
+        assertEquals(booleanQuery, sparseVectorQuery.getFallbackQuery());
     }
 
     @SneakyThrows
