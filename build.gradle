@@ -266,6 +266,8 @@ dependencies {
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
     compileOnly fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
+    compileOnly "org.opensearch.plugin:transport-grpc-spi:${opensearch_version}"
+    compileOnly "org.opensearch:protobufs:${versions.opensearchprotobufs}"
     compileOnly (group: 'com.google.guava', name: 'guava', version:'32.1.3-jre') {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
