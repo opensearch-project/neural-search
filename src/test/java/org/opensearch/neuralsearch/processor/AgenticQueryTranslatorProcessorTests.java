@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.processor;
 
 import org.opensearch.OpenSearchParseException;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.unit.TimeValue;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -42,7 +41,6 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -901,7 +899,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertEquals(originalExtBuilders.get(0), request.source().ext().get(0));
     }
 
-    public void testProcessRequestAsync_preservesOriginalParameters() throws IOException {
+    public void testProcessRequestAsync_preservesSourceFields() throws IOException {
         // Create processor with proper NamedXContentRegistry
         List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
         entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match_all"), MatchAllQueryBuilder::fromXContent));
@@ -919,41 +917,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         SearchRequest request = new SearchRequest("test-index");
 
-        // Create original search source with various parameters that should be preserved
-        SearchSourceBuilder originalSource = new SearchSourceBuilder().query(agenticQuery);
-
-        // Core pagination and limits
-        originalSource.size(25);
-        originalSource.from(10);
-        originalSource.timeout(new TimeValue(30, TimeUnit.SECONDS));
-        originalSource.terminateAfter(1000);
-
-        // Source and field selection
-        originalSource.fetchSource(new String[] { "title", "content" }, new String[] { "internal_field" });
-        originalSource.storedField("stored_field");
-        originalSource.docValueField("doc_value_field");
-        originalSource.fetchField("fetch_field");
-
-        // Scoring and metadata
-        originalSource.trackScores(true);
-        originalSource.trackTotalHitsUpTo(100);
-        originalSource.minScore(0.5f);
-        originalSource.explain(true);
-        originalSource.version(true);
-        originalSource.seqNoAndPrimaryTerm(true);
-        originalSource.includeNamedQueriesScores(true);
-
-        // Search behavior
-        originalSource.searchAfter(new Object[] { "value1", 123 });
-        originalSource.indexBoost("index1", 1.5f);
-        originalSource.stats(Arrays.asList("group1", "group2"));
-        originalSource.profile(true);
-
+        // Set up original source with field filtering
+        SearchSourceBuilder originalSource = new SearchSourceBuilder().query(agenticQuery)
+            .fetchSource(new String[] { "title", "description" }, new String[] { "internal_field" });
         request.source(originalSource);
 
         ActionListener<SearchRequest> listener = mock(ActionListener.class);
 
-        // Mock agent execution
         AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
         doAnswer(invocation -> {
             ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
@@ -961,11 +931,10 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             return null;
         }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
-        // Agent returns a simple query with sorting (which would normally cause score=null)
-        String agentResponse = "{\"query\": {\"match_all\": {}}, \"sort\": [{\"price\": \"asc\"}]}";
+        String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(agentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -979,47 +948,13 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         testProcessor.processRequestAsync(request, mockContext, listener);
 
-        verify(listener).onResponse(request);
+        // Verify source fields are preserved
+        ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(listener).onResponse(requestCaptor.capture());
 
-        // Verify all original parameters are preserved
-        SearchSourceBuilder resultSource = request.source();
-        assertNotNull(resultSource);
-
-        // Core pagination and limits
-        assertEquals(25, resultSource.size());
-        assertEquals(10, resultSource.from());
-        assertEquals("30s", resultSource.timeout().getStringRep());
-        assertEquals(1000, resultSource.terminateAfter());
-
-        // Source and field selection
-        assertNotNull(resultSource.fetchSource());
-        assertArrayEquals(new String[] { "title", "content" }, resultSource.fetchSource().includes());
-        assertArrayEquals(new String[] { "internal_field" }, resultSource.fetchSource().excludes());
-        assertNotNull(resultSource.storedFields());
-        assertNotNull(resultSource.docValueFields());
-        assertNotNull(resultSource.fetchFields());
-
-        // Scoring and metadata
-        assertTrue(resultSource.trackScores());
-        assertEquals(Integer.valueOf(100), resultSource.trackTotalHitsUpTo());
-        assertEquals(Float.valueOf(0.5f), resultSource.minScore());
-        assertEquals(Boolean.TRUE, resultSource.explain());
-        assertEquals(Boolean.TRUE, resultSource.version());
-        assertEquals(Boolean.TRUE, resultSource.seqNoAndPrimaryTerm());
-        assertTrue(resultSource.includeNamedQueriesScore());
-
-        // Search behavior
-        assertArrayEquals(new Object[] { "value1", 123 }, resultSource.searchAfter());
-        assertNotNull(resultSource.indexBoosts());
-        assertEquals(1, resultSource.indexBoosts().size());
-        assertEquals("index1", resultSource.indexBoosts().get(0).getIndex());
-        assertEquals(1.5f, resultSource.indexBoosts().get(0).getBoost(), 0.001f);
-        assertEquals(Arrays.asList("group1", "group2"), resultSource.stats());
-        assertTrue(resultSource.profile());
-
-        // Verify agent's query and sort are also present
-        assertNotNull(resultSource.query());
-        assertNotNull(resultSource.sorts());
-        assertEquals(1, resultSource.sorts().size());
+        SearchRequest modifiedRequest = requestCaptor.getValue();
+        assertNotNull(modifiedRequest.source().fetchSource());
+        assertArrayEquals(new String[] { "title", "description" }, modifiedRequest.source().fetchSource().includes());
+        assertArrayEquals(new String[] { "internal_field" }, modifiedRequest.source().fetchSource().excludes());
     }
 }

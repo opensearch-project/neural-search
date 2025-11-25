@@ -158,8 +158,10 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                         if (originalExtBuilders != null && !originalExtBuilders.isEmpty()) {
                             newSourceBuilder.ext(originalExtBuilders);
                         }
-                        // Preserve original request parameters
-                        preserveOriginalParameters(originalSourceBuilder, newSourceBuilder);
+                        // Preserve source field selection
+                        if (originalSourceBuilder != null && originalSourceBuilder.fetchSource() != null) {
+                            newSourceBuilder.fetchSource(originalSourceBuilder.fetchSource());
+                        }
                         request.source(newSourceBuilder);
                     }
 
@@ -189,66 +191,6 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             agenticQuery.setAgentFailureReason(errorMessage);
             requestListener.onFailure(new IllegalArgumentException("Agentic search failed - " + errorMessage, e));
         }));
-    }
-
-    private void preserveOriginalParameters(SearchSourceBuilder original, SearchSourceBuilder target) {
-        if (original == null) return;
-
-        // Core pagination and limits
-        if (original.size() != -1) target.size(original.size());
-        if (original.from() != -1) target.from(original.from());
-        if (original.timeout() != null) target.timeout(original.timeout());
-        if (original.terminateAfter() != -1) target.terminateAfter(original.terminateAfter());
-
-        // Source and field selection
-        if (original.fetchSource() != null) target.fetchSource(original.fetchSource());
-        if (original.storedFields() != null) target.storedFields(original.storedFields());
-        if (original.docValueFields() != null && !original.docValueFields().isEmpty()) {
-            original.docValueFields().forEach(field -> target.docValueField(field.field, field.format));
-        }
-        if (original.fetchFields() != null && !original.fetchFields().isEmpty()) {
-            original.fetchFields().forEach(field -> target.fetchField(field.field, field.format));
-        }
-        if (original.scriptFields() != null && !original.scriptFields().isEmpty()) {
-            original.scriptFields().forEach(sf -> target.scriptField(sf.fieldName(), sf.script(), sf.ignoreFailure()));
-        }
-
-        // Scoring and metadata
-        target.trackScores(original.trackScores());
-        if (original.trackTotalHitsUpTo() != null) target.trackTotalHitsUpTo(original.trackTotalHitsUpTo());
-        if (original.minScore() != null) target.minScore(original.minScore());
-        if (original.explain() != null) target.explain(original.explain());
-        if (original.version() != null) target.version(original.version());
-        if (original.seqNoAndPrimaryTerm() != null) target.seqNoAndPrimaryTerm(original.seqNoAndPrimaryTerm());
-        target.includeNamedQueriesScores(original.includeNamedQueriesScore());
-
-        // Search behavior (excluding blocked features)
-        if (original.searchAfter() != null) target.searchAfter(original.searchAfter());
-        if (original.slice() != null) target.slice(original.slice());
-        if (original.indexBoosts() != null && !original.indexBoosts().isEmpty()) {
-            original.indexBoosts().forEach(ib -> target.indexBoost(ib.getIndex(), ib.getBoost()));
-        }
-        if (original.stats() != null) target.stats(original.stats());
-        target.profile(original.profile());
-
-        // Advanced features
-        if (original.pointInTimeBuilder() != null) target.pointInTimeBuilder(original.pointInTimeBuilder());
-        if (original.pipeline() != null) target.pipeline(original.pipeline());
-        if (original.verbosePipeline() != null) target.verbosePipeline(original.verbosePipeline());
-        if (original.getDerivedFields() != null && !original.getDerivedFields().isEmpty()) {
-            original.getDerivedFields()
-                .forEach(
-                    df -> target.derivedField(
-                        df.getName(),
-                        df.getType(),
-                        df.getScript(),
-                        df.getProperties(),
-                        df.getPrefilterField(),
-                        df.getFormat(),
-                        df.getIgnoreMalformed()
-                    )
-                );
-        }
     }
 
     @Override
