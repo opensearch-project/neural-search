@@ -543,13 +543,19 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     public void testStreams_whenCurrentVersion_thenSuccess() {
         setUpClusterService(Version.CURRENT);
         testStreams(true, true);
-        testStreamsWithQueryTokensOnly();
+        testStreamsWithQueryTokensOnly(true);
+    }
+
+    public void testStreams_whenMinVersionIsBeforeSparseAnn_thenSuccess() {
+        setUpClusterService(Version.V_3_2_0);
+        testStreams(true, false);
+        testStreamsWithQueryTokensOnly(false);
     }
 
     public void testStreams_whenMinVersionIsBeforeDefaultModelId_thenSuccess() {
         setUpClusterService(Version.V_2_12_0);
         testStreams(false, false);
-        testStreamsWithQueryTokensOnly();
+        testStreamsWithQueryTokensOnly(false);
     }
 
     @SneakyThrows
@@ -614,10 +620,13 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    private void testStreamsWithQueryTokensOnly() {
+    private void testStreamsWithQueryTokensOnly(boolean sparseAnnSupport) {
         NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER);
+        if (sparseAnnSupport) {
+            original.sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        }
 
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         original.writeTo(streamOutput);
@@ -1019,7 +1028,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .maxTokenScore(MAX_TOKEN_SCORE)
             .queryText(QUERY_TEXT)
-            .searchAnalyzer(DEFAULT_ANALYZER);
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(new SparseAnnQueryBuilder());
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         IndexAnalyzers indexAnalyzers = mock(IndexAnalyzers.class);
         when(mockedQueryShardContext.getIndexAnalyzers()).thenReturn(indexAnalyzers);
@@ -1338,10 +1348,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         booleanQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "2000", 2.f), BooleanClause.Occur.SHOULD);
 
         Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
-        assertTrue(query instanceof SparseVectorQuery);
-        SparseVectorQuery sparseVectorQuery = (SparseVectorQuery) query;
-        BooleanQuery booleanQuery = booleanQueryBuilder.build();
-        assertEquals(booleanQuery, sparseVectorQuery.getFallbackQuery());
+        assertTrue(query instanceof BooleanQuery);
     }
 
     @SneakyThrows

@@ -147,8 +147,12 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         if (StringUtils.EMPTY.equals(this.modelId)) {
             this.modelId = null;
         }
-        if (isSeismicSupported() && in.readBoolean()) {
-            this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder(in);
+        if (isSeismicSupported()) {
+            if (in.readBoolean()) {
+                this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder(in);
+            } else {
+                this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder();
+            }
         }
     }
 
