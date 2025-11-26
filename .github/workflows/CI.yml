@@ -56,6 +56,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           use_oidc: true
+          use_pypi: true
 
   Check-neural-search-windows:
     strategy:
