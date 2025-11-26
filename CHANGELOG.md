@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))
 - Add BWC tests for Sparse ANN Seismic feature ([#1657](https://github.com/opensearch-project/neural-search/pull/1657))
 - Add role assignment multi-node integ testing in CI ([#1663](https://github.com/opensearch-project/neural-search/pull/1663))
+- Upgrade codecov-action version to v5 and fix codecov rate limit issue ([#1675](https://github.com/opensearch-project/neural-search/pull/1675))
 
 ### Documentation
 
