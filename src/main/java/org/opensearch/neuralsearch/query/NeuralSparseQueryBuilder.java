@@ -383,6 +383,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                 );
             }
         }
+        if (sparseEncodingQueryBuilder.isSeismicSupported() && sparseEncodingQueryBuilder.sparseAnnQueryBuilder() == null) {
+            sparseEncodingQueryBuilder.sparseAnnQueryBuilder(new SparseAnnQueryBuilder());
+        }
     }
 
     @Override
@@ -564,12 +567,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
             builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
         }
-        if (!isSeismic) {
+        if (!isSeismic || sparseAnnQueryBuilder == null) {
             return builder.build();
         } else {
-            if (sparseAnnQueryBuilder == null) {
-                sparseAnnQueryBuilder = new SparseAnnQueryBuilder();
-            }
             QueryBuilder filter = sparseAnnQueryBuilder.filter();
             if (filter != null) {
                 builder.add(filter.toQuery(context), BooleanClause.Occur.FILTER);
