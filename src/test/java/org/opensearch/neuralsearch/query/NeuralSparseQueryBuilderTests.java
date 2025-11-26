@@ -239,6 +239,34 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testFromXContent_whenSeismicSupportedWithoutMethodParameters_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_tokens": {
+                    "token_a": float_score_a,
+                    "token_b": float_score_b
+                }
+             }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TOKENS_FIELD.getPreferredName(), QUERY_TOKENS_SUPPLIER.get())
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
+        assertEquals(QUERY_TOKENS_SUPPLIER.get(), sparseEncodingQueryBuilder.queryTokensMapSupplier().get());
+        assertEquals(new SparseAnnQueryBuilder(), sparseEncodingQueryBuilder.sparseAnnQueryBuilder());
+    }
+
+    @SneakyThrows
     public void testFromXContent_whenBuiltWithMethodParameters_seismicNotSupported() {
         setUpClusterService(Version.V_3_2_0);
         XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
