@@ -670,6 +670,75 @@ public class SparseSearchingIT extends SparseBaseIT {
         verifyTopDocScoreExpected(TEST_INDEX_NAME, neuralSparseQueryBuilder9, 30.0f);
     }
 
+    public void testSearchDocumentsWithoutMethodParametersSingleShard() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            )
+        );
+
+        // Create query without specifying method_parameters (sparseAnnQueryBuilder is null)
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_SPARSE_FIELD_NAME)
+            .queryTokensMapSupplier(() -> Map.of("1000", 0.1f, "2000", 0.2f));
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertNotNull(searchResults);
+        assertEquals(4, getHitCount(searchResults));
+        List<String> actualIds = getDocIDs(searchResults);
+        assertEquals(List.of("8", "7", "6", "5"), actualIds);
+    }
+
+    public void testSearchDocumentsWithoutMethodParametersMultipleShard() throws Exception {
+        int shards = 3;
+        int replicas = getEffectiveReplicaCount(3);
+        int docCount = 20;
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 5, 0.4f, 0.5f, docCount, shards, replicas);
+
+        List<Map<String, Float>> docs = prepareIngestDocuments(docCount);
+        List<String> text = new ArrayList<>();
+        for (int i = 0; i < docCount; ++i) {
+            if (i % 2 == 0) {
+                text.add("apple");
+            } else {
+                text.add("tree");
+            }
+        }
+        List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
+        for (int i = 0; i < shards; ++i) {
+            ingestDocuments(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, docs, text, i * docCount + 1, routingIds.get(i));
+        }
+
+        forceMerge(TEST_INDEX_NAME);
+        // wait until force merge complete
+        waitForSegmentMerge(TEST_INDEX_NAME, shards, replicas);
+        // there are replica segments
+        assertEquals(shards * (replicas + 1), getSegmentCount(TEST_INDEX_NAME));
+
+        // filter apple
+        BoolQueryBuilder filter = new BoolQueryBuilder();
+        filter.must(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "apple"));
+
+        // Create query without specifying method_parameters (sparseAnnQueryBuilder is null)
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_SPARSE_FIELD_NAME)
+            .queryTokensMapSupplier(() -> Map.of("1000", 0.1f));
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 20);
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) <= 15);
+    }
+
     @SuppressWarnings("unchecked")
     private void verifyTopDocScoreExpected(String indexName, NeuralSparseQueryBuilder neuralSparseQueryBuilder, float expectedScore) {
         float deltaForScoreAssertion = 1f; // score delta needs to be bigger due to quantization
