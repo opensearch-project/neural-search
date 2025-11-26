@@ -147,8 +147,12 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         if (StringUtils.EMPTY.equals(this.modelId)) {
             this.modelId = null;
         }
-        if (isSeismicSupported() && in.readBoolean()) {
-            this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder(in);
+        if (isSeismicSupported()) {
+            if (in.readBoolean()) {
+                this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder(in);
+            } else {
+                this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder();
+            }
         }
     }
 
@@ -382,6 +386,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                     String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, currentFieldName)
                 );
             }
+        }
+        if (sparseEncodingQueryBuilder.isSeismicSupported() && sparseEncodingQueryBuilder.sparseAnnQueryBuilder() == null) {
+            sparseEncodingQueryBuilder.sparseAnnQueryBuilder(new SparseAnnQueryBuilder());
         }
     }
 
