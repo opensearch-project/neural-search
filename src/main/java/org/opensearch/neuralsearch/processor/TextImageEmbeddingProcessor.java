@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
+
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,6 +33,7 @@ import org.opensearch.neuralsearch.processor.optimization.TextImageEmbeddingInfe
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.OpenSearchClient;
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 
 /**
  * This processor is used for user input data text and image embedding processing, model_id can be used to indicate which model user use,
@@ -240,7 +243,7 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
         BiConsumer<IngestDocument, Exception> handler
     ) {
         mlCommonsClientAccessor.inferenceSentencesMap(
-            MapInferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).build(),
+            MapInferenceRequest.builder().modelId(this.modelId).inputObjects(inferenceMap).embeddingContentType(PASSAGE).build(),
             ActionListener.wrap(vectors -> {
                 setVectorFieldsToDocument(ingestDocument, vectors);
                 handler.accept(ingestDocument, null);

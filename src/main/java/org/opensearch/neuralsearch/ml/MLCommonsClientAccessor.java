@@ -4,11 +4,9 @@
  */
 package org.opensearch.neuralsearch.ml;
 
-import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_IMAGE;
-import static org.opensearch.neuralsearch.processor.TextImageEmbeddingProcessor.INPUT_TEXT;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
-import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
+import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,14 +14,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.Arrays;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -33,8 +31,9 @@ import java.util.function.Supplier;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import com.google.gson.Gson;
+
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.common.Nullable;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
@@ -42,21 +41,16 @@ import org.opensearch.ml.client.MachineLearningNodeClient;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLAgentType;
 import org.opensearch.ml.common.MLModel;
-import org.opensearch.ml.common.dataset.MLInputDataset;
-import org.opensearch.ml.common.dataset.QuestionAnsweringInputDataSet;
-import org.opensearch.ml.common.dataset.TextDocsInputDataSet;
-import org.opensearch.ml.common.dataset.TextSimilarityInputDataSet;
 import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
 import org.opensearch.ml.common.input.execute.agent.AgentMLInput;
-import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.ml.common.output.MLOutput;
-import org.opensearch.ml.common.output.model.ModelResultFilter;
 import org.opensearch.ml.common.output.model.ModelTensor;
 import org.opensearch.ml.common.output.model.ModelTensorOutput;
 import org.opensearch.ml.common.output.model.ModelTensors;
 import org.opensearch.neuralsearch.ml.dto.AgentExecutionDTO;
 import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
+
 import org.opensearch.neuralsearch.processor.InferenceRequest;
 import org.opensearch.neuralsearch.processor.MapInferenceRequest;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
@@ -67,8 +61,9 @@ import org.opensearch.neuralsearch.util.RetryUtil;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import java.util.HashMap;
-import org.opensearch.common.xcontent.XContentFactory;
-import org.opensearch.core.xcontent.XContentBuilder;
+
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -80,7 +75,11 @@ import lombok.extern.log4j.Log4j2;
 @RequiredArgsConstructor
 @Log4j2
 public class MLCommonsClientAccessor {
+    private static final String RESPONSE_FIELD = "response";
+
     private final MachineLearningNodeClient mlClient;
+    private final Cache<String, MLModel> modelCache = CacheBuilder.newBuilder().maximumSize(1000).build();
+
     private static final Gson gson = new Gson();
 
     // Error message constants for conversational agent responses
@@ -92,37 +91,6 @@ public class MLCommonsClientAccessor {
         "No valid 'dsl_query' found in conversational agent response. "
             + "The agent must return a JSON object with 'dsl_query' field. "
             + "Please check the agent configuration and prompts.";
-
-    /**
-     * Wrapper around {@link #inferenceSentences} that expected a single input text and produces a single floating
-     * point vector as a response.
-     *
-     * @param modelId   {@link String}
-     * @param inputText {@link String}
-     * @param listener  {@link ActionListener} which will be called when prediction is completed or errored out
-     */
-    public void inferenceSentence(
-        @NonNull final String modelId,
-        @NonNull final String inputText,
-        @NonNull final ActionListener<List<Number>> listener
-    ) {
-
-        inferenceSentences(
-            TextInferenceRequest.builder().modelId(modelId).inputTexts(List.of(inputText)).build(),
-            ActionListener.wrap(response -> {
-                if (response.size() != 1) {
-                    listener.onFailure(
-                        new IllegalStateException(
-                            "Unexpected number of vectors produced. Expected 1 vector to be returned, but got [" + response.size() + "]"
-                        )
-                    );
-                    return;
-                }
-
-                listener.onResponse(response.getFirst());
-            }, listener::onFailure)
-        );
-    }
 
     /**
      * Abstraction to call predict function of api of MLClient with provided targetResponse filters. It uses the
@@ -138,27 +106,32 @@ public class MLCommonsClientAccessor {
         @NonNull final TextInferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<List<Number>>> listener
     ) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createMLTextInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputTexts()),
-            this::buildVectorFromResponse,
-            listener
+        checkModelAndThenPredict(
+            inferenceRequest.getModelId(),
+            listener::onFailure,
+            model -> runInference(
+                inferenceRequest,
+                model,
+                inferenceRequest.getTargetResponseFilters(),
+                this::buildVectorFromResponse,
+                listener
+            )
         );
     }
 
     public void inferenceSentencesWithMapResult(
         @NonNull final TextInferenceRequest inferenceRequest,
-        @Nullable MLAlgoParams mlAlgoParams,
         @NonNull final ActionListener<List<Map<String, ?>>> listener
     ) {
-        retryableInference(inferenceRequest, 0, () -> {
-            MLInput input = createMLTextInput(null, inferenceRequest.getInputTexts());
-            if (mlAlgoParams != null) {
-                input.setParameters(mlAlgoParams);
-            }
-            return input;
-        }, this::buildMapResultFromResponse, listener);
+        checkModelAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, model -> {
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> NeuralSearchMLInputBuilder.createTextEmbeddingInput(model, null, inferenceRequest.getInputTexts(), inferenceRequest),
+                this::buildMapResultFromResponse,
+                listener
+            );
+        });
     }
 
     /**
@@ -170,13 +143,20 @@ public class MLCommonsClientAccessor {
      * @param listener         {@link ActionListener} which will be called when prediction is completed or errored out.
      */
     public void inferenceSentencesMap(@NonNull MapInferenceRequest inferenceRequest, @NonNull final ActionListener<List<Number>> listener) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createMLMultimodalInput(inferenceRequest.getTargetResponseFilters(), inferenceRequest.getInputObjects()),
-            this::buildSingleVectorFromResponse,
-            listener
-        );
+        checkModelAndThenPredict(inferenceRequest.getModelId(), listener::onFailure, model -> {
+            retryableInference(
+                inferenceRequest,
+                0,
+                () -> NeuralSearchMLInputBuilder.createMultimodalInputFromMap(
+                    model,
+                    inferenceRequest.getTargetResponseFilters(),
+                    inferenceRequest.getInputObjects(),
+                    inferenceRequest
+                ),
+                this::buildSingleVectorFromResponse,
+                listener
+            );
+        });
     }
 
     /**
@@ -194,7 +174,7 @@ public class MLCommonsClientAccessor {
         retryableInference(
             inferenceRequest,
             0,
-            () -> createMLTextPairsInput(inferenceRequest.getQueryText(), inferenceRequest.getInputTexts()),
+            () -> NeuralSearchMLInputBuilder.createTextSimilarityInput(inferenceRequest.getQueryText(), inferenceRequest.getInputTexts()),
             (mlOutput) -> buildVectorFromResponse(mlOutput).stream().map(v -> v.getFirst().floatValue()).collect(Collectors.toList()),
             listener
         );
@@ -232,28 +212,53 @@ public class MLCommonsClientAccessor {
         ));
     }
 
-    private MLInput createMLTextInput(final List<String> targetResponseFilters, List<String> inputText) {
-        final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
-        final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
-    }
-
-    private MLInput createMLTextPairsInput(final String query, final List<String> inputText) {
-        final MLInputDataset inputDataset = new TextSimilarityInputDataSet(query, inputText);
-        return new MLInput(FunctionName.TEXT_SIMILARITY, null, inputDataset);
-    }
-
     private <T extends Number> List<List<T>> buildVectorFromResponse(MLOutput mlOutput) {
         final List<List<T>> vector = new ArrayList<>();
         final ModelTensorOutput modelTensorOutput = (ModelTensorOutput) mlOutput;
         final List<ModelTensors> tensorOutputList = modelTensorOutput.getMlModelOutputs();
+
         for (final ModelTensors tensors : tensorOutputList) {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
-                vector.add(Arrays.stream(tensor.getData()).map(value -> (T) value).collect(Collectors.toList()));
+                // Check if we have standard tensor data first
+                if (tensor.getData() != null) {
+                    if (tensor.getData().length > 0) {
+                        vector.add(Arrays.stream(tensor.getData()).map(value -> (T) value).collect(Collectors.toList()));
+                    } else {
+                        // Add empty list for empty tensor data
+                        vector.add(new ArrayList<>());
+                    }
+                } else {
+                    // Try to extract from asymmetric remote embedding model response
+                    List<List<T>> remoteVectors = extractVectorsFromAsymmetricRemoteEmbeddingResponse(tensor);
+                    vector.addAll(remoteVectors);
+                }
             }
         }
         return vector;
+    }
+
+    /**
+     * Extracts vectors from asymmetric remote embedding model response format.
+     * Handles the simplified format used by asymmetric E5 remote embedding models: [[emb1], [emb2], [emb3]]
+     */
+    private <T extends Number> List<List<T>> extractVectorsFromAsymmetricRemoteEmbeddingResponse(ModelTensor tensor) {
+        final List<List<T>> vectors = new ArrayList<>();
+        Map<String, ?> dataMap = tensor.getDataAsMap();
+
+        if (dataMap != null && !dataMap.isEmpty()) {
+            Object responseData = dataMap.get(RESPONSE_FIELD);
+            if (responseData instanceof List) {
+                List<?> responseList = (List<?>) responseData;
+                // Handle simplified format from asymmetric E5 remote embedding models: [[emb1], [emb2], [emb3]]
+                for (Object embedding : responseList) {
+                    if (embedding instanceof List) {
+                        vectors.add(((List<?>) embedding).stream().map(v -> (T) v).collect(Collectors.toList()));
+                    }
+                }
+            }
+        }
+        return vectors;
     }
 
     private List<Map<String, ?>> buildMapResultFromResponse(MLOutput mlOutput) {
@@ -351,17 +356,6 @@ public class MLCommonsClientAccessor {
         } catch (Exception e) {
             throw new IllegalStateException("Error processing sentence highlighting output", e);
         }
-    }
-
-    private MLInput createMLMultimodalInput(final List<String> targetResponseFilters, final Map<String, String> input) {
-        List<String> inputText = new ArrayList<>();
-        inputText.add(input.get(INPUT_TEXT));
-        if (input.containsKey(INPUT_IMAGE)) {
-            inputText.add(input.get(INPUT_IMAGE));
-        }
-        final ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
-        final MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, null, inputDataset);
     }
 
     public void getModel(@NonNull final String modelId, @NonNull final ActionListener<MLModel> listener) {
@@ -481,38 +475,12 @@ public class MLCommonsClientAccessor {
             }
         };
 
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> createBatchHighlightingMLInput(batchRequests),
-            this::parseBatchHighlightingOutput,
-            listener
-        );
-    }
-
-    /**
-     * Create MLInput for batch highlighting inference
-     */
-    private MLInput createBatchHighlightingMLInput(List<SentenceHighlightingRequest> batchRequests) {
-        try {
-            Map<String, String> parameters = new HashMap<>();
-
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            builder.startArray();
-            for (SentenceHighlightingRequest request : batchRequests) {
-                builder.startObject()
-                    .field(SemanticHighlightingConstants.QUESTION_KEY, request.getQuestion())
-                    .field(SemanticHighlightingConstants.CONTEXT_KEY, request.getContext())
-                    .endObject();
-            }
-            builder.endArray();
-
-            parameters.put(SemanticHighlightingConstants.INPUTS_KEY, builder.toString());
-            RemoteInferenceInputDataSet inputDataset = new RemoteInferenceInputDataSet(parameters);
-            return MLInput.builder().algorithm(FunctionName.REMOTE).inputDataset(inputDataset).build();
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create batch highlighting ML input", e);
-        }
+        retryableInference(inferenceRequest, 0, () -> {
+            List<Map<String, String>> requests = batchRequests.stream()
+                .map(req -> Map.of("question", req.getQuestion(), "context", req.getContext()))
+                .collect(Collectors.toList());
+            return NeuralSearchMLInputBuilder.createBatchHighlightingInput(requests);
+        }, this::parseBatchHighlightingOutput, listener);
     }
 
     /**
@@ -551,7 +519,10 @@ public class MLCommonsClientAccessor {
             retryableInference(
                 inferenceRequest,
                 0,
-                () -> createLocalHighlightingMLInput(inferenceRequest),
+                () -> NeuralSearchMLInputBuilder.createQuestionAnsweringInput(
+                    inferenceRequest.getQuestion(),
+                    inferenceRequest.getContext()
+                ),
                 mlOutput -> parseSingleHighlightingOutput(mlOutput),
                 listener
             );
@@ -560,49 +531,15 @@ public class MLCommonsClientAccessor {
             retryableInference(
                 inferenceRequest,
                 0,
-                () -> createRemoteHighlightingMLInput(inferenceRequest),
+                () -> NeuralSearchMLInputBuilder.createSingleRemoteHighlightingInput(
+                    inferenceRequest.getQuestion(),
+                    inferenceRequest.getContext()
+                ),
                 mlOutput -> parseSingleHighlightingOutput(mlOutput),
                 listener
             );
         } else {
             listener.onFailure(new IllegalArgumentException("Unsupported model type for highlighting: " + modelType));
-        }
-    }
-
-    /**
-     * Create MLInput for local model highlighting (QUESTION_ANSWERING)
-     */
-    private MLInput createLocalHighlightingMLInput(SentenceHighlightingRequest inferenceRequest) {
-        try {
-            MLInputDataset inputDataset = new QuestionAnsweringInputDataSet(inferenceRequest.getQuestion(), inferenceRequest.getContext());
-            return new MLInput(FunctionName.QUESTION_ANSWERING, null, inputDataset);
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create local highlighting ML input", e);
-        }
-    }
-
-    /**
-     * Create MLInput for remote model highlighting (REMOTE)
-     * Uses the same format as batch but with a single item array to maintain consistency
-     */
-    private MLInput createRemoteHighlightingMLInput(SentenceHighlightingRequest inferenceRequest) {
-        try {
-            Map<String, String> parameters = new HashMap<>();
-
-            // Create a single-item array in the same format as batch
-            XContentBuilder builder = XContentFactory.jsonBuilder();
-            builder.startArray();
-            builder.startObject()
-                .field(SemanticHighlightingConstants.QUESTION_KEY, inferenceRequest.getQuestion())
-                .field(SemanticHighlightingConstants.CONTEXT_KEY, inferenceRequest.getContext())
-                .endObject();
-            builder.endArray();
-
-            parameters.put(SemanticHighlightingConstants.INPUTS_KEY, builder.toString());
-            RemoteInferenceInputDataSet inputDataset = new RemoteInferenceInputDataSet(parameters);
-            return MLInput.builder().algorithm(FunctionName.REMOTE).inputDataset(inputDataset).build();
-        } catch (Exception e) {
-            throw new IllegalStateException("Failed to create remote highlighting ML input", e);
         }
     }
 
@@ -894,7 +831,7 @@ public class MLCommonsClientAccessor {
                     }
 
                     // Extract response containing dsl_query or agent steps
-                    if (!"response".equals(tensorName)) {
+                    if (!RESPONSE_FIELD.equals(tensorName)) {
                         continue;
                     }
 
@@ -1167,6 +1104,70 @@ public class MLCommonsClientAccessor {
         }
 
         return highlights;
+    }
+
+    /**
+     * Helper method to run inference with proper MLAlgoParams handling
+     */
+    private <T> void runInference(
+        TextInferenceRequest inferenceRequest,
+        MLModel model,
+        List<String> targetResponseFilters,
+        Function<MLOutput, T> mlOutputBuilder,
+        ActionListener<T> listener
+    ) {
+        retryableInference(
+            inferenceRequest,
+            0,
+            () -> NeuralSearchMLInputBuilder.createTextEmbeddingInput(
+                model,
+                targetResponseFilters,
+                inferenceRequest.getInputTexts(),
+                inferenceRequest
+            ),
+            mlOutputBuilder,
+            listener
+        );
+    }
+
+    /**
+     * Checks model and executes inference with appropriate input format.
+     * Cache hit: runs immediately. Cache miss: fetches model info concurrently.
+     *
+     * @param modelId The model ID to check
+     * @param onFailure Callback if model retrieval fails
+     * @param runPrediction Callback with model object to execute inference
+     */
+    private void checkModelAndThenPredict(String modelId, Consumer<Exception> onFailure, Consumer<MLModel> runPrediction) {
+        MLModel cached = modelCache.getIfPresent(modelId);
+        if (cached != null) {
+            runPrediction.accept(cached);
+            return;
+        }
+
+        mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
+            modelCache.put(modelId, mlModel);
+            runPrediction.accept(mlModel);
+        }, onFailure));
+    }
+
+    /**
+     * Get cached model or fetch from ML client
+     *
+     * @param modelId The model ID
+     * @param listener Callback with MLModel or failure
+     */
+    public void getCachedModel(String modelId, ActionListener<MLModel> listener) {
+        MLModel cached = modelCache.getIfPresent(modelId);
+        if (cached != null) {
+            listener.onResponse(cached);
+            return;
+        }
+
+        mlClient.getModel(modelId, null, ActionListener.<MLModel>wrap(mlModel -> {
+            modelCache.put(modelId, mlModel);
+            listener.onResponse(mlModel);
+        }, listener::onFailure));
     }
 
 }

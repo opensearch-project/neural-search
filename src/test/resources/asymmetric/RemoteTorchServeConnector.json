@@ -1,0 +1,21 @@
+{
+    "name": "%s",
+    "description": "TorchServe connector for asymmetric text embedding (supports query and passage content types)",
+    "version": 1,
+    "protocol": "http",
+    "credential": {
+        "key": "test"
+    },
+    "actions": [
+        {
+            "action_type": "predict",
+            "method": "POST",
+            "url": "%s/predictions/asymmetric_text_embedding",
+            "headers": {
+                "Content-Type": "application/json"
+            },
+            "request_body": "{ \"texts\": ${parameters.texts:-null}, \"content_type\": \"${parameters.content_type:-passage}\" }",
+            "pre_process_function": "// Pre-process function for asymmetric text embedding\n// Handle both direct API calls and OpenSearch text embedding processor\nif (params.texts != null) {\n  // Direct API call format\n  String textsJson = params.texts.toString();\n  String contentType = params.content_type != null ? params.content_type : \"passage\";\n  return '{\"parameters\":{\"texts\":' + textsJson + ',\"content_type\":\"' + contentType + '\"}}';\n}\nelse if (params.inputText != null) {\n  // OpenSearch text embedding processor format\n  String inputText = params.inputText;\n  String contentType = params.content_type != null ? params.content_type : \"passage\";\n  return '{\"parameters\":{\"texts\":[\"' + inputText + '\"],\"content_type\":\"' + contentType + '\"}}';\n}\nelse {\n  // Fallback: try to extract text from any string parameter\n  for (String key : params.keySet()) {\n    Object value = params.get(key);\n    if (value instanceof String && ((String)value).length() > 0) {\n      String contentType = \"passage\"; // Default for indexing\n      return '{\"parameters\":{\"texts\":[\"' + value + '\"],\"content_type\":\"' + contentType + '\"}}';\n    }\n  }\n  throw new IllegalArgumentException(\"No text input found in parameters: \" + params.keySet());\n}"
+        }
+    ]
+}
