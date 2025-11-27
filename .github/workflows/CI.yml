@@ -52,9 +52,11 @@ jobs:
 
       - name: Upload Coverage Report
         if: ${{ !cancelled() && contains(matrix.os, 'ubuntu') && contains(matrix.java, '21') }}
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: true
+          use_pypi: true
 
   Check-neural-search-windows:
     strategy:
