@@ -557,6 +557,25 @@ public class TestsPrepareUtils {
         return properties;
     }
 
+    public static Map<String, Object> createNestedFieldMappingProperties(
+        boolean isSeismicField,
+        String parentField,
+        List<String> sparseFields
+    ) {
+        Map<String, Object> properties = new HashMap<>();
+        Map<String, Object> nestedFieldMapping = new HashMap<>();
+        Map<String, Object> sparseFieldMapping = new HashMap<>();
+        for (String sparseField : sparseFields) {
+            Map<String, Object> sparseFieldProperties = new HashMap<>();
+            sparseFieldProperties.put("type", isSeismicField ? "sparse_vector" : "rank_features");
+
+            sparseFieldMapping.put(sparseField, sparseFieldProperties);
+        }
+        nestedFieldMapping.put("properties", sparseFieldMapping);
+        properties.put("properties", Map.of(parentField, nestedFieldMapping));
+        return properties;
+    }
+
     public static void prepareSparseFieldUtilsClusterServiceMock(
         ClusterService mockClusterService,
         List<String> sparseFields,

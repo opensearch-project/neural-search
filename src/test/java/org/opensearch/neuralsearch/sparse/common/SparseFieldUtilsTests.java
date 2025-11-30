@@ -27,6 +27,7 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
 
     private static final String TEST_INDEX_NAME = "test_index";
     private static final String TEST_SPARSE_FIELD_NAME = "test_sparse_field";
+    private static final String TEST_PARENT_FIELD_NAME = "test_parent_field";
 
     @Mock
     private IndexMetadata indexMetadata;
@@ -108,6 +109,21 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         configureIndexMappingProperties(properties);
 
         assertEquals(Set.of(TEST_SPARSE_FIELD_NAME), SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService));
+    }
+
+    public void testGetSparseAnnFields_whenNestedSeismicField_thenReturnField() {
+        // Setup mock cluster service with nested seismic field
+        Map<String, Object> properties = TestsPrepareUtils.createNestedFieldMappingProperties(
+            true,
+            TEST_PARENT_FIELD_NAME,
+            Collections.singletonList(TEST_SPARSE_FIELD_NAME)
+        );
+        configureIndexMappingProperties(properties);
+
+        assertEquals(
+            Set.of(TEST_PARENT_FIELD_NAME + "." + TEST_SPARSE_FIELD_NAME),
+            SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService)
+        );
     }
 
     private void configureSparseIndexSetting(boolean isSparseIndex) {
