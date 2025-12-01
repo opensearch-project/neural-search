@@ -214,13 +214,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         for (DataForInference dataForInference : dataForInferences) {
             Map<String, Object> tokenIdProcessMap = new HashMap<>();
             Map<String, Object> wordProcessMap = new HashMap<>();
-            for (Map.Entry<String, Object> entry : dataForInference.getProcessMap().entrySet()) {
-                if (isSparseAnnField(sparseAnnFields, entry.getKey())) {
-                    tokenIdProcessMap.put(entry.getKey(), entry.getValue());
-                } else {
-                    wordProcessMap.put(entry.getKey(), entry.getValue());
-                }
-            }
+            splitProcessMap(dataForInference.getProcessMap(), sparseAnnFields, "", tokenIdProcessMap, wordProcessMap);
             List<String> tokenIdList = createInferenceList(tokenIdProcessMap);
             List<String> wordList = createInferenceList(wordProcessMap);
             splitDataResponse.getTokenIdResponseInferenceList().addAll(tokenIdList);
@@ -235,6 +229,62 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             }
         }
         return splitDataResponse;
+    }
+
+    /**
+     * Recursively splits the processMap into tokenId and word maps based on sparse ANN field detection.
+     *
+     * @param processMap The current level of the process map
+     * @param sparseAnnFields Set of sparse ANN field paths
+     * @param currentPath The current path being processed
+     * @param tokenIdProcessMap Map to collect token ID fields
+     * @param wordProcessMap Map to collect word fields
+     */
+    @SuppressWarnings("unchecked")
+    private void splitProcessMap(
+        Map<String, Object> processMap,
+        Set<String> sparseAnnFields,
+        String currentPath,
+        Map<String, Object> tokenIdProcessMap,
+        Map<String, Object> wordProcessMap
+    ) {
+        for (Map.Entry<String, Object> entry : processMap.entrySet()) {
+            String fieldPath = currentPath.isEmpty() ? entry.getKey() : currentPath + "." + entry.getKey();
+
+            if (entry.getValue() instanceof Map) {
+                Map<String, Object> nestedTokenIdMap = new HashMap<>();
+                Map<String, Object> nestedWordMap = new HashMap<>();
+                splitProcessMap((Map<String, Object>) entry.getValue(), sparseAnnFields, fieldPath, nestedTokenIdMap, nestedWordMap);
+
+                if (!nestedTokenIdMap.isEmpty()) {
+                    tokenIdProcessMap.put(entry.getKey(), nestedTokenIdMap);
+                }
+                if (!nestedWordMap.isEmpty()) {
+                    wordProcessMap.put(entry.getKey(), nestedWordMap);
+                }
+            } else if (isSparseAnnFieldByPath(sparseAnnFields, fieldPath)) {
+                tokenIdProcessMap.put(entry.getKey(), entry.getValue());
+            } else {
+                wordProcessMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    /**
+     * Checks if a field path matches a sparse ANN field.
+     * This method checks both exact matches and prefix matches to handle cases where
+     * the processMap structure may not include the listTypeNestedMapKey.
+     *
+     * For example, if sparseAnnFields contains "parent.passage_chunk_embedding.sparse_encoding"
+     * and fieldPath is "parent.passage_chunk_embedding", this returns true because the fieldPath
+     * is a prefix of a sparse ANN field.
+     *
+     * @param sparseAnnFields Set of sparse ANN field paths (full paths to sparse_vector fields)
+     * @param fieldPath The full field path to check
+     * @return true if the field path matches or is a prefix of any sparse ANN field
+     */
+    private boolean isSparseAnnFieldByPath(Set<String> sparseAnnFields, String fieldPath) {
+        return sparseAnnFields.contains(fieldPath) || sparseAnnFields.contains(fieldPath + "." + this.listTypeNestedMapKey);
     }
 
     @Override
@@ -309,13 +359,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService);
         Map<String, Object> tokenIdProcessMap = new HashMap<>();
         Map<String, Object> wordProcessMap = new HashMap<>();
-        for (Map.Entry<String, Object> entry : processMap.entrySet()) {
-            if (isSparseAnnField(sparseAnnFields, entry.getKey())) {
-                tokenIdProcessMap.put(entry.getKey(), entry.getValue());
-            } else {
-                wordProcessMap.put(entry.getKey(), entry.getValue());
-            }
-        }
+        splitProcessMap(processMap, sparseAnnFields, "", tokenIdProcessMap, wordProcessMap);
         AtomicInteger counter = new AtomicInteger(0);
         if (tokenIdProcessMap.isEmpty()) {
             generateAndSetMapInference(ingestDocument, processMap, inferenceList, pruneType, pruneRatio, null, handler);
@@ -394,12 +438,6 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
                 }
             }
         };
-    }
-
-    private boolean isSparseAnnField(Set<String> sparseAnnFields, String field) {
-        // we don't support nested sparse ann field
-        int nestedDotIndex = field.indexOf('.');
-        return nestedDotIndex == -1 && sparseAnnFields.contains(field);
     }
 
     @Data

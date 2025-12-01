@@ -23,7 +23,8 @@ import java.util.Set;
  */
 public class SparseFieldUtils {
     /**
-     * Retrieves all sparse ANN fields from a given index.
+     * Retrieves all sparse ANN fields from a given index, including nested fields.
+     * For nested fields like "passage_chunk_embedding.sparse_encoding", returns the parent path "passage_chunk_embedding".
      *
      * @param index The name of the index
      * @return A set of field names that are configured as sparse token fields, or an empty set if none exist
@@ -51,13 +52,36 @@ public class SparseFieldUtils {
         }
         Set<String> sparseAnnFields = new HashSet<>();
         Map<String, Object> fields = (Map<String, Object>) properties;
+        collectSparseAnnFields(fields, "", sparseAnnFields);
+        return sparseAnnFields;
+    }
+
+    /**
+     * Recursively collects sparse ANN fields from the mapping, including nested structures.
+     * For nested fields, returns the parent path rather than the full field path.
+     *
+     * @param fields The current level of field mappings
+     * @param parentPath The path to the current level (empty for top-level)
+     * @param sparseAnnFields The set to collect sparse ANN field paths
+     */
+    @SuppressWarnings("unchecked")
+    private static void collectSparseAnnFields(Map<String, Object> fields, String parentPath, Set<String> sparseAnnFields) {
         for (Map.Entry<String, Object> field : fields.entrySet()) {
+            if (!(field.getValue() instanceof Map)) {
+                continue;
+            }
             Map<String, Object> fieldMap = (Map<String, Object>) field.getValue();
             Object type = fieldMap.get("type");
+
             if (Objects.nonNull(type) && SparseVectorFieldType.isSparseVectorType(type.toString())) {
-                sparseAnnFields.add(field.getKey());
+                sparseAnnFields.add(parentPath.isEmpty() ? field.getKey() : parentPath + "." + field.getKey());
+            } else {
+                Object nestedProperties = fieldMap.get("properties");
+                if (nestedProperties instanceof Map) {
+                    String currentPath = parentPath.isEmpty() ? field.getKey() : parentPath + "." + field.getKey();
+                    collectSparseAnnFields((Map<String, Object>) nestedProperties, currentPath, sparseAnnFields);
+                }
             }
         }
-        return sparseAnnFields;
     }
 }

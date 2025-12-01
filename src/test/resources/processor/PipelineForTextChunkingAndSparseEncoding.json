@@ -1,0 +1,27 @@
+{
+  "description": "Pipeline for text chunking and sparse encoding",
+  "processors": [
+    {
+      "text_chunking": {
+        "algorithm": {
+          "fixed_token_length": {
+            "token_limit": 4,
+            "overlap_rate": 0.2,
+            "tokenizer": "standard"
+          }
+        },
+        "field_map": {
+          "passage_text": "passage_chunk"
+        }
+      }
+    },
+    {
+      "sparse_encoding": {
+        "model_id": "${MODEL_ID}",
+        "field_map": {
+          "passage_chunk": "passage_chunk_embedding"
+        }
+      }
+    }
+  ]
+}
