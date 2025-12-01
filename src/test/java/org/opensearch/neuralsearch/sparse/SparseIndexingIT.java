@@ -377,7 +377,7 @@ public class SparseIndexingIT extends SparseBaseIT {
         String modelId = prepareSparseEncodingModel();
         String sparseFieldName = "title_sparse"; // configured in SparseEncodingPipelineConfiguration.json
         createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING, 2);
-        createSparseIndex(TEST_INDEX_NAME, sparseFieldName, 4, 0.4f, 0.5f, 8);
+        createSparseIndex(TEST_INDEX_NAME, sparseFieldName, 4, 0.4f, 0.5f, 1);
 
         String payload = prepareSparseBulkIngestPayload(TEST_INDEX_NAME, "title", null, List.of(), List.of(""), 1);
         bulkIngest(payload, PIPELINE_NAME);
