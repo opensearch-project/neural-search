@@ -751,7 +751,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         String nestedFieldName = "nested_data";
         String sparseFieldName = nestedFieldName + "." + SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY;
 
-        createNestedSparseIndex(TEST_INDEX_NAME, nestedFieldName, SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY, 4, 0.4f, 0.5f, 8);
+        createNestedSparseIndex(TEST_INDEX_NAME, nestedFieldName, SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY, 4, 0.4f, 0.5f, 3);
 
         List<List<Map<String, Float>>> documentsWithChunks = List.of(
             List.of(Map.of("1000", 0.9f, "2000", 0.1f), Map.of("1000", 0.6f, "2000", 0.4f), Map.of("1000", 0.3f, "2000", 0.7f)),
@@ -784,17 +784,16 @@ public class SparseSearchingIT extends SparseBaseIT {
         String modelId = prepareSparseEncodingModel();
         String nestedFieldName = "passage_chunk_embedding";
         String sparseFieldName = nestedFieldName + "." + SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY;
-        String pipelineName = "chunking-sparse-pipeline";
 
         URL pipelineURLPath = classLoader.getResource("processor/PipelineForTextChunkingAndSparseEncoding.json");
         Objects.requireNonNull(pipelineURLPath);
         String pipelineConfiguration = Files.readString(Path.of(pipelineURLPath.toURI()));
         pipelineConfiguration = pipelineConfiguration.replace("${MODEL_ID}", modelId);
 
-        createPipelineProcessor(pipelineConfiguration, pipelineName, "", null);
+        createPipelineProcessor(pipelineConfiguration, PIPELINE_NAME, "", null);
 
-        createNestedSparseIndex(TEST_INDEX_NAME, nestedFieldName, SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY, 4, 0.4f, 0.5f, 8);
-        updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.default_pipeline", pipelineName));
+        createNestedSparseIndex(TEST_INDEX_NAME, nestedFieldName, SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY, 4, 0.4f, 0.5f, 3);
+        updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.default_pipeline", PIPELINE_NAME));
 
         String doc1 = "{\"passage_text\": \"hello world this is a test document for chunking\"}";
         String doc2 = "{\"passage_text\": \"machine learning models are used for neural search\"}";
@@ -838,7 +837,7 @@ public class SparseSearchingIT extends SparseBaseIT {
             4,
             0.4f,
             0.5f,
-            8,
+            3,
             shards,
             replicas
         );
@@ -919,7 +918,7 @@ public class SparseSearchingIT extends SparseBaseIT {
             4,
             0.4f,
             0.5f,
-            8,
+            3,
             shards,
             replicas
         );
