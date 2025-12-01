@@ -10,11 +10,14 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.get.GetAction;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.get.MultiGetAction;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
@@ -34,6 +37,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -65,6 +69,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     @Getter
     private final float pruneRatio;
     private final ClusterService clusterService;
+    private final Environment environment;
 
     public SparseEncodingProcessor(
         String tag,
@@ -88,6 +93,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         this.textEmbeddingInferenceFilter = textEmbeddingInferenceFilter;
         this.openSearchClient = openSearchClient;
         this.clusterService = clusterService;
+        this.environment = environment;
     }
 
     @Override
@@ -155,7 +161,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
             return;
         }
-        SplitDataResponse splitDataResponse = splitData(dataForInferences, sparseAnnFields);
+        long maxDepth = getMaxDepth(index);
+        SplitDataResponse splitDataResponse = splitData(dataForInferences, sparseAnnFields, maxDepth);
         AtomicInteger counter = new AtomicInteger(0);
         if (splitDataResponse.getTokenIdDataForInference().isEmpty()) {
             super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
@@ -209,12 +216,12 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         );
     }
 
-    private SplitDataResponse splitData(List<DataForInference> dataForInferences, Set<String> sparseAnnFields) {
+    private SplitDataResponse splitData(List<DataForInference> dataForInferences, Set<String> sparseAnnFields, long maxDepth) {
         SplitDataResponse splitDataResponse = new SplitDataResponse();
         for (DataForInference dataForInference : dataForInferences) {
             Map<String, Object> tokenIdProcessMap = new HashMap<>();
             Map<String, Object> wordProcessMap = new HashMap<>();
-            splitProcessMap(dataForInference.getProcessMap(), sparseAnnFields, "", tokenIdProcessMap, wordProcessMap);
+            splitProcessMap(dataForInference.getProcessMap(), sparseAnnFields, "", tokenIdProcessMap, wordProcessMap, 1, maxDepth);
             List<String> tokenIdList = createInferenceList(tokenIdProcessMap);
             List<String> wordList = createInferenceList(wordProcessMap);
             splitDataResponse.getTokenIdResponseInferenceList().addAll(tokenIdList);
@@ -239,6 +246,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
      * @param currentPath The current path being processed
      * @param tokenIdProcessMap Map to collect token ID fields
      * @param wordProcessMap Map to collect word fields
+     * @param depth Current recursion depth
+     * @param maxDepth Maximum allowed recursion depth
      */
     @SuppressWarnings("unchecked")
     private void splitProcessMap(
@@ -246,15 +255,27 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         Set<String> sparseAnnFields,
         String currentPath,
         Map<String, Object> tokenIdProcessMap,
-        Map<String, Object> wordProcessMap
+        Map<String, Object> wordProcessMap,
+        int depth,
+        long maxDepth
     ) {
+        validateDepth(currentPath, depth, maxDepth);
+
         for (Map.Entry<String, Object> entry : processMap.entrySet()) {
             String fieldPath = currentPath.isEmpty() ? entry.getKey() : currentPath + "." + entry.getKey();
 
             if (entry.getValue() instanceof Map) {
                 Map<String, Object> nestedTokenIdMap = new HashMap<>();
                 Map<String, Object> nestedWordMap = new HashMap<>();
-                splitProcessMap((Map<String, Object>) entry.getValue(), sparseAnnFields, fieldPath, nestedTokenIdMap, nestedWordMap);
+                splitProcessMap(
+                    (Map<String, Object>) entry.getValue(),
+                    sparseAnnFields,
+                    fieldPath,
+                    nestedTokenIdMap,
+                    nestedWordMap,
+                    depth + 1,
+                    maxDepth
+                );
 
                 if (!nestedTokenIdMap.isEmpty()) {
                     tokenIdProcessMap.put(entry.getKey(), nestedTokenIdMap);
@@ -267,6 +288,26 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
             } else {
                 wordProcessMap.put(entry.getKey(), entry.getValue());
             }
+        }
+    }
+
+    private long getMaxDepth(String indexName) {
+        Settings settings = Optional.ofNullable(clusterService.state().metadata().index(indexName))
+            .map(IndexMetadata::getSettings)
+            .orElse(environment.settings());
+        return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(settings);
+    }
+
+    private void validateDepth(String fieldPath, int depth, long maxDepth) {
+        if (depth > maxDepth) {
+            throw new IllegalArgumentException(
+                String.format(
+                    java.util.Locale.ROOT,
+                    "Field [%s] exceeds maximum depth limit of [%d], cannot process it",
+                    fieldPath,
+                    maxDepth
+                )
+            );
         }
     }
 
@@ -284,7 +325,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
      * @return true if the field path matches or is a prefix of any sparse ANN field
      */
     private boolean isSparseAnnFieldByPath(Set<String> sparseAnnFields, String fieldPath) {
-        return sparseAnnFields.contains(fieldPath) || !fieldPath.isEmpty() && sparseAnnFields.contains(fieldPath + "." + this.listTypeNestedMapKey);
+        return sparseAnnFields.contains(fieldPath)
+            || !fieldPath.isEmpty() && sparseAnnFields.contains(fieldPath + "." + this.listTypeNestedMapKey);
     }
 
     @Override
@@ -357,9 +399,10 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         Object indexObj = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj == null ? null : indexObj.toString();
         Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService);
+        long maxDepth = getMaxDepth(index);
         Map<String, Object> tokenIdProcessMap = new HashMap<>();
         Map<String, Object> wordProcessMap = new HashMap<>();
-        splitProcessMap(processMap, sparseAnnFields, "", tokenIdProcessMap, wordProcessMap);
+        splitProcessMap(processMap, sparseAnnFields, "", tokenIdProcessMap, wordProcessMap, 1, maxDepth);
         AtomicInteger counter = new AtomicInteger(0);
         if (tokenIdProcessMap.isEmpty()) {
             generateAndSetMapInference(ingestDocument, processMap, inferenceList, pruneType, pruneRatio, null, handler);

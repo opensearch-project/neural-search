@@ -139,11 +139,7 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         when(indexMetadata.mapping()).thenReturn(mappingMetadata);
     }
 
-    private Map<String, Object> createNestedFieldMappingProperties(
-        boolean isSeismicField,
-        String parentField,
-        List<String> sparseFields
-    ) {
+    private Map<String, Object> createNestedFieldMappingProperties(boolean isSeismicField, String parentField, List<String> sparseFields) {
         Map<String, Object> properties = new HashMap<>();
         Map<String, Object> nestedFieldMapping = new HashMap<>();
         Map<String, Object> sparseFieldMapping = new HashMap<>();
