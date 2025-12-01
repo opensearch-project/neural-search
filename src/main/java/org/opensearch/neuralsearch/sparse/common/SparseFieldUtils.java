@@ -24,7 +24,7 @@ import java.util.Set;
 public class SparseFieldUtils {
     /**
      * Retrieves all sparse ANN fields from a given index, including nested fields.
-     * For nested fields like "passage_chunk_embedding.sparse_encoding", returns the parent path "passage_chunk_embedding".
+     * For nested fields like "passage_chunk_embedding.sparse_encoding", returns the full path "passage_chunk_embedding.sparse_encoding".
      *
      * @param index The name of the index
      * @return A set of field names that are configured as sparse token fields, or an empty set if none exist
