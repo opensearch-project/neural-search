@@ -27,10 +27,12 @@ public class SparseFieldUtils {
      * For nested fields like "passage_chunk_embedding.sparse_encoding", returns the full path "passage_chunk_embedding.sparse_encoding".
      *
      * @param index The name of the index
+     * @param clusterService The cluster service
+     * @param maxDepth The maximum depth to traverse in nested fields
      * @return A set of field names that are configured as sparse token fields, or an empty set if none exist
      */
     @SuppressWarnings("unchecked")
-    public static Set<String> getSparseAnnFields(String index, ClusterService clusterService) {
+    public static Set<String> getSparseAnnFields(String index, ClusterService clusterService, long maxDepth) {
         if (index == null) {
             return Collections.emptySet();
         }
@@ -52,7 +54,7 @@ public class SparseFieldUtils {
         }
         Set<String> sparseAnnFields = new HashSet<>();
         Map<String, Object> fields = (Map<String, Object>) properties;
-        collectSparseAnnFields(fields, "", sparseAnnFields);
+        collectSparseAnnFields(fields, "", sparseAnnFields, 1, maxDepth);
         return sparseAnnFields;
     }
 
@@ -63,9 +65,23 @@ public class SparseFieldUtils {
      * @param fields The current level of field mappings
      * @param parentPath The path to the current level (empty for top-level)
      * @param sparseAnnFields The set to collect sparse ANN field paths
+     * @param depth Current recursion depth
+     * @param maxDepth Maximum allowed depth
      */
     @SuppressWarnings("unchecked")
-    private static void collectSparseAnnFields(Map<String, Object> fields, String parentPath, Set<String> sparseAnnFields) {
+    private static void collectSparseAnnFields(
+        Map<String, Object> fields,
+        String parentPath,
+        Set<String> sparseAnnFields,
+        int depth,
+        long maxDepth
+    ) {
+        if (depth > maxDepth) {
+            throw new IllegalArgumentException(
+                String.format("Field [%s] exceeds maximum mapping depth limit of [%d]", parentPath, maxDepth)
+            );
+        }
+
         for (Map.Entry<String, Object> field : fields.entrySet()) {
             if (!(field.getValue() instanceof Map)) {
                 continue;
@@ -79,7 +95,7 @@ public class SparseFieldUtils {
                 Object nestedProperties = fieldMap.get("properties");
                 if (nestedProperties instanceof Map) {
                     String currentPath = parentPath.isEmpty() ? field.getKey() : parentPath + "." + field.getKey();
-                    collectSparseAnnFields((Map<String, Object>) nestedProperties, currentPath, sparseAnnFields);
+                    collectSparseAnnFields((Map<String, Object>) nestedProperties, currentPath, sparseAnnFields, depth + 1, maxDepth);
                 }
             }
         }
