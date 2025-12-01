@@ -16,6 +16,8 @@ import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -113,7 +115,7 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
 
     public void testGetSparseAnnFields_whenNestedSeismicField_thenReturnField() {
         // Setup mock cluster service with nested seismic field
-        Map<String, Object> properties = TestsPrepareUtils.createNestedFieldMappingProperties(
+        Map<String, Object> properties = createNestedFieldMappingProperties(
             true,
             TEST_PARENT_FIELD_NAME,
             Collections.singletonList(TEST_SPARSE_FIELD_NAME)
@@ -135,5 +137,24 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         MappingMetadata mappingMetadata = new MappingMetadata("_doc", properties);
         configureSparseIndexSetting(true);
         when(indexMetadata.mapping()).thenReturn(mappingMetadata);
+    }
+
+    private Map<String, Object> createNestedFieldMappingProperties(
+        boolean isSeismicField,
+        String parentField,
+        List<String> sparseFields
+    ) {
+        Map<String, Object> properties = new HashMap<>();
+        Map<String, Object> nestedFieldMapping = new HashMap<>();
+        Map<String, Object> sparseFieldMapping = new HashMap<>();
+        for (String sparseField : sparseFields) {
+            Map<String, Object> sparseFieldProperties = new HashMap<>();
+            sparseFieldProperties.put("type", isSeismicField ? "sparse_vector" : "rank_features");
+
+            sparseFieldMapping.put(sparseField, sparseFieldProperties);
+        }
+        nestedFieldMapping.put("properties", sparseFieldMapping);
+        properties.put("properties", Map.of(parentField, nestedFieldMapping));
+        return properties;
     }
 }

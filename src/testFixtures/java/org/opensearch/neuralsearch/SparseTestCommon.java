@@ -813,7 +813,7 @@ public class SparseTestCommon {
             .endObject();
         return mappingBuilder.toString();
     }
-    
+
     public static String prepareMixedFieldTypeIndexMapping(
         String parentField,
         String rankFeaturesField,
