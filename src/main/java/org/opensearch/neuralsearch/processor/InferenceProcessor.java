@@ -79,7 +79,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     private final String type;
 
-    // This field is used for nested knn_vector/rank_features field. The value of the field will be used as the
+    // This field is used for nested knn_vector/rank_features/sparse_vector field. The value of the field will be used as the
     // default key for the nested object.
     protected final String listTypeNestedMapKey;
 
