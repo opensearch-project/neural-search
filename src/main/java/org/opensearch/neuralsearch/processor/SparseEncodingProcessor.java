@@ -284,7 +284,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
      * @return true if the field path matches or is a prefix of any sparse ANN field
      */
     private boolean isSparseAnnFieldByPath(Set<String> sparseAnnFields, String fieldPath) {
-        return sparseAnnFields.contains(fieldPath) || sparseAnnFields.contains(fieldPath + "." + this.listTypeNestedMapKey);
+        return sparseAnnFields.contains(fieldPath) || !fieldPath.isEmpty() && sparseAnnFields.contains(fieldPath + "." + this.listTypeNestedMapKey);
     }
 
     @Override
