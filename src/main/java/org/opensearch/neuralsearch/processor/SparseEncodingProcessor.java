@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Objects;
@@ -301,12 +302,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     private void validateDepth(String fieldPath, int depth, long maxDepth) {
         if (depth > maxDepth) {
             throw new IllegalArgumentException(
-                String.format(
-                    java.util.Locale.ROOT,
-                    "Field [%s] exceeds maximum depth limit of [%d], cannot process it",
-                    fieldPath,
-                    maxDepth
-                )
+                String.format(Locale.ROOT, "Field [%s] exceeds maximum depth limit of [%d], cannot process it", fieldPath, maxDepth)
             );
         }
     }

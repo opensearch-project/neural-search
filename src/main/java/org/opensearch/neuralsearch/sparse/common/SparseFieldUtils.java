@@ -15,6 +15,7 @@ import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -112,7 +113,7 @@ public class SparseFieldUtils {
     ) {
         if (depth > maxDepth) {
             throw new IllegalArgumentException(
-                String.format("Field [%s] exceeds maximum mapping depth limit of [%d]", parentPath, maxDepth)
+                String.format(Locale.ROOT, "Field [%s] exceeds maximum mapping depth limit of [%d]", parentPath, maxDepth)
             );
         }
 
