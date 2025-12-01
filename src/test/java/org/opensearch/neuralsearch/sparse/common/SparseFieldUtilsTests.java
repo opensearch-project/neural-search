@@ -128,6 +128,22 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         );
     }
 
+    public void testGetSparseAnnFields_whenNestedSeismicField_andExceedMapDepth_thenThrowException() {
+        // Setup mock cluster service with deeply nested seismic field that exceeds maxDepth
+        Map<String, Object> properties = createNestedFieldMappingProperties(
+            true,
+            TEST_PARENT_FIELD_NAME,
+            Collections.singletonList(TEST_SPARSE_FIELD_NAME)
+        );
+        configureIndexMappingProperties(properties);
+
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> {
+            SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService, 1);
+        });
+
+        assertTrue(exception.getMessage().contains("exceeds maximum mapping depth limit"));
+    }
+
     private void configureSparseIndexSetting(boolean isSparseIndex) {
         Settings settings = Settings.builder().put("index.sparse", isSparseIndex).build();
         when(indexMetadata.getSettings()).thenReturn(settings);

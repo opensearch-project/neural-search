@@ -8,6 +8,8 @@ import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 
@@ -22,6 +24,20 @@ import java.util.Set;
  * Utility class for operations related to sparse fields in neural search indices.
  */
 public class SparseFieldUtils {
+    /**
+     * Retrieves all sparse ANN fields from a given index, including nested fields.
+     * For nested fields like "passage_chunk_embedding.sparse_encoding", returns the full path "passage_chunk_embedding.sparse_encoding".
+     * This method automatically retrieves the max depth from the index settings.
+     *
+     * @param index The name of the index
+     * @param clusterService The cluster service
+     * @return A set of field names that are configured as sparse token fields, or an empty set if none exist
+     */
+    public static Set<String> getSparseAnnFields(String index, ClusterService clusterService) {
+        long maxDepth = getMaxDepth(index, clusterService);
+        return getSparseAnnFields(index, clusterService, maxDepth);
+    }
+
     /**
      * Retrieves all sparse ANN fields from a given index, including nested fields.
      * For nested fields like "passage_chunk_embedding.sparse_encoding", returns the full path "passage_chunk_embedding.sparse_encoding".
@@ -56,6 +72,24 @@ public class SparseFieldUtils {
         Map<String, Object> fields = (Map<String, Object>) properties;
         collectSparseAnnFields(fields, "", sparseAnnFields, 1, maxDepth);
         return sparseAnnFields;
+    }
+
+    /**
+     * Retrieves the maximum allowed mapping depth from index settings.
+     *
+     * @param index The name of the index
+     * @param clusterService The cluster service
+     * @return The maximum depth limit from index settings
+     */
+    private static long getMaxDepth(String index, ClusterService clusterService) {
+        Settings settings = Optional.ofNullable(clusterService)
+            .map(ClusterService::state)
+            .map(ClusterState::metadata)
+            .map(metadata -> metadata.index(index))
+            .map(IndexMetadata::getSettings)
+            .orElse(Settings.EMPTY);
+
+        return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(settings);
     }
 
     /**

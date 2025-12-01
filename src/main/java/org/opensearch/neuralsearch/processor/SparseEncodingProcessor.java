@@ -156,12 +156,12 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         // ingest documents in a batch belong to the same index
         Object indexObj = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj.toString();
-        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService);
+        long maxDepth = getMaxDepth(index);
+        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService, maxDepth);
         if (sparseAnnFields.isEmpty()) {
             super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
             return;
         }
-        long maxDepth = getMaxDepth(index);
         SplitDataResponse splitDataResponse = splitData(dataForInferences, sparseAnnFields, maxDepth);
         AtomicInteger counter = new AtomicInteger(0);
         if (splitDataResponse.getTokenIdDataForInference().isEmpty()) {
@@ -398,8 +398,8 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     ) {
         Object indexObj = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj == null ? null : indexObj.toString();
-        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService);
         long maxDepth = getMaxDepth(index);
+        Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService, maxDepth);
         Map<String, Object> tokenIdProcessMap = new HashMap<>();
         Map<String, Object> wordProcessMap = new HashMap<>();
         splitProcessMap(processMap, sparseAnnFields, "", tokenIdProcessMap, wordProcessMap, 1, maxDepth);
