@@ -82,7 +82,7 @@ public class SparseFieldUtils {
      * @param clusterService The cluster service
      * @return The maximum depth limit from index settings
      */
-    private static long getMaxDepth(String index, ClusterService clusterService) {
+    public static long getMaxDepth(String index, ClusterService clusterService) {
         Settings settings = Optional.ofNullable(clusterService)
             .map(ClusterService::state)
             .map(ClusterState::metadata)

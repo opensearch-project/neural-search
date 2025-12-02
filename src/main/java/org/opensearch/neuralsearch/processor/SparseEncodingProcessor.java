@@ -10,14 +10,11 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.get.GetAction;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.get.MultiGetAction;
-import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
-import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.util.CollectionUtils;
 import org.opensearch.env.Environment;
-import org.opensearch.index.mapper.MapperService;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
@@ -38,7 +35,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -157,7 +153,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         // ingest documents in a batch belong to the same index
         Object indexObj = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj.toString();
-        long maxDepth = getMaxDepth(index);
+        long maxDepth = SparseFieldUtils.getMaxDepth(index, clusterService);
         Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService, maxDepth);
         if (sparseAnnFields.isEmpty()) {
             super.doSubBatchExecute(ingestDocumentWrappers, inferenceList, dataForInferences, handler);
@@ -292,13 +288,6 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         }
     }
 
-    private long getMaxDepth(String indexName) {
-        Settings settings = Optional.ofNullable(clusterService.state().metadata().index(indexName))
-            .map(IndexMetadata::getSettings)
-            .orElse(environment.settings());
-        return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(settings);
-    }
-
     private void validateDepth(String fieldPath, int depth, long maxDepth) {
         if (depth > maxDepth) {
             throw new IllegalArgumentException(
@@ -394,7 +383,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     ) {
         Object indexObj = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         String index = indexObj == null ? null : indexObj.toString();
-        long maxDepth = getMaxDepth(index);
+        long maxDepth = SparseFieldUtils.getMaxDepth(index, clusterService);
         Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, clusterService, maxDepth);
         Map<String, Object> tokenIdProcessMap = new HashMap<>();
         Map<String, Object> wordProcessMap = new HashMap<>();
