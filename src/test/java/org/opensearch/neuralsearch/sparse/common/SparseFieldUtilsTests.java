@@ -12,6 +12,7 @@ import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -142,6 +143,44 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         });
 
         assertTrue(exception.getMessage().contains("exceeds maximum mapping depth limit"));
+    }
+
+    public void testGetMaxDepth_whenNullIndex_thenReturnDefaultDepth() {
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(null, clusterService));
+    }
+
+    public void testGetMaxDepth_whenNullClusterService_thenReturnDefaultDepth() {
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, null));
+    }
+
+    public void testGetMaxDepth_whenIndexNotFound_thenReturnDefaultDepth() {
+        when(metadata.index(TEST_INDEX_NAME)).thenReturn(null);
+
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, clusterService));
+    }
+
+    public void testGetMaxDepth_whenCustomDepthConfigured_thenReturnCustomDepth() {
+        long customDepth = 50L;
+        Settings settings = Settings.builder().put(MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getKey(), customDepth).build();
+
+        when(indexMetadata.getSettings()).thenReturn(settings);
+
+        assertEquals(customDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, clusterService));
+    }
+
+    public void testGetMaxDepth_whenNoDepthConfigured_thenReturnDefaultDepth() {
+        Settings settings = Settings.builder().build();
+        when(indexMetadata.getSettings()).thenReturn(settings);
+
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, clusterService));
     }
 
     private void configureSparseIndexSetting(boolean isSparseIndex) {
