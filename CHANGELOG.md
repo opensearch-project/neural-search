@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+- Implement GRPC Hybrid Query ([#1665](https://github.com/opensearch-project/neural-search/pull/1665))
 
 ### Enhancements
 - [Agentic Search] Preserve source parameter for the query ([#1669](https://github.com/opensearch-project/neural-search/pull/1669))
