@@ -13,15 +13,23 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.SparseTestCommon;
+import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
+import org.apache.lucene.search.join.ScoreMode;
 
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
@@ -737,6 +745,461 @@ public class SparseSearchingIT extends SparseBaseIT {
         Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 20);
         assertNotNull(searchResults);
         assertTrue(getHitCount(searchResults) <= 15);
+    }
+
+    public void testSearchNestedFieldWithRawSparseVectors() throws Exception {
+        String nestedFieldName = "nested_data";
+        String sparseFieldName = nestedFieldName + "." + SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY;
+
+        createNestedSparseIndex(TEST_INDEX_NAME, nestedFieldName, SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY, 4, 0.4f, 0.5f, 3);
+
+        List<List<Map<String, Float>>> documentsWithChunks = List.of(
+            List.of(Map.of("1000", 0.9f, "2000", 0.1f), Map.of("1000", 0.6f, "2000", 0.4f), Map.of("1000", 0.3f, "2000", 0.7f)),
+            List.of(Map.of("1000", 0.8f, "2000", 0.2f), Map.of("1000", 0.5f, "2000", 0.5f), Map.of("1000", 0.2f, "2000", 0.8f)),
+            List.of(Map.of("1000", 0.7f, "2000", 0.3f), Map.of("1000", 0.4f, "2000", 0.6f), Map.of("1000", 0.1f, "3000", 0.9f))
+        );
+
+        ingestNestedDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, nestedFieldName, documentsWithChunks, null);
+
+        assertEquals(3, getDocCount(TEST_INDEX_NAME));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            sparseFieldName,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 1.5f, "2000", 0.5f)
+        );
+
+        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(nestedFieldName, neuralSparseQueryBuilder, ScoreMode.Max);
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, nestedQuery, 10);
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) > 0);
+        List<String> actualIds = getDocIDs(searchResults);
+        assertEquals(List.of("1", "2", "3"), actualIds);
+    }
+
+    public void testSearchNestedFieldWithModelInferencing() throws Exception {
+        String modelId = prepareSparseEncodingModel();
+        String nestedFieldName = "passage_chunk_embedding";
+        String sparseFieldName = nestedFieldName + "." + SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY;
+
+        URL pipelineURLPath = classLoader.getResource("processor/PipelineForTextChunkingAndSparseEncoding.json");
+        Objects.requireNonNull(pipelineURLPath);
+        String pipelineConfiguration = Files.readString(Path.of(pipelineURLPath.toURI()));
+        pipelineConfiguration = pipelineConfiguration.replace("${MODEL_ID}", modelId);
+
+        createPipelineProcessor(pipelineConfiguration, PIPELINE_NAME, "", null);
+
+        createNestedSparseIndex(TEST_INDEX_NAME, nestedFieldName, SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY, 4, 0.4f, 0.5f, 3);
+        updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.default_pipeline", PIPELINE_NAME));
+
+        String doc1 = "{\"passage_text\": \"hello world this is a test document for chunking\"}";
+        String doc2 = "{\"passage_text\": \"machine learning models are used for neural search\"}";
+        String doc3 = "{\"passage_text\": \"opensearch provides powerful search capabilities for applications\"}";
+
+        ingestDocument(TEST_INDEX_NAME, doc1, "1");
+        ingestDocument(TEST_INDEX_NAME, doc2, "2");
+        ingestDocument(TEST_INDEX_NAME, doc3, "3");
+
+        forceMerge(TEST_INDEX_NAME);
+        waitForSegmentMerge(TEST_INDEX_NAME);
+
+        assertEquals(3, getDocCount(TEST_INDEX_NAME));
+
+        SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2).fieldName(sparseFieldName).heapFactor(1.0f).k(5);
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
+            .fieldName(sparseFieldName)
+            .modelId(modelId)
+            .queryText("hello world");
+
+        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(nestedFieldName, neuralSparseQueryBuilder, ScoreMode.Max);
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, nestedQuery, 10);
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) > 0);
+        // Doc 1 with "hello world" should be in the results
+        assertEquals("1", getDocIDs(searchResults).get(0));
+    }
+
+    public void testSearchNestedFieldWithRawSparseVectorsMultipleShard() throws Exception {
+        int shards = 3;
+        int replicas = getEffectiveReplicaCount(3);
+        String nestedFieldName = "nested_data";
+        String sparseFieldName = nestedFieldName + "." + SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY;
+
+        createNestedSparseIndex(
+            TEST_INDEX_NAME,
+            nestedFieldName,
+            SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY,
+            4,
+            0.4f,
+            0.5f,
+            3,
+            shards,
+            replicas
+        );
+
+        List<List<Map<String, Float>>> documentsWithChunks = List.of(
+            List.of(Map.of("1000", 0.9f, "2000", 0.1f), Map.of("1000", 0.6f, "2000", 0.4f), Map.of("1000", 0.3f, "2000", 0.7f)),
+            List.of(Map.of("1000", 0.8f, "2000", 0.2f), Map.of("1000", 0.5f, "2000", 0.5f), Map.of("1000", 0.2f, "2000", 0.8f)),
+            List.of(Map.of("1000", 0.7f, "2000", 0.3f), Map.of("1000", 0.4f, "2000", 0.6f), Map.of("1000", 0.1f, "3000", 0.9f))
+        );
+
+        List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
+        for (int i = 0; i < shards; ++i) {
+            String payload = SparseTestCommon.prepareNestedSparseBulkIngestPayloadWithMultipleChunks(
+                TEST_INDEX_NAME,
+                nestedFieldName,
+                documentsWithChunks,
+                i * documentsWithChunks.size() + 1
+            );
+            bulkIngest(payload, null, routingIds.get(i));
+        }
+
+        forceMerge(TEST_INDEX_NAME);
+        waitForSegmentMerge(TEST_INDEX_NAME, shards, replicas);
+        assertEquals(shards * (replicas + 1), getSegmentCount(TEST_INDEX_NAME));
+
+        assertEquals(shards * documentsWithChunks.size(), getDocCount(TEST_INDEX_NAME));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            sparseFieldName,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 1.5f, "2000", 0.5f)
+        );
+
+        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(nestedFieldName, neuralSparseQueryBuilder, ScoreMode.Max);
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, nestedQuery, 20);
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) > 0);
+
+        // Verify search results across multiple shards
+        // We ingested 3 documents per shard across 3 shards (total 9 documents)
+        // Each document has 3 sparse vectors with decreasing scores for high-weighted token "1000":
+        // - Doc 1,4,7 (first doc per shard)
+        // - Doc 2,5,8 (second doc per shard)
+        // - Doc 3,6,9 (third doc per shard)
+        // Expected ranking: [1,4,7] > [2,5,8] > [3,6,9]
+        List<String> actualIds = getDocIDs(searchResults);
+        assertTrue(actualIds.size() >= 9);
+        Set<String> topThreeIds = new HashSet<>(actualIds.subList(0, 3));
+        Set<String> middleThreeIds = new HashSet<>(actualIds.subList(3, 6));
+        Set<String> lastThreeIds = new HashSet<>(actualIds.subList(6, 9));
+        assertEquals(Set.of("1", "4", "7"), topThreeIds);
+        assertEquals(Set.of("2", "5", "8"), middleThreeIds);
+        assertEquals(Set.of("3", "6", "9"), lastThreeIds);
+    }
+
+    public void testSearchNestedFieldWithModelInferencingMultipleShard() throws Exception {
+        int shards = 3;
+        int replicas = getEffectiveReplicaCount(3);
+        String modelId = prepareSparseEncodingModel();
+        String nestedFieldName = "passage_chunk_embedding";
+        String sparseFieldName = nestedFieldName + "." + SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY;
+        String pipelineName = "chunking-sparse-pipeline";
+
+        URL pipelineURLPath = classLoader.getResource("processor/PipelineForTextChunkingAndSparseEncoding.json");
+        Objects.requireNonNull(pipelineURLPath);
+        String pipelineConfiguration = Files.readString(Path.of(pipelineURLPath.toURI()));
+        pipelineConfiguration = pipelineConfiguration.replace("${MODEL_ID}", modelId);
+
+        createPipelineProcessor(pipelineConfiguration, pipelineName, "", null);
+
+        createNestedSparseIndex(
+            TEST_INDEX_NAME,
+            nestedFieldName,
+            SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY,
+            4,
+            0.4f,
+            0.5f,
+            3,
+            shards,
+            replicas
+        );
+        updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.default_pipeline", pipelineName));
+
+        List<String> documents = List.of(
+            "{\"passage_text\": \"hello world this is a test document for chunking\"}",
+            "{\"passage_text\": \"machine learning models are used for neural search\"}",
+            "{\"passage_text\": \"opensearch provides powerful search capabilities for applications\"}"
+        );
+
+        List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
+        int docId = 1;
+        for (int i = 0; i < shards; ++i) {
+            StringBuilder payloadBuilder = new StringBuilder();
+            for (String doc : documents) {
+                payloadBuilder.append(
+                    String.format(Locale.ROOT, "{ \"index\": { \"_index\": \"%s\", \"_id\": \"%d\"} }", TEST_INDEX_NAME, docId)
+                );
+                payloadBuilder.append(System.lineSeparator());
+                payloadBuilder.append(doc);
+                payloadBuilder.append(System.lineSeparator());
+                docId++;
+            }
+            bulkIngest(payloadBuilder.toString(), null, routingIds.get(i));
+        }
+
+        forceMerge(TEST_INDEX_NAME);
+        waitForSegmentMerge(TEST_INDEX_NAME, shards, replicas);
+        assertEquals(shards * (replicas + 1), getSegmentCount(TEST_INDEX_NAME));
+
+        assertEquals(shards * documents.size(), getDocCount(TEST_INDEX_NAME));
+
+        SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2).fieldName(sparseFieldName).heapFactor(1.0f).k(5);
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
+            .fieldName(sparseFieldName)
+            .modelId(modelId)
+            .queryText("hello world");
+
+        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(nestedFieldName, neuralSparseQueryBuilder, ScoreMode.Max);
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, nestedQuery, 20);
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) > 0);
+        // Documents with "hello world" should be in the results. The documents are with id "1", "4" and "7"
+        List<String> actualIds = getDocIDs(searchResults);
+        assertTrue(actualIds.size() >= 3);
+        Set<String> topThreeIds = new HashSet<>(actualIds.subList(0, 3));
+        assertEquals(Set.of("1", "4", "7"), topThreeIds);
+    }
+
+    public void testSearchMixedNestedFieldsWithDifferentSearchStrategies() throws Exception {
+        // Tests an index with two nested parent fields:
+        // 1. sparse_ann_parent_field - uses sparse ANN search with method parameters
+        // 2. plain_neural_sparse_parent_field - uses plain neural sparse search
+        // Both fields contain nested passage chunks with sparse encoding, processed by the same pipeline
+        String modelId = prepareSparseEncodingModel();
+        String sparseAnnParentField = "sparse_ann_parent_field";
+        String plainNeuralSparseParentField = "plain_neural_sparse_parent_field";
+        String nestedChunkField = "passage_chunk_embedding";
+        String sparseFieldName = nestedChunkField + "." + SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY;
+        String pipelineName = "multi-field-chunking-pipeline";
+
+        URL pipelineURLPath = classLoader.getResource("processor/PipelineForMultiFieldTextChunkingAndSparseEncoding.json");
+        Objects.requireNonNull(pipelineURLPath);
+        String pipelineConfiguration = Files.readString(Path.of(pipelineURLPath.toURI()));
+        pipelineConfiguration = pipelineConfiguration.replace("${MODEL_ID}", modelId);
+
+        createPipelineProcessor(pipelineConfiguration, pipelineName, "", null);
+
+        String indexMappings = SparseTestCommon.prepareMixedNestedFieldsIndexMapping(
+            sparseAnnParentField,
+            plainNeuralSparseParentField,
+            nestedChunkField,
+            SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY,
+            4,
+            0.4f,
+            0.5f,
+            8
+        );
+
+        String indexSettings = prepareIndexSettings(1, 0);
+        Request request = new Request("PUT", "/" + TEST_INDEX_NAME);
+        String body = String.format(
+            Locale.ROOT,
+            "{\n" + "  \"settings\": %s,\n" + "  \"mappings\": %s\n" + "}",
+            indexSettings,
+            indexMappings
+        );
+        request.setJsonEntity(body);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.default_pipeline", pipelineName));
+
+        String doc1 = String.format(
+            Locale.ROOT,
+            "{\"%s\": {\"passage_text\": \"hello world test document\"}, \"%s\": {\"passage_text\": \"hello world test document\"}}",
+            sparseAnnParentField,
+            plainNeuralSparseParentField
+        );
+        String doc2 = String.format(
+            Locale.ROOT,
+            "{\"%s\": {\"passage_text\": \"machine learning neural search\"}, \"%s\": {\"passage_text\": \"machine learning neural search\"}}",
+            sparseAnnParentField,
+            plainNeuralSparseParentField
+        );
+        String doc3 = String.format(
+            Locale.ROOT,
+            "{\"%s\": {\"passage_text\": \"opensearch search capabilities\"}, \"%s\": {\"passage_text\": \"opensearch search capabilities\"}}",
+            sparseAnnParentField,
+            plainNeuralSparseParentField
+        );
+
+        StringBuilder payloadBuilder = new StringBuilder();
+        int docId = 1;
+        for (String doc : List.of(doc1, doc2, doc3)) {
+            payloadBuilder.append(
+                String.format(Locale.ROOT, "{ \"index\": { \"_index\": \"%s\", \"_id\": \"%d\"} }", TEST_INDEX_NAME, docId)
+            );
+            payloadBuilder.append(System.lineSeparator());
+            payloadBuilder.append(doc);
+            payloadBuilder.append(System.lineSeparator());
+            docId++;
+        }
+        bulkIngest(payloadBuilder.toString(), null);
+
+        forceMerge(TEST_INDEX_NAME);
+        waitForSegmentMerge(TEST_INDEX_NAME);
+
+        assertEquals(3, getDocCount(TEST_INDEX_NAME));
+
+        // Test 1: Search using sparse ANN on first parent field
+        String sparseAnnFieldPath = sparseAnnParentField + "." + sparseFieldName;
+        SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2).fieldName(sparseAnnFieldPath).heapFactor(1.0f).k(5);
+
+        NeuralSparseQueryBuilder sparseAnnQuery = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
+            .fieldName(sparseAnnFieldPath)
+            .modelId(modelId)
+            .queryText("hello world");
+
+        QueryBuilder nestedSparseAnnQuery = QueryBuilders.nestedQuery(
+            sparseAnnParentField + "." + nestedChunkField,
+            sparseAnnQuery,
+            ScoreMode.Max
+        );
+
+        Map<String, Object> sparseAnnResults = search(TEST_INDEX_NAME, nestedSparseAnnQuery, 10);
+        assertNotNull(sparseAnnResults);
+        assertTrue(getHitCount(sparseAnnResults) > 0);
+        assertEquals("1", getDocIDs(sparseAnnResults).get(0));
+
+        // Test 2: Search using plain neural sparse on second parent field
+        String plainFieldPath = plainNeuralSparseParentField + "." + sparseFieldName;
+        NeuralSparseQueryBuilder plainQuery = new NeuralSparseQueryBuilder().fieldName(plainFieldPath)
+            .modelId(modelId)
+            .queryText("hello world");
+
+        QueryBuilder nestedPlainQuery = QueryBuilders.nestedQuery(
+            plainNeuralSparseParentField + "." + nestedChunkField,
+            plainQuery,
+            ScoreMode.Max
+        );
+
+        Map<String, Object> plainResults = search(TEST_INDEX_NAME, nestedPlainQuery, 10);
+        assertNotNull(plainResults);
+        assertTrue(getHitCount(plainResults) > 0);
+        assertEquals("1", getDocIDs(plainResults).get(0));
+
+        // Both field should yield the same search results
+        assertEquals(getDocIDs(sparseAnnResults), getDocIDs(plainResults));
+    }
+
+    public void testSearchMixedFieldTypesWithinSingleParent() throws Exception {
+        // Tests an index with a parent object containing two different field types:
+        // 1. rank_features_embedding - rank_features type (no method parameters)
+        // 2. sparse_ann_embedding - sparse_vector type with seismic method
+        // Both fields are populated by the same sparse encoding processor from different source text fields
+        String modelId = prepareSparseEncodingModel();
+        String parentField = "parent";
+        String rankFeaturesField = "rank_features_embedding";
+        String sparseVectorField = "sparse_ann_embedding";
+        String pipelineName = "mixed-field-encoding-pipeline";
+
+        URL pipelineURLPath = classLoader.getResource("processor/PipelineForMixedFieldSparseEncoding.json");
+        Objects.requireNonNull(pipelineURLPath);
+        String pipelineConfiguration = Files.readString(Path.of(pipelineURLPath.toURI()));
+        pipelineConfiguration = pipelineConfiguration.replace("${MODEL_ID}", modelId);
+
+        createPipelineProcessor(pipelineConfiguration, pipelineName, "", null);
+
+        String indexMappings = SparseTestCommon.prepareMixedFieldTypeIndexMapping(
+            parentField,
+            rankFeaturesField,
+            sparseVectorField,
+            4,
+            0.4f,
+            0.5f,
+            8
+        );
+
+        String indexSettings = prepareIndexSettings(1, 0);
+        Request request = new Request("PUT", "/" + TEST_INDEX_NAME);
+        String body = String.format(
+            Locale.ROOT,
+            "{\n" + "  \"settings\": %s,\n" + "  \"mappings\": %s\n" + "}",
+            indexSettings,
+            indexMappings
+        );
+        request.setJsonEntity(body);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+
+        updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.default_pipeline", pipelineName));
+
+        // Ingest documents with two text fields that will be encoded into different field types
+        String doc1 = String.format(
+            Locale.ROOT,
+            "{\"%s\": {\"passage_text_1\": \"hello world test\", \"passage_text_2\": \"hello world test\"}}",
+            parentField
+        );
+        String doc2 = String.format(
+            Locale.ROOT,
+            "{\"%s\": {\"passage_text_1\": \"machine learning\", \"passage_text_2\": \"machine learning\"}}",
+            parentField
+        );
+        String doc3 = String.format(
+            Locale.ROOT,
+            "{\"%s\": {\"passage_text_1\": \"opensearch capabilities\", \"passage_text_2\": \"opensearch capabilities\"}}",
+            parentField
+        );
+
+        StringBuilder payloadBuilder = new StringBuilder();
+        int docId = 1;
+        for (String doc : List.of(doc1, doc2, doc3)) {
+            payloadBuilder.append(
+                String.format(Locale.ROOT, "{ \"index\": { \"_index\": \"%s\", \"_id\": \"%d\"} }", TEST_INDEX_NAME, docId)
+            );
+            payloadBuilder.append(System.lineSeparator());
+            payloadBuilder.append(doc);
+            payloadBuilder.append(System.lineSeparator());
+            docId++;
+        }
+        bulkIngest(payloadBuilder.toString(), null);
+
+        forceMerge(TEST_INDEX_NAME);
+        waitForSegmentMerge(TEST_INDEX_NAME);
+
+        assertEquals(3, getDocCount(TEST_INDEX_NAME));
+
+        // Test 1: Search using sparse ANN on sparse_vector field (sparse_ann_embedding)
+        String sparseVectorFieldPath = parentField + "." + sparseVectorField;
+        SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2)
+            .fieldName(sparseVectorFieldPath)
+            .heapFactor(1.0f)
+            .k(5);
+
+        NeuralSparseQueryBuilder sparseAnnQuery = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
+            .fieldName(sparseVectorFieldPath)
+            .modelId(modelId)
+            .queryText("hello world");
+
+        Map<String, Object> sparseAnnResults = search(TEST_INDEX_NAME, sparseAnnQuery, 10);
+        assertNotNull(sparseAnnResults);
+        assertTrue(getHitCount(sparseAnnResults) > 0);
+        assertEquals("1", getDocIDs(sparseAnnResults).get(0));
+
+        // Test 2: Search using plain neural sparse on rank_features field (rank_features_embedding)
+        String rankFeaturesFieldPath = parentField + "." + rankFeaturesField;
+        NeuralSparseQueryBuilder plainQuery = new NeuralSparseQueryBuilder().fieldName(rankFeaturesFieldPath)
+            .modelId(modelId)
+            .queryText("hello world");
+
+        Map<String, Object> plainResults = search(TEST_INDEX_NAME, plainQuery, 10);
+        assertNotNull(plainResults);
+        assertTrue(getHitCount(plainResults) > 0);
+        assertEquals("1", getDocIDs(plainResults).get(0));
+
+        // Both field should yield the same search results
+        assertEquals(getDocIDs(sparseAnnResults), getDocIDs(plainResults));
     }
 
     @SuppressWarnings("unchecked")

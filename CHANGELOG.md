@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Enhancements
 - [Agentic Search] Preserve source parameter for the query ([#1669](https://github.com/opensearch-project/neural-search/pull/1669))
+- [SEISMIC Nested Field]: Sparse ANN ingestion and query handle nested fields ([#1678](https://github.com/opensearch-project/neural-search/pull/1678))
 
 ### Bug Fixes
 - [SEISMIC IT]: Fix some failed IT cases ([#1655](https://github.com/opensearch-project/neural-search/pull/1655))

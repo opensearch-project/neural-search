@@ -151,7 +151,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -204,7 +204,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(6);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(6);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -250,7 +250,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createNestedTypeInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -268,7 +268,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
         SparseEncodingProcessor processor = createInstance(docCount, false);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(10);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -409,7 +409,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(true);
         mockUpdateDocument(ingestDocument);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -429,7 +429,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(true);
         mockUpdateDocument(ingestDocument);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -821,7 +821,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -847,7 +847,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -877,7 +877,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(2);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
         doThrow(new RuntimeException()).doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -895,7 +895,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
         SparseEncodingProcessor processor = createInstance(docCount, false);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(10);
         String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType, KEY2_MAPPED, seisType);
         doAnswer(invocation -> {
@@ -923,7 +923,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         SparseEncodingProcessor processor = createInstance(docCount, false);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(10);
         String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType);
         doAnswer(invocation -> {
@@ -955,7 +955,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount, KEY1, VALUE1, KEY2, VALUE2);
         SparseEncodingProcessor processor = createInstance(docCount, false);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(10);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(10);
         String seisType = SparseVectorFieldMapper.CONTENT_TYPE;
         mockSeismic(KEY1_MAPPED, seisType);
         doThrow(new RuntimeException()).doAnswer(invocation -> {
@@ -1020,7 +1020,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         List<String> inferenceList = processor.constructInferenceTexts(dataForInferences);
         List<List<IngestDocumentWrapper>> consumer = new ArrayList<>();
         processor = spy(processor);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(5);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(5);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -1045,7 +1045,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         List<String> inferenceList = processor.constructInferenceTexts(dataForInferences);
         List<List<IngestDocumentWrapper>> consumer = new ArrayList<>();
         processor = spy(processor);
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(5);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(5);
         doAnswer(invocation -> {
             MLAlgoParams mlAlgoParams = invocation.getArgument(1);
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
@@ -1076,7 +1076,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(1);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(1);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -1109,7 +1109,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
         SparseEncodingProcessor processor = createNestedTypeInstance(false);
 
-        List<Map<String, ?>> dataAsMapList = createMockMapResult(1);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(1);
         doAnswer(invocation -> {
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
             listener.onResponse(dataAsMapList);
@@ -1128,10 +1128,68 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         assertTrue(key2Map.containsKey("test4_knn"));
     }
 
-    private List<Map<String, ?>> createMockMapResult(int number) {
+    @SuppressWarnings("unchecked")
+    public void testExecute_withNestedSparseAnnField_usesTokenIdFormat() {
+        mockSeismic("key1.test1_knn");
+
+        Map<String, String> map1 = new HashMap<>();
+        map1.put("test1", "test value");
+        Map<String, String> map2 = new HashMap<>();
+        map2.put("test4", "test5");
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put(KEY1, map1);
+        sourceAndMetadata.put(KEY2, map2);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        SparseEncodingProcessor processor = createNestedTypeInstance(false);
+
+        List<Map<String, ?>> dataAsMapListWord = createMockMapResultWithWordToken(1);
+        List<Map<String, ?>> dataAsMapListInt = createMockMapResultWithIntToken(1);
+
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onResponse(dataAsMapListInt);
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(
+                argThat(request -> request.getInputTexts() != null),
+                any(MLAlgoParams.class),
+                isA(ActionListener.class)
+            );
+
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            listener.onResponse(dataAsMapListWord);
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isNull(), isA(ActionListener.class));
+
+        BiConsumer<IngestDocument, Exception> handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+        verify(handler).accept(any(IngestDocument.class), isNull());
+
+        Map<String, Object> key1Map = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get(KEY1);
+        assertTrue(key1Map.containsKey("test1_knn"));
+        assertEquals(((List<?>) dataAsMapListInt.get(0).get("response")).get(0), key1Map.get("test1_knn"));
+
+        Map<String, Object> key2Map = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get(KEY2);
+        assertTrue(key2Map.containsKey("test4_knn"));
+        assertEquals(((List<?>) dataAsMapListWord.get(0).get("response")).get(0), key2Map.get("test4_knn"));
+    }
+
+    private List<Map<String, ?>> createMockMapResultWithWordToken(int number) {
         List<Map<String, Float>> mockSparseEncodingResult = new ArrayList<>();
         IntStream.range(0, number)
             .forEachOrdered(x -> mockSparseEncodingResult.add(ImmutableMap.of("hello", randomFloat(), "world", randomFloat())));
+
+        List<Map<String, ?>> mockMapResult = Collections.singletonList(Map.of("response", mockSparseEncodingResult));
+        return mockMapResult;
+    }
+
+    private List<Map<String, ?>> createMockMapResultWithIntToken(int number) {
+        List<Map<String, Float>> mockSparseEncodingResult = new ArrayList<>();
+        IntStream.range(0, number)
+            .forEachOrdered(x -> mockSparseEncodingResult.add(ImmutableMap.of("1000", randomFloat(), "2000", randomFloat())));
 
         List<Map<String, ?>> mockMapResult = Collections.singletonList(Map.of("response", mockSparseEncodingResult));
         return mockMapResult;
@@ -1153,12 +1211,12 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         doAnswer(invocation -> {
             int numVectors = ingestRequest.getInputTexts().size();
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
-            listener.onResponse(createMockMapResult(numVectors));
+            listener.onResponse(createMockMapResultWithWordToken(numVectors));
             return null;
         }).doAnswer(invocation -> {
             int numVectors = updateRequest.getInputTexts().size();
             ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
-            listener.onResponse(createMockMapResult(numVectors));
+            listener.onResponse(createMockMapResultWithWordToken(numVectors));
             return null;
         })
             .when(mlCommonsClientAccessor)
