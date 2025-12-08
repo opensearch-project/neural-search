@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
+- Fix the disk free space recovery problem with Sparse ANN ([#1683](https://github.com/opensearch-project/neural-search/pull/1683))
 
 ### Infrastructure
 
