@@ -10,6 +10,7 @@ Compatible with OpenSearch 3.4.0 and OpenSearch Dashboards 3.4.0
 - [SEISMIC IT]: Fix some failed IT cases ([#1655](https://github.com/opensearch-project/neural-search/pull/1655))
 - [SEISMIC Query]: Sparse ANN query handle non-specified method_parameters ([#1674](https://github.com/opensearch-project/neural-search/pull/1674))
 - Revert change in ([#1086](https://github.com/opensearch-project/neural-search/pull/1086)) to add support for empty string ([#1668](https://github.com/opensearch-project/neural-search/pull/1668))
+- [SEISMIC]: Fix the disk free space recovery problem with Sparse ANN ([#1683](https://github.com/opensearch-project/neural-search/pull/1683))
 
 ### Infrastructure
 - Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))
