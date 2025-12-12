@@ -26,14 +26,14 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Lock-free cache storage for tracking which keys are currently in the cache
-     * The Integer value represents the count of duplicates in the accessOrder deque
+     * The Integer value represents the count of keys in the accessOrder deque
      */
     protected final ConcurrentHashMap<Key, Integer> cache;
 
     /**
      * Lock-free access order tracking using a deque
      * Keys are added to the end on access, and eviction removes from the front
-     * May contain duplicate keys temporarily, which are cleaned up during eviction
+     * May contain duplicate keys temporarily, which will be cleaned up during eviction
      */
     protected final ConcurrentLinkedDeque<Key> accessOrder;
 
@@ -61,17 +61,13 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
             return;
         }
 
-        // Increment count in cache storage (lock-free)
-        // This tracks how many times this key appears in the deque
         cache.compute(key, (k, count) -> (count == null) ? 1 : count + 1);
 
-        // Add to access order tracking (lock-free)
-        // This creates duplicates in the deque, but we track them with counts
         accessOrder.addLast(key);
     }
 
     /**
-     * Retrieves and removes the least recently used key from the front of the access order deque.
+     * Retrieves the least recently used key from the front of the access order deque.
      * Uses count-based duplicate handling to find and clean up the true LRU item.
      *
      * This method polls from the deque front and handles duplicates by decrementing counts
@@ -85,15 +81,12 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
             Integer count = cache.get(candidate);
 
             if (count == null) {
-                // Key was already evicted, continue to next
                 continue;
             }
 
             if (count == 1) {
-                // This is the last occurrence, return it as LRU
                 return candidate;
             } else {
-                // This is a duplicate, decrement count and continue
                 cache.put(candidate, count - 1);
             }
         }
@@ -102,7 +95,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Evicts least recently used items from cache until the specified amount of RAM has been freed.
-     * Uses tryLock to allow only one thread to evict at a time, with other threads skipping eviction.
+     * Uses lock to ensure all threads get a chance to evict when needed.
      *
      * @param ramBytesToRelease Number of bytes to evict
      */
@@ -111,12 +104,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
             return;
         }
 
-        // Try to acquire the eviction lock
-        // If another thread is already evicting, skip this eviction
-        if (!evictionLock.tryLock()) {
-            log.debug("Skipping eviction, another thread is already evicting");
-            return;
-        }
+        evictionLock.lock();
 
         try {
             long ramBytesReleased = 0;
@@ -143,20 +131,17 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Evicts a specific item from the cache.
-     * Removes the key from the cache storage only.
-     * Stale entries in the accessOrder deque will be cleaned up naturally during subsequent evictions.
+     * Removes the key from both cache storage and access order deque to minimize memory usage.
      *
      * @param key The key to evict
      * @return number of bytes freed, or 0 if the item was not evicted
      */
     protected long evictItem(Key key) {
-        // Remove from cache storage
         if (cache.remove(key) == null) {
             return 0;
         }
 
-        // Note: We don't remove from accessOrder deque here
-        // Stale entries will be skipped in pollLeastRecentlyUsedItem()
+        accessOrder.removeIf(k -> k.equals(key));
 
         return doEviction(key);
     }
@@ -170,11 +155,9 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
     public void onIndexRemoval(@NonNull CacheKey cacheKey) {
         evictionLock.lock();
         try {
-            // Remove matching entries from cache storage
             cache.entrySet().removeIf(entry -> entry.getKey().getCacheKey().equals(cacheKey));
 
-            // Note: Stale entries in accessOrder deque will be cleaned up naturally
-            // during eviction as they won't be found in cache
+            accessOrder.removeIf(key -> key.getCacheKey().equals(cacheKey));
         } finally {
             evictionLock.unlock();
         }
