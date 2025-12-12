@@ -7,15 +7,18 @@ package org.opensearch.neuralsearch.sparse.cache;
 import lombok.extern.log4j.Log4j2;
 import lombok.NonNull;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Abstract LRU cache implementation for sparse vector caches.
+ * Abstract LRU cache implementation using Second Chance (Clock) algorithm for sparse vector caches.
  * This class provides common functionality for managing eviction of cache entries
- * based on least recently used policy.
+ * based on an approximation of least recently used policy with lock-free access operations.
+ *
+ * The Second Chance algorithm uses a circular buffer with reference bits to approximate LRU
+ * behavior while providing excellent concurrency characteristics.
+ * https://www.geeksforgeeks.org/operating-systems/second-chance-or-clock-page-replacement-policy/
  *
  * @param <Key> The type of key used for cache entries
  */
@@ -23,18 +26,32 @@ import java.util.Map;
 public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
-     * Map to track access with LRU ordering
-     * We use Map instead of set because only linked hash map supports tracking the access order of items
+     * Hash map for cache storage and reference bit tracking
+     * Boolean value represents the reference bit (true = recently accessed)
      */
-    protected final Map<Key, Boolean> accessRecencyMap;
+    private final ConcurrentHashMap<Key, Boolean> cache;
+
+    /**
+     * Queue to maintain insertion/access order for efficient Second Chance algorithm
+     * Keys are added when first accessed and re-added when accessed again
+     */
+    private final ConcurrentLinkedQueue<Key> accessQueue;
+
+    /**
+     * Lock used only for eviction operations to ensure atomicity
+     */
+    private final ReentrantLock evictionLock;
 
     protected AbstractLruCache() {
-        this.accessRecencyMap = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true));
+        this.cache = new ConcurrentHashMap<>();
+        this.accessQueue = new ConcurrentLinkedQueue<>();
+        this.evictionLock = new ReentrantLock();
     }
 
     /**
      * Updates access to an item for a specific cache key.
-     * This updates the item's position in the LRU order.
+     * Following Second Chance algorithm: any access sets reference bit to true.
+     * New keys are added to the queue (insertion order), existing keys just update reference bit.
      *
      * @param key The key being accessed
      */
@@ -43,25 +60,61 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
             return;
         }
 
-        accessRecencyMap.put(key, true);
+        // Check if key already exists
+        Boolean existingValue = cache.get(key);
+
+        if (existingValue != null) {
+            // Key exists - just set reference bit to true (recently accessed)
+            cache.put(key, true);
+            // Don't add to queue again - maintain original insertion order
+        } else {
+            // New key - add to cache with reference bit true and add to queue
+            cache.put(key, true);
+            accessQueue.offer(key);
+        }
     }
 
     /**
-     * Retrieves the least recently used key without affecting its position in the access order.
+     * Retrieves the least recently used key using Second Chance algorithm with efficient queue-based approach.
+     * Uses the access queue to avoid O(n) scanning of the entire cache.
      *
      * @return The least recently used key, or null if the cache is empty
      */
     protected Key getLeastRecentlyUsedItem() {
-        // With accessOrder is true in the LinkedHashMap, the first entry is the least recently used
-        Iterator<Map.Entry<Key, Boolean>> iterator = accessRecencyMap.entrySet().iterator();
-        if (iterator.hasNext()) {
-            return iterator.next().getKey();
+        if (cache.isEmpty()) {
+            return null;
         }
-        return null;
+
+        Key candidate;
+
+        // Process queue until we find a victim or queue is empty
+        while ((candidate = accessQueue.poll()) != null) {
+            Boolean referenceBit = cache.get(candidate);
+
+            if (referenceBit == null) {
+                // Key was already evicted, continue to next
+                continue;
+            }
+
+            if (!referenceBit) {
+                // Found victim - reference bit is false (not recently accessed)
+                return candidate;
+            } else {
+                // Give second chance - clear reference bit and re-add to queue
+                cache.put(candidate, false);
+                accessQueue.offer(candidate);
+            }
+        }
+
+        // If we reach here, queue is empty but cache is not
+        // This shouldn't happen in normal operation since accessQueue.offer() is always called
+        // Return any key from cache as fallback
+        return cache.keySet().iterator().hasNext() ? cache.keySet().iterator().next() : null;
     }
 
     /**
      * Evicts least recently used items from cache until the specified amount of RAM has been freed.
+     * Uses Second Chance algorithm with lock-free access operations.
      *
      * @param ramBytesToRelease Number of bytes to evict
      */
@@ -70,49 +123,64 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
             return;
         }
 
-        long ramBytesReleased = 0;
+        // Use eviction lock to ensure atomic eviction operations
+        evictionLock.lock();
+        try {
+            long ramBytesReleased = 0;
 
-        // Synchronizing the access recency map for thread safety
-        synchronized (accessRecencyMap) {
             // Continue evicting until we've freed enough memory or the cache is empty
-            while (ramBytesReleased < ramBytesToRelease) {
-                // Get the least recently used item
-                Key leastRecentlyUsedKey = getLeastRecentlyUsedItem();
+            while (ramBytesReleased < ramBytesToRelease && !cache.isEmpty()) {
+                // Find victim using Second Chance algorithm
+                Key victimKey = getLeastRecentlyUsedItem();
 
-                if (leastRecentlyUsedKey == null) {
+                if (victimKey == null) {
                     // Cache is empty, nothing more to evict
                     break;
                 }
 
                 // Evict the item and track bytes freed
-                ramBytesReleased += evictItem(leastRecentlyUsedKey);
+                ramBytesReleased += evictItem(victimKey);
             }
-        }
 
-        log.debug("Freed {} bytes of memory", ramBytesReleased);
+            log.debug("Freed {} bytes of memory using Second Chance algorithm", ramBytesReleased);
+        } finally {
+            evictionLock.unlock();
+        }
     }
 
     /**
      * Evicts a specific item from the cache.
+     * This method is used when a specific key needs to be removed.
+     * Note: We don't remove from accessQueue here as stale entries will be skipped during eviction.
      *
      * @param key The key to evict
      * @return number of bytes freed, or 0 if the item was not evicted
      */
     protected long evictItem(Key key) {
-        if (accessRecencyMap.remove(key) == null) {
-            return 0;
+        if (cache.remove(key) == null) {
+            return 0; // Key not found
         }
+
+        // Note: We don't remove from accessQueue here to avoid O(n) operation
+        // Stale entries will be skipped in getLeastRecentlyUsedItem()
 
         return doEviction(key);
     }
 
     /**
      * Removes all entries for a specific cache key when an index is removed.
+     * Uses eviction lock to ensure atomicity with ongoing evictions.
      *
      * @param cacheKey The cache key to remove
      */
     public void onIndexRemoval(@NonNull CacheKey cacheKey) {
-        accessRecencyMap.keySet().removeIf(key -> key.getCacheKey().equals(cacheKey));
+        evictionLock.lock();
+        try {
+            // Remove all entries matching the cache key
+            cache.entrySet().removeIf(entry -> entry.getKey().getCacheKey().equals(cacheKey));
+        } finally {
+            evictionLock.unlock();
+        }
     }
 
     /**
