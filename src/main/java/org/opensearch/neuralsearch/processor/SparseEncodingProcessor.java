@@ -30,6 +30,8 @@ import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.ArrayList;
+
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -200,8 +202,12 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         Map<Integer, Integer> originalOrder = sortedResult.v2();
         final AsymmetricTextEmbeddingParameters parameters = format == SparseEmbeddingFormat.TOKEN_ID ? TOKEN_ID_PARAMETER : null;
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
-            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(sortedInferenceList).build(),
-            parameters,
+            TextInferenceRequest.builder()
+                .modelId(this.modelId)
+                .inputTexts(sortedInferenceList)
+                .mlAlgoParams(parameters)
+                .embeddingContentType(PASSAGE)
+                .build(),
             ActionListener.wrap(resultMaps -> {
                 List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                     .stream()
@@ -317,8 +323,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
         mlCommonsClientAccessor.inferenceSentencesWithMapResult(
-            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
-            null,
+            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).embeddingContentType(PASSAGE).build(),
             ActionListener.wrap(resultMaps -> {
                 List<Map<String, Float>> sparseVectors = TokenWeightUtil.fetchListOfTokenWeightMap(resultMaps)
                     .stream()

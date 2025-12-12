@@ -62,6 +62,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
+
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.OpenSearchClient;
@@ -2552,5 +2553,140 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
                 assertEquals(insertVector.get(j).floatValue(), updateVector.get(j).floatValue(), 0.0000001f);
             }
         }
+    }
+
+    public void testAsymmetricModelSupport_whenDoBatchExecute_thenUsesPassageEmbeddingContentType() {
+        // Create processor instance
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(createMockVectorResult());
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        // Create test inference list
+        List<String> inferenceList = Arrays.asList("test passage 1", "test passage 2");
+        Consumer<List<?>> handler = mock(Consumer.class);
+        Consumer<Exception> onException = mock(Consumer.class);
+
+        // Execute the batch processing
+        processor.doBatchExecute(inferenceList, handler, onException);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+        assertEquals("Input texts should match", inferenceList, capturedRequest.getInputTexts());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify the handler was called with results
+        verify(handler).accept(any(List.class));
+    }
+
+    public void testAsymmetricModelSupport_whenExecuteWithoutSkipExisting_thenUsesPassageContentType() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("key1", "passage text 1");
+        sourceAndMetadata.put("key2", "passage text 2");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+
+        // Create processor with skipExisting = false
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify successful execution
+        verify(handler).accept(any(IngestDocument.class), isNull());
+    }
+
+    public void testAsymmetricModelSupport_whenSubBatchExecuteWithoutSkipExisting_thenUsesPassageContentType() {
+        final int docCount = 3;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, false);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        List<List<Float>> modelTensorList = createMockVectorWithLength(6); // 2 fields * 3 docs
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        Consumer resultHandler = mock(Consumer.class);
+        processor.subBatchExecute(ingestDocumentWrappers, resultHandler);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify successful execution
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCaptor.capture());
+        assertEquals(docCount, resultCaptor.getValue().size());
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCaptor.getValue().get(i).getIngestDocument());
+            assertNull(resultCaptor.getValue().get(i).getException());
+        }
+    }
+
+    public void testAsymmetricModelSupport_whenBatchExecuteWithSkipExisting_thenUsesPassageContentType() {
+        final int docCount = 2;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(createRandomOneDimensionalMockVector(2, 2, 0.0f, 1.0f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        // Mock the document retrieval for skip existing logic
+        mockUpdateMultipleDocuments(ingestDocumentWrappers);
+
+        Consumer resultHandler = mock(Consumer.class);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify successful execution
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCaptor.capture());
+        assertEquals(docCount, resultCaptor.getValue().size());
     }
 }
