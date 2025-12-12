@@ -24,6 +24,10 @@ jobs:
         java: [21, 25]
         os: [ubuntu-latest]
 
+    permissions:
+      contents: read
+      id-token: write
+
     name: Gradle Check Linux
     runs-on: ${{ matrix.os }}
     container:
@@ -55,7 +59,7 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          use_oidc: true
+          use_oidc: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL != '' }}
           use_pypi: true
 
   Check-neural-search-windows:
