@@ -314,6 +314,10 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         return SparseTestCommon.getNeuralSparseQueryBuilder(field, cut, hf, k, query, filter);
     }
 
+    protected Map<String, Object> searchWithExplain(String index, QueryBuilder queryBuilder, int resultSize) {
+        return search(index, queryBuilder, null, resultSize, Map.of("explain", "true"));
+    }
+
     @SneakyThrows
     protected int getEffectiveReplicaCount(int replicas) {
         return SparseTestCommon.getEffectiveReplicaCount(client(), replicas);
