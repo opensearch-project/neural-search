@@ -1215,4 +1215,266 @@ public class SparseSearchingIT extends SparseBaseIT {
             assertEquals(expectedScore, score, deltaForScoreAssertion);
         }
     }
+
+    @SuppressWarnings("unchecked")
+    public void testSearchWithExplain_BasicScoring() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 4);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            )
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 0.1f, "2000", 0.2f)
+        );
+
+        Map<String, Object> searchResults = searchWithExplain(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) > 0);
+
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
+        List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hitsMap.get("hits");
+
+        for (Map<String, Object> hit : hitsList) {
+            Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+            assertNotNull("Explanation should be present", explanation);
+
+            String description = (String) explanation.get("description");
+            assertNotNull("Explanation description should be present", description);
+            assertTrue("Explanation should be for sparse_ann", description.contains("sparse_ann"));
+
+            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
+            assertNotNull("Explanation details should be present", details);
+            assertTrue("Explanation should have details", details.size() > 0);
+
+            // Verify expected explanation components are present
+            boolean hasQueryPruning = false;
+            boolean hasRawScore = false;
+            boolean hasQuantizationRescaling = false;
+
+            for (Map<String, Object> detail : details) {
+                String detailDesc = (String) detail.get("description");
+                if (detailDesc.contains("query token pruning")) {
+                    hasQueryPruning = true;
+                }
+                if (detailDesc.contains("raw dot product score")) {
+                    hasRawScore = true;
+                }
+                if (detailDesc.contains("quantization rescaling")) {
+                    hasQuantizationRescaling = true;
+                }
+            }
+
+            assertTrue("Explanation should contain query pruning info", hasQueryPruning);
+            assertTrue("Explanation should contain raw score info", hasRawScore);
+            assertTrue("Explanation should contain quantization rescaling info", hasQuantizationRescaling);
+        }
+    }
+
+    public void testSearchWithExplain_FallBackToRankFeaturesScoring() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f)
+            )
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 0.1f, "2000", 0.2f)
+        );
+
+        Map<String, Object> searchResults = searchWithExplain(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) > 0);
+
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
+        List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hitsMap.get("hits");
+
+        for (Map<String, Object> hit : hitsList) {
+            Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+            assertNotNull("Explanation should be present", explanation);
+
+            String description = (String) explanation.get("description");
+            assertNotNull("Explanation description should be present", description);
+            assertFalse("Explanation should NOT be for sparse_ann", description.contains("sparse_ann"));
+
+            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
+            assertNotNull("Explanation details should be present", details);
+            assertTrue("Explanation should have details", details.size() > 0);
+
+            // Verify expected explanation components are present
+            boolean hasQueryPruning = false;
+            boolean hasRawScore = false;
+            boolean hasQuantizationRescaling = false;
+
+            for (Map<String, Object> detail : details) {
+                String detailDesc = (String) detail.get("description");
+                if (detailDesc.contains("query token pruning")) {
+                    hasQueryPruning = true;
+                }
+                if (detailDesc.contains("raw dot product score")) {
+                    hasRawScore = true;
+                }
+                if (detailDesc.contains("quantization rescaling")) {
+                    hasQuantizationRescaling = true;
+                }
+            }
+
+            assertFalse("Explanation should NOT contain query pruning info", hasQueryPruning);
+            assertFalse("Explanation should NOT contain raw score info", hasRawScore);
+            assertFalse("Explanation should NOT contain quantization rescaling info", hasQuantizationRescaling);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testSearchWithExplain_ExactSearchMode() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            ),
+            List.of("apple", "tree", "apple", "tree", "apple", "tree", "apple", "tree")
+        );
+
+        // Filter for "apple" - 4 documents match
+        // k=10, P=4, so P <= k triggers exact search mode
+        BoolQueryBuilder filter = new BoolQueryBuilder();
+        filter.must(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "apple"));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,  // k=10 > P=4, so exact search mode
+            Map.of("1000", 0.1f, "2000", 0.2f),
+            filter
+        );
+
+        Map<String, Object> searchResults = searchWithExplain(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertNotNull(searchResults);
+        assertEquals(4, getHitCount(searchResults));
+
+        // Verify explanation indicates exact search mode
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
+        List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hitsMap.get("hits");
+
+        for (Map<String, Object> hit : hitsList) {
+            Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+            assertNotNull("Explanation should be present", explanation);
+
+            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
+
+            boolean hasExactSearchMode = false;
+            for (Map<String, Object> detail : details) {
+                String detailDesc = (String) detail.get("description");
+                if (detailDesc.contains("exact search mode")) {
+                    hasExactSearchMode = true;
+                    assertTrue("Explanation should indicate P <= k", detailDesc.contains("4 documents <= k=10"));
+                    break;
+                }
+            }
+            assertTrue("Explanation should indicate exact search mode", hasExactSearchMode);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testSearchWithExplain_ApproximateSearchMode() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            ),
+            List.of("apple", "apple", "apple", "apple", "apple", "apple", "apple", "tree")
+        );
+
+        // Filter for "apple" - 7 documents match
+        // k=4, P=7, so P > k triggers approximate search mode with post-filtering
+        BoolQueryBuilder filter = new BoolQueryBuilder();
+        filter.must(new MatchQueryBuilder(TEST_TEXT_FIELD_NAME, "apple"));
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            4,  // k=4 < P=7, so approximate search mode
+            Map.of("1000", 0.1f, "2000", 0.2f),
+            filter
+        );
+
+        Map<String, Object> searchResults = searchWithExplain(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertNotNull(searchResults);
+        // Results are intersection of top-k ANN results and filter results
+        assertTrue(getHitCount(searchResults) > 0);
+
+        // Verify explanation indicates approximate search mode
+        Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
+        List<Map<String, Object>> hitsList = (List<Map<String, Object>>) hitsMap.get("hits");
+
+        for (Map<String, Object> hit : hitsList) {
+            Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+            assertNotNull("Explanation should be present", explanation);
+
+            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
+
+            boolean hasApproximateSearchMode = false;
+            for (Map<String, Object> detail : details) {
+                String detailDesc = (String) detail.get("description");
+                if (detailDesc.contains("approximate search mode")) {
+                    hasApproximateSearchMode = true;
+                    assertTrue("Explanation should indicate P > k", detailDesc.contains("7 documents > k=4"));
+                    break;
+                }
+            }
+            assertTrue("Explanation should indicate approximate search mode", hasApproximateSearchMode);
+        }
+    }
 }
