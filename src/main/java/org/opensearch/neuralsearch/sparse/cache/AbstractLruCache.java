@@ -63,6 +63,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
         // Check if key already exists
         Boolean existingValue = cache.get(key);
 
+        // Extreme case: multiple threads getting the same key, finding null, ending up with duplicate items in access queue
         if (existingValue != null) {
             // Key exists - just set reference bit to true (recently accessed)
             cache.put(key, true);
