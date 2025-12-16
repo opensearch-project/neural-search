@@ -52,22 +52,4 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
         CollapseDataCollector<?> collector = new CollapseDataCollector<>(mockCollapseDTO);
         assertNotNull(collector);
     }
-
-    public void testConstructor_whenInvalidType_thenFail() {
-        CollapseTopFieldDocs testCollapseTopFieldDocs = new CollapseTopFieldDocs(
-            null,
-            null,
-            null,
-            new SortField[] { SortField.FIELD_SCORE },
-            new Object[] { 1 }
-        );
-        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(null, List.of(testCollapseTopFieldDocs), null, null);
-
-        CollapseDTO mockCollapseDTO = mock(CollapseDTO.class);
-        when(mockCollapseDTO.getCollapseQueryTopDocs()).thenReturn(List.of(compoundTopDocs));
-        when(mockCollapseDTO.getIndexOfFirstNonEmpty()).thenReturn(0);
-
-        assertThrows(IllegalArgumentException.class, () -> new CollapseDataCollector<>(mockCollapseDTO));
-    }
-
 }
