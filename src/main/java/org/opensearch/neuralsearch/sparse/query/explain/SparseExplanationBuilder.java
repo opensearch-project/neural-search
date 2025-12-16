@@ -124,9 +124,15 @@ public class SparseExplanationBuilder {
         // Calculate contribution for each query token
         List<TokenContribution> contributions = new ArrayList<>();
         for (String tokenStr : queryTokens) {
-            int tokenId = Integer.parseInt(tokenStr);
+            int tokenId;
+            try {
+                tokenId = Integer.parseInt(tokenStr);
+            } catch (NumberFormatException e) {
+                log.warn("Invalid token ID '{}' in query context, skipping", tokenStr);
+                continue;
+            }
 
-            if (tokenId >= queryDenseVector.length) {
+            if (tokenId < 0 || tokenId >= queryDenseVector.length) {
                 continue;
             }
 

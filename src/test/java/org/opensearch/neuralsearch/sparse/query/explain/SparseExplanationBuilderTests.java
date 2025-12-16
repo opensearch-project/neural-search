@@ -643,6 +643,39 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         assertTrue("Should have raw score explanation", foundRawScoreExplanation);
     }
 
+    public void testExplain_InvalidTokenIdFormat() throws IOException {
+        // Query context includes invalid token IDs (non-numeric strings)
+        when(mockQueryContext.getTokens()).thenReturn(List.of("1", "invalid", "abc", "2", "-5"));
+
+        when(mockReader.read(DOC_ID)).thenReturn(docVector);
+
+        SparseExplanationBuilder builder = createDefaultBuilder();
+
+        // Should not throw exception, invalid tokens should be skipped gracefully
+        Explanation explanation = builder.explain();
+
+        assertNotNull("Explanation should not be null", explanation);
+        assertTrue("Explanation should match", explanation.isMatch());
+
+        // Find the raw score explanation and verify invalid tokens are not included
+        boolean foundRawScoreExplanation = false;
+        for (Explanation detail : explanation.getDetails()) {
+            if (detail.getDescription().contains("raw dot product score")) {
+                foundRawScoreExplanation = true;
+
+                // Check that invalid tokens are not in the explanation
+                for (Explanation tokenDetail : detail.getDetails()) {
+                    String desc = tokenDetail.getDescription();
+                    assertFalse("Should not include invalid token 'invalid'", desc.contains("token 'invalid'"));
+                    assertFalse("Should not include invalid token 'abc'", desc.contains("token 'abc'"));
+                    assertFalse("Should not include negative token '-5'", desc.contains("token '-5'"));
+                }
+                break;
+            }
+        }
+        assertTrue("Should have raw score explanation", foundRawScoreExplanation);
+    }
+
     private SparseExplanationBuilder createDefaultBuilder() throws IOException {
         when(mockReader.read(DOC_ID)).thenReturn(docVector);
         return SparseExplanationBuilder.builder()
