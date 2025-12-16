@@ -104,8 +104,16 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
 
     @Override
     public void doBatchExecute(List<String> inferenceList, Consumer<List<?>> handler, Consumer<Exception> onException) {
+        // Set PASSAGE content type for document ingestion.
+        // For asymmetric models: MLCommonsClientAccessor will use this to create AsymmetricTextEmbeddingParameters
+        // For symmetric models: MLCommonsClientAccessor will ignore this and pass null parameters
+        // This avoids an extra model lookup here since MLCommonsClientAccessor caches model asymmetry status
         mlCommonsClientAccessor.inferenceSentences(
-            TextInferenceRequest.builder().modelId(this.modelId).inputTexts(inferenceList).build(),
+            TextInferenceRequest.builder()
+                .modelId(this.modelId)
+                .inputTexts(inferenceList)
+                .embeddingContentType(EmbeddingContentType.PASSAGE)
+                .build(),
             ActionListener.wrap(handler::accept, onException)
         );
     }
