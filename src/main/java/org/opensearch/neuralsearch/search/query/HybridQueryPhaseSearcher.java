@@ -57,9 +57,9 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         final boolean hasFilterCollector,
         final boolean hasTimeout
     ) throws IOException {
-        Query phaseQuery = query;
+        Query phaseQuery;
         if (isHybridQuery(query, searchContext) == false) {
-            validateQuery(searchContext, query);
+            phaseQuery = validateAndTransformQuery(searchContext, query);
         } else {
             phaseQuery = extractHybridQuery(searchContext, query);
             validateHybridQuery((HybridQuery) phaseQuery);
@@ -81,25 +81,32 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
      *   ]
      * }
      * TODO add similar validation for other compound type queries like constant_score, function_score etc.
-     *
+     * @param searchContext search context
      * @param query query to validate
      */
-    private void validateQuery(final SearchContext searchContext, final Query query) {
+    private Query validateAndTransformQuery(final SearchContext searchContext, final Query query) {
         if (query instanceof BooleanQuery) {
             List<BooleanClause> booleanClauses = ((BooleanQuery) query).clauses();
-
-            // Allow hybrid query in MUST clause with additional FILTER clauses
-            // This format is used when inner hits are passed within the collapse parameter
-            if (isHybridQueryWrappedInBooleanMustQueryWithFilters(booleanClauses) == false) {
-                for (BooleanClause booleanClause : booleanClauses) {
-                    validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
-                }
+            // If Collapse with Inner hits is applied with HybridQuery then it for each collapsed group,
+            // opensearch will fan out new query in the form of HybridQuery wrapped under Boolean Query with filters.
+            // if the field is not present in the document, then it will contain a must_not clause for the inner_hits condition. Either of
+            // filter clause or must not clause can exist.
+            // In this case, the bulkScorer will be DefaultBulkScorer and the scorer will be hybridQueryScorer.
+            // Therefore, we need to create a new Boolean query by removing hybrid query and add it subqueries in should clause to bring
+            // docIdIterator and BulkScorer in sync.
+            Query transformedBooleanQuery = isHybridQueryWrappedInBooleanMustQueryWithFilters(booleanClauses);
+            if (transformedBooleanQuery != null) {
+                return transformedBooleanQuery;
+            }
+            for (BooleanClause booleanClause : booleanClauses) {
+                validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
             }
         } else if (query instanceof DisjunctionMaxQuery) {
             for (Query disjunct : (DisjunctionMaxQuery) query) {
                 validateNestedDisJunctionQuery(disjunct, getMaxDepthLimit(searchContext));
             }
         }
+        return query;
     }
 
     private void validateNestedBooleanQuery(final Query query, final int level) {

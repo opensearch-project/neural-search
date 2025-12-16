@@ -29,7 +29,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testMergeScoreDocs_whenBothTopDocsHasHits_thenSuccessful() {
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
 
         TopDocs topDocsOriginal = new TopDocs(
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -84,7 +84,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testMergeScoreDocs_whenOneTopDocsHasHitsAndOtherIsEmpty_thenSuccessful() {
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
 
         TopDocs topDocsOriginal = new TopDocs(
             new TotalHits(0, TotalHits.Relation.EQUAL_TO),
@@ -135,7 +135,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testMergeScoreDocs_whenBothTopDocsHasNoHits_thenSuccessful() {
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
 
         TopDocs topDocsOriginal = new TopDocs(
             new TotalHits(0, TotalHits.Relation.EQUAL_TO),
@@ -177,7 +177,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testMergeScoreDocs_whenSomeSegmentsHasNoHits_thenSuccessful() {
         // Given
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
 
         // When
         // first segment has no results, and we merge with non-empty segment
@@ -235,7 +235,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testThreeSequentialMerges_whenAllTopDocsHasHits_thenSuccessful() {
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
 
         TopDocs topDocsOriginal = new TopDocs(
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -316,7 +316,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
 
         TopDocs topDocsOriginal = new TopFieldDocs(
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),
@@ -376,7 +376,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
 
         TopDocs topDocsOriginal = new TopFieldDocs(
             new TotalHits(0, TotalHits.Relation.EQUAL_TO),
@@ -433,7 +433,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
 
         TopDocs topDocsOriginal = new TopFieldDocs(
             new TotalHits(0, TotalHits.Relation.EQUAL_TO),
@@ -480,7 +480,7 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
 
         TopDocs topDocsOriginal = new TopFieldDocs(
             new TotalHits(2, TotalHits.Relation.EQUAL_TO),

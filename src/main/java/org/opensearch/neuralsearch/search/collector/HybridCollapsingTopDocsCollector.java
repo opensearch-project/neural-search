@@ -338,7 +338,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 // Gets the collapse group value associated with the current document
                 groupSelector.advanceTo(doc);
                 T groupValue = groupSelector.currentValue();
-                assert groupValue != null;
 
                 float[] subScoresByQuery = compoundQueryScorer.getSubQueryScores();
                 initializeQueueIfNeeded(groupValue, subScoresByQuery.length);
