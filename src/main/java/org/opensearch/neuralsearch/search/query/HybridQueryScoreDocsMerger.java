@@ -146,7 +146,7 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
         // mark end of hybrid query results by end element
         mergedScoreDocs.add(sourceScoreDocs[sourceScoreDocs.length - 1]);
         if (isCollapseEnabled) {
-            mergedCollapseValues.add(sourceScoreDocs[sourceScoreDocs.length - 1]);
+            mergedCollapseValues.add(sourceCollapseValues[sourceScoreDocs.length - 1]);
         }
         if (isCollapseEnabled) {
             return new MergeResult<>(mergedScoreDocs.toArray((T[]) new FieldDoc[0]), mergedCollapseValues.toArray(new Object[0]));

@@ -12,7 +12,10 @@ import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
@@ -23,7 +26,12 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocDelimiterElementForHybridSearchResults;
 
 import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortAndFormats;
+import org.opensearch.search.sort.SortBuilders;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
@@ -555,6 +563,126 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertFieldDoc(fieldDocs[10], 9, 50);
         assertFieldDoc(fieldDocs[11], 4, 30);
         assertEquals(1, fieldDocs[12].fields[0]);
+    }
+
+    @SneakyThrows
+    public void testMergeFieldDocsAndCollapseValues_whenBothTopDocsHasHits_thenSuccessful() {
+        DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
+        SortField sortField = new SortField("stock", SortField.Type.INT, true);
+        Sort sort = new Sort(sortField);
+        SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
+        InnerHitBuilder collapsedAgesInnerHitBuilder = new InnerHitBuilder("authors");
+        collapsedAgesInnerHitBuilder.setSize(10);
+        collapsedAgesInnerHitBuilder.setSorts(List.of(SortBuilders.scoreSort()));
+
+        List<InnerHitBuilder> innerHitBuilders = new ArrayList<>();
+        innerHitBuilders.add(collapsedAgesInnerHitBuilder);
+        CollapseContext collapseContext = new CollapseContext("author", null, innerHitBuilders);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, collapseContext);
+
+        TopDocs topDocsOriginal = new CollapseTopFieldDocs(
+            "author",
+            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+
+            new FieldDoc[] {
+                createFieldDocStartStopElementForHybridSearchResults(0, new Object[] { 1 }),
+                createFieldDocDelimiterElementForHybridSearchResults(0, new Object[] { 1 }),
+                new FieldDoc(0, 0.5f, new Object[] { 100 }),
+                new FieldDoc(2, 0.3f, new Object[] { 80 }),
+                createFieldDocDelimiterElementForHybridSearchResults(0, new Object[] { 1 }),
+                createFieldDocStartStopElementForHybridSearchResults(0, new Object[] { 1 }) },
+            sortAndFormats.sort.getSort(),
+            new Object[] { 0, 0, new BytesRef(), new BytesRef(), 0, 0 }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreOriginal = new TopDocsAndMaxScore(topDocsOriginal, 0.5f);
+        TopDocs topDocsNew = new CollapseTopFieldDocs(
+            "author",
+            new TotalHits(4, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+
+            new FieldDoc[] {
+                createFieldDocStartStopElementForHybridSearchResults(1, new Object[] { 1 }),
+                createFieldDocDelimiterElementForHybridSearchResults(1, new Object[] { 1 }),
+                new FieldDoc(1, 0.7f, new Object[] { 70 }),
+                new FieldDoc(4, 0.3f, new Object[] { 60 }),
+                new FieldDoc(5, 0.05f, new Object[] { 30 }),
+                createFieldDocDelimiterElementForHybridSearchResults(1, new Object[] { 1 }),
+                new FieldDoc(4, 0.6f, new Object[] { 40 }),
+                createFieldDocStartStopElementForHybridSearchResults(1, new Object[] { 1 }) },
+            sortAndFormats.sort.getSort(),
+            new Object[] { 0, 0, new BytesRef(), new BytesRef(), new BytesRef(), 0, new BytesRef(), 0 }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0.7f);
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.merge(topDocsAndMaxScoreOriginal, topDocsAndMaxScoreNew);
+
+        assertNotNull(mergedTopDocsAndMaxScore);
+
+        CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) mergedTopDocsAndMaxScore.topDocs;
+        Object[] mergedCollapseValues = collapseTopFieldDocs.collapseValues;
+        assertEquals(10, mergedCollapseValues.length);
+        assertEquals(0, mergedCollapseValues[0]);
+        assertEquals(0, mergedCollapseValues[1]);
+        assertEquals(new BytesRef(), mergedCollapseValues[2]);
+        assertEquals(new BytesRef(), mergedCollapseValues[3]);
+        assertEquals(new BytesRef(), mergedCollapseValues[4]);
+        assertEquals(new BytesRef(), mergedCollapseValues[5]);
+        assertEquals(new BytesRef(), mergedCollapseValues[6]);
+        assertEquals(0, mergedCollapseValues[7]);
+        assertEquals(new BytesRef(), mergedCollapseValues[8]);
+        assertEquals(0, mergedCollapseValues[9]);
+    }
+
+    @SneakyThrows
+    public void testMergeFieldDocsAndCollapseValues_whenBothTopDocsHasNoHits_thenSuccessful() {
+        DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
+        SortField sortField = new SortField("stock", SortField.Type.INT, true);
+        Sort sort = new Sort(sortField);
+        SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
+        InnerHitBuilder collapsedAgesInnerHitBuilder = new InnerHitBuilder("authors");
+        collapsedAgesInnerHitBuilder.setSize(10);
+        collapsedAgesInnerHitBuilder.setSorts(List.of(SortBuilders.scoreSort()));
+
+        List<InnerHitBuilder> innerHitBuilders = new ArrayList<>();
+        innerHitBuilders.add(collapsedAgesInnerHitBuilder);
+        CollapseContext collapseContext = new CollapseContext("author", null, innerHitBuilders);
+        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, collapseContext);
+
+        TopDocs topDocsOriginal = new CollapseTopFieldDocs(
+            "author",
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+
+            new FieldDoc[] {
+                createFieldDocStartStopElementForHybridSearchResults(0, new Object[] { 1 }),
+                createFieldDocDelimiterElementForHybridSearchResults(0, new Object[] { 1 }),
+                createFieldDocDelimiterElementForHybridSearchResults(0, new Object[] { 1 }),
+                createFieldDocStartStopElementForHybridSearchResults(0, new Object[] { 1 }) },
+            sortAndFormats.sort.getSort(),
+            new Object[] { 0, 0, 0, 0 }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreOriginal = new TopDocsAndMaxScore(topDocsOriginal, 0);
+        TopDocs topDocsNew = new CollapseTopFieldDocs(
+            "author",
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+
+            new FieldDoc[] {
+                createFieldDocStartStopElementForHybridSearchResults(2, new Object[] { 1 }),
+                createFieldDocDelimiterElementForHybridSearchResults(2, new Object[] { 1 }),
+                createFieldDocDelimiterElementForHybridSearchResults(2, new Object[] { 1 }),
+                createFieldDocStartStopElementForHybridSearchResults(2, new Object[] { 1 }) },
+            sortAndFormats.sort.getSort(),
+            new Object[] { 0, 0, 0, 0 }
+        );
+        TopDocsAndMaxScore topDocsAndMaxScoreNew = new TopDocsAndMaxScore(topDocsNew, 0);
+        TopDocsAndMaxScore mergedTopDocsAndMaxScore = topDocsMerger.merge(topDocsAndMaxScoreOriginal, topDocsAndMaxScoreNew);
+
+        assertNotNull(mergedTopDocsAndMaxScore);
+
+        CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) mergedTopDocsAndMaxScore.topDocs;
+        Object[] mergedCollapseValues = collapseTopFieldDocs.collapseValues;
+        assertEquals(4, mergedCollapseValues.length);
+        assertEquals(0, mergedCollapseValues[0]);
+        assertEquals(0, mergedCollapseValues[1]);
+        assertEquals(0, mergedCollapseValues[2]);
+        assertEquals(0, mergedCollapseValues[3]);
     }
 
     private void assertScoreDoc(ScoreDoc scoreDoc, int expectedDocId, float expectedScore) {

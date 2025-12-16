@@ -122,10 +122,11 @@ public class TopDocsMerger {
                 collapseContext.getFieldName(),
                 mergedTotalHits,
                 mergeResult.scoreDocs(),
-                new SortField[] { new SortField(null, SortField.Type.SCORE) },
+                getSortFieldsWhenCollapseEnabled(),
                 mergeResult.collapseValues()
             );
         }
+
         if (isSortingEnabled()) {
             return new TopFieldDocs(mergedTotalHits, mergeResult.scoreDocs(), sortAndFormats.sort.getSort());
         }
@@ -182,5 +183,9 @@ public class TopDocsMerger {
 
     private boolean isCollapseEnabled() {
         return collapseContext != null;
+    }
+
+    private SortField[] getSortFieldsWhenCollapseEnabled() {
+        return sortAndFormats != null ? sortAndFormats.sort.getSort() : new SortField[] { new SortField(null, SortField.Type.SCORE) };
     }
 }
