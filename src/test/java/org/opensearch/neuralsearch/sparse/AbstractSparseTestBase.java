@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.sparse;
 import lombok.SneakyThrows;
 import org.apache.lucene.index.SegmentInfo;
 import org.junit.Before;
+import org.mockito.internal.util.MockUtil;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
@@ -16,6 +17,8 @@ import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.PostingClusters;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
+import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
+import org.opensearch.neuralsearch.sparse.cache.RamBytesRecorder;
 import org.opensearch.core.common.breaker.CircuitBreaker;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.PostingsEnum;
@@ -36,6 +39,7 @@ import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
@@ -46,6 +50,7 @@ import static org.opensearch.neuralsearch.sparse.mapper.SparseVectorField.SPARSE
 public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
 
     protected CircuitBreaker mockedCircuitBreaker = mock(CircuitBreaker.class);
+    protected RamBytesRecorder mockedMemoryUsageTracker;
 
     @Before
     @Override
@@ -53,6 +58,10 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
     public void setUp() {
         super.setUp();
         CircuitBreakerManager.setCircuitBreaker(mockedCircuitBreaker);
+        // resolve compilation issue due to nested spy
+        RamBytesRecorder ramBytesRecorder = MemoryUsageManager.getInstance().getMemoryUsageTracker();
+        mockedMemoryUsageTracker = MockUtil.isMock(ramBytesRecorder) ? ramBytesRecorder : spy(ramBytesRecorder);
+        MemoryUsageManager.getInstance().setMemoryUsageTracker(mockedMemoryUsageTracker);
     }
 
     protected DocWeightIterator constructDocWeightIterator(Integer... docs) {
