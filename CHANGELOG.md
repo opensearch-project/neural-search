@@ -11,7 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
-- Fix for Hybrid Query with Collapse bugs([#1702](https://github.com/opensearch-project/neural-search/pull/1702))
+- [SEISMIC]: Fix the memory usage track upon cache entry creation ([#1701](https://github.com/opensearch-project/neural-search/pull/1701))
+- [HYBRID]: Fix for Hybrid Query with Collapse bugs([#1702](https://github.com/opensearch-project/neural-search/pull/1702))
 
 ### Infrastructure
 
