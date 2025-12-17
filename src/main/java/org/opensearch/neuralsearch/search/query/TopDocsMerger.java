@@ -6,8 +6,6 @@ package org.opensearch.neuralsearch.search.query;
 
 import com.google.common.annotations.VisibleForTesting;
 import lombok.RequiredArgsConstructor;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.SortField;
@@ -29,7 +27,6 @@ import org.opensearch.neuralsearch.search.query.HybridQueryScoreDocsMerger.Merge
  */
 @RequiredArgsConstructor
 public class TopDocsMerger {
-    private static final Logger log = LogManager.getLogger(TopDocsMerger.class);
     private HybridQueryScoreDocsMerger docsMerger;
     private SortAndFormats sortAndFormats;
     private CollapseContext collapseContext;
@@ -76,19 +73,25 @@ public class TopDocsMerger {
         TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
 
         MergeResult mergeResult;
+        ScoreDoc[] sourceScoreDocs = source.topDocs.scoreDocs;
+        ScoreDoc[] newScoreDocs = newTopDocs.topDocs.scoreDocs;
+
         if (isCollapseEnabled()) {
-            CollapseTopFieldDocs sourceCollapseTopFieldDocs = (CollapseTopFieldDocs) source.topDocs;
-            CollapseTopFieldDocs newCollapseTopFieldDocs = (CollapseTopFieldDocs) newTopDocs.topDocs;
+            if (!(source.topDocs instanceof CollapseTopFieldDocs sourceCollapseTopFieldDocs)) {
+                throw new IllegalStateException("Collapse enabled but source TopDocs is not an instance of CollapseTopFieldDocs");
+            }
+            if (!(newTopDocs.topDocs instanceof CollapseTopFieldDocs newCollapseTopFieldDocs)) {
+                throw new IllegalStateException("Collapse enabled but new TopDocs is not an instance of CollapseTopFieldDocs");
+            }
             mergeResult = getMergedScoreDocs(
-                source.topDocs.scoreDocs,
-                newTopDocs.topDocs.scoreDocs,
+                sourceScoreDocs,
+                newScoreDocs,
                 sourceCollapseTopFieldDocs.collapseValues,
                 newCollapseTopFieldDocs.collapseValues
             );
         } else {
-            mergeResult = getMergedScoreDocs(source.topDocs.scoreDocs, newTopDocs.topDocs.scoreDocs, null, null);
+            mergeResult = getMergedScoreDocs(sourceScoreDocs, newScoreDocs, null, null);
         }
-
         return new TopDocsAndMaxScore(getTopDocs(mergeResult, mergedTotalHits), Math.max(source.maxScore, newTopDocs.maxScore));
     }
 
