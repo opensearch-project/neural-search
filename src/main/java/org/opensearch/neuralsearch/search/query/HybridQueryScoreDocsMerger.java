@@ -71,13 +71,13 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
         if (isCollapseEnabled) {
             if (sourceScoreDocs.length != Objects.requireNonNull(sourceCollapseValues, "collapse values cannot be null").length) {
                 throw new IllegalArgumentException(
-                    "cannot merge collapse values because the number of elements does not match score docs count"
+                    "cannot merge collapse values of search results of source segment because source the number of elements does not match score docs count"
                 );
             }
 
             if (newScoreDocs.length != Objects.requireNonNull(newCollapseValues, "collapse values cannot be null").length) {
                 throw new IllegalArgumentException(
-                    "cannot merge collapse values because the number of elements does not match score docs coun"
+                    "cannot merge collapse values of search results from another segment because the number of elements does not match score docs count"
                 );
             }
         }
@@ -170,6 +170,12 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
         }
     }
 
+    /**
+     * Result object to hold merged score docs and collapse values
+     * @param <T> type of ScoreDoc
+     * @param collapseValues collapse values
+     * @param scoreDocs merged score docs
+     */
     public record MergeResult<T extends ScoreDoc>(T[] scoreDocs, Object[] collapseValues) {
     }
 }

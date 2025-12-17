@@ -28,7 +28,7 @@ import lombok.extern.log4j.Log4j2;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.validateHybridQuery;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanMustQueryWithFilters;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.transformHybridQueryWrappedInBooleanMustQuery;
 
 /**
  * Custom search implementation to be used at {@link QueryPhase} for Hybrid Query search. For queries other than Hybrid the
@@ -94,7 +94,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             // In this case, the bulkScorer will be DefaultBulkScorer and the scorer will be hybridQueryScorer.
             // Therefore, we need to create a new Boolean query by removing hybrid query and add it subqueries in should clause to bring
             // docIdIterator and BulkScorer in sync.
-            Query transformedBooleanQuery = isHybridQueryWrappedInBooleanMustQueryWithFilters(booleanClauses);
+            Query transformedBooleanQuery = transformHybridQueryWrappedInBooleanMustQuery(booleanClauses);
             if (transformedBooleanQuery != null) {
                 return transformedBooleanQuery;
             }

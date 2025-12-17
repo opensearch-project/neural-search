@@ -489,7 +489,10 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
                 true
             )
         );
-        assertEquals("cannot merge collapse values because the number of elements does not match score docs count", exception.getMessage());
+        assertEquals(
+            "cannot merge collapse values of search results of source segment because source the number of elements does not match score docs count",
+            exception.getMessage()
+        );
 
         // Test 2: Both collapse values length mismatch
         Object[] mismatchedSourceValues = new Object[] { "value1", "value2", "value3" }; // 3 elements instead of 4
@@ -507,7 +510,10 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
                 true
             )
         );
-        assertEquals("cannot merge collapse values because the number of elements does not match score docs count", exception.getMessage());
+        assertEquals(
+            "cannot merge collapse values of search results of source segment because source the number of elements does not match score docs count",
+            exception.getMessage()
+        );
     }
 
     public void testMergeCollapseValues_whenBothCollapseValuesArePresent_thenSuccessful() {

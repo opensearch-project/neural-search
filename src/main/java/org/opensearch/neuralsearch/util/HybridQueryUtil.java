@@ -58,12 +58,12 @@ public class HybridQueryUtil {
     }
 
     /**
-     * This method checks if the hybrid query is in a MUST clause with additional FILTER or MUST_NOT clauses
+     * This method checks if the hybrid query is in a MUST clause with additional FILTER or MUST_NOT clauses and convert it into new boolean query
      * This format is used when inner hits are passed within the collapse parameter
      * @param booleanClauses list of clauses from the main query
      * @return query if the clauses represent a hybrid query wrapped in a boolean must clause with the rest of the clause being a filter or must_not
      */
-    public static Query isHybridQueryWrappedInBooleanMustQueryWithFilters(List<BooleanClause> booleanClauses) {
+    public static Query transformHybridQueryWrappedInBooleanMustQuery(List<BooleanClause> booleanClauses) {
         if (booleanClauses.isEmpty()) {
             return null;
         }

@@ -35,7 +35,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.index.remote.RemoteStoreEnums.PathType.HASHED_PREFIX;
-import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQueryWrappedInBooleanMustQueryWithFilters;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.transformHybridQueryWrappedInBooleanMustQuery;
 
 public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
 
@@ -155,7 +155,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testIsHybridQueryWrappedInBooleanMustQueryWithFilters_whenSingleHybridMustClause_thenSuccessful() {
         List<BooleanClause> clauses = new ArrayList<>();
-        assertNull(isHybridQueryWrappedInBooleanMustQueryWithFilters(clauses));
+        assertNull(transformHybridQueryWrappedInBooleanMustQuery(clauses));
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         when(mockQueryShardContext.convertToShardContext()).thenReturn(mockQueryShardContext);
         HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(new TermQueryBuilder("field", "text"));
@@ -163,7 +163,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         clauses.add(hybridMustClause);
         BooleanClause filterClause = new BooleanClause(new TermQuery(new Term("field", "value")), BooleanClause.Occur.FILTER);
         clauses.add(filterClause);
-        Query query = isHybridQueryWrappedInBooleanMustQueryWithFilters(clauses);
+        Query query = transformHybridQueryWrappedInBooleanMustQuery(clauses);
         assertNotNull(query);
         assert query instanceof BooleanQuery;
     }
@@ -178,7 +178,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         clauses.add(hybridMustClause);
         BooleanClause filterClause = new BooleanClause(new TermQuery(new Term("field", "value")), BooleanClause.Occur.MUST_NOT);
         clauses.add(filterClause);
-        Query query = isHybridQueryWrappedInBooleanMustQueryWithFilters(clauses);
+        Query query = transformHybridQueryWrappedInBooleanMustQuery(clauses);
         assertNotNull(query);
         assert query instanceof BooleanQuery;
     }
@@ -192,7 +192,7 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         BooleanClause hybridMustClause = new BooleanClause(hybridQueryBuilder.toQuery(mockQueryShardContext), BooleanClause.Occur.MUST);
         List<BooleanClause> clauses = new ArrayList<>();
         clauses.add(hybridMustClause);
-        Query query = isHybridQueryWrappedInBooleanMustQueryWithFilters(clauses);
+        Query query = transformHybridQueryWrappedInBooleanMustQuery(clauses);
         assertNull(query);
     }
 
