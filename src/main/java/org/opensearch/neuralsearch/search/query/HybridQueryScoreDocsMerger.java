@@ -71,7 +71,7 @@ class HybridQueryScoreDocsMerger<T extends ScoreDoc> {
         if (isCollapseEnabled) {
             if (sourceScoreDocs.length != Objects.requireNonNull(sourceCollapseValues, "collapse values cannot be null").length) {
                 throw new IllegalArgumentException(
-                    "cannot merge collapse values of search results of source segment because source the number of elements does not match score docs count"
+                    "cannot merge collapse values of search results of source segment because the number of elements does not match score docs count"
                 );
             }
 
