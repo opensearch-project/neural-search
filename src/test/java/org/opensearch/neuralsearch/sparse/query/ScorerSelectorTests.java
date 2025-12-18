@@ -12,9 +12,12 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.SegmentReader;
+import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
@@ -28,6 +31,7 @@ import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
+import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.util.List;
@@ -177,7 +181,7 @@ public class ScorerSelectorTests extends AbstractSparseTestBase {
     }
 
     @SneakyThrows
-    public void testSelectFallbackWhenPhaseOneScorerSupplierNull() {
+    public void testSelectTwoPhaseWhenPhaseOneScorerSupplierNull() {
         SparseQueryTwoPhaseInfo twoPhaseInfo = SparseQueryTwoPhaseInfo.builder().expansionRatio(5.0f).build();
         when(sparseVectorQuery.getSparseQueryTwoPhaseInfo()).thenReturn(twoPhaseInfo);
 
@@ -188,6 +192,50 @@ public class ScorerSelectorTests extends AbstractSparseTestBase {
 
         when(phaseOneWeight.scorerSupplier(any())).thenReturn(null);
         when(phaseTwoWeight.scorerSupplier(any())).thenReturn(createMockScorerSupplier());
+
+        ScorerSupplier result = scorerSelector.select(fallbackContext, sparseVectorQuery, null);
+        assertNotNull(result);
+        assertTrue(result instanceof TwoPhaseScorerSupplier);
+    }
+
+    @SneakyThrows
+    public void testSelectTwoPhaseWhenPhaseTwoScorerSupplierNull() {
+        SparseQueryTwoPhaseInfo twoPhaseInfo = SparseQueryTwoPhaseInfo.builder().expansionRatio(5.0f).build();
+        when(sparseVectorQuery.getSparseQueryTwoPhaseInfo()).thenReturn(twoPhaseInfo);
+
+        Weight phaseOneWeight = mock(Weight.class);
+        Weight phaseTwoWeight = mock(Weight.class);
+        when(weight.getRankFeaturePhaseOneWeight()).thenReturn(phaseOneWeight);
+        when(weight.getRankFeaturePhaseTwoWeight()).thenReturn(phaseTwoWeight);
+
+        when(phaseOneWeight.scorerSupplier(any())).thenReturn(createMockScorerSupplier());
+        when(phaseTwoWeight.scorerSupplier(any())).thenReturn(null);
+
+        ScorerSupplier result = scorerSelector.select(fallbackContext, sparseVectorQuery, null);
+        assertNotNull(result);
+        assertTrue(result instanceof TwoPhaseScorerSupplier);
+    }
+
+    @SneakyThrows
+    public void testSelectFallbackWhenRankFeaturePhaseOneWeightNull() {
+        SparseQueryTwoPhaseInfo twoPhaseInfo = SparseQueryTwoPhaseInfo.builder().expansionRatio(5.0f).build();
+        when(sparseVectorQuery.getSparseQueryTwoPhaseInfo()).thenReturn(twoPhaseInfo);
+
+        when(weight.getRankFeaturePhaseOneWeight()).thenReturn(null);
+        when(weight.getRankFeaturePhaseTwoWeight()).thenReturn(mock(Weight.class));
+
+        ScorerSupplier result = scorerSelector.select(fallbackContext, sparseVectorQuery, null);
+        assertNotNull(result);
+        assertEquals(mockScorer, result.get(0));
+    }
+
+    @SneakyThrows
+    public void testSelectFallbackWhenRankFeaturePhaseTwoWeightNull() {
+        SparseQueryTwoPhaseInfo twoPhaseInfo = SparseQueryTwoPhaseInfo.builder().expansionRatio(5.0f).build();
+        when(sparseVectorQuery.getSparseQueryTwoPhaseInfo()).thenReturn(twoPhaseInfo);
+
+        when(weight.getRankFeaturePhaseOneWeight()).thenReturn(mock(Weight.class));
+        when(weight.getRankFeaturePhaseTwoWeight()).thenReturn(null);
 
         ScorerSupplier result = scorerSelector.select(fallbackContext, sparseVectorQuery, null);
         assertNotNull(result);
@@ -224,6 +272,21 @@ public class ScorerSelectorTests extends AbstractSparseTestBase {
         assertTrue(scorer instanceof OrderedPostingWithClustersScorer);
     }
 
+    @SneakyThrows
+    public void testSelectSeismicScorerWhenSegmentInfoNull() {
+        Scorer scorer = scorerSelector.selectSeismicScorer(sparseVectorQuery, leafReaderContext, null, null);
+        assertTrue(scorer instanceof OrderedPostingWithClustersScorer);
+    }
+
+    @SneakyThrows
+    public void testSelectSeismicScorerWithSparseBinaryDocValues() {
+        SparseBinaryDocValuesPassThrough mockDocValues = mock(SparseBinaryDocValuesPassThrough.class);
+        when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(mockDocValues);
+
+        Scorer scorer = scorerSelector.selectSeismicScorer(sparseVectorQuery, leafReaderContext, segmentInfo, null);
+        assertTrue(scorer instanceof OrderedPostingWithClustersScorer);
+    }
+
     private BitSetIterator createBitSetIterator(int cardinality) {
         FixedBitSet bitSet = new FixedBitSet(100);
         for (int i = 0; i < cardinality; i++) {
@@ -244,5 +307,51 @@ public class ScorerSelectorTests extends AbstractSparseTestBase {
                 return 1;
             }
         };
+    }
+
+    @SneakyThrows
+    public void testGeneralScorerSupplierGet() {
+        ScorerSelector.GeneralScorerSupplier supplier = new ScorerSelector.GeneralScorerSupplier(mockScorer);
+        assertEquals(mockScorer, supplier.get(0));
+        assertEquals(0, supplier.cost());
+    }
+
+    @SneakyThrows
+    public void testGeneralScorerSupplierBulkScorer() {
+        when(mockScorer.iterator()).thenReturn(DocIdSetIterator.all(3));
+        ScorerSelector.GeneralScorerSupplier supplier = new ScorerSelector.GeneralScorerSupplier(mockScorer);
+        BulkScorer bulkScorer = supplier.bulkScorer();
+
+        assertNotNull(bulkScorer);
+        assertEquals(0, bulkScorer.cost());
+
+        java.util.List<Integer> collected = new java.util.ArrayList<>();
+        LeafCollector collector = new LeafCollector() {
+            @Override
+            public void setScorer(Scorable scorer) {}
+
+            @Override
+            public void collect(int doc) {
+                collected.add(doc);
+            }
+        };
+        int result = bulkScorer.score(collector, null, 0, Integer.MAX_VALUE);
+        assertEquals(DocIdSetIterator.NO_MORE_DOCS, result);
+        assertEquals(3, collected.size());
+    }
+
+    @SneakyThrows
+    public void testEmptyScorer() {
+        ScorerSelector.EmptyScorer emptyScorer = new ScorerSelector.EmptyScorer();
+
+        assertEquals(DocIdSetIterator.NO_MORE_DOCS, emptyScorer.docID());
+        assertEquals(0, emptyScorer.score(), 0.0f);
+        assertEquals(0, emptyScorer.getMaxScore(Integer.MAX_VALUE), 0.0f);
+
+        DocIdSetIterator iterator = emptyScorer.iterator();
+        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.docID());
+        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.nextDoc());
+        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.advance(10));
+        assertEquals(0, iterator.cost());
     }
 }

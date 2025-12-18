@@ -12,7 +12,7 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * Iterator over pre-computed search results with score retrieval via cost().
+ * Iterator over pre-computed search results with score retrieval.
  */
 public class ResultsDocValueIterator<V extends Number> extends DocIdSetIterator {
     private final IteratorWrapper<Pair<Integer, V>> resultsIterator;
@@ -57,9 +57,6 @@ public class ResultsDocValueIterator<V extends Number> extends DocIdSetIterator 
         return NO_MORE_DOCS;
     }
 
-    /**
-     * Returns pre-stored score for current document via cost method.
-     */
     @Override
     public long cost() {
         return 0;

@@ -17,7 +17,6 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.Version;
@@ -350,9 +349,6 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                 splitTokens.v1()
             );
             BooleanQuery.Builder lowWeightsBuilder = NeuralSparseQueryBuilder.generateBooleanBuilderFromTokens(fieldName, splitTokens.v2());
-            if (filter != null) {
-                highWeightsBuilder.add(filter.toQuery(context), BooleanClause.Occur.FILTER);
-            }
             rankFeaturePhaseOneQuery = highWeightsBuilder.build();
             rankFeaturePhaseTwoQuery = lowWeightsBuilder.build();
         }

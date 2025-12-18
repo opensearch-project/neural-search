@@ -68,9 +68,12 @@ public class ScorerSelector {
             if (sparseQueryTwoPhaseInfo != null && rankFeaturePhaseOneWeight != null && rankFeaturePhaseTwoWeight != null) {
                 ScorerSupplier phaseOneScorerSupplier = rankFeaturePhaseOneWeight.scorerSupplier(context);
                 ScorerSupplier phaseTwoScorerSupplier = rankFeaturePhaseTwoWeight.scorerSupplier(context);
-                // if any supplier is null, fallback to fallbackQueryWeight
-                if (phaseOneScorerSupplier == null || phaseTwoScorerSupplier == null) {
-                    return fallbackQueryWeight.scorerSupplier(context);
+                if (phaseOneScorerSupplier == null) {
+                    phaseOneScorerSupplier = new GeneralScorerSupplier(new EmptyScorer());
+                }
+
+                if (phaseTwoScorerSupplier == null) {
+                    phaseTwoScorerSupplier = new GeneralScorerSupplier(new EmptyScorer());
                 }
 
                 return new TwoPhaseScorerSupplier(
@@ -134,7 +137,8 @@ public class ScorerSelector {
     }
 
     @AllArgsConstructor
-    private class GeneralScorerSupplier extends ScorerSupplier {
+    @VisibleForTesting
+    static class GeneralScorerSupplier extends ScorerSupplier {
 
         private Scorer scorer;
 
@@ -172,4 +176,48 @@ public class ScorerSelector {
             return 0;
         }
     };
+
+    @VisibleForTesting
+    static class EmptyScorer extends Scorer {
+
+        @Override
+        public int docID() {
+            return DocIdSetIterator.NO_MORE_DOCS;
+        }
+
+        @Override
+        public DocIdSetIterator iterator() {
+            return new DocIdSetIterator() {
+                @Override
+                public int docID() {
+                    return DocIdSetIterator.NO_MORE_DOCS;
+                }
+
+                @Override
+                public int nextDoc() throws IOException {
+                    return DocIdSetIterator.NO_MORE_DOCS;
+                }
+
+                @Override
+                public int advance(int target) throws IOException {
+                    return DocIdSetIterator.NO_MORE_DOCS;
+                }
+
+                @Override
+                public long cost() {
+                    return 0;
+                }
+            };
+        }
+
+        @Override
+        public float getMaxScore(int upTo) throws IOException {
+            return 0;
+        }
+
+        @Override
+        public float score() throws IOException {
+            return 0;
+        }
+    }
 }

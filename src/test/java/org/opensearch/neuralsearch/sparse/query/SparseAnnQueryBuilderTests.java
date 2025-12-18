@@ -41,7 +41,6 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
@@ -497,6 +496,77 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertEquals(Float.valueOf(1.5f), fromStream.heapFactor());
     }
 
+    public void testStreamConstructor_withTwoPhaseEnabled_readsTwoPhaseInfo() throws IOException {
+        StreamInput streamInput = mock(StreamInput.class);
+        when(streamInput.readOptionalInt()).thenReturn(5, 20);
+        when(streamInput.readOptionalFloat()).thenReturn(1.5f, DEFAULT_EXPANSION_RATIO);
+        when(streamInput.available()).thenReturn(1);
+        when(streamInput.readOptionalBoolean()).thenReturn(true);
+        when(streamInput.readInt()).thenReturn(DEFAULT_STATUS.getValue(), DEFAULT_MAX_WINDOW_SIZE);
+        when(streamInput.readFloat()).thenReturn(SparseQueryTwoPhaseInfo.DEFAULT_PRUNE_RATIO, DEFAULT_EXPANSION_RATIO);
+        when(streamInput.readString()).thenReturn(DEFAULT_PRUNE_TYPE.getValue());
+
+        SparseAnnQueryBuilder fromStream = new SparseAnnQueryBuilder(streamInput);
+
+        assertNotNull(fromStream.sparseQueryTwoPhaseInfo());
+        assertEquals(DEFAULT_PRUNE_TYPE, fromStream.sparseQueryTwoPhaseInfo().getTwoPhasePruneType());
+    }
+
+    public void testStreamConstructor_withTwoPhaseDisabled_noTwoPhaseInfo() throws IOException {
+        StreamInput streamInput = mock(StreamInput.class);
+        when(streamInput.readOptionalInt()).thenReturn(5, 20);
+        when(streamInput.readOptionalFloat()).thenReturn(1.5f);
+        when(streamInput.available()).thenReturn(1);
+        when(streamInput.readOptionalBoolean()).thenReturn(false);
+
+        SparseAnnQueryBuilder fromStream = new SparseAnnQueryBuilder(streamInput);
+
+        assertNull(fromStream.sparseQueryTwoPhaseInfo());
+    }
+
+    public void testStreamConstructor_withNullTwoPhaseBoolean_noTwoPhaseInfo() throws IOException {
+        StreamInput streamInput = mock(StreamInput.class);
+        when(streamInput.readOptionalInt()).thenReturn(5, 20);
+        when(streamInput.readOptionalFloat()).thenReturn(1.5f);
+        when(streamInput.available()).thenReturn(1);
+        when(streamInput.readOptionalBoolean()).thenReturn(null);
+
+        SparseAnnQueryBuilder fromStream = new SparseAnnQueryBuilder(streamInput);
+
+        assertNull(fromStream.sparseQueryTwoPhaseInfo());
+    }
+
+    public void testStreamConstructor_withNoAvailableBytes_noTwoPhaseInfo() throws IOException {
+        StreamInput streamInput = mock(StreamInput.class);
+        when(streamInput.readOptionalInt()).thenReturn(5, 20);
+        when(streamInput.readOptionalFloat()).thenReturn(1.5f);
+        when(streamInput.available()).thenReturn(0);
+
+        SparseAnnQueryBuilder fromStream = new SparseAnnQueryBuilder(streamInput);
+
+        assertNull(fromStream.sparseQueryTwoPhaseInfo());
+    }
+
+    public void testFromXContent_withTwoPhaseEnabledOnOldVersion_throwsException() throws IOException {
+        setUpClusterService(Version.V_3_3_0);
+        String json = "{\"top_n\": 5, \"two_phase_enabled\": true}";
+        XContentParser parser = createParser(json);
+        parser.nextToken();
+
+        ParsingException exception = expectThrows(ParsingException.class, () -> SparseAnnQueryBuilder.fromXContent(parser));
+        assertTrue(exception.getMessage().contains("unknown token"));
+    }
+
+    public void testFromXContent_withTwoPhaseParameterOnOldVersion_throwsException() throws IOException {
+        setUpClusterService(Version.V_3_3_0);
+        String json = "{\"top_n\": 5, \"two_phase_parameter\": {\"prune_ratio\": 0.5}}";
+        XContentParser parser = createParser(json);
+        parser.nextToken();
+
+        ParsingException exception = expectThrows(ParsingException.class, () -> SparseAnnQueryBuilder.fromXContent(parser));
+        assertTrue(exception.getMessage().contains("unknown token"));
+    }
+
     public void testDoWriteTo_writesCorrectly() throws IOException {
         StreamOutput streamOutput = mock(StreamOutput.class);
 
@@ -576,18 +646,6 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
 
         assertNotNull(queryBuilder.doToQuery(context));
         verify(filter).toQuery(context);
-    }
-
-    public void testDoToQuery_withFilter_appliesFilterTwiceWithTwoPhase() throws IOException {
-        QueryBuilder filter = mock(QueryBuilder.class);
-        Query filterQuery = mock(Query.class);
-        when(filter.toQuery(context)).thenReturn(filterQuery);
-
-        queryBuilder.filter(filter);
-        queryBuilder.fallbackQuery(mock(Query.class));
-
-        assertNotNull(queryBuilder.doToQuery(context));
-        verify(filter, times(2)).toQuery(context);
     }
 
     public void testQueryTokens_SetterCanProcessTokens() {
