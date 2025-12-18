@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 - Add support for asymmetric embedding models([#1605](https://github.com/opensearch-project/neural-search/pull/1605))
+- Support Two-Phase Query in sparse_vector field([#1704](https://github.com/opensearch-project/neural-search/pull/1704)) 
 
 ### Enhancements
 
