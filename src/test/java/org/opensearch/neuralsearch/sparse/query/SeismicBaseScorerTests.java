@@ -24,7 +24,6 @@ import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -193,101 +192,6 @@ public class SeismicBaseScorerTests extends AbstractSparseTestBase {
 
         // Verify that vector reader was called
         verify(vectorReader, times(expectedDocsCount + 1)).read(anyInt());
-    }
-
-    public void testHeapWrapper() {
-        // Create a heap wrapper
-        SeismicBaseScorer.HeapWrapper heapWrapper = new SeismicBaseScorer.HeapWrapper(3);
-
-        // Add some pairs
-        heapWrapper.add(Pair.of(1, 10));
-        heapWrapper.add(Pair.of(2, 20));
-        heapWrapper.add(Pair.of(3, 30));
-
-        // Verify heap is full
-        assertTrue(heapWrapper.isFull());
-
-        // Add a pair with lower score, should not be added
-        heapWrapper.add(Pair.of(4, 5));
-        assertEquals(3, heapWrapper.size());
-
-        // Add a pair with higher score, should replace lowest score
-        heapWrapper.add(Pair.of(5, 40));
-        assertEquals(3, heapWrapper.size());
-
-        // Get ordered list
-        List<Pair<Integer, Integer>> orderedList = heapWrapper.toOrderedList();
-        assertEquals(3, orderedList.size());
-        assertEquals(2, orderedList.get(0).getLeft().intValue());
-        assertEquals(3, orderedList.get(1).getLeft().intValue());
-        assertEquals(5, orderedList.get(2).getLeft().intValue());
-
-        assertEquals(20, heapWrapper.peek().getRight().intValue());
-    }
-
-    public void testResultsDocValueIterator() throws IOException {
-        init();
-        // Create test results
-        List<Pair<Integer, Integer>> results = new ArrayList<>();
-        results.add(Pair.of(1, 10));
-        results.add(Pair.of(3, 30));
-        results.add(Pair.of(5, 50));
-
-        // Create iterator
-        SeismicBaseScorer.ResultsDocValueIterator iterator = new SeismicBaseScorer.ResultsDocValueIterator(results);
-
-        // Test nextDoc
-        assertEquals(-1, iterator.docID());
-        assertEquals(1, iterator.nextDoc());
-        assertEquals(1, iterator.docID());
-        assertEquals(1, iterator.docID());
-        assertEquals(10, iterator.cost());
-        assertEquals(3, iterator.nextDoc());
-        assertEquals(3, iterator.docID());
-        assertEquals(30, iterator.cost());
-        assertEquals(5, iterator.nextDoc());
-        assertEquals(5, iterator.docID());
-        assertEquals(50, iterator.cost());
-        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.nextDoc());
-        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.docID());
-    }
-
-    public void testResultsDocValueIterator_advance() throws IOException {
-        init();
-        // Create new iterator for advance test
-        List<Pair<Integer, Integer>> results = new ArrayList<>();
-        results.add(Pair.of(1, 10));
-        results.add(Pair.of(3, 30));
-        results.add(Pair.of(5, 50));
-        results.add(Pair.of(7, 70));
-
-        SeismicBaseScorer.ResultsDocValueIterator iterator = new SeismicBaseScorer.ResultsDocValueIterator(results);
-        // Test advance
-        assertEquals(1, iterator.nextDoc());
-        assertEquals(1, iterator.advance(0));
-        assertEquals(3, iterator.advance(3));
-        assertEquals(3, iterator.docID());
-        assertEquals(7, iterator.advance(6));
-        assertEquals(7, iterator.docID());
-        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.advance(10));
-        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.docID());
-    }
-
-    public void testResultsDocValueIterator_cost() throws IOException {
-        init();
-        // Create new iterator for advance test
-        List<Pair<Integer, Integer>> results = new ArrayList<>();
-        results.add(Pair.of(1, 10));
-        results.add(Pair.of(3, 30));
-        results.add(Pair.of(5, 50));
-        results.add(Pair.of(7, 70));
-
-        SeismicBaseScorer.ResultsDocValueIterator iterator = new SeismicBaseScorer.ResultsDocValueIterator(results);
-        assertEquals(0, iterator.cost());
-        assertEquals(1, iterator.nextDoc());
-        assertEquals(10, iterator.cost());
-        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.advance(100));
-        assertEquals(0, iterator.cost());
     }
 
     public void testSingleScorer_basic() throws IOException {

@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse;
 
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
@@ -19,7 +20,7 @@ import org.opensearch.neuralsearch.SparseTestCommon;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
-import org.apache.lucene.search.join.ScoreMode;
+import org.opensearch.neuralsearch.sparse.query.SparseQueryTwoPhaseInfo;
 
 import java.net.URL;
 import java.nio.file.Files;
@@ -40,9 +41,12 @@ import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 public class SparseSearchingIT extends SparseBaseIT {
 
     private static final String TEST_INDEX_NAME = "test-sparse-index";
+    private static final String TEST_TWO_PHASE_INDEX_NAME = "test-two-phase-index";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
+    private static final String TEST_NEURAL_SPARSE_FIELD_NAME = "neural";
     private static final String TEST_TEXT_FIELD_NAME = "text";
     private static final String PIPELINE_NAME = "seismic_test_pipeline";
+    private static final float DELTA_FOR_ASSERTION = 0.01f;
 
     @Before
     public void setUp() throws Exception {
@@ -1202,6 +1206,75 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(getDocIDs(sparseAnnResults), getDocIDs(plainResults));
     }
 
+    public void testSearchDocumentsMixSegmentQueryWithTwoPhase() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "1001", 0.1f),
+                Map.of("2000", 0.2f, "2001", 0.2f),
+                Map.of("3000", 0.3f, "3001", 0.3f),
+                Map.of("4000", 0.4f, "4001", 0.4f),
+                Map.of("5000", 0.5f, "5001", 0.5f),
+                Map.of("6000", 0.6f, "6001", 0.6f),
+                Map.of("7000", 0.7f, "7001", 0.7f),
+                Map.of("8000", 0.8f, "8001", 0.8f),
+                Map.of("9000", 0.8f, "9001", 0.8f),
+                Map.of("10000", 0.8f, "10001", 0.8f)
+            )
+        );
+
+        List<Map<String, Float>> testRankFeaturesDoc = List.of(
+            Map.of("10001", 0.1f, "1001", 0.1f),
+            Map.of("10001", 0.2f, "2001", 0.2f),
+            Map.of("10002", 0.3f, "3001", 0.3f),
+            Map.of("10002", 0.4f, "4001", 0.4f),
+            Map.of("10003", 0.5f, "5001", 0.5f),
+            Map.of("10003", 0.6f, "6001", 0.6f),
+            Map.of("10004", 0.7f, "7001", 0.7f)
+        );
+        ingestDocuments(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, testRankFeaturesDoc, List.of(), 11);
+        Map<String, Float> queryTokens = Map.of("10001", 0.1f, "10002", 0.15f, "10003", 0.2f, "7001", 0.01f, "6001", 0.02f);
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,
+            queryTokens,
+            null
+        );
+        SparseQueryTwoPhaseInfo info = new SparseQueryTwoPhaseInfo(
+            SparseQueryTwoPhaseInfo.DEFAULT_STATUS,
+            0.4f,
+            SparseQueryTwoPhaseInfo.DEFAULT_PRUNE_TYPE,
+            5.0f,
+            1000
+        );
+        neuralSparseQueryBuilder.sparseAnnQueryBuilder().sparseQueryTwoPhaseInfo(info);
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        assertNotNull(searchResults);
+        assertEquals(6, getHitCount(searchResults));
+        List<String> actualIds = getDocIDs(searchResults);
+        List<Float> scores = SparseTestCommon.getResults(searchResults, "_score").stream().map(Float::valueOf).toList();
+        assertEquals(List.of("16", "15", "14", "13", "12", "11"), actualIds);
+
+        prepareTwoPhaseQueryProcessor(TEST_TWO_PHASE_INDEX_NAME, TEST_NEURAL_SPARSE_FIELD_NAME, testRankFeaturesDoc, 11);
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(TEST_NEURAL_SPARSE_FIELD_NAME)
+            .queryTokensMapSupplier(() -> queryTokens);
+        searchResults = search(TEST_TWO_PHASE_INDEX_NAME, sparseEncodingQueryBuilder, 10);
+        assertNotNull(searchResults);
+        assertEquals(6, getHitCount(searchResults));
+        assertEquals(getDocIDs(searchResults), actualIds);
+        List<Float> twoPhaseScores = SparseTestCommon.getResults(searchResults, "_score").stream().map(Float::valueOf).toList();
+        for (int i = 0; i < scores.size(); ++i) {
+            assertEquals(scores.get(i), twoPhaseScores.get(i), DELTA_FOR_ASSERTION);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private void verifyTopDocScoreExpected(String indexName, NeuralSparseQueryBuilder neuralSparseQueryBuilder, float expectedScore) {
         float deltaForScoreAssertion = 1f; // score delta needs to be bigger due to quantization
@@ -1214,5 +1287,20 @@ public class SparseSearchingIT extends SparseBaseIT {
             float score = NumberUtils.createFloat(mapObject.get("_score").toString());
             assertEquals(expectedScore, score, deltaForScoreAssertion);
         }
+    }
+
+    private void prepareTwoPhaseQueryProcessor(
+        String indexName,
+        String fieldName,
+        List<Map<String, Float>> testRankFeaturesDoc,
+        int startDocId
+    ) throws Exception {
+        prepareSparseEncodingIndex(indexName, List.of(fieldName));
+        for (int i = 1; i <= testRankFeaturesDoc.size(); ++i) {
+            addSparseEncodingDoc(indexName, String.valueOf(startDocId + i - 1), List.of(fieldName), testRankFeaturesDoc.subList(i - 1, i));
+        }
+        assertEquals(testRankFeaturesDoc.size(), getDocCount(indexName));
+        createNeuralSparseTwoPhaseSearchProcessor(PIPELINE_NAME);
+        updateIndexSettings(indexName, Settings.builder().put("index.search.default_pipeline", PIPELINE_NAME));
     }
 }

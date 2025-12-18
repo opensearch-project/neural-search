@@ -17,7 +17,11 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
+import org.opensearch.Version;
+import org.opensearch.common.collect.Tuple;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -35,11 +39,14 @@ import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -73,6 +80,11 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     public static final ParseField METHOD_PARAMETERS_FIELD = new ParseField("method_parameters");
     @VisibleForTesting
     public static final ParseField FILTER_FIELD = new ParseField("filter");
+    @VisibleForTesting
+    public static final ParseField TWO_PHASE_ENABLE_FIELD = new ParseField("two_phase_enabled");
+    @VisibleForTesting
+    public static final ParseField TWO_PHASE_PARAMETER_FIELD = new ParseField("two_phase_parameter");
+
     private String fieldName;
     private Integer queryCut;
     private Integer k;
@@ -81,6 +93,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     private Query fallbackQuery;
     @Setter(lombok.AccessLevel.NONE)
     private Map<String, Float> queryTokens;
+    private SparseQueryTwoPhaseInfo sparseQueryTwoPhaseInfo;
 
     private static final int DEFAULT_TOP_K = 10;
     private static final int DEFAULT_QUERY_CUT = 10;
@@ -93,7 +106,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         Float heapFactor,
         QueryBuilder filter,
         Query fallbackQuery,
-        Map<String, Float> queryTokens
+        Map<String, Float> queryTokens,
+        SparseQueryTwoPhaseInfo sparseQueryTwoPhaseInfo
     ) {
         this.fieldName = fieldName;
         this.queryCut = queryCut;
@@ -102,6 +116,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         this.filter = filter;
         this.fallbackQuery = fallbackQuery;
         this.queryTokens = preprocessQueryTokens(queryTokens);
+        this.sparseQueryTwoPhaseInfo = sparseQueryTwoPhaseInfo;
     }
 
     /**
@@ -116,6 +131,12 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         this.k = in.readOptionalInt();
         this.heapFactor = in.readOptionalFloat();
         this.filter = in.readOptionalNamedWriteable(QueryBuilder.class);
+        if (in.available() > 0 && isClusterOnOrAfterMinReqVersionForTwoPhase()) {
+            Boolean enableTwoPhase = in.readOptionalBoolean();
+            if (enableTwoPhase != null && enableTwoPhase) {
+                this.sparseQueryTwoPhaseInfo = new SparseQueryTwoPhaseInfo(in);
+            }
+        }
     }
 
     public SparseAnnQueryBuilder queryTokens(Map<String, Float> queryTokens) {
@@ -134,6 +155,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             );
         }
         SparseAnnQueryBuilderBuilder builder = SparseAnnQueryBuilder.builder();
+        SparseQueryTwoPhaseInfo info = new SparseQueryTwoPhaseInfo();
+        boolean twoPhaseEnabled = false;
         while ((token = parser.nextToken()) != Token.END_OBJECT) {
             if (token == Token.FIELD_NAME) {
                 methodFieldName = parser.currentName();
@@ -162,6 +185,14 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                             String.format(Locale.ROOT, "[%s] %s must be a positive float", NAME, HEAP_FACTOR_FIELD.getPreferredName())
                         );
                     }
+                } else if (TWO_PHASE_ENABLE_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
+                    if (!isClusterOnOrAfterMinReqVersionForTwoPhase()) {
+                        throw new ParsingException(
+                            parser.getTokenLocation(),
+                            String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, methodFieldName)
+                        );
+                    }
+                    twoPhaseEnabled = parser.booleanValue();
                 } else {
                     throw new ParsingException(
                         parser.getTokenLocation(),
@@ -171,12 +202,36 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             } else if (FILTER_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
                 QueryBuilder filterQueryBuilder = parseInnerQueryBuilder(parser);
                 builder.filter(filterQueryBuilder);
+            } else if (TWO_PHASE_PARAMETER_FIELD.match(methodFieldName, parser.getDeprecationHandler())) {
+                if (!isClusterOnOrAfterMinReqVersionForTwoPhase()) {
+                    throw new ParsingException(
+                        parser.getTokenLocation(),
+                        String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, methodFieldName)
+                    );
+                }
+                info = SparseQueryTwoPhaseInfo.fromXContent(parser);
             } else {
                 throw new ParsingException(
                     parser.getTokenLocation(),
                     String.format(Locale.ROOT, "[%s] unknown token [%s] after [%s]", NAME, token, methodFieldName)
                 );
             }
+        }
+        if (twoPhaseEnabled && info != null) {
+            builder.sparseQueryTwoPhaseInfo(info);
+            int windowSize = (int) (builder.k * info.getExpansionRatio());
+            if (windowSize > info.getMaxWindowSize()) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "The two-phase window size should be [0,%d], but get the value of %d",
+                        info.getMaxWindowSize(),
+                        windowSize
+                    )
+                );
+            }
+        } else {
+            builder.sparseQueryTwoPhaseInfo(null);
         }
         return builder.build();
     }
@@ -194,6 +249,10 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         out.writeOptionalInt(this.k);
         out.writeOptionalFloat(this.heapFactor);
         out.writeOptionalNamedWriteable(this.filter);
+        if (sparseQueryTwoPhaseInfo != null) {
+            out.writeOptionalBoolean(true);
+            sparseQueryTwoPhaseInfo.writeTo(out);
+        }
     }
 
     @Override
@@ -210,6 +269,10 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         if (Objects.nonNull(filter)) {
             xContentBuilder.field(FILTER_FIELD.getPreferredName(), filter);
         }
+        if (Objects.nonNull(sparseQueryTwoPhaseInfo)) {
+            xContentBuilder.field(TWO_PHASE_ENABLE_FIELD.getPreferredName(), true);
+            xContentBuilder.field(TWO_PHASE_PARAMETER_FIELD.getPreferredName(), sparseQueryTwoPhaseInfo);
+        }
     }
 
     @Override
@@ -219,7 +282,8 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             .k(k)
             .filter(filter)
             .fallbackQuery(fallbackQuery)
-            .heapFactor(heapFactor);
+            .heapFactor(heapFactor)
+            .sparseQueryTwoPhaseInfo(sparseQueryTwoPhaseInfo);
     }
 
     private SparseQueryContext constructSparseQueryContext() {
@@ -258,12 +322,41 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             int token = Integer.parseInt(entry.getKey());
             integerTokens.put(token, entry.getValue());
         }
+
+        List<Query> twoPhaseQueries = buildTwoPhaseQueries(context);
+
         return new SparseVectorQuery.SparseVectorQueryBuilder().fieldName(fieldName)
             .queryContext(sparseQueryContext)
             .queryVector(new SparseVector(integerTokens, new ByteQuantizer(quantizationCeilSearch)))
             .fallbackQuery(fallbackQuery)
+            .rankFeaturesPhaseOneQuery(twoPhaseQueries.get(0))
+            .rankFeaturesPhaseTwoQuery(twoPhaseQueries.get(1))
+            .sparseQueryTwoPhaseInfo(sparseQueryTwoPhaseInfo)
             .filter(filterQuery)
             .build();
+    }
+
+    private List<Query> buildTwoPhaseQueries(QueryShardContext context) throws IOException {
+        Query rankFeaturePhaseOneQuery = null;
+        Query rankFeaturePhaseTwoQuery = null;
+        if (isClusterOnOrAfterMinReqVersionForTwoPhase() && sparseQueryTwoPhaseInfo != null) {
+            Tuple<Map<String, Float>, Map<String, Float>> splitTokens = PruneUtils.splitSparseVector(
+                sparseQueryTwoPhaseInfo.getTwoPhasePruneType(),
+                sparseQueryTwoPhaseInfo.getTwoPhasePruneRatio(),
+                queryTokens
+            );
+            BooleanQuery.Builder highWeightsBuilder = NeuralSparseQueryBuilder.generateBooleanBuilderFromTokens(
+                fieldName,
+                splitTokens.v1()
+            );
+            BooleanQuery.Builder lowWeightsBuilder = NeuralSparseQueryBuilder.generateBooleanBuilderFromTokens(fieldName, splitTokens.v2());
+            if (filter != null) {
+                highWeightsBuilder.add(filter.toQuery(context), BooleanClause.Occur.FILTER);
+            }
+            rankFeaturePhaseOneQuery = highWeightsBuilder.build();
+            rankFeaturePhaseTwoQuery = lowWeightsBuilder.build();
+        }
+        return Arrays.asList(rankFeaturePhaseOneQuery, rankFeaturePhaseTwoQuery);
     }
 
     public static void validateFieldType(MappedFieldType fieldType) {
@@ -288,16 +381,22 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         if (Objects.isNull(obj) || getClass() != obj.getClass()) {
             return false;
         }
+
         EqualsBuilder equalsBuilder = new EqualsBuilder().append(queryCut, obj.queryCut)
             .append(heapFactor, obj.heapFactor)
             .append(k, obj.k)
-            .append(filter, obj.filter);
+            .append(filter, obj.filter)
+            .append(sparseQueryTwoPhaseInfo, obj.sparseQueryTwoPhaseInfo);
         return equalsBuilder.isEquals();
     }
 
     @Override
     protected int doHashCode() {
-        HashCodeBuilder builder = new HashCodeBuilder().append(queryCut).append(heapFactor).append(k).append(filter);
+        HashCodeBuilder builder = new HashCodeBuilder().append(queryCut)
+            .append(heapFactor)
+            .append(k)
+            .append(filter)
+            .append(sparseQueryTwoPhaseInfo);
         return builder.toHashCode();
     }
 
@@ -345,5 +444,10 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
             log.error("Failed to get quantization ceiling search value for field [{}]", fieldName, e);
         }
         return quantizationCeilSearch;
+    }
+
+    // TODO: this needs to be updated to 3.5.0 before release
+    private static boolean isClusterOnOrAfterMinReqVersionForTwoPhase() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(Version.V_3_4_0);
     }
 }
