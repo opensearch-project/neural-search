@@ -97,7 +97,7 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
     public void testExplain_InvalidDocumentId() throws IOException {
         SparseExplanationBuilder builder = SparseExplanationBuilder.builder()
             .context(mockContext)
-            .doc(-1)
+            .docId(-1)
             .query(mockQuery)
             .boost(BOOST)
             .fieldInfo(mockFieldInfo)
@@ -129,7 +129,7 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
 
         SparseExplanationBuilder builder = SparseExplanationBuilder.builder()
                 .context(mockContext)
-                .doc(DOC_ID)
+                .docId(DOC_ID)
                 .query(mockQuery)
                 .boost(BOOST)
                 .fieldInfo(mockFieldInfo)
@@ -148,7 +148,7 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
 
         SparseExplanationBuilder builder = SparseExplanationBuilder.builder()
                 .context(mockContext)
-                .doc(DOC_ID)
+                .docId(DOC_ID)
                 .query(mockQuery)
                 .boost(BOOST)
                 .fieldInfo(mockFieldInfo)
@@ -501,7 +501,7 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         float customBoost = 2.5f;
         SparseExplanationBuilder builder = SparseExplanationBuilder.builder()
             .context(mockContext)
-            .doc(DOC_ID)
+            .docId(DOC_ID)
             .query(mockQuery)
             .boost(customBoost)
             .fieldInfo(mockFieldInfo)
@@ -680,7 +680,7 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         when(mockReader.read(DOC_ID)).thenReturn(docVector);
         return SparseExplanationBuilder.builder()
                 .context(mockContext)
-                .doc(DOC_ID)
+                .docId(DOC_ID)
                 .query(mockQuery)
                 .boost(BOOST)
                 .fieldInfo(mockFieldInfo)

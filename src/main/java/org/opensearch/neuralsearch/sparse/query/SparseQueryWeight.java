@@ -83,7 +83,7 @@ public class SparseQueryWeight extends Weight {
 
         return SparseExplanationBuilder.builder()
             .context(context)
-            .doc(doc)
+            .docId(doc)
             .query(query)
             .boost(boost)
             .fieldInfo(fieldInfo)

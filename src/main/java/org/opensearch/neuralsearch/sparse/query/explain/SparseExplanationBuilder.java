@@ -30,11 +30,10 @@ import java.util.Map;
  *
  * This class orchestrates the construction of multi-level explanations that break down
  * the SEISMIC algorithm's scoring process, including:
- * - Query token pruning
+ * - Query token pruning - 'top_n' tokens with the highest weight will be kept
  * - Raw dot product score calculation with token-level contributions
- * - Quantization rescaling
+ * - Quantization rescaling - Convert Byte format data back into float
  * - Filter application
- *
  */
 @Log4j2
 @Builder
@@ -43,7 +42,7 @@ public class SparseExplanationBuilder {
     @NonNull
     private final LeafReaderContext context;
 
-    private final int doc;
+    private final int docId;
 
     @NonNull
     private final SparseVectorQuery query;
@@ -59,11 +58,10 @@ public class SparseExplanationBuilder {
     /**
      * Constructs a complete explanation for the document's score.
      * @return A Lucene Explanation object containing the complete scoring breakdown
-     * @throws IOException if there's an error reading the document vector
      */
-    public Explanation explain() throws IOException {
-        if (doc < 0) {
-            return Explanation.noMatch(String.format(Locale.ROOT, "invalid document ID %d (must be non-negative)", doc));
+    public Explanation explain() {
+        if (docId < 0) {
+            return Explanation.noMatch(String.format(Locale.ROOT, "invalid document ID %d (must be non-negative)", docId));
         }
         if (query.getQueryVector().getSize() == 0) {
             return Explanation.noMatch(String.format(Locale.ROOT, "query vector is empty or null for field '%s'", query.getFieldName()));
@@ -71,16 +69,15 @@ public class SparseExplanationBuilder {
 
         SparseVector docVector;
         try {
-            docVector = reader.read(doc);
+            docVector = reader.read(docId);
         } catch (IOException e) {
-            log.warn("Failed to read document vector for doc {} in field '{}': {}", doc, query.getFieldName(), e.getMessage(), e);
             return Explanation.noMatch(
-                String.format(Locale.ROOT, "error reading document %d in field '%s': %s", doc, query.getFieldName(), e.getMessage())
+                String.format(Locale.ROOT, "error reading document %d in field '%s': %s", docId, query.getFieldName(), e.getMessage())
             );
         }
         if (docVector == null) {
             return Explanation.noMatch(
-                String.format(Locale.ROOT, "document %d not found or has no sparse vector in field '%s'", doc, query.getFieldName())
+                String.format(Locale.ROOT, "document %d not found or has no sparse vector in field '%s'", docId, query.getFieldName())
             );
         }
 
@@ -105,7 +102,7 @@ public class SparseExplanationBuilder {
 
         return Explanation.match(
             finalScore,
-            String.format(Locale.ROOT, "sparse_ann score for doc %d in field '%s'", doc, query.getFieldName()),
+            String.format(Locale.ROOT, "sparse_ann score for doc %d in field '%s'", docId, query.getFieldName()),
             details
         );
     }
@@ -292,7 +289,7 @@ public class SparseExplanationBuilder {
             details.add(Explanation.match(1.0f, String.format(Locale.ROOT, "filter criteria: %s", filterQuery)));
         }
 
-        if (bitSet.get(doc)) {
+        if (bitSet.get(docId)) {
             int passedCount = bitSet.cardinality();
             int k = query.getQueryContext().getK();
 

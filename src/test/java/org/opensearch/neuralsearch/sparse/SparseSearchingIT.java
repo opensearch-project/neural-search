@@ -1253,40 +1253,12 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
-            assertNotNull("Explanation should be present", explanation);
 
-            String description = (String) explanation.get("description");
-            assertNotNull("Explanation description should be present", description);
-            assertTrue("Explanation should be for sparse_ann", description.contains("sparse_ann"));
-
-            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
-            assertNotNull("Explanation details should be present", details);
-            assertTrue("Explanation should have details", details.size() > 0);
-
-            // Verify expected explanation components are present
-            boolean hasQueryPruning = false;
-            boolean hasRawScore = false;
-            boolean hasQuantizationRescaling = false;
-
-            for (Map<String, Object> detail : details) {
-                String detailDesc = (String) detail.get("description");
-                if (detailDesc.contains("query token pruning")) {
-                    hasQueryPruning = true;
-                }
-                if (detailDesc.contains("raw dot product score")) {
-                    hasRawScore = true;
-                }
-                if (detailDesc.contains("quantization rescaling")) {
-                    hasQuantizationRescaling = true;
-                }
-            }
-
-            assertTrue("Explanation should contain query pruning info", hasQueryPruning);
-            assertTrue("Explanation should contain raw score info", hasRawScore);
-            assertTrue("Explanation should contain quantization rescaling info", hasQuantizationRescaling);
+            assertExplanationContains(explanation, "query token pruning", "raw dot product score", "quantization rescaling");
         }
     }
 
+    @SuppressWarnings("unchecked")
     public void testSearchWithExplain_FallBackToRankFeaturesScoring() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 8);
 
@@ -1319,37 +1291,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
-            assertNotNull("Explanation should be present", explanation);
-
-            String description = (String) explanation.get("description");
-            assertNotNull("Explanation description should be present", description);
-            assertFalse("Explanation should NOT be for sparse_ann", description.contains("sparse_ann"));
-
-            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
-            assertNotNull("Explanation details should be present", details);
-            assertTrue("Explanation should have details", details.size() > 0);
-
-            // Verify expected explanation components are present
-            boolean hasQueryPruning = false;
-            boolean hasRawScore = false;
-            boolean hasQuantizationRescaling = false;
-
-            for (Map<String, Object> detail : details) {
-                String detailDesc = (String) detail.get("description");
-                if (detailDesc.contains("query token pruning")) {
-                    hasQueryPruning = true;
-                }
-                if (detailDesc.contains("raw dot product score")) {
-                    hasRawScore = true;
-                }
-                if (detailDesc.contains("quantization rescaling")) {
-                    hasQuantizationRescaling = true;
-                }
-            }
-
-            assertFalse("Explanation should NOT contain query pruning info", hasQueryPruning);
-            assertFalse("Explanation should NOT contain raw score info", hasRawScore);
-            assertFalse("Explanation should NOT contain quantization rescaling info", hasQuantizationRescaling);
+            assertExplanationNotContains(explanation, "query token pruning", "raw dot product score", "quantization rescaling");
         }
     }
 
@@ -1398,20 +1340,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
-            assertNotNull("Explanation should be present", explanation);
-
-            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
-
-            boolean hasExactSearchMode = false;
-            for (Map<String, Object> detail : details) {
-                String detailDesc = (String) detail.get("description");
-                if (detailDesc.contains("exact search mode")) {
-                    hasExactSearchMode = true;
-                    assertTrue("Explanation should indicate P <= k", detailDesc.contains("4 documents <= k=10"));
-                    break;
-                }
-            }
-            assertTrue("Explanation should indicate exact search mode", hasExactSearchMode);
+            assertExplanationContains(explanation, "exact search mode", "4 documents <= k=10");
         }
     }
 
@@ -1461,20 +1390,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
-            assertNotNull("Explanation should be present", explanation);
-
-            List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
-
-            boolean hasApproximateSearchMode = false;
-            for (Map<String, Object> detail : details) {
-                String detailDesc = (String) detail.get("description");
-                if (detailDesc.contains("approximate search mode")) {
-                    hasApproximateSearchMode = true;
-                    assertTrue("Explanation should indicate P > k", detailDesc.contains("7 documents > k=4"));
-                    break;
-                }
-            }
-            assertTrue("Explanation should indicate approximate search mode", hasApproximateSearchMode);
+            assertExplanationContains(explanation, "approximate search mode", "7 documents > k=4");
         }
     }
 }

@@ -22,8 +22,10 @@ import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Base Integration tests for seismic feature
@@ -329,5 +331,43 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
 
     protected void updateSparseVector(String index, String docId, String field, Map<String, Float> docTokens) throws IOException {
         SparseTestCommon.updateSparseVector(client(), index, docId, field, docTokens);
+    }
+
+    @SuppressWarnings("unchecked")
+    protected void assertExplanationContains(Map<String, Object> explanation, String... expectedDescriptions) {
+        assertNotNull("Explanation should be present", explanation);
+
+        List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
+        assertNotNull("Explanation details should be present", details);
+        assertFalse("Explanation should have details", details.isEmpty());
+
+        Set<String> foundDescriptions = new HashSet<>();
+        for (Map<String, Object> detail : details) {
+            String detailDesc = (String) detail.get("description");
+            for (String expected : expectedDescriptions) {
+                if (detailDesc.contains(expected)) {
+                    foundDescriptions.add(expected);
+                }
+            }
+        }
+
+        for (String expected : expectedDescriptions) {
+            assertTrue("Explanation should contain: " + expected, foundDescriptions.contains(expected));
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    protected void assertExplanationNotContains(Map<String, Object> explanation, String... unexpectedDescriptions) {
+        assertNotNull("Explanation should be present", explanation);
+
+        List<Map<String, Object>> details = (List<Map<String, Object>>) explanation.get("details");
+        assertNotNull("Explanation details should be present", details);
+
+        for (Map<String, Object> detail : details) {
+            String detailDesc = (String) detail.get("description");
+            for (String unexpected : unexpectedDescriptions) {
+                assertFalse("Explanation should NOT contain: " + unexpected, detailDesc.contains(unexpected));
+            }
+        }
     }
 }
