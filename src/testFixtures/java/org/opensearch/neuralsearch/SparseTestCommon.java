@@ -705,6 +705,18 @@ public class SparseTestCommon {
         return actualIds;
     }
 
+    public static List<String> getResults(Map<String, Object> searchResults, String key) {
+        Map<String, Object> hits1map = (Map<String, Object>) searchResults.get("hits");
+        List<String> data = new ArrayList<>();
+        List<Object> hits1List = (List<Object>) hits1map.get("hits");
+        for (Object hits1Object : hits1List) {
+            Map<String, Object> mapObject = (Map<String, Object>) hits1Object;
+            String id = mapObject.get(key).toString();
+            data.add(id);
+        }
+        return data;
+    }
+
     public static void updateSparseVector(RestClient client, String index, String docId, String field, Map<String, Float> docTokens)
         throws IOException {
         StringBuilder stringBuilder = new StringBuilder();

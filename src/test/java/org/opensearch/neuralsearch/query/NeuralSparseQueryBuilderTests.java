@@ -1597,4 +1597,15 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         queryBuilder.clusterService(clusterService);
         TestsPrepareUtils.prepareSparseFieldUtilsClusterServiceMock(clusterService, List.of(queryBuilder.fieldName()), null);
     }
+
+    public void testGenerateBooleanBuilderFromTokens() {
+        Map<String, Float> tokens = Map.of("token1", 1.5f, "token2", 2.5f);
+        BooleanQuery.Builder builder = NeuralSparseQueryBuilder.generateBooleanBuilderFromTokens(FIELD_NAME, tokens);
+        BooleanQuery query = builder.build();
+
+        assertEquals(2, query.clauses().size());
+        for (BooleanClause clause : query.clauses()) {
+            assertEquals(BooleanClause.Occur.SHOULD, clause.occur());
+        }
+    }
 }

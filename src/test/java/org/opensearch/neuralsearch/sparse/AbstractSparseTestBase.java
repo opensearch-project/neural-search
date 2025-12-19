@@ -8,6 +8,11 @@ import lombok.SneakyThrows;
 import org.apache.lucene.index.SegmentInfo;
 import org.junit.Before;
 import org.mockito.internal.util.MockUtil;
+import org.opensearch.Version;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
@@ -28,6 +33,8 @@ import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.codec.SparsePostingsEnum;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
 import org.opensearch.neuralsearch.sparse.query.SparseQueryContext;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -222,5 +229,11 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
 
     protected static CacheKey prepareUniqueCacheKey(SegmentInfo segmentInfo) {
         return new CacheKey(segmentInfo, UUID.randomUUID().toString());
+    }
+
+    protected void setUpClusterService(Version version) {
+        ClusterService clusterService = NeuralSearchClusterTestUtils.mockClusterService(version);
+        IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
     }
 }

@@ -54,6 +54,9 @@ public class SparseVectorQuery extends Query {
     private final String fieldName;
     @NonNull
     private final Query fallbackQuery;
+    private final Query rankFeaturesPhaseOneQuery;
+    private final Query rankFeaturesPhaseTwoQuery;
+    private final SparseQueryTwoPhaseInfo sparseQueryTwoPhaseInfo;
     private final Query filter;
     private Map<Object, BitSet> filterResults;
 
@@ -165,6 +168,6 @@ public class SparseVectorQuery extends Query {
 
     @Override
     public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
-        return new SparseQueryWeight(this, searcher, scoreMode, boost, ForwardIndexCache.getInstance());
+        return new SparseQueryWeight(this, searcher, scoreMode, boost, ForwardIndexCache.getInstance(), null);
     }
 }

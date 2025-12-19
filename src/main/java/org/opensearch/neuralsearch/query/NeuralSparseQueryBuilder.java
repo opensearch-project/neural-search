@@ -565,6 +565,14 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         }
     }
 
+    static public BooleanQuery.Builder generateBooleanBuilderFromTokens(String fieldName, Map<String, Float> queryTokens) {
+        BooleanQuery.Builder builder = new BooleanQuery.Builder();
+        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
+            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
+        }
+        return builder;
+    }
+
     @Override
     protected Query doToQuery(QueryShardContext context) throws IOException {
         final MappedFieldType ft = context.fieldMapper(fieldName);
@@ -573,10 +581,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             validateFieldType(ft);
         }
         Map<String, Float> queryTokens = getQueryTokens(context);
-        BooleanQuery.Builder builder = new BooleanQuery.Builder();
-        for (Map.Entry<String, Float> entry : queryTokens.entrySet()) {
-            builder.add(FeatureField.newLinearQuery(fieldName, entry.getKey(), entry.getValue()), BooleanClause.Occur.SHOULD);
-        }
+        BooleanQuery.Builder builder = generateBooleanBuilderFromTokens(fieldName, queryTokens);
         if (!isSeismic || sparseAnnQueryBuilder == null) {
             return builder.build();
         } else {

@@ -26,11 +26,9 @@ import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.PriorityQueue;
 
 /**
  * Base scorer for seismic sparse vector queries with cluster-based optimization.
@@ -39,7 +37,7 @@ import java.util.PriorityQueue;
 @Log4j2
 public abstract class SeismicBaseScorer extends Scorer {
     private final static int SEISMIC_HEAP_SIZE = 10;
-    protected final HeapWrapper scoreHeap;
+    protected final HeapWrapper<Integer> scoreHeap;
     protected final LongBitSet visitedDocId;
     protected final String fieldName;
     protected final SparseQueryContext sparseQueryContext;
@@ -67,7 +65,7 @@ public abstract class SeismicBaseScorer extends Scorer {
         this.queryDenseVector = queryVector.toDenseVector();
         this.reader = reader;
         this.acceptedDocs = acceptedDocs;
-        scoreHeap = new HeapWrapper(SEISMIC_HEAP_SIZE);
+        scoreHeap = new HeapWrapper<Integer>(SEISMIC_HEAP_SIZE);
         initialize(leafReader);
     }
 
@@ -97,7 +95,7 @@ public abstract class SeismicBaseScorer extends Scorer {
      * Performs upfront search across all sub-scorers and returns top results.
      */
     protected List<Pair<Integer, Integer>> searchUpfront(int resultSize) throws IOException {
-        HeapWrapper resultHeap = new HeapWrapper(resultSize);
+        HeapWrapper<Integer> resultHeap = new HeapWrapper<>(resultSize);
         for (Scorer scorer : subScorers) {
             DocIdSetIterator iterator = scorer.iterator();
             int docId = 0;
@@ -119,58 +117,6 @@ public abstract class SeismicBaseScorer extends Scorer {
             }
         }
         return resultHeap.toOrderedList();
-    }
-
-    protected static PriorityQueue<Pair<Integer, Integer>> makeHeap() {
-        return new PriorityQueue<>(Comparator.comparingInt(Pair::getRight));
-    }
-
-    /**
-     * Wrapper for priority queue maintaining top-K results with threshold optimization.
-     */
-    protected static class HeapWrapper {
-        private final PriorityQueue<Pair<Integer, Integer>> heap = makeHeap();
-        private float heapThreshold = Integer.MIN_VALUE;
-        private final int k;
-
-        HeapWrapper(int k) {
-            this.k = k;
-        }
-
-        public boolean isFull() {
-            return heap.size() == this.k;
-        }
-
-        /**
-         * Adds pair to heap if score exceeds threshold, maintaining size limit.
-         */
-        public void add(Pair<Integer, Integer> pair) {
-            if (pair.getRight() > heapThreshold) {
-                heap.add(pair);
-                if (heap.size() > k) {
-                    heap.poll();
-                    assert heap.peek() != null;
-                    heapThreshold = heap.peek().getRight();
-                }
-            }
-        }
-
-        /**
-         * Returns heap contents as ordered list sorted by document ID.
-         */
-        public List<Pair<Integer, Integer>> toOrderedList() {
-            List<Pair<Integer, Integer>> list = new ArrayList<>(heap);
-            list.sort((a, b) -> Float.compare(a.getLeft(), b.getLeft()));
-            return list;
-        }
-
-        public int size() {
-            return heap.size();
-        }
-
-        public Pair<Integer, Integer> peek() {
-            return heap.peek();
-        }
     }
 
     /**
@@ -210,7 +156,8 @@ public abstract class SeismicBaseScorer extends Scorer {
                         }
                         int score = cluster.getSummary().dotProduct(queryDenseVector);
                         if (scoreHeap.isFull()
-                            && score < Objects.requireNonNull(scoreHeap.peek()).getRight() / sparseQueryContext.getHeapFactor()) {
+                            && score < (Integer) (Objects.requireNonNull(scoreHeap.peek()).getRight()) / sparseQueryContext
+                                .getHeapFactor()) {
                             cluster = clusterIter.next();
                         } else {
                             return cluster;
@@ -267,65 +214,6 @@ public abstract class SeismicBaseScorer extends Scorer {
         @Override
         public float score() throws IOException {
             return 0;
-        }
-    }
-
-    /**
-     * Iterator over pre-computed search results with score retrieval via cost().
-     */
-    public static class ResultsDocValueIterator extends DocIdSetIterator {
-        private final IteratorWrapper<Pair<Integer, Integer>> resultsIterator;
-        private int docId;
-
-        /**
-         * Creates iterator from list of document ID and score pairs.
-         */
-        public ResultsDocValueIterator(List<Pair<Integer, Integer>> results) {
-            resultsIterator = new IteratorWrapper<>(results.iterator());
-            docId = -1;
-        }
-
-        @Override
-        public int docID() {
-            return docId;
-        }
-
-        @Override
-        public int nextDoc() throws IOException {
-            if (resultsIterator.next() == null) {
-                docId = NO_MORE_DOCS;
-                return NO_MORE_DOCS;
-            }
-            docId = resultsIterator.getCurrent().getLeft();
-            return docId;
-        }
-
-        @Override
-        public int advance(int target) throws IOException {
-            if (target <= docId) {
-                return docId;
-            }
-            while (resultsIterator.hasNext()) {
-                Pair<Integer, Integer> pair = resultsIterator.next();
-                if (pair.getKey() >= target) {
-                    docId = pair.getKey();
-                    return docId;
-                }
-            }
-            docId = NO_MORE_DOCS;
-            return NO_MORE_DOCS;
-        }
-
-        /**
-         * Returns pre-stored score for current document via cost method.
-         */
-        @Override
-        public long cost() {
-            if (resultsIterator.getCurrent() == null || docId == NO_MORE_DOCS) {
-                return 0;
-            } else {
-                return resultsIterator.getCurrent().getValue();
-            }
         }
     }
 }
