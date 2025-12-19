@@ -445,7 +445,6 @@ testClusters.integTest {
     // Increase heap size from default of 512mb to 1gb. When heap size is 512mb, our integ tests sporadically fail due
     // to ml-commons memory circuit breaker exception
     jvmArgs("-Xms1g", "-Xmx2g")
-    systemProperty "java.library.path", "/Users/varunudr/search/k-NN/jni/build/release"
 }
 
 // Remote Integration Tests

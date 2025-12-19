@@ -5,8 +5,6 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
@@ -26,7 +24,6 @@ public class HybridBulkScorer extends BulkScorer {
     private static final int SHIFT = 12;
     private static final int WINDOW_SIZE = 1 << SHIFT;
     private static final int MASK = WINDOW_SIZE - 1;
-    private static final Logger log = LogManager.getLogger(HybridBulkScorer.class);
 
     private final long cost;
     private final Scorer[] scorers;
