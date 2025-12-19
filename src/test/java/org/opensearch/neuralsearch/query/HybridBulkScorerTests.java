@@ -181,7 +181,6 @@ public class HybridBulkScorerTests extends OpenSearchTestCase {
         // Execute scoring
         int result = bulkScorer.score(mockLeafCollector, null, 0, 4096);
 
-        // Should return minimum (100), not maximum (500) or middle (300)
         assertEquals("All Iterators reach the end", Integer.MAX_VALUE, result);
     }
 
