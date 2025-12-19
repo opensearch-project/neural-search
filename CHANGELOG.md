@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Add support for asymmetric embedding models([#1605](https://github.com/opensearch-project/neural-search/pull/1605))
 
 ### Enhancements
+- [SEISMIC Query Explain]: Enable explain function within Sparse ANN query ([#1694](https://github.com/opensearch-project/neural-search/pull/1694))
 
 ### Bug Fixes
 - [SEISMIC]: Fix the memory usage track upon cache entry creation ([#1701](https://github.com/opensearch-project/neural-search/pull/1701))

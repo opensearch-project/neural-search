@@ -34,6 +34,7 @@ import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
+import org.opensearch.neuralsearch.sparse.query.explain.SparseExplanationBuilder;
 
 import java.io.IOException;
 
@@ -63,7 +64,32 @@ public class SparseQueryWeight extends Weight {
 
     @Override
     public Explanation explain(LeafReaderContext context, int doc) throws IOException {
-        return null;
+        final SparseVectorQuery query = (SparseVectorQuery) parentQuery;
+
+        SegmentInfo info = Lucene.segmentReader(context.reader()).getSegmentInfo().info;
+        FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(query.getFieldName());
+
+        if (!PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
+            // Fallback to plain neural sparse query explanation
+            return fallbackQueryWeight.explain(context, doc);
+        }
+
+        SparseVectorReader reader = SparseVectorReader.NOOP_READER;
+        if (info != null) {
+            CacheKey key = new CacheKey(info, query.getFieldName());
+            ForwardIndexCacheItem cacheItem = forwardIndexCache.getOrCreate(key, info.maxDoc());
+            reader = getCacheGatedForwardIndexReader(cacheItem, context.reader(), query.getFieldName());
+        }
+
+        return SparseExplanationBuilder.builder()
+            .context(context)
+            .docId(doc)
+            .query(query)
+            .boost(boost)
+            .fieldInfo(fieldInfo)
+            .reader(reader)
+            .build()
+            .explain();
     }
 
     @Override
