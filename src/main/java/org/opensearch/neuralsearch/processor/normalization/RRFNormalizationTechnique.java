@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -124,9 +125,8 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         int topDocsIndex,
         TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor
     ) {
-        for (int position = 0; position < topDocs.scoreDocs.length; position++) {
-            ScoreDoc scoreDoc = topDocs.scoreDocs[position];
-            float normalizedScore = calculateNormalizedScore(position);
+        for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+            float normalizedScore = calculateNormalizedScore(Arrays.asList(topDocs.scoreDocs).indexOf(scoreDoc));
             DocIdAtSearchShard docIdAtSearchShard = new DocIdAtSearchShard(scoreDoc.doc, searchShard);
             scoreProcessor.apply(docIdAtSearchShard, normalizedScore, topDocsIndex);
             scoreDoc.score = normalizedScore;
