@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
@@ -24,6 +26,7 @@ public class HybridBulkScorer extends BulkScorer {
     private static final int SHIFT = 12;
     private static final int WINDOW_SIZE = 1 << SHIFT;
     private static final int MASK = WINDOW_SIZE - 1;
+    private static final Logger log = LogManager.getLogger(HybridBulkScorer.class);
 
     private final long cost;
     private final Scorer[] scorers;
@@ -179,13 +182,19 @@ public class HybridBulkScorer extends BulkScorer {
     }
 
     private int getNextDocIdCandidate(final int[] docsIds) {
-        int nextDoc = -1;
-        for (int doc : docsIds) {
-            if (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                nextDoc = Math.max(nextDoc, doc);
+        int[] nextDoc = new int[docsIds.length];
+        Arrays.fill(nextDoc, -1);
+        int minDocIdForNextIteration = Integer.MAX_VALUE;
+        for (int i = 0; i < nextDoc.length; i++) {
+            if (docIds[i] != DocIdSetIterator.NO_MORE_DOCS) {
+                nextDoc[i] = Math.max(nextDoc[i], docIds[i]);
+                if (nextDoc[i] < minDocIdForNextIteration) {
+                    minDocIdForNextIteration = nextDoc[i];
+                }
             }
         }
-        return nextDoc == -1 ? DocIdSetIterator.NO_MORE_DOCS : nextDoc;
+
+        return minDocIdForNextIteration == -1 ? DocIdSetIterator.NO_MORE_DOCS : minDocIdForNextIteration;
     }
 
     /**
