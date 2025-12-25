@@ -1,0 +1,16 @@
+{
+  "description": "A text embedding ingest pipeline for mixed field types",
+  "processors": [
+    {
+      "sparse_encoding": {
+        "model_id": "${MODEL_ID}",
+        "field_map": {
+          "parent": {
+            "passage_text_1": "rank_features_embedding",
+            "passage_text_2": "sparse_ann_embedding"
+          }
+        }
+      }
+    }
+  ]
+}

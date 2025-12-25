@@ -6,16 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+- Add support for asymmetric embedding models([#1605](https://github.com/opensearch-project/neural-search/pull/1605))
 - Implement GRPC Hybrid Query ([#1665](https://github.com/opensearch-project/neural-search/pull/1665))
 
 ### Enhancements
 
 ### Bug Fixes
-- [SEISMIC IT]: Fix some failed IT cases ([#1655](https://github.com/opensearch-project/neural-search/pull/1655))
+- [SEISMIC]: Fix the memory usage track upon cache entry creation ([#1701](https://github.com/opensearch-project/neural-search/pull/1701))
+- [HYBRID]: Fix for Hybrid Query with Collapse bugs([#1702](https://github.com/opensearch-project/neural-search/pull/1702))
+- [HYBRID]: Fix position overflow of docIds in HybridBulkScorer to increase search relevance ([#1706](https://github.com/opensearch-project/neural-search/pull/1706))
 
 ### Infrastructure
-- Onboard to s3 snapshots ([#1618](https://github.com/opensearch-project/neural-search/pull/1618))
-- Add BWC tests for Sparse ANN Seismic feature ([#1657](https://github.com/opensearch-project/neural-search/pull/1657))
 
 ### Documentation
 

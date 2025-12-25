@@ -74,6 +74,54 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         );
     }
 
+    protected void createNestedSparseIndex(
+        String indexName,
+        String nestedFieldName,
+        String sparseFieldName,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold
+    ) throws IOException {
+        SparseTestCommon.createNestedSparseIndex(
+            client(),
+            indexName,
+            nestedFieldName,
+            sparseFieldName,
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold,
+            1,
+            0
+        );
+    }
+
+    protected void createNestedSparseIndex(
+        String indexName,
+        String nestedFieldName,
+        String sparseFieldName,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold,
+        int shards,
+        int replicas
+    ) throws IOException {
+        SparseTestCommon.createNestedSparseIndex(
+            client(),
+            indexName,
+            nestedFieldName,
+            sparseFieldName,
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold,
+            shards,
+            replicas
+        );
+    }
+
     protected String prepareIndexSettings() throws IOException {
         return SparseTestCommon.prepareIndexSettings(1, 0);
     }
@@ -181,6 +229,22 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         List<String> docTexts
     ) {
         SparseTestCommon.ingestDocumentsAndForceMergeForSingleShard(client(), index, textField, sparseField, docTokens, docTexts);
+    }
+
+    @SneakyThrows
+    protected void ingestNestedDocumentsAndForceMergeForSingleShard(
+        String index,
+        String nestedFieldName,
+        List<List<Map<String, Float>>> documentsWithChunks,
+        String pipelineName
+    ) {
+        SparseTestCommon.ingestNestedDocumentsAndForceMergeForSingleShard(
+            client(),
+            index,
+            nestedFieldName,
+            documentsWithChunks,
+            pipelineName
+        );
     }
 
     protected void ingestDocuments(

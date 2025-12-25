@@ -64,7 +64,7 @@ public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
 
         listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.DELETED);
 
-        verify(mapperService).close();
+        verify(gatedCloseable).close();
     }
 
     public void testBeforeIndexRemoved_withNonSparseField_doesNotClearCache() throws IOException {
@@ -84,7 +84,7 @@ public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
 
         listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.DELETED);
 
-        verify(mapperService).close();
+        verify(gatedCloseable).close();
     }
 
     public void testBeforeIndexRemoved_withEmptySegments_handlesGracefully() throws IOException {
@@ -98,7 +98,7 @@ public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
 
         listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.DELETED);
 
-        verify(mapperService).close();
+        verify(gatedCloseable).close();
     }
 
     public void testBeforeIndexRemoved_withException_throwsRuntimeException() {

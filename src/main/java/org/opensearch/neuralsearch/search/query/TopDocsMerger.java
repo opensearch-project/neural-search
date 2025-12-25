@@ -8,14 +8,19 @@ import com.google.common.annotations.VisibleForTesting;
 import lombok.RequiredArgsConstructor;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 
 import java.util.Comparator;
 import java.util.Objects;
+
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortAndFormats;
+import org.opensearch.neuralsearch.search.query.HybridQueryScoreDocsMerger.MergeResult;
 
 /**
  * Utility class for merging TopDocs and MaxScore across multiple search queries
@@ -24,6 +29,7 @@ import org.opensearch.search.sort.SortAndFormats;
 public class TopDocsMerger {
     private HybridQueryScoreDocsMerger docsMerger;
     private SortAndFormats sortAndFormats;
+    private CollapseContext collapseContext;
     @VisibleForTesting
     protected static Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR;
     @VisibleForTesting
@@ -36,8 +42,9 @@ public class TopDocsMerger {
     /**
      * Uses hybrid query score docs merger to merge internal score docs
      */
-    TopDocsMerger(final SortAndFormats sortAndFormats) {
+    TopDocsMerger(final SortAndFormats sortAndFormats, final CollapseContext collapseContext) {
         this.sortAndFormats = sortAndFormats;
+        this.collapseContext = collapseContext;
         if (isSortingEnabled()) {
             docsMerger = new HybridQueryScoreDocsMerger<FieldDoc>();
             FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
@@ -64,11 +71,28 @@ public class TopDocsMerger {
             return newTopDocs;
         }
         TotalHits mergedTotalHits = getMergedTotalHits(source, newTopDocs);
-        TopDocsAndMaxScore result = new TopDocsAndMaxScore(
-            getTopDocs(getMergedScoreDocs(source.topDocs.scoreDocs, newTopDocs.topDocs.scoreDocs), mergedTotalHits),
-            Math.max(source.maxScore, newTopDocs.maxScore)
-        );
-        return result;
+
+        MergeResult mergeResult;
+        ScoreDoc[] sourceScoreDocs = source.topDocs.scoreDocs;
+        ScoreDoc[] newScoreDocs = newTopDocs.topDocs.scoreDocs;
+
+        if (isCollapseEnabled()) {
+            if (!(source.topDocs instanceof CollapseTopFieldDocs sourceCollapseTopFieldDocs)) {
+                throw new IllegalStateException("Collapse enabled but source TopDocs is not an instance of CollapseTopFieldDocs");
+            }
+            if (!(newTopDocs.topDocs instanceof CollapseTopFieldDocs newCollapseTopFieldDocs)) {
+                throw new IllegalStateException("Collapse enabled but new TopDocs is not an instance of CollapseTopFieldDocs");
+            }
+            mergeResult = getMergedScoreDocs(
+                sourceScoreDocs,
+                newScoreDocs,
+                sourceCollapseTopFieldDocs.collapseValues,
+                newCollapseTopFieldDocs.collapseValues
+            );
+        } else {
+            mergeResult = getMergedScoreDocs(sourceScoreDocs, newScoreDocs, null, null);
+        }
+        return new TopDocsAndMaxScore(getTopDocs(mergeResult, mergedTotalHits), Math.max(source.maxScore, newTopDocs.maxScore));
     }
 
     /**
@@ -95,14 +119,29 @@ public class TopDocsMerger {
         return new TotalHits(source.topDocs.totalHits.value() + newTopDocs.topDocs.totalHits.value(), mergedHitsRelation);
     }
 
-    private TopDocs getTopDocs(ScoreDoc[] mergedScoreDocs, TotalHits mergedTotalHits) {
-        if (isSortingEnabled()) {
-            return new TopFieldDocs(mergedTotalHits, mergedScoreDocs, sortAndFormats.sort.getSort());
+    private TopDocs getTopDocs(MergeResult mergeResult, TotalHits mergedTotalHits) {
+        if (isCollapseEnabled()) {
+            return new CollapseTopFieldDocs(
+                collapseContext.getFieldName(),
+                mergedTotalHits,
+                mergeResult.scoreDocs(),
+                getSortFieldsWhenCollapseEnabled(),
+                mergeResult.collapseValues()
+            );
         }
-        return new TopDocs(mergedTotalHits, mergedScoreDocs);
+
+        if (isSortingEnabled()) {
+            return new TopFieldDocs(mergedTotalHits, mergeResult.scoreDocs(), sortAndFormats.sort.getSort());
+        }
+        return new TopDocs(mergedTotalHits, mergeResult.scoreDocs());
     }
 
-    private ScoreDoc[] getMergedScoreDocs(ScoreDoc[] source, ScoreDoc[] newScoreDocs) {
+    private MergeResult getMergedScoreDocs(
+        ScoreDoc[] source,
+        ScoreDoc[] newScoreDocs,
+        Object[] sourceCollapseValues,
+        Object[] newCollapseValues
+    ) {
         // Case 1 when sorting is enabled then below will be the TopDocs format
         // we need to merge hits per individual sub-query
         // format of results in both new and source TopDocs is following
@@ -126,7 +165,15 @@ public class TopDocsMerger {
         // doc_id | magic_number_2
         // ...
         // doc_id | magic_number_1
-        return docsMerger.merge(source, newScoreDocs, comparator(), isSortingEnabled());
+        return docsMerger.mergeScoreDocsAndCollapseValues(
+            source,
+            newScoreDocs,
+            comparator(),
+            sourceCollapseValues,
+            newCollapseValues,
+            isSortingEnabled(),
+            isCollapseEnabled()
+        );
     }
 
     private Comparator<? extends ScoreDoc> comparator() {
@@ -135,5 +182,13 @@ public class TopDocsMerger {
 
     private boolean isSortingEnabled() {
         return sortAndFormats != null;
+    }
+
+    private boolean isCollapseEnabled() {
+        return collapseContext != null;
+    }
+
+    private SortField[] getSortFieldsWhenCollapseEnabled() {
+        return sortAndFormats != null ? sortAndFormats.sort.getSort() : new SortField[] { new SortField(null, SortField.Type.SCORE) };
     }
 }

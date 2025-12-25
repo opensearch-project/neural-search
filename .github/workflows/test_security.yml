@@ -20,7 +20,7 @@ jobs:
   integ-test-with-security-linux:
     strategy:
       matrix:
-        java: [21, 24]
+        java: [21, 25]
 
     name: Run Security Enabled Integration Tests on Linux
     runs-on: ubuntu-latest

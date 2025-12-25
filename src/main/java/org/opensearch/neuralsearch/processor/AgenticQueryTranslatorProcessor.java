@@ -151,11 +151,16 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
 
                     // Parse the agent response to get the new search source
                     BytesReference bytes = new BytesArray(dslQuery);
-                    List<SearchExtBuilder> originalExtBuilders = request.source() != null ? request.source().ext() : null;
+                    SearchSourceBuilder originalSourceBuilder = request.source();
+                    List<SearchExtBuilder> originalExtBuilders = originalSourceBuilder != null ? originalSourceBuilder.ext() : null;
                     try (XContentParser parser = XContentType.JSON.xContent().createParser(xContentRegistry, null, bytes.streamInput())) {
                         SearchSourceBuilder newSourceBuilder = SearchSourceBuilder.fromXContent(parser);
                         if (originalExtBuilders != null && !originalExtBuilders.isEmpty()) {
                             newSourceBuilder.ext(originalExtBuilders);
+                        }
+                        // Preserve source field selection
+                        if (originalSourceBuilder != null && originalSourceBuilder.fetchSource() != null) {
+                            newSourceBuilder.fetchSource(originalSourceBuilder.fetchSource());
                         }
                         request.source(newSourceBuilder);
                     }

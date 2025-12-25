@@ -1,0 +1,37 @@
+{
+  "description": "A text chunking and embedding ingest pipeline for multiple parent fields",
+  "processors": [
+    {
+      "text_chunking": {
+        "algorithm": {
+          "fixed_token_length": {
+            "token_limit": 10,
+            "overlap_rate": 0.2,
+            "tokenizer": "standard"
+          }
+        },
+        "field_map": {
+          "sparse_ann_parent_field": {
+            "passage_text": "passage_chunk"
+          },
+          "plain_neural_sparse_parent_field": {
+            "passage_text": "passage_chunk"
+          }
+        }
+      }
+    },
+    {
+      "sparse_encoding": {
+        "model_id": "${MODEL_ID}",
+        "field_map": {
+          "sparse_ann_parent_field": {
+            "passage_chunk": "passage_chunk_embedding"
+          },
+          "plain_neural_sparse_parent_field": {
+            "passage_chunk": "passage_chunk_embedding"
+          }
+        }
+      }
+    }
+  ]
+}

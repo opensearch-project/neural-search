@@ -67,7 +67,7 @@ sdk install java 21.0.2-open
 sdk use java 21.0.2-open
 ```
 
-JDK versions 14 and 17 were tested and are fully supported for local development.
+JDK versions 21 through 25 are tested and fully supported for local development.
 
 ## Use an Editor
 

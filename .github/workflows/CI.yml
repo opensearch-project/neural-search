@@ -21,8 +21,12 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [21, 24]
+        java: [21, 25]
         os: [ubuntu-latest]
+
+    permissions:
+      contents: read
+      id-token: write
 
     name: Gradle Check Linux
     runs-on: ${{ matrix.os }}
@@ -52,14 +56,16 @@ jobs:
 
       - name: Upload Coverage Report
         if: ${{ !cancelled() && contains(matrix.os, 'ubuntu') && contains(matrix.java, '21') }}
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
+          use_oidc: ${{ env.ACTIONS_ID_TOKEN_REQUEST_URL != '' }}
+          use_pypi: true
 
   Check-neural-search-windows:
     strategy:
       matrix:
-        java: [21, 24]
+        java: [21, 25]
         os: [windows-latest]
 
     name: Gradle Check Windows
@@ -82,7 +88,7 @@ jobs:
     needs: Get-CI-Image-Tag
     strategy:
       matrix:
-        java: [21, 24]
+        java: [21, 25]
         os: [ubuntu-latest]
 
     name: Pre-commit Linux
@@ -115,7 +121,7 @@ jobs:
     needs: Precommit-neural-search-linux
     strategy:
       matrix:
-        java: [ 21, 23 ]
+        java: [ 21, 25 ]
         os: [ ubuntu-latest ]
     name: Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -136,7 +142,8 @@ jobs:
         matrix:
           java: [ 21 ]
           os: [ ubuntu-latest ]
-      name: Multi-Node Integ Test JDK${{ matrix.java }}, ${{ matrix.os }}
+          configureNodeRoles: [ false, true ]
+      name: Multi-Node Integ Test JDK${{ matrix.java }}, With Role Assignment ${{ matrix.configureNodeRoles }}
       runs-on: ${{ matrix.os }}
       steps:
         - uses: actions/checkout@v4
@@ -147,4 +154,4 @@ jobs:
             distribution: temurin
         - name: Build and Run Tests
           run: |
-            ./gradlew integTest -PnumNodes=3
+            ./gradlew integTest -PnumNodes=3 -PconfigureNodeRoles=${{ matrix.configureNodeRoles }}

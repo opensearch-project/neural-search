@@ -179,13 +179,14 @@ public class HybridBulkScorer extends BulkScorer {
     }
 
     private int getNextDocIdCandidate(final int[] docsIds) {
-        int nextDoc = -1;
-        for (int doc : docsIds) {
-            if (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                nextDoc = Math.max(nextDoc, doc);
+        int minDocIdForNextIteration = DocIdSetIterator.NO_MORE_DOCS;
+        for (int docId : docsIds) {
+            if (docId < minDocIdForNextIteration) {
+                minDocIdForNextIteration = docId;
             }
         }
-        return nextDoc == -1 ? DocIdSetIterator.NO_MORE_DOCS : nextDoc;
+
+        return minDocIdForNextIteration;
     }
 
     /**

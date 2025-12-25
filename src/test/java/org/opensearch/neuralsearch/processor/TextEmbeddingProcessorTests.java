@@ -31,6 +31,7 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.IntStream;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
@@ -61,6 +62,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 
 import lombok.SneakyThrows;
+
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.OpenSearchClient;
@@ -364,31 +366,6 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
-    public void testExecute_SimpleTypeWithEmptyStringValue_throwIllegalArgumentException() {
-        Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
-        sourceAndMetadata.put("key1", "    ");
-        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
-
-        BiConsumer handler = mock(BiConsumer.class);
-        processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
-    }
-
-    public void testExecute_listHasEmptyStringValue_throwIllegalArgumentException() {
-        List<String> list1 = ImmutableList.of("", "test2", "test3");
-        Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
-        sourceAndMetadata.put("key1", list1);
-        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
-
-        BiConsumer handler = mock(BiConsumer.class);
-        processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
-    }
-
     public void testExecute_listHasNonStringValue_throwIllegalArgumentException() {
         List<Integer> list2 = ImmutableList.of(1, 2, 3);
         Map<String, Object> sourceAndMetadata = new HashMap<>();
@@ -665,20 +642,6 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
     public void testExecute_mapHasNonStringValue_throwIllegalArgumentException() {
         Map<String, String> map1 = ImmutableMap.of("test1", "test2");
         Map<String, Double> map2 = ImmutableMap.of("test3", 209.3D);
-        Map<String, Object> sourceAndMetadata = new HashMap<>();
-        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
-        sourceAndMetadata.put("key1", map1);
-        sourceAndMetadata.put("key2", map2);
-        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
-        TextEmbeddingProcessor processor = createInstanceWithLevel2MapConfig(false);
-        BiConsumer handler = mock(BiConsumer.class);
-        processor.execute(ingestDocument, handler);
-        verify(handler).accept(isNull(), any(IllegalArgumentException.class));
-    }
-
-    public void testExecute_mapHasEmptyStringValue_throwIllegalArgumentException() {
-        Map<String, String> map1 = ImmutableMap.of("test1", "test2");
-        Map<String, String> map2 = ImmutableMap.of("test3", "   ");
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
         sourceAndMetadata.put("key1", map1);
@@ -1069,6 +1032,79 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         assertTrue(nestedObj.get(0).containsKey("textFieldNotForEmbedding"));
         assertTrue(nestedObj.get(1).containsKey("vectorField"));
         assertNotNull(nestedObj.get(1).get("vectorField"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testBuildVectorOutput_withPlainString_EmptyString_skipped() {
+        Map<String, Object> config = createPlainStringConfiguration();
+        IngestDocument ingestDocument = createPlainIngestDocument();
+        Map<String, Object> sourceAndMetadata = ingestDocument.getSourceAndMetadata();
+        sourceAndMetadata.put("oriKey1", StringUtils.EMPTY);
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> knnMap = processor.buildMapWithTargetKeys(ingestDocument);
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(6, 100, 0.0f, 1.0f);
+        processor.setVectorFieldsToDocument(ingestDocument, knnMap, modelTensorList);
+
+        /** IngestDocument
+         * "oriKey1": "",
+         * "oriKey2": "oriValue2",
+         * "oriKey3": "oriValue3",
+         * "oriKey4": "oriValue4",
+         * "oriKey5": "oriValue5",
+         * "oriKey6": [
+         *     "oriValue6",
+         *     "oriValue7"
+         * ]
+         *
+         */
+        assertEquals(11, sourceAndMetadata.size());
+        assertFalse(sourceAndMetadata.containsKey("oriKey1_knn"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testBuildVectorOutput_withNestedField_EmptyString_skipped() {
+        Map<String, Object> config = createNestedMapConfiguration();
+        IngestDocument ingestDocument = createNestedMapIngestDocument();
+        Map<String, Object> favorites = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");
+        Map<String, Object> favorite = (Map<String, Object>) favorites.get("favorite");
+        favorite.put("movie", StringUtils.EMPTY);
+
+        TextEmbeddingProcessor processor = createInstanceWithNestedMapConfiguration(config);
+        Map<String, Object> knnMap = processor.buildMapWithTargetKeys(ingestDocument);
+        List<List<Float>> modelTensorList = createRandomOneDimensionalMockVector(1, 100, 0.0f, 1.0f);
+        processor.buildNLPResult(knnMap, modelTensorList, ingestDocument.getSourceAndMetadata());
+
+        /**
+         * "favorites": {
+         *      "favorite": {
+         *          "movie": "",
+         *          "actor": "Charlie Chaplin",
+         *          "games" : {
+         *              "adventure": {
+         *                  "action": "overwatch",
+         *                  "rpg": "elden ring"
+         *              }
+         *          }
+         *      }
+         * }
+         */
+        Map<String, Object> favoritesMap = (Map<String, Object>) ingestDocument.getSourceAndMetadata().get("favorites");
+        assertNotNull(favoritesMap);
+        Map<String, Object> favoriteMap = (Map<String, Object>) favoritesMap.get("favorite");
+        assertNotNull(favoriteMap);
+
+        Map<String, Object> favoriteGames = (Map<String, Object>) favoriteMap.get("games");
+        assertNotNull(favoriteGames);
+        Map<String, Object> adventure = (Map<String, Object>) favoriteGames.get("adventure");
+        List<Float> adventureKnnVector = (List<Float>) adventure.get("with_action_knn");
+        assertNotNull(adventureKnnVector);
+        assertEquals(100, adventureKnnVector.size());
+        for (float vector : adventureKnnVector) {
+            assertTrue(vector >= 0.0f && vector <= 1.0f);
+        }
+
+        assertFalse(favoriteMap.containsKey("favorite_movie_knn"));
     }
 
     public void test_updateDocument_appendVectorFieldsToDocument_successful() {
@@ -2517,5 +2553,140 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
                 assertEquals(insertVector.get(j).floatValue(), updateVector.get(j).floatValue(), 0.0000001f);
             }
         }
+    }
+
+    public void testAsymmetricModelSupport_whenDoBatchExecute_thenUsesPassageEmbeddingContentType() {
+        // Create processor instance
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(createMockVectorResult());
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        // Create test inference list
+        List<String> inferenceList = Arrays.asList("test passage 1", "test passage 2");
+        Consumer<List<?>> handler = mock(Consumer.class);
+        Consumer<Exception> onException = mock(Consumer.class);
+
+        // Execute the batch processing
+        processor.doBatchExecute(inferenceList, handler, onException);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+        assertEquals("Input texts should match", inferenceList, capturedRequest.getInputTexts());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify the handler was called with results
+        verify(handler).accept(any(List.class));
+    }
+
+    public void testAsymmetricModelSupport_whenExecuteWithoutSkipExisting_thenUsesPassageContentType() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("key1", "passage text 1");
+        sourceAndMetadata.put("key2", "passage text 2");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+
+        // Create processor with skipExisting = false
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(false);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        BiConsumer handler = mock(BiConsumer.class);
+        processor.execute(ingestDocument, handler);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify successful execution
+        verify(handler).accept(any(IngestDocument.class), isNull());
+    }
+
+    public void testAsymmetricModelSupport_whenSubBatchExecuteWithoutSkipExisting_thenUsesPassageContentType() {
+        final int docCount = 3;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, false);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        List<List<Float>> modelTensorList = createMockVectorWithLength(6); // 2 fields * 3 docs
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        Consumer resultHandler = mock(Consumer.class);
+        processor.subBatchExecute(ingestDocumentWrappers, resultHandler);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify successful execution
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCaptor.capture());
+        assertEquals(docCount, resultCaptor.getValue().size());
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCaptor.getValue().get(i).getIngestDocument());
+            assertNull(resultCaptor.getValue().get(i).getException());
+        }
+    }
+
+    public void testAsymmetricModelSupport_whenBatchExecuteWithSkipExisting_thenUsesPassageContentType() {
+        final int docCount = 2;
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(docCount, true);
+
+        // Mock the ML client to capture the inference request
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(createRandomOneDimensionalMockVector(2, 2, 0.0f, 1.0f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(requestCaptor.capture(), isA(ActionListener.class));
+
+        // Mock the document retrieval for skip existing logic
+        mockUpdateMultipleDocuments(ingestDocumentWrappers);
+
+        Consumer resultHandler = mock(Consumer.class);
+        processor.batchExecute(ingestDocumentWrappers, resultHandler);
+
+        // Verify the request was captured
+        TextInferenceRequest capturedRequest = requestCaptor.getValue();
+        assertNotNull("Request should not be null", capturedRequest);
+        assertEquals("Model ID should match", "mockModelId", capturedRequest.getModelId());
+
+        // Verify embedding content type is set to PASSAGE
+        assertEquals("Should use PASSAGE embedding content type", EmbeddingContentType.PASSAGE, capturedRequest.getEmbeddingContentType());
+
+        // Verify successful execution
+        ArgumentCaptor<List<IngestDocumentWrapper>> resultCaptor = ArgumentCaptor.forClass(List.class);
+        verify(resultHandler).accept(resultCaptor.capture());
+        assertEquals(docCount, resultCaptor.getValue().size());
     }
 }

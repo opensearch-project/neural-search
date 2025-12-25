@@ -117,6 +117,66 @@ public class SparseTestCommon {
         return request;
     }
 
+    public static void createNestedSparseIndex(
+        RestClient client,
+        String indexName,
+        String nestedFieldName,
+        String sparseFieldName,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold,
+        int shards,
+        int replicas
+    ) throws IOException {
+        Request request = configureNestedSparseIndex(
+            indexName,
+            nestedFieldName,
+            sparseFieldName,
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold,
+            shards,
+            replicas
+        );
+        Response response = client.performRequest(request);
+        if (RestStatus.OK != RestStatus.fromCode(response.getStatusLine().getStatusCode())) {
+            throw new IOException("Failed to create nested sparse index: " + response.getStatusLine());
+        }
+    }
+
+    private static Request configureNestedSparseIndex(
+        String indexName,
+        String nestedFieldName,
+        String sparseFieldName,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold,
+        int shards,
+        int replicas
+    ) throws IOException {
+        String indexSettings = prepareIndexSettings(shards, replicas);
+        String indexMappings = prepareNestedIndexMapping(
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold,
+            nestedFieldName,
+            sparseFieldName
+        );
+        Request request = new Request("PUT", "/" + indexName);
+        String body = String.format(
+            Locale.ROOT,
+            "{\n" + "  \"settings\": %s,\n" + "  \"mappings\": %s\n" + "}",
+            indexSettings,
+            indexMappings
+        );
+        request.setJsonEntity(body);
+        return request;
+    }
+
     public static String prepareIndexSettings(int shards, int replicas) throws IOException {
         XContentBuilder settingBuilder = XContentFactory.jsonBuilder()
             .startObject()
@@ -177,6 +237,63 @@ public class SparseTestCommon {
             .endObject()
             .endObject();
         return mappingBuilder.toString();
+    }
+
+    public static String prepareNestedIndexMapping(
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold,
+        float quantizationCeilingIngest,
+        float quantizationCeilingSearch,
+        String nestedFieldName,
+        String sparseFieldName
+    ) throws IOException {
+        XContentBuilder mappingBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("properties")
+            .startObject(nestedFieldName)
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject(sparseFieldName)
+            .field("type", SparseVectorFieldMapper.CONTENT_TYPE)
+            .startObject("method")
+            .field("name", ALGO_NAME)
+            .startObject("parameters")
+            .field("n_postings", nPostings)
+            .field("summary_prune_ratio", alpha)
+            .field("cluster_ratio", clusterRatio)
+            .field("approximate_threshold", approximateThreshold)
+            .field("quantization_ceiling_ingest", quantizationCeilingIngest)
+            .field("quantization_ceiling_search", quantizationCeilingSearch)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+        return mappingBuilder.toString();
+    }
+
+    public static String prepareNestedIndexMapping(
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold,
+        String nestedFieldName,
+        String sparseFieldName
+    ) throws IOException {
+        return prepareNestedIndexMapping(
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold,
+            DEFAULT_QUANTIZATION_CEILING_INGEST,
+            DEFAULT_QUANTIZATION_CEILING_SEARCH,
+            nestedFieldName,
+            sparseFieldName
+        );
     }
 
     @SneakyThrows
@@ -410,6 +527,23 @@ public class SparseTestCommon {
         assertEquals(1, getSegmentCount(client, index));
     }
 
+    @SneakyThrows
+    public static void ingestNestedDocumentsAndForceMergeForSingleShard(
+        RestClient client,
+        String index,
+        String nestedFieldName,
+        List<List<Map<String, Float>>> documentsWithChunks,
+        String pipelineName
+    ) {
+        String payload = prepareNestedSparseBulkIngestPayloadWithMultipleChunks(index, nestedFieldName, documentsWithChunks, 1);
+        bulkIngest(payload, pipelineName);
+
+        forceMerge(client, index);
+        // wait until force merge complete
+        waitForSegmentMerge(client, index);
+        assertEquals(1, getSegmentCount(client, index));
+    }
+
     public static void ingestDocuments(
         String index,
         String textField,
@@ -446,6 +580,39 @@ public class SparseTestCommon {
                     String.format(Locale.ROOT, "{\"%s\": \"%s\", \"%s\": {%s}}", textField, text, sparseField, strTokens)
                 );
             }
+            payloadBuilder.append(System.lineSeparator());
+        }
+        return payloadBuilder.toString();
+    }
+
+    public static String prepareNestedSparseBulkIngestPayloadWithMultipleChunks(
+        String index,
+        String nestedFieldName,
+        List<List<Map<String, Float>>> documentsWithChunks,
+        int startingId
+    ) {
+        StringBuilder payloadBuilder = new StringBuilder();
+        for (int docId = 0; docId < documentsWithChunks.size(); docId++) {
+            List<Map<String, Float>> chunks = documentsWithChunks.get(docId);
+
+            payloadBuilder.append(
+                String.format(Locale.ROOT, "{ \"index\": { \"_index\": \"%s\", \"_id\": \"%d\"} }", index, startingId + docId)
+            );
+            payloadBuilder.append(System.lineSeparator());
+
+            StringBuilder nestedArrayBuilder = new StringBuilder("[");
+            for (int i = 0; i < chunks.size(); i++) {
+                Map<String, Float> chunkTokens = chunks.get(i);
+                String strTokens = convertTokensToText(chunkTokens);
+                nestedArrayBuilder.append(String.format(Locale.ROOT, "{\"sparse_encoding\": {%s}}", strTokens));
+
+                if (i < chunks.size() - 1) {
+                    nestedArrayBuilder.append(", ");
+                }
+            }
+            nestedArrayBuilder.append("]");
+
+            payloadBuilder.append(String.format(Locale.ROOT, "{\"%s\": %s}", nestedFieldName, nestedArrayBuilder.toString()));
             payloadBuilder.append(System.lineSeparator());
         }
         return payloadBuilder.toString();
@@ -590,5 +757,98 @@ public class SparseTestCommon {
 
     public static String prepareIndexSettings() throws IOException {
         return prepareIndexSettings(1, 0);
+    }
+
+    public static String prepareMixedNestedFieldsIndexMapping(
+        String sparseAnnParentField,
+        String plainNeuralSparseParentField,
+        String nestedChunkField,
+        String sparseFieldName,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold
+    ) throws IOException {
+        XContentBuilder mappingBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("properties")
+            // First parent field: sparseAnnParentField with ANN parameters
+            .startObject(sparseAnnParentField)
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject(nestedChunkField)
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject(sparseFieldName)
+            .field("type", SparseVectorFieldMapper.CONTENT_TYPE)
+            .startObject("method")
+            .field("name", ALGO_NAME)
+            .startObject("parameters")
+            .field("n_postings", nPostings)
+            .field("summary_prune_ratio", alpha)
+            .field("cluster_ratio", clusterRatio)
+            .field("approximate_threshold", approximateThreshold)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            // Second parent field: plainNeuralSparseParentField with same structure
+            .startObject(plainNeuralSparseParentField)
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject(nestedChunkField)
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject(sparseFieldName)
+            .field("type", "rank_features")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+        return mappingBuilder.toString();
+    }
+
+    public static String prepareMixedFieldTypeIndexMapping(
+        String parentField,
+        String rankFeaturesField,
+        String sparseVectorField,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold
+    ) throws IOException {
+        XContentBuilder mappingBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("properties")
+            .startObject(parentField)
+            .startObject("properties")
+            // First field: rank_features type
+            .startObject(rankFeaturesField)
+            .field("type", "rank_features")
+            .endObject()
+            // Second field: sparse_vector type with seismic method
+            .startObject(sparseVectorField)
+            .field("type", SparseVectorFieldMapper.CONTENT_TYPE)
+            .startObject("method")
+            .field("name", ALGO_NAME)
+            .startObject("parameters")
+            .field("n_postings", nPostings)
+            .field("summary_prune_ratio", alpha)
+            .field("cluster_ratio", clusterRatio)
+            .field("approximate_threshold", approximateThreshold)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+        return mappingBuilder.toString();
     }
 }

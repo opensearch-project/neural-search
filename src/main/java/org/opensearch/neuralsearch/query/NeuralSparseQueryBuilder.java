@@ -70,6 +70,8 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.BiConsumer;
 
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.QUERY;
+
 import static org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder.METHOD_PARAMETERS_FIELD;
 
 /**
@@ -147,8 +149,12 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         if (StringUtils.EMPTY.equals(this.modelId)) {
             this.modelId = null;
         }
-        if (isSeismicSupported() && in.readBoolean()) {
-            this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder(in);
+        if (isSeismicSupported()) {
+            if (in.readBoolean()) {
+                this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder(in);
+            } else {
+                this.sparseAnnQueryBuilder = new SparseAnnQueryBuilder();
+            }
         }
     }
 
@@ -383,6 +389,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                 );
             }
         }
+        if (sparseEncodingQueryBuilder.isSeismicSupported() && sparseEncodingQueryBuilder.sparseAnnQueryBuilder() == null) {
+            sparseEncodingQueryBuilder.sparseAnnQueryBuilder(new SparseAnnQueryBuilder());
+        }
     }
 
     @Override
@@ -473,8 +482,12 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         // accordingly.
         final AsymmetricTextEmbeddingParameters parameters = withTokenId ? TOKEN_ID_PARAMETER : null;
         return ((client, actionListener) -> ML_CLIENT.inferenceSentencesWithMapResult(
-            TextInferenceRequest.builder().modelId(modelId()).inputTexts(List.of(queryText)).build(),
-            parameters,
+            TextInferenceRequest.builder()
+                .modelId(modelId())
+                .inputTexts(List.of(queryText))
+                .embeddingContentType(QUERY)
+                .mlAlgoParams(parameters)
+                .build(),
             ActionListener.wrap(mapResultList -> {
                 Map<String, Float> queryTokens = TokenWeightUtil.fetchListOfTokenWeightMap(mapResultList).get(0);
                 if (isSparseTwoPhaseOne()) {

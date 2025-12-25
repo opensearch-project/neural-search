@@ -52,10 +52,6 @@ public class CollapseDataCollector<T> {
         );
 
         this.expectedType = determineExpectedType(collapseDTO);
-        if (this.expectedType == null) {
-            log.error("Could not determine collapse value type from input data");
-            throw new IllegalArgumentException("Could not determine collapse value type from input data");
-        }
     }
 
     @SuppressWarnings("unchecked")
@@ -127,11 +123,8 @@ public class CollapseDataCollector<T> {
         }
 
         Object collapseValueObj = fieldDoc.fields[fieldDoc.fields.length - 1];
-        if (collapseValueObj == null) {
-            return;
-        }
 
-        if (!expectedType.isInstance(collapseValueObj)) {
+        if (collapseValueObj != null && expectedType != null && !expectedType.isInstance(collapseValueObj)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -178,7 +171,7 @@ public class CollapseDataCollector<T> {
      * @throws IllegalArgumentException if the provided key is not of the expected type
      */
     public Integer getCollapseShardIndex(T key) {
-        if (!expectedType.isInstance(key)) {
+        if (key != null && expectedType != null && !expectedType.isInstance(key)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,

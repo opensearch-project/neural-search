@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        java: [21, 24]
+        java: [21, 25]
     steps:
       - name: Checkout neural-search
         uses: actions/checkout@v4

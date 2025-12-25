@@ -30,7 +30,7 @@ public class HybridCollectorResultsUtilParams {
 
     private HybridCollectorResultsUtilParams(Builder builder) {
         this.searchContext = builder.searchContext;
-        this.topDocsMerger = new TopDocsMerger(searchContext.sort());
+        this.topDocsMerger = new TopDocsMerger(searchContext.sort(), searchContext.collapse());
         this.trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         this.isSortEnabled = searchContext.sort() != null;
         if (isSortEnabled) {
