@@ -16,4 +16,5 @@ public class AgentExecutionDTO {
     private final String dslQuery;
     private final String agentStepsSummary;
     private final String memoryId;
+    private final String selectedIndex;
 }

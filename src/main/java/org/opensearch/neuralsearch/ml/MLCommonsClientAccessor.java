@@ -76,6 +76,9 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class MLCommonsClientAccessor {
     private static final String RESPONSE_FIELD = "response";
+    private static final String INDEX_NAME_FIELD = "INDEX_NAME";
+    private static final String SELECTED_INDEX = "SELECTED_INDEX";
+    private static final String STEPS_FIELD = "STEPS";
 
     private final MachineLearningNodeClient mlClient;
     private final Cache<String, MLModel> modelCache = CacheBuilder.newBuilder().maximumSize(1000).build();
@@ -722,6 +725,7 @@ public class MLCommonsClientAccessor {
             String agentStepsSummary = null;
 
             String memoryId = null;
+            String selectedIndex = null;
             if (type == MLAgentType.FLOW) {
                 dslQuery = extractFlowAgentResult(mlOutput);
             } else if (type == MLAgentType.CONVERSATIONAL) {
@@ -729,9 +733,10 @@ public class MLCommonsClientAccessor {
                 dslQuery = conversationalResult.get(DSL_QUERY_FIELD_NAME);
                 agentStepsSummary = conversationalResult.get(AGENT_STEPS_FIELD_NAME);
                 memoryId = conversationalResult.get(MEMORY_ID_FIELD_NAME);
+                selectedIndex = conversationalResult.get(SELECTED_INDEX);
             }
 
-            listener.onResponse(new AgentExecutionDTO(removeTrailingDecimalZeros(dslQuery), agentStepsSummary, memoryId));
+            listener.onResponse(new AgentExecutionDTO(removeTrailingDecimalZeros(dslQuery), agentStepsSummary, memoryId, selectedIndex));
         }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> {
             try {
                 retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, retryTime + 1, listener);
@@ -853,9 +858,21 @@ public class MLCommonsClientAccessor {
 
                         // Extract agent steps based on model type
                         if (isClaude) {
-                            agentSteps.addAll(extractClaudeAgentSteps(modelResponseMap));
+                            Map<String, String> claudeResult = extractClaudeAgentSteps(modelResponseMap);
+                            if (claudeResult.containsKey(STEPS_FIELD) && !claudeResult.get(STEPS_FIELD).isEmpty()) {
+                                agentSteps.add(claudeResult.get(STEPS_FIELD));
+                            }
+                            if (claudeResult.containsKey(INDEX_NAME_FIELD)) {
+                                result.put(SELECTED_INDEX, claudeResult.get(INDEX_NAME_FIELD));
+                            }
                         } else if (isOpenAI) {
-                            agentSteps.addAll(extractOpenAIAgentSteps(modelResponseMap));
+                            Map<String, String> openAIResult = extractOpenAIAgentSteps(modelResponseMap);
+                            if (openAIResult.containsKey(STEPS_FIELD) && !openAIResult.get(STEPS_FIELD).isEmpty()) {
+                                agentSteps.add(openAIResult.get(STEPS_FIELD));
+                            }
+                            if (openAIResult.containsKey(INDEX_NAME_FIELD)) {
+                                result.put(SELECTED_INDEX, openAIResult.get(INDEX_NAME_FIELD));
+                            }
                         }
                     } catch (Exception e) {
                         // If JSON parsing fails, skip this response
@@ -921,24 +938,36 @@ public class MLCommonsClientAccessor {
         }
     }
 
-    private List<String> extractClaudeAgentSteps(Map<String, Object> responseMap) {
+    private Map<String, String> extractClaudeAgentSteps(Map<String, Object> responseMap) {
+        Map<String, String> extractedTrace = new HashMap<>();
         List<String> steps = new ArrayList<>();
-        if (!responseMap.containsKey("output")) return steps;
+
+        if (!responseMap.containsKey("output")) {
+            return extractedTrace;
+        }
+
         Map<String, Object> output = (Map<String, Object>) responseMap.get("output");
+        if (output == null || !output.containsKey("message")) {
+            return extractedTrace;
+        }
 
-        if (output == null || !output.containsKey("message")) return steps;
         Map<String, Object> message = (Map<String, Object>) output.get("message");
+        if (message == null || !message.containsKey("content")) {
+            return extractedTrace;
+        }
 
-        if (message == null || !message.containsKey("content")) return steps;
         List<Map<String, Object>> content = (List<Map<String, Object>>) message.get("content");
-
-        if (content == null) return steps;
+        if (content == null) {
+            return extractedTrace;
+        }
 
         // Check if toolUse is present in the content array
         boolean hasToolUse = content.stream().anyMatch(item -> item.containsKey("toolUse"));
-        if (!hasToolUse) return steps;
+        if (!hasToolUse) {
+            return extractedTrace;
+        }
 
-        // Extract text only when toolUse is present (agent step, not final response)
+        // Extract text and index_name from tool calls when toolUse is present
         for (Map<String, Object> item : content) {
             if (item.containsKey("text")) {
                 String text = (String) item.get("text");
@@ -946,29 +975,67 @@ public class MLCommonsClientAccessor {
                     steps.add(text);
                 }
             }
+            if (item.containsKey("toolUse")) {
+                Map<String, Object> toolUse = (Map<String, Object>) item.get("toolUse");
+                if (toolUse != null && toolUse.containsKey("input")) {
+                    Map<String, Object> input = (Map<String, Object>) toolUse.get("input");
+                    if (input != null && input.containsKey("index_name")) {
+                        String indexName = (String) input.get("index_name");
+                        if (indexName != null && !indexName.isBlank()) {
+                            extractedTrace.put(INDEX_NAME_FIELD, indexName);
+                        }
+                    }
+                }
+            }
         }
-        return steps;
+        extractedTrace.put(STEPS_FIELD, steps.isEmpty() ? "" : String.join("\n", steps));
+        return extractedTrace;
     }
 
-    private List<String> extractOpenAIAgentSteps(Map<String, Object> responseMap) {
+    private Map<String, String> extractOpenAIAgentSteps(Map<String, Object> responseMap) {
+        Map<String, String> extractedTrace = new HashMap<>();
         List<String> steps = new ArrayList<>();
-        if (!responseMap.containsKey("choices")) return steps;
+
+        if (!responseMap.containsKey("choices")) {
+            return extractedTrace;
+        }
 
         List<Map<String, Object>> choices = (List<Map<String, Object>>) responseMap.get("choices");
-        if (choices == null || choices.isEmpty()) return steps;
+        if (choices == null || choices.isEmpty()) {
+            return extractedTrace;
+        }
 
-        Map<String, Object> firstChoice = choices.get(0);
-        if (firstChoice == null) return steps;
-
-        Map<String, Object> message = (Map<String, Object>) firstChoice.get("message");
-        if (message == null || !message.containsKey("tool_calls")) return steps;
+        Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+        if (message == null || !message.containsKey("tool_calls")) {
+            return extractedTrace;
+        }
 
         String content = (String) message.get("content");
-
         if (content != null && !content.isBlank()) {
             steps.add(content);
         }
-        return steps;
+
+        // Extract index_name from tool_calls
+        List<Map<String, Object>> toolCalls = (List<Map<String, Object>>) message.get("tool_calls");
+        if (toolCalls != null) {
+            for (Map<String, Object> toolCall : toolCalls) {
+                Map<String, Object> function = (Map<String, Object>) toolCall.get("function");
+                if (function != null && function.containsKey("arguments")) {
+                    try {
+                        Map<String, Object> argsMap = gson.fromJson((String) function.get("arguments"), Map.class);
+                        String indexName = (String) argsMap.get("index_name");
+                        if (indexName != null && !indexName.isBlank()) {
+                            extractedTrace.put(INDEX_NAME_FIELD, indexName);
+                            break;
+                        }
+                    } catch (Exception e) {
+                        log.debug("Failed to parse tool call arguments", e);
+                    }
+                }
+            }
+        }
+        extractedTrace.put(STEPS_FIELD, steps.isEmpty() ? "" : String.join("\n", steps));
+        return extractedTrace;
     }
 
     /**

@@ -2316,4 +2316,74 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         verify(listener).onFailure(exception);
         Mockito.verifyNoMoreInteractions(listener);
     }
+
+    public void testExtractClaudeAgentSteps_WithIndexName() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index", "products-index", "orders-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("Find products");
+
+        // Create Claude response with toolUse containing index_name
+        String agentStepResponse =
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"I'll search the products index.\"},{\"toolUse\":{\"input\":{\"question\":\"Find products\",\"index_name\":\"products-index\"},\"name\":\"QueryTool\"}}],\"role\":\"assistant\"}}}";
+        String finalResponse = "{\"dsl_query\":{\"query\":{\"match_all\":{}}}}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createClaudeAgentResponse(agentStepResponse, finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("products-index", result.getSelectedIndex());
+        assertEquals("I'll search the products index.", result.getAgentStepsSummary());
+    }
+
+    public void testExtractOpenAIAgentSteps_WithIndexName() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index", "products-index", "orders-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("Find products");
+
+        // Create OpenAI response with tool_calls containing index_name in arguments
+        String agentStepResponse =
+            "{\"choices\":[{\"message\":{\"content\":\"I'll search for products.\",\"tool_calls\":[{\"function\":{\"name\":\"query_tool\",\"arguments\":\"{\\\"question\\\":\\\"Find products\\\",\\\"index_name\\\":\\\"products-index\\\"}\"}}]}}]}";
+        String finalResponse = "{\"dsl_query\":{\"query\":{\"match_all\":{}}}}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createOpenAIAgentResponse(agentStepResponse, finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "openai/v1/chat/completions");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("products-index", result.getSelectedIndex());
+        assertEquals("I'll search for products.", result.getAgentStepsSummary());
+    }
 }
