@@ -2329,7 +2329,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         // Create Claude response with toolUse containing index_name
         String agentStepResponse =
-            "{\"output\":{\"message\":{\"content\":[{\"text\":\"I'll search the products index.\"},{\"toolUse\":{\"input\":{\"question\":\"Find products\",\"index_name\":\"products-index\"},\"name\":\"QueryTool\"}}],\"role\":\"assistant\"}}}";
+            "{\"output\":{\"message\":{\"content\":[{\"text\":\"I'll search the products index.\"},{\"toolUse\":{\"input\":{\"question\":\"Find products\",\"index_name\":\"products-index\"},\"name\":\"QueryPlanningTool\"}}],\"role\":\"assistant\"}}}";
         String finalResponse = "{\"dsl_query\":{\"query\":{\"match_all\":{}}}}";
 
         Mockito.doAnswer(invocation -> {
@@ -2364,7 +2364,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         // Create OpenAI response with tool_calls containing index_name in arguments
         String agentStepResponse =
-            "{\"choices\":[{\"message\":{\"content\":\"I'll search for products.\",\"tool_calls\":[{\"function\":{\"name\":\"query_tool\",\"arguments\":\"{\\\"question\\\":\\\"Find products\\\",\\\"index_name\\\":\\\"products-index\\\"}\"}}]}}]}";
+            "{\"choices\":[{\"message\":{\"content\":\"I'll search for products.\",\"tool_calls\":[{\"function\":{\"name\":\"QueryPlanningTool\",\"arguments\":\"{\\\"question\\\":\\\"Find products\\\",\\\"index_name\\\":\\\"products-index\\\"}\"}}]}}]}";
         String finalResponse = "{\"dsl_query\":{\"query\":{\"match_all\":{}}}}";
 
         Mockito.doAnswer(invocation -> {

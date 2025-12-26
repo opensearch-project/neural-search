@@ -79,6 +79,7 @@ public class MLCommonsClientAccessor {
     private static final String INDEX_NAME_FIELD = "INDEX_NAME";
     private static final String SELECTED_INDEX = "SELECTED_INDEX";
     private static final String STEPS_FIELD = "STEPS";
+    private static final String QUERY_PLANNING_TOOL = "QueryPlanningTool";
 
     private final MachineLearningNodeClient mlClient;
     private final Cache<String, MLModel> modelCache = CacheBuilder.newBuilder().maximumSize(1000).build();
@@ -977,7 +978,7 @@ public class MLCommonsClientAccessor {
             }
             if (item.containsKey("toolUse")) {
                 Map<String, Object> toolUse = (Map<String, Object>) item.get("toolUse");
-                if (toolUse != null && toolUse.containsKey("input")) {
+                if (toolUse != null && QUERY_PLANNING_TOOL.equals(toolUse.get("name")) && toolUse.containsKey("input")) {
                     Map<String, Object> input = (Map<String, Object>) toolUse.get("input");
                     if (input != null && input.containsKey("index_name")) {
                         String indexName = (String) input.get("index_name");
@@ -1020,7 +1021,7 @@ public class MLCommonsClientAccessor {
         if (toolCalls != null) {
             for (Map<String, Object> toolCall : toolCalls) {
                 Map<String, Object> function = (Map<String, Object>) toolCall.get("function");
-                if (function != null && function.containsKey("arguments")) {
+                if (function != null && QUERY_PLANNING_TOOL.equals(function.get("name")) && function.containsKey("arguments")) {
                     try {
                         Map<String, Object> argsMap = gson.fromJson((String) function.get("arguments"), Map.class);
                         String indexName = (String) argsMap.get("index_name");
