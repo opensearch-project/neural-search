@@ -69,6 +69,7 @@ import java.util.concurrent.Executors;
 
 import static org.apache.lucene.tests.util.LuceneTestCase.random;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -560,7 +561,8 @@ public class TestsPrepareUtils {
     public static void prepareSparseFieldUtilsClusterServiceMock(
         ClusterService mockClusterService,
         List<String> sparseFields,
-        Settings additionalSettings
+        Settings additionalSettings,
+        String index
     ) {
         IndexMetadata indexMetadata = mock(IndexMetadata.class);
         Metadata metadata = mock(Metadata.class);
@@ -569,7 +571,11 @@ public class TestsPrepareUtils {
 
         when(mockClusterService.state()).thenReturn(clusterState);
         when(clusterState.metadata()).thenReturn(metadata);
-        when(metadata.index(anyString())).thenReturn(indexMetadata);
+        if (index == null) {
+            when(metadata.index(anyString())).thenReturn(indexMetadata);
+        } else {
+            when(metadata.index(eq(index))).thenReturn(indexMetadata);
+        }
 
         when(indexMetadata.mapping()).thenReturn(mappingMetadata);
 
@@ -580,5 +586,13 @@ public class TestsPrepareUtils {
             Settings settings = Settings.builder().put("index.sparse", true).put(additionalSettings).build();
             when(indexMetadata.getSettings()).thenReturn(settings);
         }
+    }
+
+    public static void prepareSparseFieldUtilsClusterServiceMock(
+        ClusterService mockClusterService,
+        List<String> sparseFields,
+        Settings additionalSettings
+    ) {
+        prepareSparseFieldUtilsClusterServiceMock(mockClusterService, sparseFields, additionalSettings, null);
     }
 }

@@ -15,7 +15,10 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.query.AbstractNeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryTwoPhaseInfo;
 import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
+import org.opensearch.neuralsearch.sparse.query.SparseQueryTwoPhaseInfo;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -28,6 +31,9 @@ import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescorerBuilder;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -113,7 +119,12 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         if (queryBuilderMap.isEmpty()) {
             return request;
         }
-        validateSeismicQuery(request.indices(), queryBuilderMap);
+        // if query is on sparse_vector fields, use two-phase logic in sparse ann instead.
+        List<String> seismicIndices = validateSeismicQuery(request.indices(), queryBuilderMap);
+        boolean useSeismicTwoPhase = updateNeuralSparseQueryBuilderWithSeismicTwoPhase(seismicIndices, queryBuilder, request);
+        if (useSeismicTwoPhase) {
+            return request;
+        }
         // Make a nestedQueryBuilder which includes all the two-phase QueryBuilder.
         QueryBuilder nestedTwoPhaseQueryBuilder = getNestedQueryBuilderFromNeuralSparseQueryBuilderMap(queryBuilderMap);
         nestedTwoPhaseQueryBuilder.boost(getOriginQueryWeightAfterRescore(request.source()));
@@ -197,6 +208,31 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         return result;
     }
 
+    private Set<AbstractNeuralQueryBuilder<?>> collectNeuralQueryBuilderWithSparseEmbedding(
+        final QueryBuilder queryBuilder,
+        final SearchRequest request
+    ) {
+        Set<AbstractNeuralQueryBuilder<?>> result = new HashSet<>();
+        if (queryBuilder instanceof BoolQueryBuilder) {
+            BoolQueryBuilder boolQueryBuilder = (BoolQueryBuilder) queryBuilder;
+            for (QueryBuilder subQuery : boolQueryBuilder.should()) {
+                Set<AbstractNeuralQueryBuilder<?>> subResult = collectNeuralQueryBuilderWithSparseEmbedding(subQuery, request);
+                result.addAll(subResult);
+            }
+        } else if (queryBuilder instanceof AbstractNeuralQueryBuilder<?> abstractNeuralQueryBuilder) {
+            // If this is a neuralQueryBuilder then we need to check if the target is sparse embedding.
+            // If the target is not the sparse embedding we do nothing.
+            if (abstractNeuralQueryBuilder instanceof NeuralQueryBuilder neuralQueryBuilder
+                && neuralQueryBuilder.isTargetSparseEmbedding(request) == false) {
+                return result;
+            }
+            result.add(abstractNeuralQueryBuilder);
+        }
+        // We only support BoostQuery, BooleanQuery and NeuralSparseQuery now. For other compound query type which are not support now, will
+        // do nothing and just quit.
+        return result;
+    }
+
     private RescorerBuilder<QueryRescorerBuilder> buildRescoreQueryBuilderForTwoPhase(
         final QueryBuilder nestedTwoPhaseQueryBuilder,
         final SearchRequest searchRequest
@@ -218,19 +254,62 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         return twoPhaseRescorer;
     }
 
-    private void validateSeismicQuery(String[] indices, Multimap<AbstractNeuralQueryBuilder<?>, Float> queryBuilderMap) {
+    private boolean updateNeuralSparseQueryBuilderWithSeismicTwoPhase(
+        final List<String> sparseAnnIndices,
+        QueryBuilder queryBuilder,
+        final SearchRequest request
+    ) {
+        boolean useSeismicTwoPhase = false;
+        if (sparseAnnIndices.isEmpty()) {
+            return useSeismicTwoPhase;
+        }
+        Set<AbstractNeuralQueryBuilder<?>> neuralQueryBuilders = collectNeuralQueryBuilderWithSparseEmbedding(queryBuilder, request);
+        if (neuralQueryBuilders.isEmpty()) {
+            return useSeismicTwoPhase;
+        }
+        for (AbstractNeuralQueryBuilder<?> neuralQueryBuilder : neuralQueryBuilders) {
+            if (neuralQueryBuilder instanceof NeuralSparseQueryBuilder neuralSparseQueryBuilder) {
+                if (neuralSparseQueryBuilder.sparseAnnQueryBuilder() != null) {
+                    neuralSparseQueryBuilder.sparseAnnQueryBuilder()
+                        .sparseQueryTwoPhaseInfo(
+                            new SparseQueryTwoPhaseInfo(
+                                NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_ONE,
+                                this.pruneRatio,
+                                this.pruneType,
+                                this.windowExpansion,
+                                this.maxWindowSize
+                            )
+                        );
+                    useSeismicTwoPhase = true;
+                }
+            }
+        }
+        return useSeismicTwoPhase;
+    }
+
+    private List<String> validateSeismicQuery(String[] indices, Multimap<AbstractNeuralQueryBuilder<?>, Float> queryBuilderMap) {
+        List<String> sparseAnnIndices = new ArrayList<>();
         for (String index : indices) {
             Set<String> sparseAnnFields = SparseFieldUtils.getSparseAnnFields(index, getClusterService());
             for (Map.Entry<AbstractNeuralQueryBuilder<?>, Float> entry : queryBuilderMap.entries()) {
                 AbstractNeuralQueryBuilder<?> queryBuilder = entry.getKey();
                 String fieldName = queryBuilder.fieldName();
                 if (sparseAnnFields.contains(fieldName)) {
-                    throw new IllegalArgumentException(
-                        String.format(Locale.ROOT, "Two phase search processor is not compatible with [%s] field for now", SEISMIC)
-                    );
+                    sparseAnnIndices.add(index);
                 }
             }
         }
+        if (!sparseAnnIndices.isEmpty() && sparseAnnIndices.size() != indices.length) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "Two phase search processor can only be run on all [%s] indices or non [%s] indices",
+                    SEISMIC,
+                    SEISMIC
+                )
+            );
+        }
+        return sparseAnnIndices;
     }
 
     /**
