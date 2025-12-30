@@ -30,8 +30,6 @@ import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.ArrayList;
-
-import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -46,6 +44,7 @@ import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 
 /**
  * This processor is used for user input data text sparse encoding processing, model_id can be used to indicate which model user use,
@@ -174,6 +173,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         }
         List<Exception> exceptions = Collections.synchronizedList(new ArrayList<>());
         if (!splitDataResponse.getTokenIdDataForInference().isEmpty()) {
+            EventStatsManager.increment(EventStatName.SPARSE_ENCODING_PROCESSOR_SEISMIC_EXECUTIONS);
             doBatchExecuteWithType(
                 splitDataResponse.getTokenIdResponseInferenceList(),
                 splitDataResponse.getTokenIdDataForInference(),
@@ -409,6 +409,7 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         }
         List<Exception> exceptions = Collections.synchronizedList(new ArrayList<>());
         if (!tokenIdProcessMap.isEmpty()) {
+            EventStatsManager.increment(EventStatName.SPARSE_ENCODING_PROCESSOR_SEISMIC_EXECUTIONS);
             List<String> updatedInferenceList = createInferenceList(tokenIdProcessMap);
             generateAndSetMapInference(
                 ingestDocument,
