@@ -258,6 +258,14 @@ public enum EventStatName implements StatName {
 
     /** Counts seismic query requests */
     SEISMIC_QUERY_REQUESTS("seismic_query_requests", "query.neural_sparse", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_3_0),
+
+    // Counts seismic ingest through sparse encoding processor
+    SPARSE_ENCODING_PROCESSOR_SEISMIC_EXECUTIONS(
+        "sparse_encoding_seismic_executions",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_5_0
+    ),
     /** Tracks executions of the mmr neural query transformer */
     MMR_NEURAL_QUERY_TRANSFORMER(
         "mmr_neural_query_transformer_executions",
