@@ -97,8 +97,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
      * @return number of bytes freed, or 0 if the item was not evicted
      */
     protected long evictItem(Key key) {
-        Boolean removed = accessRecencyMap.remove(key);
-        if (removed == null) {
+        if (accessRecencyMap.remove(key) == null) {
             return 0;
         }
 
