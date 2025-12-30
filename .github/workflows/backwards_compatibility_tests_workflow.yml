@@ -62,7 +62,7 @@ jobs:
       matrix:
         java: [21, 25]
         os: [ubuntu-latest]
-        bwc_version: [ "2.20.0-SNAPSHOT","3.0.0", "3.1.0", "3.2.0", "3.3.0","3.4.0" ]
+        bwc_version: [ "2.19.0","3.0.0", "3.1.0", "3.2.0", "3.3.0","3.4.0" ]
         opensearch_version: [ "3.5.0-SNAPSHOT" ]
 
     name: NeuralSearch Rolling-Upgrade BWC Tests

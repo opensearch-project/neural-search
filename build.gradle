@@ -515,7 +515,7 @@ task updateVersion {
 
         if (!fileTree("gradle.properties").getSingleFile().text.contains(os_version_without_snapshot)) {
             // Include the current OpenSearch Version before version bump to the bwc_version matrix
-            ant.replaceregexp(file:"gradle.properties", match: oldBWCVersion, replace: oldBWCVersion + '", "' + opensearch_version.tokenize('-')[0], flags:'g', byline:true)
+            ant.replaceregexp(file:"gradle.properties", match: oldBWCVersion, replace: opensearch_version.tokenize('-')[0], flags:'g', byline:true)
         }
     }
 }
