@@ -111,7 +111,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
      * @param cacheKey The cache key to remove
      */
     public void onIndexRemoval(@NonNull CacheKey cacheKey) {
-        accessRecencyMap.entrySet().removeIf(entry -> entry.getKey().getCacheKey().equals(cacheKey));
+        accessRecencyMap.keySet().removeIf(key -> key.getCacheKey().equals(cacheKey));
     }
 
     /**
