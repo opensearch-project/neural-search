@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 
 /**
  * Abstracts normalization of scores in query search results.

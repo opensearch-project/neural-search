@@ -1006,6 +1006,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testBuild_whenValidParameters_thenCreateQuery() {
+        setUpClusterService();
         String queryText = "test query";
         String modelId = "test_model";
         String fieldName = "rank_features";

@@ -19,13 +19,16 @@ import org.apache.lucene.search.TotalHits;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.SearchShard;
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.normalization.bounds.BoundMode;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
+import static org.mockito.Mockito.mock;
 import static org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique.MAX_SCORE;
 import static org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique.MIN_SCORE;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
@@ -237,7 +240,12 @@ public class MinMaxScoreNormalizationTechniqueTests extends OpenSearchQueryTestC
         );
 
         MinMaxScoreNormalizationTechnique normalizer = new MinMaxScoreNormalizationTechnique();
-        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(Collections.singletonList(compoundTopDocs));
+        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(
+            ExplainDTO.builder()
+                .queryTopDocs(Collections.singletonList(compoundTopDocs))
+                .explainableTechnique(mock(ExplainableTechnique.class))
+                .build()
+        );
 
         // Verify results
         DocIdAtSearchShard doc1 = new DocIdAtSearchShard(1, searchShard);

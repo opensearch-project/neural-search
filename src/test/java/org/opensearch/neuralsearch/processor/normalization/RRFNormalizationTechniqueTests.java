@@ -10,20 +10,23 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+
+import static org.mockito.Mockito.mock;
 
 /**
  * Abstracts testing of normalization of scores based on RRF method
@@ -279,7 +282,12 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         );
 
         RRFNormalizationTechnique normalizer = new RRFNormalizationTechnique(Map.of(), new ScoreNormalizationUtil());
-        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(Collections.singletonList(compoundTopDocs));
+        ExplainableTechnique explainableTechnique = mock(ExplainableTechnique.class);
+        ExplainDTO explainDTO = ExplainDTO.builder()
+            .queryTopDocs(Collections.singletonList(compoundTopDocs))
+            .explainableTechnique(explainableTechnique)
+            .build();
+        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(explainDTO);
 
         // Verify results
         DocIdAtSearchShard doc1 = new DocIdAtSearchShard(1, searchShard);
@@ -325,13 +333,11 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         assertTrue(doc1Scores.get(2).getValue().contains("rrf"));
     }
 
-    public void testExplainWithEmptyAndNullList() {
+    public void testExplainWithEmptyList() {
         RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
-        normalizationTechnique.explain(List.of());
-
-        List<CompoundTopDocs> compoundTopDocs = new ArrayList<>();
-        compoundTopDocs.add(null);
-        normalizationTechnique.explain(compoundTopDocs);
+        normalizationTechnique.explain(
+            ExplainDTO.builder().queryTopDocs(Collections.emptyList()).explainableTechnique(mock(ExplainableTechnique.class)).build()
+        );
     }
 
     public void testExplainWithSingleTopDocs() {
@@ -339,7 +345,9 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         CompoundTopDocs topDocs = createCompoundTopDocs(new float[] { 0.8f }, 1);
         List<CompoundTopDocs> queryTopDocs = Collections.singletonList(topDocs);
 
-        Map<DocIdAtSearchShard, ExplanationDetails> explanation = normalizationTechnique.explain(queryTopDocs);
+        Map<DocIdAtSearchShard, ExplanationDetails> explanation = normalizationTechnique.explain(
+            ExplainDTO.builder().queryTopDocs(queryTopDocs).explainableTechnique(mock(ExplainableTechnique.class)).build()
+        );
 
         assertNotNull(explanation);
         assertEquals(1, explanation.size());

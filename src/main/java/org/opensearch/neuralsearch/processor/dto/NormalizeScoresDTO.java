@@ -2,12 +2,13 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor;
+package org.opensearch.neuralsearch.processor.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
+import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 
 import java.util.List;
@@ -23,4 +24,5 @@ public class NormalizeScoresDTO {
     private List<CompoundTopDocs> queryTopDocs;
     @NonNull
     private ScoreNormalizationTechnique normalizationTechnique;
+    private boolean singleShard;
 }

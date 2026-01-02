@@ -4,7 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import org.opensearch.neuralsearch.processor.TechniqueCompatibilityCheckDTO;
+import org.opensearch.neuralsearch.processor.dto.TechniqueCompatibilityCheckDTO;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;

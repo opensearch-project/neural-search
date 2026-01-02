@@ -12,7 +12,7 @@ import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
-import org.opensearch.neuralsearch.processor.TechniqueCompatibilityCheckDTO;
+import org.opensearch.neuralsearch.processor.dto.TechniqueCompatibilityCheckDTO;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;

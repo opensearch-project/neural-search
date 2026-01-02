@@ -6,7 +6,8 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import java.util.List;
 import java.util.Objects;
 import java.util.Map;
@@ -15,7 +16,6 @@ import java.util.Locale;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
-import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 import com.google.common.primitives.Floats;
@@ -89,7 +89,9 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     }
 
     @Override
-    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final ExplainDTO explainDTO) {
+        List<CompoundTopDocs> queryTopDocs = explainDTO.getQueryTopDocs();
+
         ZScoreNormalizationTechnique.ZScores zScores = getZScoreResults(queryTopDocs);
 
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();

@@ -25,7 +25,8 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import com.google.common.primitives.Floats;
 
 import lombok.ToString;
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
@@ -176,7 +177,8 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
     }
 
     @Override
-    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final ExplainDTO explainDTO) {
+        final List<CompoundTopDocs> queryTopDocs = explainDTO.getQueryTopDocs();
         MinMaxScores minMaxScores = getMinMaxScoresResult(queryTopDocs);
 
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
