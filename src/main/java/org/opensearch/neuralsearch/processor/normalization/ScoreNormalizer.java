@@ -9,10 +9,11 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 
 public class ScoreNormalizer {
 
@@ -37,17 +38,14 @@ public class ScoreNormalizer {
 
     /**
      * Explain normalized scores based on input normalization technique. Does not mutate input object.
-     * @param queryTopDocs original query results from multiple shards and multiple sub-queries
-     * @param queryTopDocs
-     * @param scoreNormalizationTechnique
+     * @param explainDTO original query results from multiple shards of multiple sub-queries with explainableTechnique
      * @return map of doc id to explanation details
      */
-    public Map<DocIdAtSearchShard, ExplanationDetails> explain(
-        final List<CompoundTopDocs> queryTopDocs,
-        final ExplainableTechnique scoreNormalizationTechnique
-    ) {
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final ExplainDTO explainDTO) {
+        final List<CompoundTopDocs> queryTopDocs = explainDTO.getQueryTopDocs();
+        final ExplainableTechnique scoreNormalizationTechnique = explainDTO.getExplainableTechnique();
         if (canQueryResultsBeNormalized(queryTopDocs)) {
-            return scoreNormalizationTechnique.explain(queryTopDocs);
+            return scoreNormalizationTechnique.explain(explainDTO);
         }
         return Map.of();
     }
