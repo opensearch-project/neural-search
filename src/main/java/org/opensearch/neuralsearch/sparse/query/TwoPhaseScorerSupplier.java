@@ -19,7 +19,9 @@ import java.io.IOException;
  * Manages scorer creation with configurable expansion ratio.
  */
 public class TwoPhaseScorerSupplier extends ScorerSupplier {
-    private final Scorer scorer;
+    private final BulkScorer phaseOneBulkScorer;
+    private final PhaseOneLeafCollector phaseOneLeafCollector;
+    private final Scorer phaseTwoScorer;
 
     /**
      * Creates a two-phase scorer supplier.
@@ -36,12 +38,14 @@ public class TwoPhaseScorerSupplier extends ScorerSupplier {
         BitSetIterator filterBitSetIterator,
         int querySize
     ) throws IOException {
-        scorer = new TwoPhaseScorer(phaseOneScorerSupplier.get(0), phaseTwoScorerSupplier.get(0), filterBitSetIterator, querySize);
+        this.phaseOneBulkScorer = phaseOneScorerSupplier.bulkScorer();
+        this.phaseOneLeafCollector = new PhaseOneLeafCollector(querySize);
+        this.phaseTwoScorer = phaseTwoScorerSupplier.get(0);
     }
 
     @Override
     public Scorer get(long leadCost) throws IOException {
-        return scorer;
+        return null;
     }
 
     @Override
@@ -51,14 +55,18 @@ public class TwoPhaseScorerSupplier extends ScorerSupplier {
             // so, to ensure it's only called once, we return the maxDoc
             @Override
             public int score(LeafCollector collector, Bits acceptDocs, int min, int max) throws IOException {
+                // run phase 1:
+                int ret = phaseOneBulkScorer.score(phaseOneLeafCollector, acceptDocs, min, max);
+                // iterate phase result
+                ResultsDocValueIterator<Float> phaseOneResultsIterator = phaseOneLeafCollector.getPhaseOneResults();
+                TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneResultsIterator, phaseTwoScorer);
                 collector.setScorer(scorer);
-                DocIdSetIterator iter = scorer.iterator();
-                int docId = iter.nextDoc();
+                int docId = phaseOneResultsIterator.nextDoc();
                 while (docId != DocIdSetIterator.NO_MORE_DOCS) {
                     collector.collect(docId);
-                    docId = iter.nextDoc();
+                    docId = phaseOneResultsIterator.nextDoc();
                 }
-                return DocIdSetIterator.NO_MORE_DOCS;
+                return ret;
             }
 
             @Override

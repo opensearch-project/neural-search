@@ -48,7 +48,7 @@ public class SparseQueryWeight extends Weight {
             ? query.getRankFeaturesPhaseOneQuery().createWeight(searcher, scoreMode, boost)
             : null;
         this.rankFeaturePhaseTwoWeight = query.getRankFeaturesPhaseTwoQuery() != null
-            ? query.getRankFeaturesPhaseTwoQuery().createWeight(searcher, scoreMode, boost)
+            ? query.getRankFeaturesPhaseTwoQuery().createWeight(searcher, ScoreMode.COMPLETE, boost)
             : null;
         if (scorerSelector == null) {
             selector = new ScorerSelector(this);

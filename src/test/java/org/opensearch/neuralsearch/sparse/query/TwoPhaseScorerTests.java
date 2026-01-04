@@ -4,20 +4,28 @@
  */
 package org.opensearch.neuralsearch.sparse.query;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.Scorer;
-import org.apache.lucene.util.BitSetIterator;
-import org.apache.lucene.util.FixedBitSet;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class TwoPhaseScorerTests extends AbstractSparseTestBase {
+
+    private ResultsDocValueIterator<Float> createResultsIterator(List<Integer> docs, List<Float> scores) {
+        List<Pair<Integer, Float>> results = IntStream.range(0, docs.size())
+            .mapToObj(i -> Pair.of(docs.get(i), scores.get(i)))
+            .collect(Collectors.toList());
+        return new ResultsDocValueIterator<>(results);
+    }
 
     private Scorer createMockScorer(List<Integer> docs, List<Float> scores) throws IOException {
         Scorer scorer = mock(Scorer.class);
@@ -52,87 +60,73 @@ public class TwoPhaseScorerTests extends AbstractSparseTestBase {
         return scorer;
     }
 
-    public void testConstructorWithoutFilter() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(1, 3, 5), Arrays.asList(10f, 30f, 50f));
+    public void testConstructor() throws IOException {
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(Arrays.asList(1, 3, 5), Arrays.asList(10f, 30f, 50f));
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(1, 5), Arrays.asList(1f, 5f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         assertEquals(-1, scorer.docID());
         assertNotNull(scorer.iterator());
     }
 
-    public void testConstructorWithFilter() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(1, 3, 5, 7), Arrays.asList(10f, 30f, 50f, 70f));
-        Scorer phaseTwoScorer = createMockScorer(Arrays.asList(1, 3, 5), Arrays.asList(1f, 3f, 5f));
-
-        FixedBitSet bitSet = new FixedBitSet(10);
-        bitSet.set(1);
-        bitSet.set(5);
-        BitSetIterator filterIterator = new BitSetIterator(bitSet, 2);
-
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, filterIterator, 10);
-
-        DocIdSetIterator iterator = scorer.iterator();
-        assertEquals(1, iterator.nextDoc());
-        assertEquals(5, iterator.nextDoc());
-        assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.nextDoc());
-    }
-
     public void testGetMaxScore() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(1), Arrays.asList(10f));
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(Arrays.asList(1), Arrays.asList(10f));
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(1), Arrays.asList(1f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         assertEquals(0f, scorer.getMaxScore(100), DELTA_FOR_ASSERTION);
     }
 
     public void testScorePhaseOneDocLessThanPhaseTwoDoc() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(1, 3), Arrays.asList(10f, 30f));
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(Arrays.asList(1, 3), Arrays.asList(10f, 30f));
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(5), Arrays.asList(5f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         scorer.iterator().nextDoc();
         assertEquals(10f, scorer.score(), DELTA_FOR_ASSERTION);
     }
 
     public void testScorePhaseOneDocGreaterThanPhaseTwoDocAndAdvanceMatches() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(5), Arrays.asList(50f));
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(Arrays.asList(5), Arrays.asList(50f));
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(1, 5), Arrays.asList(1f, 5f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         scorer.iterator().nextDoc();
         assertEquals(55f, scorer.score(), DELTA_FOR_ASSERTION);
     }
 
     public void testScorePhaseOneDocGreaterThanPhaseTwoDocAndAdvanceDoesNotMatch() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(5), Arrays.asList(50f));
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(Arrays.asList(5), Arrays.asList(50f));
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(1, 7), Arrays.asList(1f, 7f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         scorer.iterator().nextDoc();
         assertEquals(50f, scorer.score(), DELTA_FOR_ASSERTION);
     }
 
     public void testScorePhaseOneDocEqualsPhaseTwoDoc() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(3), Arrays.asList(30f));
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(Arrays.asList(3), Arrays.asList(30f));
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(3), Arrays.asList(3f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         scorer.iterator().nextDoc();
         assertEquals(33f, scorer.score(), DELTA_FOR_ASSERTION);
     }
 
     public void testIterationWithMultipleDocs() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(1, 3, 5, 7), Arrays.asList(10f, 30f, 50f, 70f));
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(
+            Arrays.asList(1, 3, 5, 7),
+            Arrays.asList(10f, 30f, 50f, 70f)
+        );
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(3, 7), Arrays.asList(3f, 7f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         DocIdSetIterator iterator = scorer.iterator();
 
@@ -155,25 +149,11 @@ public class TwoPhaseScorerTests extends AbstractSparseTestBase {
         assertEquals(DocIdSetIterator.NO_MORE_DOCS, iterator.nextDoc());
     }
 
-    public void testMaxSizeLimitsResults() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(1, 2, 3, 4, 5), Arrays.asList(10f, 20f, 30f, 40f, 50f));
-        Scorer phaseTwoScorer = createMockScorer(Arrays.asList(1, 2, 3, 4, 5), Arrays.asList(1f, 2f, 3f, 4f, 5f));
-
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 2);
-
-        DocIdSetIterator iterator = scorer.iterator();
-        int count = 0;
-        while (iterator.nextDoc() != DocIdSetIterator.NO_MORE_DOCS) {
-            count++;
-        }
-        assertEquals(2, count);
-    }
-
     public void testEmptyPhaseOneResults() throws IOException {
-        Scorer phaseOneScorer = createMockScorer(Arrays.asList(), Arrays.asList());
+        ResultsDocValueIterator<Float> phaseOneIterator = createResultsIterator(Arrays.asList(), Arrays.asList());
         Scorer phaseTwoScorer = createMockScorer(Arrays.asList(1), Arrays.asList(1f));
 
-        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneScorer, phaseTwoScorer, null, 10);
+        TwoPhaseScorer scorer = new TwoPhaseScorer(phaseOneIterator, phaseTwoScorer);
 
         assertEquals(DocIdSetIterator.NO_MORE_DOCS, scorer.iterator().nextDoc());
     }
