@@ -225,7 +225,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
 
             assertHitResultsFromQuery(1, searchResponseAsMap);
@@ -241,7 +242,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
             assertHitResultsFromQuery(2, searchResponseAsMap);
         } else if (!isSingleShard && hasPostFilterQuery) {
@@ -256,7 +258,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
             assertHitResultsFromQuery(2, searchResponseAsMap);
         } else {
@@ -271,7 +274,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
             assertHitResultsFromQuery(3, searchResponseAsMap);
         }
@@ -325,7 +329,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
 
             assertHitResultsFromQuery(1, searchResponseAsMap);
@@ -341,7 +346,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
             assertHitResultsFromQuery(2, searchResponseAsMap);
         } else if (!isSingleShard && hasPostFilterQuery) {
@@ -356,7 +362,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
             assertHitResultsFromQuery(4, searchResponseAsMap);
         } else {
@@ -371,7 +378,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             );
             assertHitResultsFromQuery(3, searchResponseAsMap);
         }
@@ -590,7 +598,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
             null,
             false,
             null,
-            0
+            0,
+            null
         );
         assertNotNull(searchResponseAsMap);
 
@@ -654,7 +663,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
             null,
             10,
             Map.of("search_pipeline", SEARCH_PIPELINE),
-            List.of(aggsBuilder)
+            List.of(aggsBuilder),
+            null
         );
 
         assertHitResultsFromQuery(2, searchResponseAsMap);
@@ -989,7 +999,8 @@ public class HybridQueryAggregationsIT extends BaseNeuralSearchIT {
             null,
             10,
             Map.of("search_pipeline", SEARCH_PIPELINE),
-            aggsBuilders
+            aggsBuilders,
+            null
         );
 
         assertHitResultsFromQuery(expectedHits, searchResponseAsMap);

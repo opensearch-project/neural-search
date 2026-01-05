@@ -189,7 +189,7 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
     }
 
     public Map<String, Object> searchWithPipeline(String indexName, AgenticSearchQueryBuilder query, String pipelineName) throws Exception {
-        return search(indexName, query, null, 10, Map.of("search_pipeline", pipelineName));
+        return search(indexName, query, null, 10, Map.of("search_pipeline", pipelineName), null);
     }
 
     public Map<String, Object> searchWithPipelineAndAggregations(String indexName, AgenticSearchQueryBuilder query, String pipelineName)

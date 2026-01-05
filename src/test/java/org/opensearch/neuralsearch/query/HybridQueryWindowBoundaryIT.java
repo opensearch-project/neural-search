@@ -37,7 +37,8 @@ public class HybridQueryWindowBoundaryIT extends BaseNeuralSearchIT {
             QueryBuilders.matchQuery(TEXT_FIELD, SEARCH_TERM),
             null,
             totalDocs,
-            Map.of("track_total_hits", "true")
+            Map.of("track_total_hits", "true"),
+            null
         );
         Set<String> matchResults = getDocumentIds(matchResponse);
         Map<String, Object> matchTotal = getTotalHits(matchResponse);
@@ -50,7 +51,8 @@ public class HybridQueryWindowBoundaryIT extends BaseNeuralSearchIT {
             hybridQuery,
             null,
             totalDocs,
-            Map.of("search_pipeline", SEARCH_PIPELINE, "track_total_hits", "true")
+            Map.of("search_pipeline", SEARCH_PIPELINE, "track_total_hits", "true"),
+            null
         );
         Set<String> hybridResults = getDocumentIds(hybridResponse);
         Map<String, Object> hybridTotal = getTotalHits(hybridResponse);

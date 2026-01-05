@@ -90,7 +90,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            collapseContext
+            collapseContext,
+            null
         );
 
         Map<String, Object> hits = (Map<String, Object>) searchResponse.get("hits");
@@ -135,7 +136,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            collapseContext
+            collapseContext,
+            null
         );
 
         Map<String, Object> hits = (Map<String, Object>) searchResponse.get("hits");
@@ -194,7 +196,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            collapseContext
+            collapseContext,
+            null
         );
 
         Map<String, Object> hits = (Map<String, Object>) searchResponse.get("hits");
@@ -225,7 +228,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            collapseContext
+            collapseContext,
+            null
         );
 
         String collapseDuplicate = "Chocolate Cake";
@@ -254,7 +258,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            collapseContext
+            collapseContext,
+            null
         );
 
         String collapseDuplicate = "Chocolate Cake";
@@ -291,7 +296,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            collapseContext
+            collapseContext,
+            null
         );
         String responseString = searchResponse.toString();
         assertTrue(responseString.contains("cheapest_items"));
@@ -319,7 +325,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null,
             null,
-            collapseContext
+            collapseContext,
+            null
         );
 
         String collapseDuplicate = "Chocolate Cake";

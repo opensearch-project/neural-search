@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
@@ -20,6 +21,7 @@ import java.util.Objects;
 /**
  * Bulk scorer for hybrid query
  */
+@Log4j2
 public class HybridBulkScorer extends BulkScorer {
     private static final int SHIFT = 12;
     private static final int WINDOW_SIZE = 1 << SHIFT;
@@ -82,12 +84,11 @@ public class HybridBulkScorer extends BulkScorer {
     }
 
     private void scoreWindow(LeafCollector collector, Bits acceptDocs, int min, int max, int[] docIds) throws IOException {
-        // find the first document ID below the maximum threshold to establish the next scoring window boundary
-        int topDoc = -1;
+        // find the least maximum docId below the maximum threshold to establish the next scoring window boundary
+        int topDoc = DocIdSetIterator.NO_MORE_DOCS;
         for (int docId : docIds) {
-            if (docId < max) {
+            if (docId < max && docId < topDoc) {
                 topDoc = docId;
-                break;
             }
         }
 
@@ -185,7 +186,6 @@ public class HybridBulkScorer extends BulkScorer {
                 minDocIdForNextIteration = docId;
             }
         }
-
         return minDocIdForNextIteration;
     }
 

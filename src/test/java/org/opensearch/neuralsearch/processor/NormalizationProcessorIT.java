@@ -118,7 +118,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertQueryResults(searchResponseAsMap, 5, false);
     }
@@ -160,7 +161,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertQueryResults(searchResponseAsMap, 5, false);
     }
@@ -191,7 +193,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             6,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertNotNull(searchResponseAsMap);
@@ -234,7 +237,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderPartialMatch,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 4, true, Range.between(0.33f, 1.0f));
 
@@ -248,7 +252,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNoMatches,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertQueryResults(searchResponseAsMapNoMatches, 0, true);
     }
@@ -292,7 +297,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             6,
-            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_2_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_2_QUERIES),
+            null
         );
 
         assertNotNull(searchResponseAsMap);
@@ -351,7 +357,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderPartialMatch,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_3_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_3_QUERIES),
+            null
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 1.0f));
 
@@ -365,7 +372,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNoMatches,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_2_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_2_QUERIES),
+            null
         );
         assertQueryResults(searchResponseAsMapNoMatches, 0, true);
     }
@@ -409,7 +417,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             6,
-            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_2_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_2_QUERIES),
+            null
         );
 
         assertNotNull(searchResponseAsMap);
@@ -468,7 +477,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderPartialMatch,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_3_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_LOWER_BOUNDS_3_QUERIES),
+            null
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 1.0f));
     }
@@ -512,7 +522,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             6,
-            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_2_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_2_QUERIES),
+            null
         );
 
         assertQueryResults(searchResponseAsMap, totalExpectedDocQty, false, Range.between(0.0f, 0.99f));
@@ -544,7 +555,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderPartialMatch,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_3_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_3_QUERIES),
+            null
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 0.99f));
 
@@ -558,7 +570,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNoMatches,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_2_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_2_QUERIES),
+            null
         );
         assertQueryResults(searchResponseAsMapNoMatches, 0, true);
     }
@@ -602,7 +615,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             6,
-            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_2_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_2_QUERIES),
+            null
         );
 
         assertNotNull(searchResponseAsMap);
@@ -659,7 +673,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderPartialMatch,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_3_QUERIES)
+            Map.of("search_pipeline", SEARCH_PIPELINE_UPPER_BOUNDS_3_QUERIES),
+            null
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 1.0f));
     }
@@ -710,7 +725,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             6,
-            Map.of("search_pipeline", "both-bounds-2-queries")
+            Map.of("search_pipeline", "both-bounds-2-queries"),
+            null
         );
 
         assertQueryResults(searchResponseAsMap, totalExpectedDocQty, false, Range.between(0.01f, 0.99f));
@@ -749,7 +765,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderPartialMatch,
             null,
             5,
-            Map.of("search_pipeline", "both-bounds-3-queries")
+            Map.of("search_pipeline", "both-bounds-3-queries"),
+            null
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 4, false, Range.between(0.33f, 0.99f));
 
@@ -763,7 +780,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNoMatches,
             null,
             5,
-            Map.of("search_pipeline", "both-bounds-2-queries")
+            Map.of("search_pipeline", "both-bounds-2-queries"),
+            null
         );
         assertQueryResults(searchResponseAsMapNoMatches, 0, true);
     }
@@ -814,7 +832,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             5,
-            Map.of("search_pipeline", "both-bounds-2-queries")
+            Map.of("search_pipeline", "both-bounds-2-queries"),
+            null
         );
 
         assertQueryResults(searchResponseAsMap, totalExpectedDocQty, false, Range.between(0.01f, 0.99f));
@@ -853,7 +872,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderPartialMatch,
             null,
             5,
-            Map.of("search_pipeline", "both-bounds-3-queries")
+            Map.of("search_pipeline", "both-bounds-3-queries"),
+            null
         );
         assertQueryResults(searchResponseAsMapPartialMatch, 3, false, Range.between(0.33f, 0.99f));
 
@@ -867,7 +887,8 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNoMatches,
             null,
             5,
-            Map.of("search_pipeline", "both-bounds-2-queries")
+            Map.of("search_pipeline", "both-bounds-2-queries"),
+            null
         );
         assertQueryResults(searchResponseAsMapNoMatches, 0, true);
     }
@@ -1065,14 +1086,14 @@ public class NormalizationProcessorIT extends BaseNeuralSearchIT {
         hybridQueryBuilder.add(termQueryBuilder);
         hybridQueryBuilder.add(termQueryBuilder2);
 
-        search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline1"));
+        search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline1"), null);
 
         for (int i = 0; i < 2; i++) {
-            search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline2"));
+            search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline2"), null);
         }
 
         for (int i = 0; i < 3; i++) {
-            search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline3"));
+            search(TEST_MULTI_DOC_INDEX_ONE_SHARD_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", "pipeline3"), null);
         }
 
         // Get stats
