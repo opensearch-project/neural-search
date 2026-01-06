@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.BulkScorer;
@@ -83,7 +84,8 @@ public class HybridBulkScorer extends BulkScorer {
         return getNextDocIdCandidate(docIds);
     }
 
-    private void scoreWindow(LeafCollector collector, Bits acceptDocs, int min, int max, int[] docIds) throws IOException {
+    @VisibleForTesting
+    public void scoreWindow(LeafCollector collector, Bits acceptDocs, int min, int max, int[] docIds) throws IOException {
         // find the least maximum docId below the maximum threshold to establish the next scoring window boundary
         int topDoc = DocIdSetIterator.NO_MORE_DOCS;
         for (int docId : docIds) {
@@ -92,7 +94,7 @@ public class HybridBulkScorer extends BulkScorer {
             }
         }
 
-        final int windowBase = topDoc & ~MASK; // take the next match (at random) and find the window where it belongs
+        final int windowBase = topDoc & ~MASK; // take the least maximum docId and find the window where it belongs
         final int windowMin = Math.max(min, windowBase);
         final int windowMax = Math.min(max, windowBase + WINDOW_SIZE);
         // collect doc ids and scores for this window using leaf collector
