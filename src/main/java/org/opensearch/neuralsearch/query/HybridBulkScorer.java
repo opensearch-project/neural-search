@@ -86,12 +86,12 @@ public class HybridBulkScorer extends BulkScorer {
 
     @VisibleForTesting
     public void scoreWindow(LeafCollector collector, Bits acceptDocs, int min, int max, int[] docIds) throws IOException {
-        // find the least maximum docId below the maximum threshold to establish the next scoring window boundary
-        int topDoc = DocIdSetIterator.NO_MORE_DOCS;
-        for (int docId : docIds) {
-            if (docId < max && docId < topDoc) {
-                topDoc = docId;
-            }
+        // find the minimum docId to establish the next scoring window boundary
+        int topDoc = getNextDocIdCandidate(docIds);
+
+        // If minimum docId is >= max, no documents to process in this window
+        if (topDoc >= max) {
+            return;
         }
 
         final int windowBase = topDoc & ~MASK; // take the least maximum docId and find the window where it belongs
