@@ -113,7 +113,8 @@ public class HybridSearchIT extends AbstractRollingUpgradeTestCase {
             hybridQueryBuilder,
             rescorer,
             1,
-            Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
+            Map.of("search_pipeline", SEARCH_PIPELINE_NAME),
+            null
         );
         assertNotNull(searchResponseAsMap);
         int hits = getHitCount(searchResponseAsMap);

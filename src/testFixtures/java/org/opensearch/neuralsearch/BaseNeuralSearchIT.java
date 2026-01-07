@@ -746,7 +746,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final QueryBuilder rescorer,
         final int resultSize
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, Map.of());
+        return search(index, queryBuilder, rescorer, resultSize, Map.of(), null);
     }
 
     /**
@@ -765,9 +765,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final QueryBuilder queryBuilder,
         final QueryBuilder rescorer,
         final int resultSize,
-        final Map<String, String> requestParams
+        final Map<String, String> requestParams,
+        final List<Integer> preferenceShards
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, null);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, null, preferenceShards);
     }
 
     @SneakyThrows
@@ -777,9 +778,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         QueryBuilder rescorer,
         int resultSize,
         Map<String, String> requestParams,
-        List<Object> aggs
+        List<Object> aggs,
+        final List<Integer> preferenceShards
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null, 0);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null, 0, preferenceShards);
     }
 
     @SneakyThrows
@@ -794,7 +796,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<SortBuilder<?>> sortBuilders,
         boolean trackScores,
         List<Object> searchAfter,
-        int from
+        int from,
+        final List<Integer> preferenceShards
     ) {
         return search(
             index,
@@ -812,7 +815,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             null,
             null,
             null,
-            null
+            null,
+            preferenceShards
         );
     }
 
@@ -854,7 +858,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, Object> highlightOptions,
         List<String> preTags,
         List<String> postTags,
-        CollapseContext collapseContext
+        CollapseContext collapseContext,
+        List<Integer> preferenceShards
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -958,6 +963,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
         request.addParameter("allow_partial_search_results", "false");
         request.addParameter("size", Integer.toString(resultSize));
+        if (preferenceShards != null && !preferenceShards.isEmpty()) {
+            StringBuilder shards = new StringBuilder("_shards:");
+            for (Integer shardId : preferenceShards) {
+                shards.append(shardId.toString()).append(",");
+            }
+            shards.delete(shards.length() - 1, shards.length());
+            request.addParameter("preference", shards.toString());
+        }
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
         }
@@ -1031,6 +1044,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             highlightOptions,
             null,
             sourceExcludes,
+            null,
             null
         );
     }
@@ -1074,6 +1088,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             0,
             highlightFields,
             highlightOptions,
+            null,
             null,
             null,
             null

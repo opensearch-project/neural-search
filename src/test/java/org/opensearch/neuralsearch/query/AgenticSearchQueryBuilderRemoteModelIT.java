@@ -21,7 +21,7 @@ public class AgenticSearchQueryBuilderRemoteModelIT extends BaseAgenticSearchRem
         createAgenticSearchPipeline(pipelineName, TEST_AGENT_ID);
 
         try {
-            Map<String, Object> searchResponse = search(TEST_INDEX, null, null, 10, Map.of("search_pipeline", pipelineName));
+            Map<String, Object> searchResponse = search(TEST_INDEX, null, null, 10, Map.of("search_pipeline", pipelineName), null);
             // Expect some results or error due to setup limitations
             assertTrue("Should get results or setup error", getHitCount(searchResponse) >= 0);
         } catch (Exception e) {
@@ -41,7 +41,7 @@ public class AgenticSearchQueryBuilderRemoteModelIT extends BaseAgenticSearchRem
 
         try {
             createAgenticSearchPipeline(pipelineName, "");
-            Map<String, Object> searchResponse = search(TEST_INDEX, null, null, 10, Map.of("search_pipeline", pipelineName));
+            Map<String, Object> searchResponse = search(TEST_INDEX, null, null, 10, Map.of("search_pipeline", pipelineName), null);
             fail("Expected exception for empty agent_id");
         } catch (Exception e) {
             assertTrue(
@@ -58,7 +58,7 @@ public class AgenticSearchQueryBuilderRemoteModelIT extends BaseAgenticSearchRem
         createAgenticSearchPipeline(pipelineName, TEST_AGENT_ID);
 
         try {
-            Map<String, Object> searchResponse = search(singleShardIndex, null, null, 10, Map.of("search_pipeline", pipelineName));
+            Map<String, Object> searchResponse = search(singleShardIndex, null, null, 10, Map.of("search_pipeline", pipelineName), null);
             assertTrue("Should get results or setup error", getHitCount(searchResponse) >= 0);
         } catch (Exception e) {
             assertTrue(
@@ -78,7 +78,7 @@ public class AgenticSearchQueryBuilderRemoteModelIT extends BaseAgenticSearchRem
         createAgenticSearchPipeline(pipelineName, TEST_AGENT_ID);
 
         try {
-            Map<String, Object> searchResponse = search(multiShardIndex, null, null, 10, Map.of("search_pipeline", pipelineName));
+            Map<String, Object> searchResponse = search(multiShardIndex, null, null, 10, Map.of("search_pipeline", pipelineName), null);
             assertTrue("Should get results or setup error", getHitCount(searchResponse) >= 0);
         } catch (Exception e) {
             assertTrue(

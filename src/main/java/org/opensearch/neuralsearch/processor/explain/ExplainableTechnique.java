@@ -4,9 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.explain;
 
-import org.opensearch.neuralsearch.processor.CompoundTopDocs;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
 
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,10 +24,10 @@ public interface ExplainableTechnique {
 
     /**
      * Returns a map with explanation for each document id
-     * @param queryTopDocs collection of CompoundTopDocs for each shard result
+     * @param explainDTO is a data transfer object that contains queryTopDocs
      * @return map of document per shard and corresponding explanation object
      */
-    default Map<DocIdAtSearchShard, ExplanationDetails> explain(final List<CompoundTopDocs> queryTopDocs) {
+    default Map<DocIdAtSearchShard, ExplanationDetails> explain(final ExplainDTO explainDTO) {
         return Map.of();
     }
 }

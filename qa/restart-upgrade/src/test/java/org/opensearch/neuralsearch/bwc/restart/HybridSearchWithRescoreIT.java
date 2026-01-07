@@ -77,7 +77,14 @@ public class HybridSearchWithRescoreIT extends AbstractRestartUpgradeRestTestCas
     private void validateTestIndex(final String index, HybridQueryBuilder queryBuilder, QueryBuilder rescorer) {
         int docCount = getDocCount(index);
         assertEquals(2, docCount);
-        Map<String, Object> searchResponseAsMap = search(index, queryBuilder, rescorer, 1, Map.of("search_pipeline", SEARCH_PIPELINE_NAME));
+        Map<String, Object> searchResponseAsMap = search(
+            index,
+            queryBuilder,
+            rescorer,
+            1,
+            Map.of("search_pipeline", SEARCH_PIPELINE_NAME),
+            null
+        );
         assertNotNull(searchResponseAsMap);
         int hits = getHitCount(searchResponseAsMap);
         assertEquals(1, hits);

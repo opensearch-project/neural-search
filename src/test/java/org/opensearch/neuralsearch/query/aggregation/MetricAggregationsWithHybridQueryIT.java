@@ -384,7 +384,8 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             null,
             false,
             null,
-            0
+            0,
+            null
         );
 
         Map<String, Object> aggregations = getAggregations(searchResponseAsMap);
@@ -426,7 +427,8 @@ public class MetricAggregationsWithHybridQueryIT extends BaseAggregationsWithHyb
             null,
             10,
             Map.of("search_pipeline", SEARCH_PIPELINE),
-            aggsBuilders
+            aggsBuilders,
+            null
         );
 
         assertHitResultsFromQuery(expectedHits, searchResponseAsMap);

@@ -103,7 +103,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNeuralThenTerm,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null
         );
         // Assert
         // search hits
@@ -158,7 +159,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null
         );
         // Assert
         // basic sanity check for search hits
@@ -292,7 +294,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNeuralThenTerm,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null
         );
         // Assert
         // search hits
@@ -441,7 +444,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null
         );
 
         List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
@@ -504,7 +508,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             MAX_NUMBER_OF_DOCS_IN_LARGE_INDEX,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null
         );
 
         List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
@@ -562,7 +567,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", RRF_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            Map.of("search_pipeline", RRF_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null
         );
         // Assert
         // basic sanity check for search hits
@@ -702,7 +708,8 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNeuralThenTerm,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", "true")
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", "true"),
+            null
         );
         // Assert
         // search hits

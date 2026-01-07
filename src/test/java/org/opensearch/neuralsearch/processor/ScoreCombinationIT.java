@@ -104,7 +104,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertWeightedScores(searchResponseWithWeights1AsMap, 0.4, 0.3, 0.001);
@@ -123,7 +124,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertWeightedScores(searchResponseWithWeights2AsMap, 0.6666, 0.2332, 0.001);
@@ -140,7 +142,14 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
 
         ResponseException exception1 = expectThrows(
             ResponseException.class,
-            () -> search(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", SEARCH_PIPELINE))
+            () -> search(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                hybridQueryBuilder,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null
+            )
         );
         org.hamcrest.MatcherAssert.assertThat(
             exception1.getMessage(),
@@ -163,7 +172,14 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
 
         ResponseException exception2 = expectThrows(
             ResponseException.class,
-            () -> search(TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME, hybridQueryBuilder, null, 5, Map.of("search_pipeline", SEARCH_PIPELINE))
+            () -> search(
+                TEST_MULTI_DOC_INDEX_THREE_SHARDS_NAME,
+                hybridQueryBuilder,
+                null,
+                5,
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null
+            )
         );
         org.hamcrest.MatcherAssert.assertThat(
             exception2.getMessage(),
@@ -216,7 +232,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderDefaultNorm,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertHybridSearchResults(searchResponseAsMapDefaultNorm, 5, new float[] { 0.5f, 1.0f });
@@ -242,7 +259,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderL2Norm,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
 
@@ -290,7 +308,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderDefaultNorm,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertHybridSearchResults(searchResponseAsMapDefaultNorm, 5, new float[] { 0.5f, 1.0f });
@@ -316,7 +335,8 @@ public class ScoreCombinationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderL2Norm,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapL2Norm, 5, new float[] { 0.5f, 1.0f });
     }

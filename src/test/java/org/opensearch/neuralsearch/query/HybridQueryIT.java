@@ -151,7 +151,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNeuralThenTerm,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertEquals(3, getHitCount(searchResponseAsMap1));
@@ -194,7 +195,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNeuralThenTerm,
             null,
             1,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertEquals(1, getHitCount(searchResponseAsMap));
@@ -222,6 +224,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderNeuralThenTerm,
             null,
             10,
+            null,
             null
         );
 
@@ -279,7 +282,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderThreeTerms,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertEquals(2, getHitCount(searchResponseAsMap1));
@@ -319,7 +323,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderOnlyTerm,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertEquals(0, getHitCount(searchResponseAsMap));
@@ -347,7 +352,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
 
         ResponseException exceptionNoNestedTypes = expectThrows(
             ResponseException.class,
-            () -> search(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, boolQueryBuilder, null, 10, Map.of("search_pipeline", SEARCH_PIPELINE))
+            () -> search(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD, boolQueryBuilder, null, 10, Map.of("search_pipeline", SEARCH_PIPELINE), null)
         );
 
         org.hamcrest.MatcherAssert.assertThat(
@@ -367,7 +372,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 boolQueryBuilder,
                 null,
                 10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null
             )
         );
 
@@ -395,7 +401,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderOnlyTerm,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertEquals(1, getHitCount(searchResponseAsMap));
@@ -428,7 +435,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilderOnlyTerm,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertEquals(1, getHitCount(searchResponseAsMap));
@@ -459,7 +467,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString()),
+            null
         );
 
         int firstQueryHitCount = getHitCount(firstSearchResponseAsMap);
@@ -490,7 +499,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString()),
+            null
         );
 
         assertEquals(firstQueryHitCount, getHitCount(secondSearchResponseAsMap));
@@ -534,7 +544,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString()),
+            null
         );
 
         int firstQueryHitCount = getHitCount(firstSearchResponseAsMap);
@@ -565,7 +576,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString())
+            Map.of("search_pipeline", SEARCH_PIPELINE, "request_cache", Boolean.TRUE.toString()),
+            null
         );
 
         assertEquals(firstQueryHitCount, getHitCount(secondSearchResponseAsMap));
@@ -611,7 +623,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 hybridQueryBuilder,
                 null,
                 10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null
             );
 
             assertEquals(2, getHitCount(searchResponseAsMap));
@@ -647,7 +660,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 hybridQueryBuilder,
                 null,
                 10,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null
             );
 
             assertEquals(2, getHitCount(searchResponseAsMap));
@@ -681,7 +695,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 hybridQueryBuilder,
                 null,
                 numberOfDocumentsInIndex,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null
             );
 
             int queryHitCount = getHitCount(firstSearchResponseAsMap);
@@ -728,7 +743,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 hybridQueryBuilder,
                 null,
                 numberOfDocumentsInIndex,
-                Map.of("search_pipeline", SEARCH_PIPELINE)
+                Map.of("search_pipeline", SEARCH_PIPELINE),
+                null
             );
 
             int queryHitCount = getHitCount(firstSearchResponseAsMap);
@@ -806,7 +822,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             null,
             false,
             null,
-            2
+            2,
+            null
         );
 
         assertEquals(2, getHitCount(searchResponseAsMap));
@@ -839,7 +856,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                5
+                5,
+                null
             )
         );
 
@@ -871,7 +889,8 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 null,
                 false,
                 null,
-                0
+                0,
+                null
             )
         );
 

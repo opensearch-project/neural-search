@@ -209,4 +209,36 @@ public class HybridBulkScorerTests extends OpenSearchTestCase {
         // Should return NO_MORE_DOCS when all scorers are exhausted
         assertEquals("Should return NO_MORE_DOCS when all scorers exhausted", DocIdSetIterator.NO_MORE_DOCS, result);
     }
+
+    /**
+     * Test scoreWindow with window base to set as least maximum docId
+     */
+    public void testScoreWindow() throws IOException {
+        List<Scorer> scorers = Arrays.asList(mockScorer1, mockScorer2);
+        // Max Document Range in the segment is 30000
+        HybridBulkScorer bulkScorer = new HybridBulkScorer(scorers, true, 30000);
+
+        LeafCollector mockLeafCollector = mock(LeafCollector.class);
+
+        when(mockIterator1.docID()).thenReturn(16720);
+        when(mockIterator1.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockIterator2.docID()).thenReturn(12501);
+        when(mockIterator2.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockScorer1.score()).thenReturn(1.0f);
+        when(mockScorer2.score()).thenReturn(0.8f);
+
+        int docIds[] = { 16720, 12501 };
+        // windowBase 12288
+        // windowBaseMax 16384
+        // windoBaseMax is less than first docId i.e. 16720 therefore the iteration will not touch first iterator
+        bulkScorer.scoreWindow(mockLeafCollector, null, 12501, 17100, docIds);
+
+        assertEquals(
+            "Second docId Iterator should be exhausted because the least maximum docId is of the second query",
+            DocIdSetIterator.NO_MORE_DOCS,
+            docIds[1]
+        );
+    }
 }

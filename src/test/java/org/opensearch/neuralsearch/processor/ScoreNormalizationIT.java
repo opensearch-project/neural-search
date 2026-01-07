@@ -97,7 +97,8 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderArithmeticMean,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.6f, 1.0f });
 
@@ -122,7 +123,8 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderHarmonicMean,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapHarmonicMean, 5, new float[] { 0.5f, 1.0f });
 
@@ -147,7 +149,8 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderGeometricMean,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.5f, 1.0f });
     }
@@ -193,7 +196,8 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderArithmeticMean,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.5f, 1.0f });
 
@@ -218,7 +222,8 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderHarmonicMean,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapHarmonicMean, 5, new float[] { 0.6f, 1.0f });
 
@@ -243,7 +248,8 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderGeometricMean,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
         assertHybridSearchResults(searchResponseAsMapGeometricMean, 5, new float[] { 0.6f, 1.0f });
     }
@@ -289,7 +295,8 @@ public class ScoreNormalizationIT extends BaseNeuralSearchIT {
             hybridQueryBuilderArithmeticMean,
             null,
             5,
-            Map.of("search_pipeline", SEARCH_PIPELINE)
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null
         );
 
         assertHybridSearchResults(searchResponseAsMapArithmeticMean, 5, new float[] { 0.3f, 2.0f });
