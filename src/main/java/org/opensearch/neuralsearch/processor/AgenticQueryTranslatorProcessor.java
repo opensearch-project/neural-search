@@ -119,6 +119,7 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                     String dslQuery = agentResponse.getDslQuery();
                     String agentStepsSummary = agentResponse.getAgentStepsSummary();
                     String memoryId = agentResponse.getMemoryId();
+                    String selectedIndex = agentResponse.getSelectedIndex();
                     // Validate response size to prevent memory exhaustion
                     if (dslQuery == null) {
                         String errorMessage = String.format(Locale.ROOT, "Null response from agent - Agent ID: [%s]", agentId);
@@ -163,6 +164,10 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                             newSourceBuilder.fetchSource(originalSourceBuilder.fetchSource());
                         }
                         request.source(newSourceBuilder);
+                        // Update with the selected index
+                        if (selectedIndex != null && !selectedIndex.isBlank()) {
+                            request.indices(selectedIndex);
+                        }
                     }
 
                     requestListener.onResponse(request);
