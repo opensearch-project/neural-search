@@ -14,7 +14,7 @@ import java.util.concurrent.Callable
 
 buildscript {
     ext {
-        opensearch_version = System.getProperty("opensearch.version", "3.4.0-SNAPSHOT")
+        opensearch_version = System.getProperty("opensearch.version", "3.5.0-SNAPSHOT")
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
         version_tokens = opensearch_version.tokenize('-')
@@ -291,7 +291,7 @@ dependencies {
         exclude group: 'net.minidev', module: 'json-smart'
     }
     runtimeOnly group: 'net.minidev', name:'json-smart', version: "${versions.json_smart}"
-    implementation("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson}")
+    implementation("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}")
     implementation("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
     testFixturesImplementation "org.opensearch:common-utils:${version}"
     testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: "${versions.commonslang}"
