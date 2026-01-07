@@ -6,8 +6,6 @@ package org.opensearch.neuralsearch.processor.normalization;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -79,7 +77,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     public void normalize(final NormalizeScoresDTO normalizeScoresDTO) {
         final List<CompoundTopDocs> queryTopDocs = normalizeScoresDTO.getQueryTopDocs();
 
-        Map<Integer, List<String>> sortedDocIdsPerSubqueryByGlobalRank = !normalizeScoresDTO.isSingleShard()
+        Map<Integer, Map<String, Integer>> sortedDocIdsPerSubqueryByGlobalRank = !normalizeScoresDTO.isSingleShard()
             ? sortDocumentsAsPerGlobalRankInIndividualQuery(queryTopDocs)
             : Map.of();
 
@@ -93,7 +91,9 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         }
     }
 
-    private Map<Integer, List<String>> sortDocumentsAsPerGlobalRankInIndividualQuery(@NonNull final List<CompoundTopDocs> queryTopDocs) {
+    private Map<Integer, Map<String, Integer>> sortDocumentsAsPerGlobalRankInIndividualQuery(
+        @NonNull final List<CompoundTopDocs> queryTopDocs
+    ) {
         // Map: subQueryIndex -> PQ that contains ScoreDocs from all shards
         Map<Integer, PriorityQueue<ShardResultPerSubQuery>> scoreDocsPerSubquery = new HashMap<>();
         for (int referenceShardId = 0; referenceShardId < queryTopDocs.size(); referenceShardId++) {
@@ -114,21 +114,22 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
             }
         }
 
-        Map<Integer, List<String>> globallySortedDocIdMap = new HashMap<>();
+        Map<Integer, Map<String, Integer>> globallySortedDocIdMap = new HashMap<>();
         // Traverse all scoreDocs per subquery and add it in the map with docId-shardId order.
         // We created docId-shardId format because docId can be same across different shards but the combination is unique.
         for (Map.Entry<Integer, PriorityQueue<ShardResultPerSubQuery>> entry : scoreDocsPerSubquery.entrySet()) {
             int subQueryNumber = entry.getKey();
-            globallySortedDocIdMap.putIfAbsent(subQueryNumber, new ArrayList<>());
+            globallySortedDocIdMap.putIfAbsent(subQueryNumber, new HashMap<>());
 
             PriorityQueue<ShardResultPerSubQuery> sortedScoreDocsAcrossAllShards = entry.getValue();
+            // first rank
+            int rank = 0;
             while (!sortedScoreDocsAcrossAllShards.isEmpty()) {
                 ShardResultPerSubQuery shardResultPerSubQuery = sortedScoreDocsAcrossAllShards.poll();
                 globallySortedDocIdMap.get(subQueryNumber)
-                    .add(shardResultPerSubQuery.scoreDoc.doc + "_" + shardResultPerSubQuery.referenceShardId);
+                    .put(shardResultPerSubQuery.scoreDoc.doc + "_" + shardResultPerSubQuery.referenceShardId, rank++);
             }
         }
-
         return globallySortedDocIdMap;
     }
 
@@ -146,7 +147,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     public Map<DocIdAtSearchShard, ExplanationDetails> explain(final ExplainDTO explainDTO) {
         final List<CompoundTopDocs> queryTopDocs = explainDTO.getQueryTopDocs();
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
-        Map<Integer, List<String>> sortedDocIdsPerSubqueryByGlobalRank = !explainDTO.isSingleShard()
+        Map<Integer, Map<String, Integer>> sortedDocIdsPerSubqueryByGlobalRank = !explainDTO.isSingleShard()
             ? sortDocumentsAsPerGlobalRankInIndividualQuery(queryTopDocs)
             : Map.of();
         for (int referenceShardId = 0; referenceShardId < queryTopDocs.size(); referenceShardId++) {
@@ -173,7 +174,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     private void processTopDocs(
         CompoundTopDocs compoundQueryTopDocs,
         TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
-        Map<Integer, List<String>> sortedDocIdsPerSubqueryByGlobalRank,
+        Map<Integer, Map<String, Integer>> sortedDocIdMapPerSubqueryByGlobalRank,
         int referenceShardId
     ) {
         if (Objects.isNull(compoundQueryTopDocs)) {
@@ -184,10 +185,10 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         SearchShard searchShard = compoundQueryTopDocs.getSearchShard();
 
         for (int topDocsIndex = 0; topDocsIndex < topDocsList.size(); topDocsIndex++) {
-            List<String> docIds = !sortedDocIdsPerSubqueryByGlobalRank.isEmpty()
-                ? sortedDocIdsPerSubqueryByGlobalRank.get(topDocsIndex)
-                : Collections.emptyList();
-            processTopDocsEntry(topDocsList.get(topDocsIndex), searchShard, topDocsIndex, scoreProcessor, docIds, referenceShardId);
+            Map<String, Integer> docIdToRankMap = !sortedDocIdMapPerSubqueryByGlobalRank.isEmpty()
+                ? sortedDocIdMapPerSubqueryByGlobalRank.get(topDocsIndex)
+                : Map.of();
+            processTopDocsEntry(topDocsList.get(topDocsIndex), searchShard, topDocsIndex, scoreProcessor, docIdToRankMap, referenceShardId);
         }
     }
 
@@ -196,14 +197,12 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         SearchShard searchShard,
         int topDocsIndex,
         TriConsumer<DocIdAtSearchShard, Float, Integer> scoreProcessor,
-        List<String> sortedDocIdsPerSubqueryByGlobalRank,
+        Map<String, Integer> docIdToRankMap,
         int referenceShardId
     ) {
         for (int position = 0; position < topDocs.scoreDocs.length; position++) {
             ScoreDoc scoreDoc = topDocs.scoreDocs[position];
-            int rank = !sortedDocIdsPerSubqueryByGlobalRank.isEmpty()
-                ? sortedDocIdsPerSubqueryByGlobalRank.indexOf(scoreDoc.doc + "_" + referenceShardId)
-                : position;
+            int rank = !docIdToRankMap.isEmpty() ? docIdToRankMap.get(scoreDoc.doc + "_" + referenceShardId) : position;
             if (rank < 0) {
                 throw new IllegalStateException(
                     "Document not found in global ranking map: doc=" + scoreDoc.doc + ", shard=" + referenceShardId
