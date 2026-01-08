@@ -317,7 +317,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     }
 
     protected Map<String, Object> searchWithExplain(String index, QueryBuilder queryBuilder, int resultSize) {
-        return search(index, queryBuilder, null, resultSize, Map.of("explain", "true"));
+        return search(index, queryBuilder, null, resultSize, Map.of("explain", "true"), null);
     }
 
     @SneakyThrows
