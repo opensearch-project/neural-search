@@ -37,6 +37,7 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.neuralsearch.grpc.proto.request.search.query.HybridQueryBuilderProtoConverter;
 import org.opensearch.neuralsearch.search.collector.HybridQueryCollectorContextSpecFactory;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
@@ -241,7 +242,10 @@ public class NeuralSearch extends Plugin
         // Initialize the semantic highlighter
         this.semanticHighlighter.initialize(semanticHighlighterEngine);
 
-        return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
+        // Create and provide the Hybrid query converter for gRPC transport
+        HybridQueryBuilderProtoConverter hybridQueryConverter = new HybridQueryBuilderProtoConverter();
+
+        return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager, hybridQueryConverter);
     }
 
     @Override
