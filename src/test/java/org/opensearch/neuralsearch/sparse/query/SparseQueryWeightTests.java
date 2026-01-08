@@ -21,7 +21,6 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
-import org.apache.lucene.search.Explanation;
 import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.FixedBitSet;
 import org.junit.Before;
@@ -229,62 +228,12 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
         assertFalse("Weight should not be cacheable", weight.isCacheable(leafReaderContext));
     }
 
-    public void testExplain_WithSeismicAlgorithm() throws IOException {
-        SparseQueryContext queryContext = new SparseQueryContext(List.of("1", "3", "5"), 1.0f, 5);
-        when(sparseVectorQuery.getQueryContext()).thenReturn(queryContext);
-
-        // Setup SparseBinaryDocValuesPassThrough to enable cache-gated reader
-        SparseBinaryDocValuesPassThrough mockDocValues = mock(SparseBinaryDocValuesPassThrough.class);
-        when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(mockDocValues);
-
-        // Setup sparse vector reader to return a document vector
-        SparseVectorReader mockReader = mock(SparseVectorReader.class);
-        SparseVector docVector = createVector(1, 1, 3, 2, 5, 3);
-        when(mockReader.read(0)).thenReturn(docVector);
-        when(mockForwardIndexCacheItem.getReader()).thenReturn(mockReader);
-
-        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
-
-        Explanation explanation = weight.explain(leafReaderContext, 0);
-
-        assertNotNull("Explanation should not be null", explanation);
-        assertTrue("Explanation should match. Description: " + explanation.getDescription(), explanation.isMatch());
-        assertTrue("Explanation should contain field name", explanation.getDescription().contains("name"));
-        assertTrue("Explanation should have details", explanation.getDetails().length > 0);
-    }
-
-    public void testExplain_FallbackToNonSeismic() throws IOException {
+    public void testExplain() throws IOException {
         when(mockSearcher.createWeight(any(Query.class), any(ScoreMode.class), anyFloat())).thenReturn(mockBooleanQueryWeight);
 
-        // Mock fallback explanation
-        Explanation fallbackExplanation = Explanation.match(
-            1.0f,
-            "fallback explanation"
-        );
-        when(mockBooleanQueryWeight.explain(any(LeafReaderContext.class), anyInt())).thenReturn(fallbackExplanation);
-
         SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
-        Explanation explanation = weight.explain(fallbackContext, 0);
-
-        assertNotNull("Explanation should not be null", explanation);
-        assertEquals("Should use fallback explanation", fallbackExplanation, explanation);
-        verify(mockBooleanQueryWeight).explain(fallbackContext, 0);
-    }
-
-    public void testExplain_DocumentNotFound() throws IOException {
-        // Setup sparse vector reader to return null (document not found)
-        SparseVectorReader mockReader = mock(SparseVectorReader.class);
-        when(mockReader.read(anyInt())).thenReturn(null);
-        when(mockForwardIndexCacheItem.getReader()).thenReturn(mockReader);
-
-        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
-
-        Explanation explanation = weight.explain(leafReaderContext, 0);
-
-        assertNotNull("Explanation should not be null", explanation);
-        assertFalse("Explanation should not match when document not found", explanation.isMatch());
-        assertTrue("Explanation should mention document not found", explanation.getDescription().contains("not found"));
+        assertNull("Explain should return null", weight.explain(leafReaderContext, 0));
     }
 
     public void testBulkScorerFunctionality() throws Exception {
