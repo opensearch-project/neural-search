@@ -216,6 +216,7 @@ public class NeuralSearch extends Plugin
         final Supplier<RepositoriesService> repositoriesServiceSupplier
     ) {
         this.clusterService = clusterService;
+        // test empty ci
         // Create clientAccessor first as it's needed by other components
         clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(client));
 
