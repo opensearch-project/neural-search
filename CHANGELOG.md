@@ -24,5 +24,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Documentation
 
 ### Maintenance
+- [BWC]: Auto Increment BWC version with every release ([#1716](https://github.com/opensearch-project/neural-search/pull/1716))
 
 ### Refactoring
