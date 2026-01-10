@@ -426,7 +426,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
     }
 
-    private static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits) {
+    public static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits) {
         EventStatsManager.increment(EventStatName.HYBRID_QUERY_REQUESTS);
         if (hasFilter) {
             EventStatsManager.increment(EventStatName.HYBRID_QUERY_FILTER_REQUESTS);

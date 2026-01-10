@@ -7,10 +7,17 @@ package org.opensearch.neuralsearch.grpc.proto.request.search.query;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.node.DiscoveryNodes;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverterRegistry;
 import org.opensearch.protobufs.FieldValue;
 import org.opensearch.protobufs.HybridQuery;
@@ -18,9 +25,12 @@ import org.opensearch.protobufs.MatchAllQuery;
 import org.opensearch.protobufs.QueryContainer;
 import org.opensearch.protobufs.TermQuery;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.Version;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
 
 public class HybridQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
 
@@ -30,6 +40,22 @@ public class HybridQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
+
+        // Mock cluster service for NeuralSearchClusterUtil
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        DiscoveryNodes mockDiscoveryNodes = mock(DiscoveryNodes.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockClusterState.getNodes()).thenReturn(mockDiscoveryNodes);
+        when(mockDiscoveryNodes.getMinNodeVersion()).thenReturn(Version.CURRENT);
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
+        // Initialize EventStatsManager with mock settings accessor
+        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isStatsEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(mockSettingsAccessor);
 
         // Set up mock registry to return appropriate query builders
         when(mockRegistry.fromProto(any(QueryContainer.class))).thenAnswer(invocation -> {
@@ -212,6 +238,34 @@ public class HybridQueryBuilderProtoUtilsTests extends OpenSearchTestCase {
         );
 
         assertTrue(exception.getMessage().contains("requires 'queries' field with at least one clause"));
+    }
+
+    public void testFromProto_withNullFilter() {
+        // Override mock to return null for MatchAll queries (used as filter)
+        doReturn(null).when(mockRegistry).fromProto(createMatchAllQueryContainer());
+
+        HybridQuery hybridQuery = HybridQuery.newBuilder()
+            .addQueries(createTermQueryContainer("field1", "value1"))
+            .setFilter(createMatchAllQueryContainer())
+            .build();
+
+        // Should succeed - null filter should be ignored gracefully
+        QueryBuilder result = HybridQueryBuilderProtoUtils.fromProto(hybridQuery, mockRegistry);
+
+        assertNotNull(result);
+        assertTrue(result instanceof HybridQueryBuilder);
+        HybridQueryBuilder hybridQueryBuilder = (HybridQueryBuilder) result;
+        assertEquals(1, hybridQueryBuilder.queries().size());
+
+        // Assert filter was not applied: sub-query should still be TermQueryBuilder (not wrapped in BoolQueryBuilder)
+        QueryBuilder subQuery = hybridQueryBuilder.queries().get(0);
+        assertTrue("Sub-query should be TermQueryBuilder when filter is null", subQuery instanceof TermQueryBuilder);
+
+        // Compare with control case without filter to ensure they're equivalent
+        HybridQuery controlQuery = HybridQuery.newBuilder().addQueries(createTermQueryContainer("field1", "value1")).build();
+        QueryBuilder controlResult = HybridQueryBuilderProtoUtils.fromProto(controlQuery, mockRegistry);
+        HybridQueryBuilder controlBuilder = (HybridQueryBuilder) controlResult;
+        assertEquals("Queries should be identical when filter is null", controlBuilder.queries().get(0).getClass(), subQuery.getClass());
     }
 
     private QueryContainer createTermQueryContainer(String field, String value) {
