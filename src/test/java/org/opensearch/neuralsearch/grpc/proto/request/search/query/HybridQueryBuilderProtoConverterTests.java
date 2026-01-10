@@ -7,10 +7,18 @@ package org.opensearch.neuralsearch.grpc.proto.request.search.query;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.opensearch.Version;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.node.DiscoveryNodes;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverterRegistry;
 import org.opensearch.protobufs.FieldValue;
 import org.opensearch.protobufs.HybridQuery;
@@ -20,6 +28,7 @@ import org.opensearch.protobufs.TermQuery;
 import org.opensearch.test.OpenSearchTestCase;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 public class HybridQueryBuilderProtoConverterTests extends OpenSearchTestCase {
@@ -32,6 +41,23 @@ public class HybridQueryBuilderProtoConverterTests extends OpenSearchTestCase {
     @Before
     public void setup() {
         MockitoAnnotations.openMocks(this);
+
+        // Mock cluster service for NeuralSearchClusterUtil
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        DiscoveryNodes mockDiscoveryNodes = mock(DiscoveryNodes.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockClusterState.getNodes()).thenReturn(mockDiscoveryNodes);
+        when(mockDiscoveryNodes.getMinNodeVersion()).thenReturn(Version.CURRENT);
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
+        // Initialize EventStatsManager with mock settings accessor
+        NeuralSearchSettingsAccessor mockSettingsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(mockSettingsAccessor.isStatsEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(mockSettingsAccessor);
+
         converter = new HybridQueryBuilderProtoConverter();
         converter.setRegistry(mockRegistry);
 

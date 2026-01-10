@@ -49,7 +49,7 @@ public class HybridQueryBuilderProtoUtils {
         for (QueryContainer queryContainer : hybridQueryProto.getQueriesList()) {
             if (queries.size() == HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES) {
                 throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "Number of sub-queries exceeds maximum supported by [%s] query", HybridQueryBuilder.NAME)
+                    String.format(Locale.ROOT, HybridQueryBuilder.ERROR_MSG_MAX_QUERIES_EXCEEDED, HybridQueryBuilder.NAME)
                 );
             }
             QueryBuilder queryBuilder = parseInnerQueryBuilder(queryContainer, registry);
@@ -58,31 +58,31 @@ public class HybridQueryBuilderProtoUtils {
             }
         }
 
-        if (queries.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "[%s] requires 'queries' field with at least one clause", HybridQueryBuilder.NAME)
-            );
-        }
-
         if (hybridQueryProto.hasFilter()) {
             filter = parseInnerQueryBuilder(hybridQueryProto.getFilter(), registry);
-        }
-
-        if (hybridQueryProto.hasPaginationDepth()) {
-            paginationDepth = hybridQueryProto.getPaginationDepth();
         }
 
         if (hybridQueryProto.hasBoost()) {
             boost = hybridQueryProto.getBoost();
             if (boost != HybridQueryBuilder.DEFAULT_BOOST) {
                 throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "[%s] query does not support [%s]", HybridQueryBuilder.NAME, "boost")
+                    String.format(Locale.ROOT, HybridQueryBuilder.ERROR_MSG_BOOST_NOT_SUPPORTED, HybridQueryBuilder.NAME, "boost")
                 );
             }
         }
 
         if (hybridQueryProto.hasXName()) {
             queryName = hybridQueryProto.getXName();
+        }
+
+        if (hybridQueryProto.hasPaginationDepth()) {
+            paginationDepth = hybridQueryProto.getPaginationDepth();
+        }
+
+        if (queries.isEmpty()) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, HybridQueryBuilder.ERROR_MSG_QUERIES_REQUIRED, HybridQueryBuilder.NAME)
+            );
         }
 
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
