@@ -143,7 +143,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             null
         );
 
-        assertEquals(3, components.size());
+        assertEquals(4, components.size());
     }
 
     public void testQuerySpecs() {
