@@ -33,6 +33,9 @@ public class HybridQueryBuilderProtoConverter implements QueryBuilderProtoConver
         if (queryContainer == null || queryContainer.getQueryContainerCase() != QueryContainer.QueryContainerCase.HYBRID) {
             throw new IllegalArgumentException("QueryContainer does not contain a Hybrid query");
         }
+        if (registry == null) {
+            throw new IllegalStateException("QueryBuilderProtoConverterRegistry is not initialized. setRegistry() must be called first.");
+        }
 
         return HybridQueryBuilderProtoUtils.fromProto(queryContainer.getHybrid(), registry);
     }

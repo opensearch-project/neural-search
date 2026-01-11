@@ -136,6 +136,22 @@ public class HybridQueryBuilderProtoConverterTests extends OpenSearchTestCase {
         assertTrue(exception.getMessage().contains("QueryContainer does not contain a Hybrid query"));
     }
 
+    public void testFromProto_withNullRegistry() {
+        HybridQueryBuilderProtoConverter converterWithoutRegistry = new HybridQueryBuilderProtoConverter();
+        // Note: setRegistry() is NOT called
+
+        HybridQuery hybridQuery = HybridQuery.newBuilder().addQueries(createTermQueryContainer("field1", "value1")).build();
+        QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
+
+        IllegalStateException exception = expectThrows(
+            IllegalStateException.class,
+            () -> converterWithoutRegistry.fromProto(queryContainer)
+        );
+
+        assertTrue(exception.getMessage().contains("QueryBuilderProtoConverterRegistry is not initialized"));
+        assertTrue(exception.getMessage().contains("setRegistry() must be called first"));
+    }
+
     public void testFromProto_complexHybridQuery() {
         HybridQuery.Builder hybridProtoBuilder = HybridQuery.newBuilder().setXName("complex_hybrid_query").setPaginationDepth(100);
 
