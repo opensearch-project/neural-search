@@ -118,8 +118,8 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding sparse text chunking tests because we introduce this feature in 3.5
-    if (versionsBelow3_5.any { ext.neural_search_bwc_version.startsWith(it) }){
+    // Excluding sparse text chunking tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseTextChunkingIT.*"
         }
@@ -187,8 +187,8 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
-    // Excluding sparse text chunking tests because we introduce this feature in 3.5
-    if (versionsBelow3_5.any { ext.neural_search_bwc_version.startsWith(it) }){
+    // Excluding sparse text chunking tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseTextChunkingIT.*"
         }
