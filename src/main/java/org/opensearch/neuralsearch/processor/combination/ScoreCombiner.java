@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.processor.combination;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.Objects;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.tuple.Pair;
@@ -73,16 +75,20 @@ public class ScoreCombiner {
         // multiple sub queries, doc ids may repeat for each sub query results
         ScoreCombinationTechnique scoreCombinationTechnique = combineScoresDTO.getScoreCombinationTechnique();
         Sort sort = combineScoresDTO.getSort();
+        Float minScore = combineScoresDTO.getMinScore();
         boolean isSingleShard = combineScoresDTO.isSingleShard();
         combineScoresDTO.getQueryTopDocs()
-            .forEach(compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort, isSingleShard));
+            .forEach(
+                compoundQueryTopDocs -> combineShardScores(scoreCombinationTechnique, compoundQueryTopDocs, sort, isSingleShard, minScore)
+            );
     }
 
     private void combineShardScores(
         final ScoreCombinationTechnique scoreCombinationTechnique,
         final CompoundTopDocs compoundQueryTopDocs,
         final Sort sort,
-        final boolean isSingleShard
+        final boolean isSingleShard,
+        final Float minScore
     ) {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value() == 0) {
             return;
@@ -95,12 +101,21 @@ public class ScoreCombiner {
         // - create map of combined scores per doc id
         Map<Integer, Float> combinedNormalizedScoresByDocId = combineScoresAndGetCombinedNormalizedScoresPerDocument(
             normalizedScoresPerDoc,
-            scoreCombinationTechnique
+            scoreCombinationTechnique,
+            sort,
+            minScore
         );
 
         // - sort documents by scores and take first "max number" of docs
         // create a collection of doc ids that are sorted by their combined scores
-        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId);
+        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId, minScore);
+
+        // - get new total hits relation
+        TotalHits.Relation newRelation = getRelation(
+            normalizedScoresPerDoc.size(),
+            sortedDocsIds.size(),
+            isMinScoreAvailable(sort, minScore)
+        );
 
         // - update query search results with combined scores
         updateQueryTopDocsWithCombinedScores(
@@ -110,8 +125,25 @@ public class ScoreCombiner {
             sortedDocsIds,
             getDocIdSortFieldsMap(compoundQueryTopDocs, combinedNormalizedScoresByDocId, sort),
             sort,
-            isSingleShard
+            isSingleShard,
+            newRelation
         );
+    }
+
+    private static TotalHits.Relation getRelation(final int originalSize, final int filteredSize, final boolean useMinScore) {
+        TotalHits.Relation newRelation = null;
+        if (useMinScore) {
+            // - if min score is not null, then we update total hits to filter size, and make best effort to keep total hits relation.
+            // when filteredSize < originalSize, relation can be determined to EQUAL_TO;
+            // when filteredSize == originalSize, we can't determine the exact value above min score, so we change it to
+            // GREATER_THAN_OR_EQUAL_TO
+            newRelation = filteredSize < originalSize ? TotalHits.Relation.EQUAL_TO : TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
+        }
+        return newRelation;
+    }
+
+    private boolean isMinScoreAvailable(final Sort sort, final Float minScore) {
+        return minScore != null && (sort == null || isSortOrderByScore(sort));
     }
 
     private boolean isSortOrderByScore(Sort sort) {
@@ -131,9 +163,14 @@ public class ScoreCombiner {
     /**
      * @param sort sort criteria
      * @param topDocsPerSubQuery top docs per subquery
+     * @param docIdFilter filter to check if doc id is valid
      * @return list of top field docs which is deduced by typcasting top docs to top field docs.
      */
-    private List<TopFieldDocs> getTopFieldDocs(final Sort sort, final List<TopDocs> topDocsPerSubQuery) {
+    private List<TopFieldDocs> getTopFieldDocs(
+        final Sort sort,
+        final List<TopDocs> topDocsPerSubQuery,
+        final Predicate<Integer> docIdFilter
+    ) {
         if (sort == null) {
             return null;
         }
@@ -142,6 +179,12 @@ public class ScoreCombiner {
             // Check for scoreDocs length.
             // If scoreDocs length=0 then it means that no results are found for that particular subquery.
             if (topDocs.scoreDocs.length != 0) {
+                if (docIdFilter != null) {
+                    topDocs.scoreDocs = Arrays.stream(topDocs.scoreDocs)
+                        .filter(scoreDoc -> docIdFilter.test(scoreDoc.doc))
+                        .toArray(ScoreDoc[]::new);
+                }
+
                 topFieldDocs.add((TopFieldDocs) topDocs);
             }
         }
@@ -306,11 +349,30 @@ public class ScoreCombiner {
 
     private Map<Integer, Float> combineScoresAndGetCombinedNormalizedScoresPerDocument(
         final Map<Integer, float[]> normalizedScoresPerDocument,
-        final ScoreCombinationTechnique scoreCombinationTechnique
+        final ScoreCombinationTechnique scoreCombinationTechnique,
+        final Sort sort,
+        final Float minScore
     ) {
-        return normalizedScoresPerDocument.entrySet()
+        Map<Integer, Float> combinedNormalizedScoresByDocId = normalizedScoresPerDocument.entrySet()
             .stream()
             .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
+
+        return updateCombinedNormalizedScores(combinedNormalizedScoresByDocId, sort, minScore);
+    }
+
+    private Map<Integer, Float> updateCombinedNormalizedScores(
+        final Map<Integer, Float> combinedNormalizedScoresByDocId,
+        final Sort sort,
+        final Float minScore
+    ) {
+        if (isMinScoreAvailable(sort, minScore)) {
+            // use min score to filter out docs with score less than min score
+            return combinedNormalizedScoresByDocId.entrySet()
+                .stream()
+                .filter(entry -> entry.getValue() >= minScore)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        }
+        return combinedNormalizedScoresByDocId;
     }
 
     private void updateQueryTopDocsWithCombinedScores(
@@ -320,7 +382,8 @@ public class ScoreCombiner {
         final Collection<Integer> sortedScores,
         Map<Integer, Object[]> docIdSortFieldMap,
         final Sort sort,
-        final boolean isSingleShard
+        final boolean isSingleShard,
+        final TotalHits.Relation newRelation
     ) {
         // - max number of hits will be the same which are passed from QueryPhase
         long maxHits = compoundQueryTopDocs.getTotalHits().value();
@@ -336,7 +399,13 @@ public class ScoreCombiner {
                 isSingleShard
             )
         );
-        compoundQueryTopDocs.setTotalHits(getTotalHits(topDocsPerSubQuery, maxHits));
+        if (newRelation != null) {
+            int filteredSize = sortedScores.size();
+            compoundQueryTopDocs.setTotalHits(new TotalHits(filteredSize, newRelation));
+        } else {
+            compoundQueryTopDocs.setTotalHits(getTotalHits(topDocsPerSubQuery, maxHits));
+        }
+
     }
 
     private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, final long maxHits) {
@@ -357,14 +426,15 @@ public class ScoreCombiner {
     public Map<SearchShard, List<ExplanationDetails>> explain(
         final List<CompoundTopDocs> queryTopDocs,
         final ScoreCombinationTechnique combinationTechnique,
-        final Sort sort
+        final Sort sort,
+        final Float minScore
     ) {
         // In case of duplicate keys, keep the first value
         Map<SearchShard, List<ExplanationDetails>> explanations = new HashMap<>();
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             explanations.putIfAbsent(
                 compoundQueryTopDocs.getSearchShard(),
-                explainByShard(combinationTechnique, compoundQueryTopDocs, sort)
+                explainByShard(combinationTechnique, compoundQueryTopDocs, sort, minScore)
             );
         }
         return explanations;
@@ -373,7 +443,8 @@ public class ScoreCombiner {
     private List<ExplanationDetails> explainByShard(
         final ScoreCombinationTechnique scoreCombinationTechnique,
         final CompoundTopDocs compoundQueryTopDocs,
-        final Sort sort
+        final Sort sort,
+        final Float minScore
     ) {
         if (Objects.isNull(compoundQueryTopDocs) || compoundQueryTopDocs.getTotalHits().value() == 0) {
             return List.of();
@@ -384,8 +455,12 @@ public class ScoreCombiner {
         Map<Integer, Float> combinedNormalizedScoresByDocId = normalizedScoresPerDoc.entrySet()
             .stream()
             .collect(Collectors.toMap(Map.Entry::getKey, entry -> scoreCombinationTechnique.combine(entry.getValue())));
+
+        // update combined scores with min score
+        combinedNormalizedScoresByDocId = updateCombinedNormalizedScores(combinedNormalizedScoresByDocId, sort, minScore);
+
         // sort combined scores as per sorting criteria - either score desc or field sorting
-        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId);
+        Collection<Integer> sortedDocsIds = getSortedDocsIds(compoundQueryTopDocs, sort, combinedNormalizedScoresByDocId, minScore);
 
         List<ExplanationDetails> listOfExplanations = new ArrayList<>();
         String combinationDescription = String.format(
@@ -406,12 +481,14 @@ public class ScoreCombiner {
     private Collection<Integer> getSortedDocsIds(
         final CompoundTopDocs compoundQueryTopDocs,
         final Sort sort,
-        final Map<Integer, Float> combinedNormalizedScoresByDocId
+        final Map<Integer, Float> combinedNormalizedScoresByDocId,
+        final Float minScore
     ) {
         Collection<Integer> sortedDocsIds;
         if (sort != null) {
             List<TopDocs> topDocsPerSubQuery = compoundQueryTopDocs.getTopDocs();
-            sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery), sort);
+            Predicate<Integer> docIdFilter = isMinScoreAvailable(sort, minScore) ? combinedNormalizedScoresByDocId::containsKey : null;
+            sortedDocsIds = getSortedDocIdsBySortCriteria(getTopFieldDocs(sort, topDocsPerSubQuery, docIdFilter), sort);
         } else {
             sortedDocsIds = getSortedDocIds(combinedNormalizedScoresByDocId);
         }
