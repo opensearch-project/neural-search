@@ -76,6 +76,8 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         dependsOn "zipBwcPlugin"
     }
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
     systemProperty 'tests.skip_delete_model_index', 'true'
@@ -119,6 +121,8 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
 // This results in a mixed cluster with 2 nodes on the old version and 1 upgraded node.
 task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
     dependsOn rootProject.tasks.assemble
     dependsOn "testAgainstOldCluster"
 
@@ -180,6 +184,8 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
 task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOneThirdUpgradedCluster"
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
 
     doFirst {
         // This is added to prevent the cluster from getting stuck in yellow state
@@ -238,6 +244,8 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
 task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstTwoThirdsUpgradedCluster"
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
 
     doFirst {
         // This is added to prevent the cluster from getting stuck in yellow state
