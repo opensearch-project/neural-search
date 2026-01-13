@@ -348,18 +348,21 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         assertEquals(2, queryTopDocs.size());
 
         // First CompoundTopDocs assertions
-        assertEquals(5, queryTopDocs.get(0).getScoreDocs().size());
+        assertEquals(1, queryTopDocs.get(0).getScoreDocs().size());
         assertTrue(queryTopDocs.get(0).getScoreDocs().get(0) instanceof ScoreDoc);
         ScoreDoc firstDoc = queryTopDocs.get(0).getScoreDocs().get(0);
         assertEquals(Float.NaN, firstDoc.score, DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(3, firstDoc.doc);
+        assertEquals(1, firstDoc.doc);
 
         // Second CompoundTopDocs assertions
-        assertEquals(4, queryTopDocs.get(1).getScoreDocs().size());
+        assertEquals(2, queryTopDocs.get(1).getScoreDocs().size());
         assertTrue(queryTopDocs.get(1).getScoreDocs().get(0) instanceof ScoreDoc);
         ScoreDoc secondDoc = queryTopDocs.get(1).getScoreDocs().get(0);
         assertEquals(Float.NaN, secondDoc.score, DELTA_FOR_SCORE_ASSERTION);
         assertEquals(2, secondDoc.doc);
+        ScoreDoc thirdDoc = queryTopDocs.get(1).getScoreDocs().get(1);
+        assertEquals(Float.NaN, thirdDoc.score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(4, thirdDoc.doc);
 
         // Verify sort fields are preserved
         for (CompoundTopDocs compoundTopDocs : queryTopDocs) {
