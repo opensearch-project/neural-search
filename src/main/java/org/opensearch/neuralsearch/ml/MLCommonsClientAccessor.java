@@ -858,21 +858,15 @@ public class MLCommonsClientAccessor {
                         }
 
                         // Extract agent steps based on model type
-                        if (isClaude) {
-                            Map<String, String> claudeResult = extractClaudeAgentSteps(modelResponseMap);
-                            if (claudeResult.containsKey(STEPS_FIELD) && !claudeResult.get(STEPS_FIELD).isEmpty()) {
-                                agentSteps.add(claudeResult.get(STEPS_FIELD));
+                        if (isClaude || isOpenAI) {
+                            Map<String, String> extractedResult = isClaude
+                                ? extractClaudeAgentSteps(modelResponseMap)
+                                : extractOpenAIAgentSteps(modelResponseMap);
+                            if (extractedResult.containsKey(STEPS_FIELD) && !extractedResult.get(STEPS_FIELD).isEmpty()) {
+                                agentSteps.add(extractedResult.get(STEPS_FIELD));
                             }
-                            if (claudeResult.containsKey(INDEX_NAME_FIELD)) {
-                                result.put(SELECTED_INDEX, claudeResult.get(INDEX_NAME_FIELD));
-                            }
-                        } else if (isOpenAI) {
-                            Map<String, String> openAIResult = extractOpenAIAgentSteps(modelResponseMap);
-                            if (openAIResult.containsKey(STEPS_FIELD) && !openAIResult.get(STEPS_FIELD).isEmpty()) {
-                                agentSteps.add(openAIResult.get(STEPS_FIELD));
-                            }
-                            if (openAIResult.containsKey(INDEX_NAME_FIELD)) {
-                                result.put(SELECTED_INDEX, openAIResult.get(INDEX_NAME_FIELD));
+                            if (extractedResult.containsKey(INDEX_NAME_FIELD)) {
+                                result.put(SELECTED_INDEX, extractedResult.get(INDEX_NAME_FIELD));
                             }
                         }
                     } catch (Exception e) {
