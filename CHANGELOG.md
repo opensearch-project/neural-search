@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 - Add support for asymmetric embedding models([#1605](https://github.com/opensearch-project/neural-search/pull/1605))
 - Implement GRPC Hybrid Query ([#1665](https://github.com/opensearch-project/neural-search/pull/1665))
+- Add support for min_score param in hybrid search
 
 ### Enhancements
 - [SEISMIC Query Explain]: Enable explain function within Sparse ANN query ([#1694](https://github.com/opensearch-project/neural-search/pull/1694))

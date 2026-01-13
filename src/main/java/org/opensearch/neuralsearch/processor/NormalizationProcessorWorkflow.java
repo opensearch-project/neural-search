@@ -94,6 +94,7 @@ public class NormalizationProcessorWorkflow {
             .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
             .isSingleShard(isSingleShard)
+            .minScore(getMinScore(request))
             .build();
 
         // combine
@@ -114,6 +115,15 @@ public class NormalizationProcessorWorkflow {
     private boolean getIsSingleShard(final NormalizationProcessorWorkflowExecuteRequest request) {
         final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
         return searchPhaseContext.getNumShards() == 1 || request.fetchSearchResultOptional.isEmpty() == false;
+    }
+
+    private Float getMinScore(final NormalizationProcessorWorkflowExecuteRequest request) {
+        final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
+        Float minScore = null;
+        if (searchPhaseContext.getRequest() != null && searchPhaseContext.getRequest().source() != null) {
+            minScore = searchPhaseContext.getRequest().source().minScore();
+        }
+        return minScore;
     }
 
     /**
@@ -155,10 +165,12 @@ public class NormalizationProcessorWorkflow {
                 .singleShard(isSingleShard)
                 .build();
             Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(explainDTO);
+            Float minScore = getMinScore(request);
             Map<SearchShard, List<ExplanationDetails>> combinationExplain = scoreCombiner.explain(
                 queryTopDocs,
                 request.getCombinationTechnique(),
-                sortForQuery
+                sortForQuery,
+                minScore
             );
             Map<SearchShard, List<CombinedExplanationDetails>> combinedExplanations = new HashMap<>();
             for (Map.Entry<SearchShard, List<ExplanationDetails>> entry : combinationExplain.entrySet()) {

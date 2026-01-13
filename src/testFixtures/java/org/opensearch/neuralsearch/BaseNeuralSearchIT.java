@@ -816,7 +816,50 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             null,
             null,
             null,
-            preferenceShards
+            preferenceShards,
+            null
+        );
+    }
+
+    @SneakyThrows
+    protected Map<String, Object> search(
+        String index,
+        QueryBuilder queryBuilder,
+        QueryBuilder rescorer,
+        int resultSize,
+        Map<String, String> requestParams,
+        List<Object> aggs,
+        QueryBuilder postFilterBuilder,
+        List<SortBuilder<?>> sortBuilders,
+        boolean trackScores,
+        List<Object> searchAfter,
+        int from,
+        Map<String, Map<String, Object>> highlightFields,
+        Map<String, Object> highlightOptions,
+        List<String> preTags,
+        List<String> postTags,
+        CollapseContext collapseContext,
+        List<Integer> preferenceShards
+    ) {
+        return search(
+            index,
+            queryBuilder,
+            rescorer,
+            resultSize,
+            requestParams,
+            aggs,
+            postFilterBuilder,
+            sortBuilders,
+            trackScores,
+            searchAfter,
+            from,
+            highlightFields,
+            highlightOptions,
+            preTags,
+            postTags,
+            collapseContext,
+            preferenceShards,
+            null
         );
     }
 
@@ -839,6 +882,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
      * @param preTags pre tag for highlight
      * @param postTags post tag for highlight
      * @param collapseContext context containing collapse details
+     * @param minScore minimum score for the search
      * @return Search results represented as a map
      */
     @SneakyThrows
@@ -859,7 +903,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<String> preTags,
         List<String> postTags,
         CollapseContext collapseContext,
-        List<Integer> preferenceShards
+        List<Integer> preferenceShards,
+        Float minScore
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -956,6 +1001,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                 builder.endArray();
             }
             builder.endObject();
+        }
+
+        if (minScore != null) {
+            builder.field("min_score", minScore);
         }
 
         builder.endObject();
