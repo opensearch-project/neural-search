@@ -34,7 +34,7 @@ public class TextChunkingProcessorIT extends AbstractRestartUpgradeRestTestCase 
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
         // added for test PR to make BWC tests deterministically fail
         assertEquals(1, 2);
-        
+
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         String indexName = getIndexNameForTest();
         if (isRunningAgainstOldCluster()) {

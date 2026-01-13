@@ -34,9 +34,9 @@ public class TextChunkingProcessorIT extends AbstractRollingUpgradeTestCase {
     // Create Text Chunking Processor, Ingestion Pipeline and add document
     // Validate process, pipeline and document count in rolling-upgrade scenario
     public void testTextChunkingProcessor_E2EFlow() throws Exception {
-        //  added for test PR to make BWC tests deterministically fail
+        // added for test PR to make BWC tests deterministically fail
         assertEquals(1, 2);
-        
+
         waitForClusterHealthGreen(NODES_BWC_CLUSTER);
         String indexName = getIndexNameForTest();
         switch (getClusterType()) {
