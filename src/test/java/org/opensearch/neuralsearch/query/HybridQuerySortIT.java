@@ -56,6 +56,7 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     private static final int LARGEST_STOCK_VALUE_IN_QUERY_RESULT = 400;
     private static final int LARGEST_STOCK_VALUE_IN_SEARCH_AFTER_MULTIPLE_FIELD_QUERY_RESULT = 25;
     private static final int LARGEST_STOCK_VALUE_IN_SEARCH_AFTER_SINGLE_FIELD_QUERY_RESULT = 22;
+    private static final Float MIN_SCORE = 0.6f;
 
     @BeforeClass
     @SneakyThrows
@@ -652,33 +653,11 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
-    public void testMinScoreAndSortField_whenIndexWithSingleShard_thenSuccessful() {
+    public void testMinScoreAndSortField_whenIndex_thenSuccessful() {
         Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
         fieldSortOrderMap.put("stock", SortOrder.DESC);
 
-        testMinScoreAndSort_thenSuccessful(fieldSortOrderMap, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, Float.MAX_VALUE, RELATION_EQUAL_TO, 6);
-    }
-
-    @SneakyThrows
-    public void testMinScoreAndSortScore_whenIndexWithSingleShard_thenSuccessful() {
-        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-        fieldSortOrderMap.put("_score", SortOrder.DESC);
-
-        testMinScoreAndSort_thenSuccessful(fieldSortOrderMap, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, 0.6f, RELATION_EQUAL_TO, 4);
-    }
-
-    @SneakyThrows
-    public void testMinScoreAndSortField_whenIndexWithMultipleShards_thenSuccessful() {
-        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-        fieldSortOrderMap.put("stock", SortOrder.DESC);
-
-        testMinScoreAndSort_thenSuccessful(fieldSortOrderMap, SHARDS_COUNT_IN_MULTI_NODE_CLUSTER, Float.MAX_VALUE, RELATION_EQUAL_TO, 6);
-    }
-
-    @SneakyThrows
-    public void testMinScoreAndSortScore_whenIndexWithMultipleShards_thenSuccessful() {
-        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
-        fieldSortOrderMap.put("_score", SortOrder.DESC);
+        testMinScoreAndSort_thenSuccessful(fieldSortOrderMap, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, MIN_SCORE, RELATION_EQUAL_TO, 4);
 
         // For single shard, the expected hit count is 4, but for multiple shards, the expected hit count is 3.
         // This is because doc1["name"="Dunes part 2"] and doc2["name"="Dunes part 1"] locate in two shards and have the different scores.
@@ -686,7 +665,26 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         testMinScoreAndSort_thenSuccessful(
             fieldSortOrderMap,
             SHARDS_COUNT_IN_MULTI_NODE_CLUSTER,
-            0.6f,
+            MIN_SCORE,
+            RELATION_GREATER_THAN_OR_EQUAL_TO,
+            3
+        );
+    }
+
+    @SneakyThrows
+    public void testMinScoreAndSortScore_whenIndex_thenSuccessful() {
+        Map<String, SortOrder> fieldSortOrderMap = new HashMap<>();
+        fieldSortOrderMap.put("_score", SortOrder.DESC);
+
+        testMinScoreAndSort_thenSuccessful(fieldSortOrderMap, SHARDS_COUNT_IN_SINGLE_NODE_CLUSTER, MIN_SCORE, RELATION_EQUAL_TO, 4);
+
+        // For single shard, the expected hit count is 4, but for multiple shards, the expected hit count is 3.
+        // This is because doc1["name"="Dunes part 2"] and doc2["name"="Dunes part 1"] locate in two shards and have the different scores.
+        // so after normalization, one score of them will be 1.0f, the other one will be 0.001f (In single shard, they are both 1.0f).
+        testMinScoreAndSort_thenSuccessful(
+            fieldSortOrderMap,
+            SHARDS_COUNT_IN_MULTI_NODE_CLUSTER,
+            MIN_SCORE,
             RELATION_GREATER_THAN_OR_EQUAL_TO,
             3
         );
