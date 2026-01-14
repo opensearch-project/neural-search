@@ -17,6 +17,7 @@ buildscript {
         opensearch_version = System.getProperty("opensearch.version", "3.5.0-SNAPSHOT")
         buildVersionQualifier = System.getProperty("build.version_qualifier", "")
         isSnapshot = "true" == System.getProperty("build.snapshot", "true")
+        isJVectorEngine = "true" == System.getProperty("opensearch.knn.isJVectorEngine", "true")
         version_tokens = opensearch_version.tokenize('-')
         opensearch_build = version_tokens[0] + '.0'
         plugin_no_snapshot = opensearch_build
@@ -249,6 +250,11 @@ opensearchplugin {
     licenseFile rootProject.file('LICENSE')
     noticeFile rootProject.file('NOTICE')
     extendedPlugins = ['opensearch-knn']
+
+    if (isJVectorEngine) {
+        extendedPlugins.remove('opensearch-knn')
+        extendedPlugins.add('opensearch-jvector')
+    }
 }
 
 dependencyLicenses.enabled = false
@@ -258,18 +264,31 @@ loggerUsageCheck.enabled = false
 validateNebulaPom.enabled = false
 
 def knnJarDirectory = "$buildDir/dependencies/opensearch-knn"
+def jvectorJarDirectory = "$buildDir/dependencies/opensearch-jvector-plugin"
 
 dependencies {
     api "org.opensearch:opensearch:${opensearch_version}"
     implementation group: 'org.opensearch.plugin', name:'mapper-extras-client', version: "${opensearch_version}"
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-job-scheduler', version: "${opensearch_build}"
-    zipArchive group: 'org.opensearch.plugin', name:'opensearch-knn', version: "${opensearch_build}"
+
+    if (isJVectorEngine) {
+        zipArchive group: 'org.opensearch.plugin', name: 'opensearch-jvector-plugin', version: "${opensearch_build}"
+    }
+    else {
+        zipArchive group: 'org.opensearch.plugin', name: 'opensearch-knn', version: "${opensearch_build}"
+    }
+
     zipArchive group: 'org.opensearch.plugin', name:'opensearch-ml-plugin', version: "${opensearch_build}"
     secureIntegTestPluginArchive group: 'org.opensearch.plugin', name:'opensearch-security', version: "${opensearch_build}"
-    compileOnly fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
     compileOnly (group: 'com.google.guava', name: 'guava', version:'32.1.3-jre') {
         exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
     }
+
+    if (isJVectorEngine)
+        compileOnly fileTree(dir: jvectorJarDirectory, include: ["opensearch-jvector-${opensearch_build}.jar"])
+    else
+        compileOnly fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
+    
     api group: 'org.opensearch', name:'opensearch-ml-client', version: "${opensearch_build}"
     testFixturesImplementation "org.opensearch.test:framework:${opensearch_version}"
     compileOnly group: 'org.apache.commons', name: 'commons-lang3', version: "${versions.commonslang}"
@@ -296,10 +315,8 @@ dependencies {
     implementation("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}")
     implementation("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
     testFixturesImplementation "org.opensearch:common-utils:${version}"
-    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: "${versions.commonslang}"
-    testFixturesCompileOnly (group: 'com.google.guava', name: 'guava', version:'32.1.3-jre') {
-        exclude group: 'com.google.errorprone', module: 'error_prone_annotations'
-    }
+    testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.14.0'
+    testFixturesCompileOnly group: 'com.google.guava', name: 'guava', version:'32.1.3-jre'
     testFixturesImplementation fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
     testImplementation fileTree(dir: knnJarDirectory, include: ["opensearch-knn-${opensearch_build}.jar", "remote-index-build-client-${opensearch_build}.jar"])
     testImplementation "org.opensearch.plugin:parent-join-client:${opensearch_version}"
@@ -317,14 +334,38 @@ task extractKnnJar(type: Copy) {
     into knnJarDirectory
 }
 
-project.tasks.delombok.dependsOn(extractKnnJar)
+task extractJvectorJar(type: Copy) {
+    mustRunAfter()
+    from(zipTree(configurations.zipArchive.find { it.name.startsWith("opensearch-jvector")}))
+    into jvectorJarDirectory
+}
+
+if (isJVectorEngine) {
+    project.tasks.delombok.dependsOn(extractJvectorJar)
+}
+else {
+    project.tasks.delombok.dependsOn(extractKnnJar)
+}
 
 compileJava {
-    dependsOn extractKnnJar
-    dependsOn spotlessApply
-    options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+
+    if (isJVectorEngine) {
+        dependsOn extractJvectorJar
+        dependsOn spotlessApply
+        options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+    }
+    else
+    {
+        dependsOn extractKnnJar
+        dependsOn spotlessApply
+        options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
+    }
 }
 compileTestJava {
+    if (isJVectorEngine) {
+        dependsOn extractJvectorJar
+        dependsOn spotlessApply
+    }
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 compileTestFixturesJava {
@@ -363,6 +404,7 @@ integTest {
     var is_https = System.getProperty("https")
     var user = System.getProperty("user")
     var password = System.getProperty("password")
+    systemProperty 'opensearch.knn.isJVectorEngine', isJVectorEngine
     if (System.getProperty("security.enabled") != null) {
         // If security is enabled, set is_https/user/password defaults
         is_https = is_https == null ? "true" : is_https
