@@ -236,7 +236,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(invalidAgentResponse, null, null));
+            agentListener.onResponse(new AgentExecutionDTO(invalidAgentResponse, null, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -442,7 +442,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -490,7 +490,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(oversizedResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(oversizedResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -537,7 +537,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(null, null, null));
+            agentListener.onResponse(new AgentExecutionDTO(null, null, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -600,7 +600,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -658,7 +658,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -717,7 +717,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -776,7 +776,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -876,7 +876,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -934,7 +934,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, null));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
