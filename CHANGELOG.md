@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Infrastructure
 - [BWC]: Enable BWC tests after upgrading to Grade 9 ([#1729](https://github.com/opensearch-project/neural-search/pull/1729))
+- Add for text chunking related features for Sparse ANN ([#1725](https://github.com/opensearch-project/neural-search/pull/1725))
 
 ### Documentation
 
