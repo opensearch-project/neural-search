@@ -13,7 +13,10 @@ import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.ml.common.model.MLModelState;
+import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -293,5 +296,86 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
 
         Response response = client().performRequest(request);
         return entityAsMap(response);
+    }
+
+    /**
+     * Validates sparse ANN nested search with raw vectors.
+     *
+     * @param indexName The index to search
+     * @param nestedFieldName The nested field name
+     * @param sparseFieldName The sparse field name within the nested field
+     * @param queryTokens The query tokens with their weights
+     * @param expectedDocCount The expected number of documents in results
+     * @param expectedTopDocIds The expected top document IDs
+     */
+    @SneakyThrows
+    protected void validateSparseANNNestedSearch(
+        String indexName,
+        String nestedFieldName,
+        String sparseFieldName,
+        Map<String, Float> queryTokens,
+        int expectedDocCount,
+        Set<String> expectedTopDocIds
+    ) {
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = SparseTestCommon.getNeuralSparseQueryBuilder(
+            sparseFieldName,
+            2,
+            1.0f,
+            10,
+            queryTokens
+        );
+
+        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(
+            nestedFieldName,
+            neuralSparseQueryBuilder,
+            org.apache.lucene.search.join.ScoreMode.Max
+        );
+        Map<String, Object> searchResults = search(indexName, nestedQuery, 10);
+
+        assertNotNull(searchResults);
+        assertEquals(expectedDocCount, getHitCount(searchResults));
+        assertTrue(expectedTopDocIds.contains(SparseTestCommon.getDocIDs(searchResults).get(0)));
+    }
+
+    /**
+     * Validates sparse ANN nested search with model inference.
+     *
+     * @param indexName The index to search
+     * @param nestedFieldName The nested field name
+     * @param sparseFieldName The sparse field name within the nested field
+     * @param modelId The model ID for inference
+     * @param query The query text
+     * @param expectedTopDocIds The expected top document IDs
+     */
+    @SneakyThrows
+    protected void validateSparseANNNestedSearchWithModel(
+        String indexName,
+        String nestedFieldName,
+        String sparseFieldName,
+        String modelId,
+        String query,
+        Set<String> expectedTopDocIds
+    ) {
+        SparseAnnQueryBuilder annQueryBuilder = new org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder().queryCut(2)
+            .fieldName(sparseFieldName)
+            .heapFactor(1.0f)
+            .k(5);
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder()
+            .sparseAnnQueryBuilder(annQueryBuilder)
+            .fieldName(sparseFieldName)
+            .modelId(modelId)
+            .queryText(query);
+
+        QueryBuilder nestedQuery = org.opensearch.index.query.QueryBuilders.nestedQuery(
+            nestedFieldName,
+            neuralSparseQueryBuilder,
+            org.apache.lucene.search.join.ScoreMode.Max
+        );
+        Map<String, Object> searchResults = search(indexName, nestedQuery, 10);
+
+        assertNotNull(searchResults);
+        assertTrue(getHitCount(searchResults) > 0);
+        assertTrue(expectedTopDocIds.contains(SparseTestCommon.getDocIDs(searchResults).get(0)));
     }
 }
