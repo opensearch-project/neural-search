@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [SEISMIC]: Boost multi threads query efficiency ([#1712](https://github.com/opensearch-project/neural-search/pull/1712))
 - Add ingest through sparse_vector field metrics([#1715](https://github.com/opensearch-project/neural-search/pull/1715))
 - [Agentic Search] Select explicit index for Agentic Query if returned from ListIndexTool
+- [GRPC] Add Integration test for Hybrid Query ([#1734](https://github.com/opensearch-project/neural-search/pull/1734))
 
 ### Bug Fixes
 - [SEISMIC]: Fix the memory usage track upon cache entry creation ([#1701](https://github.com/opensearch-project/neural-search/pull/1701))
