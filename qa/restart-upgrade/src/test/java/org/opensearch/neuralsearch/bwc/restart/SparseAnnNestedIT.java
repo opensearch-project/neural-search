@@ -138,7 +138,7 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
             validateDocCountAndInfo(indexName, 3, () -> getDocById(indexName, "1"), NESTED_FIELD_NAME, List.class);
         } else {
             try {
-                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR, 1);
 
                 String newDoc = "{\"passage_text\": \"new document for testing after upgrade\"}";
                 ingestDocument(indexName, newDoc, "4");

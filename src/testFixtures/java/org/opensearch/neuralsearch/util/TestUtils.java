@@ -377,9 +377,13 @@ public class TestUtils {
     }
 
     public static String getModelId(Map<String, Object> pipeline, String processor) {
+        return getModelId(pipeline, processor, 0);
+    }
+
+    public static String getModelId(Map<String, Object> pipeline, String processor, int processorId) {
         assertNotNull(pipeline);
         ArrayList<Map<String, Object>> processors = (ArrayList<Map<String, Object>>) pipeline.get("processors");
-        Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(0).get(processor);
+        Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(processorId).get(processor);
         String modelId = (String) textEmbeddingProcessor.get("model_id");
         assertNotNull(modelId);
         return modelId;

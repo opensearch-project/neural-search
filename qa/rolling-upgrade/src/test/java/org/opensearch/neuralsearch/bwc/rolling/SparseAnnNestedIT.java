@@ -67,7 +67,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     Set.of("1")
                 );
                 break;
-
             case MIXED:
                 if (isFirstMixedRound()) {
                     List<List<Map<String, Float>>> newDocument = List.of(
@@ -92,7 +91,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     );
                 }
                 break;
-
             case UPGRADED:
                 try {
                     List<List<Map<String, Float>>> finalDocument = List.of(
@@ -119,7 +117,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     wipeOfTestResources(indexName, null, null, null);
                 }
                 break;
-
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
         }
@@ -177,9 +174,8 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                 );
                 validateDocCountAndInfo(indexName, 3, () -> getDocById(indexName, "1"), NESTED_FIELD_NAME, List.class);
                 break;
-
             case MIXED:
-                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR, 1);
 
                 if (isFirstMixedRound()) {
                     String newDoc = "{\"passage_text\": \"new document for testing during mixed state\"}";
@@ -195,10 +191,9 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     );
                 }
                 break;
-
             case UPGRADED:
                 try {
-                    modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR);
+                    modelId = TestUtils.getModelId(getIngestionPipeline(PIPELINE_NAME), SPARSE_ENCODING_PROCESSOR, 1);
 
                     String finalDoc = "{\"passage_text\": \"final document for testing after full upgrade\"}";
                     ingestDocument(indexName, finalDoc, "5");
@@ -215,7 +210,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     wipeOfTestResources(indexName, PIPELINE_NAME, modelId, null);
                 }
                 break;
-
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
         }
@@ -326,7 +320,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     wipeOfTestResources(indexName, null, null, null);
                 }
                 break;
-
             default:
                 throw new IllegalStateException("Unexpected value: " + getClusterType());
         }
