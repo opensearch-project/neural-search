@@ -8,6 +8,7 @@ import com.carrotsearch.randomizedtesting.annotations.ThreadLeakScope;
 import lombok.NonNull;
 import lombok.SneakyThrows;
 import org.apache.hc.core5.http.ParseException;
+import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -370,7 +371,7 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
         QueryBuilder nestedQuery = org.opensearch.index.query.QueryBuilders.nestedQuery(
             nestedFieldName,
             neuralSparseQueryBuilder,
-            org.apache.lucene.search.join.ScoreMode.Max
+            ScoreMode.Max
         );
         Map<String, Object> searchResults = search(indexName, nestedQuery, 10);
 

@@ -151,7 +151,7 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
                     "hello world",
                     Set.of("4")
                 );
-                validateDocCountAndInfo(indexName, 4, () -> getDocById(indexName, "1"), NESTED_FIELD_NAME, List.class);
+                validateDocCountAndInfo(indexName, 4, () -> getDocById(indexName, "4"), NESTED_FIELD_NAME, List.class);
             } finally {
                 wipeOfTestResources(indexName, PIPELINE_NAME, modelId, null);
             }

@@ -189,6 +189,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         "new document",
                         Set.of("4")
                     );
+                    validateDocCountAndInfo(indexName, 4, () -> getDocById(indexName, "4"), NESTED_FIELD_NAME, List.class);
                 }
                 break;
             case UPGRADED:
@@ -206,6 +207,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         "final document",
                         Set.of("5")
                     );
+                    validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "5"), NESTED_FIELD_NAME, List.class);
                 } finally {
                     wipeOfTestResources(indexName, PIPELINE_NAME, modelId, null);
                 }
@@ -296,7 +298,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                 break;
             case UPGRADED:
                 try {
-                    List<List<Map<String, Float>>> finalDocument = List.of(List.of(Map.of("1000", 0.85f, "2000", 0.15f)));
+                    List<List<Map<String, Float>>> finalDocument = List.of(List.of(Map.of("1000", 0.99f, "2000", 0.01f)));
 
                     for (int i = 0; i < shards; ++i) {
                         String payload = SparseTestCommon.prepareNestedSparseBulkIngestPayloadWithMultipleChunks(
