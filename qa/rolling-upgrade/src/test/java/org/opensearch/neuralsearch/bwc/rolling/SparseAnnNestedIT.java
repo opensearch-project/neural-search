@@ -80,6 +80,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         4
                     );
                     bulkIngest(payload, null);
+                    validateDocCountAndInfo(indexName, 4, () -> getDocById(indexName, "4"), NESTED_FIELD_NAME, List.class);
                 } else {
                     validateSparseANNNestedSearch(
                         indexName,
@@ -89,6 +90,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         4,
                         Set.of("4")
                     );
+                    validateDocCountAndInfo(indexName, 5, () -> getDocById(indexName, "5"), NESTED_FIELD_NAME, List.class);
                 }
                 break;
             case UPGRADED:
