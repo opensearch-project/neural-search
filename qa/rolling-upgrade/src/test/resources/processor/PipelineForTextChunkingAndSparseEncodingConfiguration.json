@@ -17,7 +17,7 @@
     },
     {
       "sparse_encoding": {
-        "model_id": "${MODEL_ID}",
+        "model_id": "%s",
         "field_map": {
           "passage_chunk": "passage_chunk_embedding"
         }

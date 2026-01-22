@@ -104,8 +104,6 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
             URL pipelineURLPath = classLoader.getResource("processor/PipelineForTextChunkingAndSparseEncodingConfiguration.json");
             Objects.requireNonNull(pipelineURLPath);
             String pipelineConfiguration = Files.readString(Path.of(pipelineURLPath.toURI()));
-            pipelineConfiguration = pipelineConfiguration.replace("${MODEL_ID}", modelId);
-
             createPipelineProcessor(pipelineConfiguration, PIPELINE_NAME, modelId, null);
 
             SparseTestCommon.createNestedSparseIndex(
