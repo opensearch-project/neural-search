@@ -326,11 +326,7 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
             queryTokens
         );
 
-        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(
-            nestedFieldName,
-            neuralSparseQueryBuilder,
-            org.apache.lucene.search.join.ScoreMode.Max
-        );
+        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(nestedFieldName, neuralSparseQueryBuilder, ScoreMode.Max);
         Map<String, Object> searchResults = search(indexName, nestedQuery, 10);
 
         assertNotNull(searchResults);
