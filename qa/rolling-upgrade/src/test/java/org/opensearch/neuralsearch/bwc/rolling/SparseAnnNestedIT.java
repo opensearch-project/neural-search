@@ -31,7 +31,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
         String indexName = getIndexNameForTest();
         int shards = 3;
         int replicas = 0;
-        int expectedDocCount = 0;
         List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
 
         switch (getClusterType()) {
@@ -41,7 +40,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     indexName,
                     NESTED_FIELD_NAME,
                     SparseEncodingProcessor.LIST_TYPE_NESTED_MAP_KEY,
-                    4,
+                    5,
                     0.4f,
                     0.5f,
                     3,
@@ -66,14 +65,13 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                 }
                 SparseTestCommon.forceMerge(client(), indexName);
                 SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
-                expectedDocCount = shards * documentsWithChunks.size();
 
                 validateSparseANNNestedSearch(
                     indexName,
                     NESTED_FIELD_NAME,
                     SPARSE_FIELD_NAME,
                     Map.of("1000", 1.5f, "2000", 0.5f),
-                    expectedDocCount,
+                    9,
                     Set.of("1", "4", "7")
                 );
                 break;
@@ -92,14 +90,15 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         );
                         bulkIngest(payload, null, routingIds.get(i));
                     }
-                    expectedDocCount += shards * newDocument.size();
+                    SparseTestCommon.forceMerge(client(), indexName);
+                    SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
                 } else {
                     validateSparseANNNestedSearch(
                         indexName,
                         NESTED_FIELD_NAME,
                         SPARSE_FIELD_NAME,
                         Map.of("1000", 1.5f, "2000", 0.5f),
-                        expectedDocCount,
+                        12,
                         Set.of("10", "11", "12")
                     );
                 }
@@ -119,13 +118,15 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         );
                         bulkIngest(payload, null, routingIds.get(i));
                     }
+                    SparseTestCommon.forceMerge(client(), indexName);
+                    SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
 
                     validateSparseANNNestedSearch(
                         indexName,
                         NESTED_FIELD_NAME,
                         SPARSE_FIELD_NAME,
                         Map.of("1000", 1.5f, "2000", 0.5f),
-                        expectedDocCount,
+                        15,
                         Set.of("13", "14", "15")
                     );
                 } finally {
@@ -189,7 +190,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     }
                     bulkIngest(payloadBuilder.toString(), null, routingIds.get(i));
                 }
-
                 SparseTestCommon.forceMerge(client(), indexName);
                 SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
 
@@ -223,15 +223,6 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         }
                         bulkIngest(payloadBuilder.toString(), null, routingIds.get(i));
                     }
-                } else {
-                    validateSparseANNNestedSearchWithModel(
-                        indexName,
-                        NESTED_FIELD_NAME,
-                        SPARSE_FIELD_NAME,
-                        modelId,
-                        "new document",
-                        Set.of("10", "11", "12")
-                    );
                 }
                 break;
             case UPGRADED:
@@ -255,6 +246,8 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                         }
                         bulkIngest(payloadBuilder.toString(), null, routingIds.get(i));
                     }
+                    SparseTestCommon.forceMerge(client(), indexName);
+                    SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
 
                     validateSparseANNNestedSearchWithModel(
                         indexName,

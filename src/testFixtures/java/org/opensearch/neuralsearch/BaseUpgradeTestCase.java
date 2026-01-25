@@ -327,7 +327,7 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
         );
 
         QueryBuilder nestedQuery = QueryBuilders.nestedQuery(nestedFieldName, neuralSparseQueryBuilder, ScoreMode.Max);
-        Map<String, Object> searchResults = search(indexName, nestedQuery, 10);
+        Map<String, Object> searchResults = search(indexName, nestedQuery, 30);
 
         assertNotNull(searchResults);
         assertEquals(expectedDocCount, getHitCount(searchResults));
@@ -353,23 +353,15 @@ public abstract class BaseUpgradeTestCase extends BaseNeuralSearchIT {
         String query,
         Set<String> expectedTopDocIds
     ) {
-        SparseAnnQueryBuilder annQueryBuilder = new org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder().queryCut(2)
-            .fieldName(sparseFieldName)
-            .heapFactor(1.0f)
-            .k(5);
+        SparseAnnQueryBuilder annQueryBuilder = new SparseAnnQueryBuilder().queryCut(2).fieldName(sparseFieldName).heapFactor(1.0f).k(5);
 
-        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder()
-            .sparseAnnQueryBuilder(annQueryBuilder)
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(annQueryBuilder)
             .fieldName(sparseFieldName)
             .modelId(modelId)
             .queryText(query);
 
-        QueryBuilder nestedQuery = org.opensearch.index.query.QueryBuilders.nestedQuery(
-            nestedFieldName,
-            neuralSparseQueryBuilder,
-            ScoreMode.Max
-        );
-        Map<String, Object> searchResults = search(indexName, nestedQuery, 10);
+        QueryBuilder nestedQuery = QueryBuilders.nestedQuery(nestedFieldName, neuralSparseQueryBuilder, ScoreMode.Max);
+        Map<String, Object> searchResults = search(indexName, nestedQuery, 30);
 
         assertNotNull(searchResults);
         assertTrue(getHitCount(searchResults) > 0);

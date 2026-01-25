@@ -31,7 +31,6 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
         String indexName = getIndexNameForTest();
         int shards = 3;
         int replicas = 0;
-        int expectedDocCount = 0;
         List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
 
         if (isRunningAgainstOldCluster()) {
@@ -65,7 +64,7 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
             }
             SparseTestCommon.forceMerge(client(), indexName);
             SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
-            expectedDocCount += shards * documentsWithChunks.size();
+            int expectedDocCount = 9;
 
             validateSparseANNNestedSearch(
                 indexName,
@@ -92,8 +91,8 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
                 }
                 SparseTestCommon.forceMerge(client(), indexName);
                 SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
-                expectedDocCount += shards * newDocument.size();
 
+                int expectedDocCount = 12;
                 validateSparseANNNestedSearch(
                     indexName,
                     NESTED_FIELD_NAME,
@@ -114,7 +113,6 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
         String modelId = null;
         int shards = 3;
         int replicas = 0;
-        int expectedDocCount = 0;
         List<String> routingIds = SparseTestCommon.generateUniqueRoutingIds(shards);
 
         if (isRunningAgainstOldCluster()) {
@@ -164,7 +162,6 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
             SparseTestCommon.forceMerge(client(), indexName);
             SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
 
-            expectedDocCount = shards * documents.size();
             validateSparseANNNestedSearchWithModel(
                 indexName,
                 NESTED_FIELD_NAME,
@@ -195,8 +192,9 @@ public class SparseAnnNestedIT extends AbstractRestartUpgradeRestTestCase {
                     }
                     bulkIngest(payloadBuilder.toString(), null, routingIds.get(i));
                 }
+                SparseTestCommon.forceMerge(client(), indexName);
+                SparseTestCommon.waitForSegmentMerge(client(), indexName, shards, replicas);
 
-                expectedDocCount += shards * newDocuments.size();
                 validateSparseANNNestedSearchWithModel(
                     indexName,
                     NESTED_FIELD_NAME,
