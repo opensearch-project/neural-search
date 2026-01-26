@@ -343,15 +343,6 @@ public class TestUtils {
         int expectedTotalHits,
         Map<String, Object> searchResponseAsMap
     ) {
-        assertHitResultsFromQueryWhenSortIsEnabled(expectedCollectedHits, expectedTotalHits, searchResponseAsMap, RELATION_EQUAL_TO);
-    }
-
-    public static void assertHitResultsFromQueryWhenSortIsEnabled(
-        int expectedCollectedHits,
-        int expectedTotalHits,
-        Map<String, Object> searchResponseAsMap,
-        String expectedRelations
-    ) {
         assertEquals(expectedCollectedHits, getHitCount(searchResponseAsMap));
 
         List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
@@ -366,7 +357,7 @@ public class TestUtils {
         assertNotNull(total.get("value"));
         assertEquals(expectedTotalHits, total.get("value"));
         assertNotNull(total.get("relation"));
-        assertEquals(expectedRelations, total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
 
     }
 

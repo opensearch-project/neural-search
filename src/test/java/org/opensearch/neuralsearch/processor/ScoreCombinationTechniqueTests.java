@@ -251,12 +251,13 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
             )
         );
 
+        Float minScore = 0.2f;
         scoreCombiner.combineScores(
             CombineScoresDto.builder()
                 .queryTopDocs(queryTopDocs)
                 .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
                 .querySearchResults(Collections.emptyList())
-                .minScore(0.2f)
+                .minScore(minScore)
                 .build()
         );
 
@@ -276,6 +277,225 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         assertEquals(4, queryTopDocs.get(1).getScoreDocs().get(1).doc);
         assertEquals(0.25, queryTopDocs.get(1).getScoreDocs().get(2).score, DELTA_FOR_SCORE_ASSERTION);
         assertEquals(7, queryTopDocs.get(1).getScoreDocs().get(2).doc);
+
+        assertEquals(0, queryTopDocs.get(2).getScoreDocs().size());
+    }
+
+    public void testCombination_whenMultipleSubqueriesResultsWithZeroMinScore_thenScoresCombined() {
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+
+        final List<CompoundTopDocs> queryTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(5, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(1, 1.0f), new ScoreDoc(2, .25f), new ScoreDoc(4, 0.001f) }
+                    ),
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(5, 0.001f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            ),
+            new CompoundTopDocs(
+                new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(
+                        new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.9f), new ScoreDoc(4, 0.6f), new ScoreDoc(7, 0.5f), new ScoreDoc(9, 0.01f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            ),
+            new CompoundTopDocs(
+                new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+
+        Float minScore = 0.0f;
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .minScore(minScore)
+                .build()
+        );
+
+        assertNotNull(queryTopDocs);
+        assertEquals(3, queryTopDocs.size());
+
+        assertEquals(5, queryTopDocs.get(0).getScoreDocs().size());
+        assertEquals(TotalHits.Relation.EQUAL_TO, queryTopDocs.get(0).getTotalHits().relation());
+        assertEquals(.5, queryTopDocs.get(0).getScoreDocs().get(0).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, queryTopDocs.get(0).getScoreDocs().get(0).doc);
+        assertEquals(.5, queryTopDocs.get(0).getScoreDocs().get(1).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(3, queryTopDocs.get(0).getScoreDocs().get(1).doc);
+        assertEquals(.125, queryTopDocs.get(0).getScoreDocs().get(2).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(2, queryTopDocs.get(0).getScoreDocs().get(2).doc);
+
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs().size());
+        assertEquals(TotalHits.Relation.EQUAL_TO, queryTopDocs.get(1).getTotalHits().relation());
+        assertEquals(0.45, queryTopDocs.get(1).getScoreDocs().get(0).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(2, queryTopDocs.get(1).getScoreDocs().get(0).doc);
+        assertEquals(0.3, queryTopDocs.get(1).getScoreDocs().get(1).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs().get(1).doc);
+        assertEquals(0.25, queryTopDocs.get(1).getScoreDocs().get(2).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(7, queryTopDocs.get(1).getScoreDocs().get(2).doc);
+        assertEquals(.005, queryTopDocs.get(1).getScoreDocs().get(3).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(9, queryTopDocs.get(1).getScoreDocs().get(3).doc);
+
+        assertEquals(0, queryTopDocs.get(2).getScoreDocs().size());
+    }
+
+    public void testCombination_whenMultipleSubqueriesResultsWithLargeMinScore_thenScoresCombined() {
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+
+        final List<CompoundTopDocs> queryTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(5, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(1, 1.0f), new ScoreDoc(2, .25f), new ScoreDoc(4, 0.001f) }
+                    ),
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(5, 0.001f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            ),
+            new CompoundTopDocs(
+                new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(
+                        new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.9f), new ScoreDoc(4, 0.6f), new ScoreDoc(7, 0.5f), new ScoreDoc(9, 0.01f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            ),
+            new CompoundTopDocs(
+                new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+
+        Float minScore = 1000.2f;
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .minScore(minScore)
+                .build()
+        );
+
+        assertNotNull(queryTopDocs);
+        assertEquals(3, queryTopDocs.size());
+
+        assertEquals(0, queryTopDocs.get(0).getScoreDocs().size());
+
+        assertEquals(0, queryTopDocs.get(1).getScoreDocs().size());
+
+        assertEquals(0, queryTopDocs.get(2).getScoreDocs().size());
+    }
+
+    public void testCombination_whenMultipleSubqueriesResultsWithCloseMinScore_thenScoresCombined() {
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+
+        final List<CompoundTopDocs> queryTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(5, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(
+                        new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(1, 1.0f), new ScoreDoc(2, .25f), new ScoreDoc(4, 0.01f) }
+                    ),
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(3, 1.0f), new ScoreDoc(5, 0.01f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            ),
+            new CompoundTopDocs(
+                new TotalHits(4, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+                List.of(
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(
+                        new TotalHits(4, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+                        new ScoreDoc[] { new ScoreDoc(2, 0.9f), new ScoreDoc(4, 0.6f), new ScoreDoc(7, 0.5f), new ScoreDoc(9, 0.01f) }
+                    )
+                ),
+                false,
+                SEARCH_SHARD
+            ),
+            new CompoundTopDocs(
+                new TotalHits(0, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]),
+                    new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0])
+                ),
+                false,
+                SEARCH_SHARD
+            )
+        );
+
+        Float minScore = 0.0049999f;
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .minScore(minScore)
+                .build()
+        );
+
+        assertNotNull(queryTopDocs);
+        assertEquals(3, queryTopDocs.size());
+
+        assertEquals(5, queryTopDocs.get(0).getScoreDocs().size());
+        // Filtered size is equal to original size, and we get EQUAL_TO because the existing relation is EQUAL_TO
+        assertEquals(TotalHits.Relation.EQUAL_TO, queryTopDocs.get(0).getTotalHits().relation());
+        assertEquals(.5, queryTopDocs.get(0).getScoreDocs().get(0).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, queryTopDocs.get(0).getScoreDocs().get(0).doc);
+        assertEquals(.5, queryTopDocs.get(0).getScoreDocs().get(1).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(3, queryTopDocs.get(0).getScoreDocs().get(1).doc);
+
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs().size());
+        // Filtered size is equal to original size, and we get GREATER_THAN_OR_EQUAL_TO because the existing relation is
+        // GREATER_THAN_OR_EQUAL_TO
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, queryTopDocs.get(1).getTotalHits().relation());
+        assertEquals(0.45, queryTopDocs.get(1).getScoreDocs().get(0).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(2, queryTopDocs.get(1).getScoreDocs().get(0).doc);
+        assertEquals(0.3, queryTopDocs.get(1).getScoreDocs().get(1).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs().get(1).doc);
+        assertEquals(0.25, queryTopDocs.get(1).getScoreDocs().get(2).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(7, queryTopDocs.get(1).getScoreDocs().get(2).doc);
+        assertEquals(0.005, queryTopDocs.get(1).getScoreDocs().get(3).score, DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(9, queryTopDocs.get(1).getScoreDocs().get(3).doc);
 
         assertEquals(0, queryTopDocs.get(2).getScoreDocs().size());
     }
@@ -332,6 +552,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
             )
         );
 
+        Float minScore = 0.2f;
         scoreCombiner.combineScores(
             CombineScoresDto.builder()
                 .queryTopDocs(queryTopDocs)
@@ -339,7 +560,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
                 .querySearchResults(Collections.emptyList())
                 .sort(sort)
                 .isSingleShard(true)
-                .minScore(0.2f)
+                .minScore(minScore)
                 .build()
         );
 
@@ -348,14 +569,14 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         assertEquals(2, queryTopDocs.size());
 
         // First CompoundTopDocs assertions
-        assertEquals(1, queryTopDocs.get(0).getScoreDocs().size());
+        assertEquals(5, queryTopDocs.get(0).getScoreDocs().size());
         assertTrue(queryTopDocs.get(0).getScoreDocs().get(0) instanceof ScoreDoc);
         ScoreDoc firstDoc = queryTopDocs.get(0).getScoreDocs().get(0);
         assertEquals(Float.NaN, firstDoc.score, DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(1, firstDoc.doc);
+        assertEquals(3, firstDoc.doc);
 
         // Second CompoundTopDocs assertions
-        assertEquals(2, queryTopDocs.get(1).getScoreDocs().size());
+        assertEquals(4, queryTopDocs.get(1).getScoreDocs().size());
         assertTrue(queryTopDocs.get(1).getScoreDocs().get(0) instanceof ScoreDoc);
         ScoreDoc secondDoc = queryTopDocs.get(1).getScoreDocs().get(0);
         assertEquals(Float.NaN, secondDoc.score, DELTA_FOR_SCORE_ASSERTION);
@@ -433,6 +654,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
             )
         );
 
+        Float minScore = 0.2f;
         scoreCombiner.combineScores(
             CombineScoresDto.builder()
                 .queryTopDocs(queryTopDocs)
@@ -440,7 +662,7 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
                 .querySearchResults(Collections.emptyList())
                 .sort(sort)
                 .isSingleShard(true)
-                .minScore(0.2f)
+                .minScore(minScore)
                 .build()
         );
 

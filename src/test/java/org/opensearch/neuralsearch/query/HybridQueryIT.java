@@ -9,7 +9,6 @@ import static org.hamcrest.Matchers.containsString;
 import static org.opensearch.index.query.QueryBuilders.matchQuery;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
-import static org.opensearch.neuralsearch.util.TestUtils.RELATION_GREATER_THAN_OR_EQUAL_TO;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
@@ -791,6 +790,13 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testPaginationOnSingleShard_whenMinScoreIsSet_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_withMinScore_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+    }
+
+    @SneakyThrows
     public void testPaginationOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
@@ -804,6 +810,13 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
+    }
+
+    @SneakyThrows
+    public void testPaginationOnMultipleShard_whenMinScoreIsSet_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_withMinScore_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
     }
 
     @SneakyThrows
@@ -831,6 +844,50 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> total = getTotalHits(searchResponseAsMap);
         assertNotNull(total.get("value"));
         assertEquals(4, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    @SneakyThrows
+    public void testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_withMinScore_thenSuccessful(String indexName) {
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        TermQueryBuilder termQueryBuilder1 = new TermQueryBuilder(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = new TermQueryBuilder(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(termQueryBuilder1).should(termQueryBuilder2);
+        hybridQueryBuilder.add(new MatchAllQueryBuilder());
+        hybridQueryBuilder.add(boolQueryBuilder);
+        hybridQueryBuilder.paginationDepth(10);
+
+        // Results will be: {doc1[score=1.0f], doc2[score=0.5005f], doc3[score=0.5f], doc4[score=0.5f]}
+        // MinScore will filter out two results.
+        Float minScore = 0.5005f;
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            1,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            minScore
+        );
+
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(2, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
@@ -1057,8 +1114,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertNotNull(total.get("value"));
         assertEquals(3, total.get("value"));
         assertNotNull(total.get("relation"));
-        // As minScore filter nothing, we can't determine the exact value above min score, so we keep it as GREATER_THAN_OR_EQUAL_TO
-        assertEquals(RELATION_GREATER_THAN_OR_EQUAL_TO, total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows

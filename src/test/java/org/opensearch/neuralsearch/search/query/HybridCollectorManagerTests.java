@@ -273,6 +273,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         Sort sort = new Sort(sortField);
         DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
         when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
+        when(searchContext.minimumScore()).thenReturn(null);
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -310,6 +311,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         FieldDoc after = new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 1 }, -1);
         when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
         when(searchContext.searchAfter()).thenReturn(after);
+        when(searchContext.minimumScore()).thenReturn(null);
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
@@ -366,6 +368,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         Sort sort = new Sort(sortField);
         DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
         when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
+        when(searchContext.minimumScore()).thenReturn(null);
 
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
 
@@ -559,6 +562,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
         when(searchContext.sort()).thenReturn(sortAndFormats);
+        when(searchContext.minimumScore()).thenReturn(null);
 
         Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
         when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);

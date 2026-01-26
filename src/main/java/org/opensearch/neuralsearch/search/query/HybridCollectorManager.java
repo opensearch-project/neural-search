@@ -73,7 +73,7 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         int numDocs = Math.min(getSubqueryResultsRetrievalSize(searchContext, query), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
         if (searchContext.sort() != null) {
-            validateSortCriteria(searchContext, searchContext.trackScores());
+            validateSortCriteria(searchContext, searchContext.trackScores(), searchContext.minimumScore());
         }
 
         boolean isSingleShard = searchContext.numberOfShards() == 1;
@@ -185,7 +185,7 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             && VALID_COLLECTOR_TYPES.stream().anyMatch(type -> type.isInstance(((FilteredCollector) collector).getCollector()));
     }
 
-    private static void validateSortCriteria(SearchContext searchContext, boolean trackScores) {
+    private static void validateSortCriteria(SearchContext searchContext, boolean trackScores, Float minScore) {
         SortField[] sortFields = searchContext.sort().sort.getSort();
         boolean hasFieldSort = false;
         boolean hasScoreSort = false;
@@ -212,6 +212,9 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         }
         if (trackScores && hasScoreSort) {
             throw new IllegalArgumentException("Hybrid search results are by default sorted by _score, track_scores must be set to false.");
+        }
+        if (minScore != null && hasFieldSort) {
+            throw new IllegalArgumentException("Hybrid search results when sorted by any field, docId or _id, min_score cannot be set.");
         }
     }
 

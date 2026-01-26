@@ -109,6 +109,6 @@ public class HybridAggregationProcessorTests extends OpenSearchQueryTestCase {
         searchContext.minimumScore(0.5f);
         hybridAggregationProcessor.preProcess(searchContext);
         verify(mockAggsProcessorDelegate, times(2)).preProcess(any());
-        assertEquals(Float.MIN_VALUE, searchContext.minimumScore(), DELTA_FOR_ASSERTION);
+        assertEquals(Float.NEGATIVE_INFINITY, searchContext.minimumScore(), DELTA_FOR_ASSERTION);
     }
 }

@@ -12,6 +12,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -724,5 +725,42 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         } catch (Exception e) {
             fail("Should not throw exception even with null pipeline context, but got: " + e.getMessage());
         }
+    }
+
+    public void testNormalization_whenMinScoreInvalid_thenFail() {
+        testNormalization_withMinScore_thenFail(Float.POSITIVE_INFINITY);
+        testNormalization_withMinScore_thenFail(Float.NEGATIVE_INFINITY);
+        testNormalization_withMinScore_thenFail(Float.NaN);
+    }
+
+    private void testNormalization_withMinScore_thenFail(Float minScore) {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.minScore(minScore);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        when(searchRequest.source()).thenReturn(searchSourceBuilder);
+
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDto = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(Collections.emptyList())
+            .fetchSearchResultOptional(Optional.empty())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .searchPhaseContext(searchPhaseContext)
+            .build();
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> normalizationProcessorWorkflow.execute(normalizationExecuteDto)
+        );
+
+        assertEquals(
+            String.format(Locale.ROOT, "min_score is invalid : [%f], must neither be Infinity nor NaN", minScore),
+            illegalArgumentException.getMessage()
+        );
     }
 }
