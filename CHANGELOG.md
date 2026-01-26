@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Infrastructure
 - [BWC]: Enable BWC tests after upgrading to Grade 9 ([#1729](https://github.com/opensearch-project/neural-search/pull/1729))
+- [BWC]: Correct BWC tests between 3.5 and 2.19 ([#1737](https://github.com/opensearch-project/neural-search/pull/1737))
 
 ### Documentation
 
