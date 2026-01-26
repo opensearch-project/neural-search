@@ -43,7 +43,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     5,
                     0.4f,
                     0.5f,
-                    3,
+                    1,
                     shards,
                     replicas
                 );
@@ -152,7 +152,7 @@ public class SparseAnnNestedIT extends AbstractRollingUpgradeTestCase {
                     4,
                     0.4f,
                     0.5f,
-                    3,
+                    1,
                     shards,
                     replicas
                 );
