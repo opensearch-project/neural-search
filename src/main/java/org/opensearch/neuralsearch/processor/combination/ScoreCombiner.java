@@ -479,7 +479,7 @@ public class ScoreCombiner {
             Locale.ROOT,
             "%s combination of%s:",
             ((ExplainableTechnique) scoreCombinationTechnique).describe(),
-            minScore != null ? String.format(" [filtered by min_score: %.4f]", minScore) : ""
+            isMinScoreAvailable(minScore, sort) ? String.format(Locale.ROOT, " [filtered by min_score: %.4f]", minScore) : ""
         );
         for (int docId : sortedDocsIds) {
             ExplanationDetails explanation = new ExplanationDetails(
