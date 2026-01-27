@@ -27,6 +27,7 @@ public class HybridCollectorResultsUtilParams {
     private final List<RescoreContext> rescoreContexts;
     private SortAndFormats sortAndFormats = null;
     private DocValueFormat[] docValueFormats = null;
+    private static final SortField[] DEFAULT_SORT_FIELDS = new SortField[] { new SortField(null, SortField.Type.SCORE) };
 
     private HybridCollectorResultsUtilParams(Builder builder) {
         this.searchContext = builder.searchContext;
@@ -39,6 +40,10 @@ public class HybridCollectorResultsUtilParams {
         this.isCollapseEnabled = searchContext.collapse() != null;
         if (isCollapseEnabled && isSortEnabled == false) {
             this.docValueFormats = new DocValueFormat[] { DocValueFormat.RAW };
+        }
+
+        if (isSortEnabled || isCollapseEnabled) {
+            this.sortFields = DEFAULT_SORT_FIELDS;
         }
         this.rescoreContexts = searchContext.rescore();
     }

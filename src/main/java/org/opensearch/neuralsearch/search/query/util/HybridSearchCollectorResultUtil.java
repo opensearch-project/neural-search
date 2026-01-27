@@ -46,7 +46,6 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 public class HybridSearchCollectorResultUtil {
     private final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO;
     private final HybridSearchCollector hybridSearchCollector;
-    private static final SortField[] DEFAULT_SORT_FIELDS = new SortField[] { new SortField(null, SortField.Type.SCORE) };
 
     /**
      * This method merges topDocs from multiple segments of a shard.
@@ -103,13 +102,7 @@ public class HybridSearchCollectorResultUtil {
     ) {
         String collapseField = hybridSearchCollectorResultsDTO.getSearchContext().collapse().getFieldName();
         if (Objects.isNull(collapseTopFieldDocs)) {
-            return new CollapseTopFieldDocs(
-                collapseField,
-                totalHits,
-                new FieldDoc[0],
-                sortFields == null ? DEFAULT_SORT_FIELDS : sortFields,
-                new Object[0]
-            );
+            return new CollapseTopFieldDocs(collapseField, totalHits, new FieldDoc[0], sortFields, new Object[0]);
         }
 
         // for a single shard case we need to do score processing at coordinator level.
@@ -118,13 +111,7 @@ public class HybridSearchCollectorResultUtil {
         // find any valid doc Id, or set it to -1 if there is not a single match
         int delimiterDocId = findDelimiterDocId(collapseTopFieldDocs);
         if (delimiterDocId == -1) {
-            return new CollapseTopFieldDocs(
-                collapseField,
-                totalHits,
-                new FieldDoc[0],
-                sortFields == null ? DEFAULT_SORT_FIELDS : sortFields,
-                new Object[0]
-            );
+            return new CollapseTopFieldDocs(collapseField, totalHits, new FieldDoc[0], sortFields, new Object[0]);
         }
 
         ArrayList<Object> collapseValues = new ArrayList<>();
@@ -166,7 +153,7 @@ public class HybridSearchCollectorResultUtil {
 
     private TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
         if (Objects.isNull(topFieldDocs)) {
-            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields == null ? DEFAULT_SORT_FIELDS : sortFields);
+            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
         }
 
         // for a single shard case we need to do score processing at coordinator level.
@@ -175,7 +162,7 @@ public class HybridSearchCollectorResultUtil {
         // find any valid doc Id, or set it to -1 if there is not a single match
         int delimiterDocId = findDelimiterDocId(topFieldDocs);
         if (delimiterDocId == -1) {
-            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields == null ? DEFAULT_SORT_FIELDS : sortFields);
+            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
         }
 
         // format scores using following template:
