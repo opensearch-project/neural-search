@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [HYBRID]: Fix for Hybrid Query with Collapse bugs([#1702](https://github.com/opensearch-project/neural-search/pull/1702))
 - [HYBRID]: Fix position overflow of docIds in HybridBulkScorer to increase search relevance ([#1706](https://github.com/opensearch-project/neural-search/pull/1706))
 - [HYBRID]: Fix logic of RRF score calculation as per document global rank in the subquery ([#1718](https://github.com/opensearch-project/neural-search/pull/1718))
+- [HYBRID]: Fix CollapseTopFieldDocs logic when a segment has no collapsed fieldDocs but has totalHits > 0
 
 ### Infrastructure
 - [BWC]: Enable BWC tests after upgrading to Grade 9 ([#1729](https://github.com/opensearch-project/neural-search/pull/1729))

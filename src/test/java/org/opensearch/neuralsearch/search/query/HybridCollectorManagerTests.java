@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.search.query;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 
 import lombok.SneakyThrows;
@@ -37,9 +38,11 @@ import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoostingQueryBuilder;
@@ -48,15 +51,18 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.ParsedQuery;
+import org.opensearch.index.shard.IndexShard;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.query.HybridQueryContext;
 import org.opensearch.neuralsearch.query.HybridQueryWeight;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
+import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.collector.PagingFieldCollector;
 import org.opensearch.neuralsearch.search.collector.SimpleFieldCollector;
 import org.opensearch.neuralsearch.search.query.exception.HybridSearchRescoreQueryException;
 import org.opensearch.search.DocValueFormat;
+import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.internal.ContextIndexSearcher;
 import org.opensearch.search.internal.ScrollContext;
 import org.opensearch.search.internal.SearchContext;
@@ -1092,6 +1098,168 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             String.format(Locale.ROOT, "pagination_depth param is missing in the search request"),
             illegalArgumentException.getMessage()
         );
+    }
+
+    public void testReduceCollectorResults_whenCollapseEnabledWithEmptyFieldDocsButNonZeroTotalHits_thenSuccessful() throws IOException {
+        /*
+         * SCENARIO EXPLANATION:
+         * This test reproduces a specific edge case that previously caused an IllegalStateException during
+         * concurrent segment search with collapse functionality enabled.
+         *
+         * THE BUG SCENARIO:
+         * 1. Concurrent segment search creates multiple collectors, each processing different segments
+         * 2. Collector1 processes a segment where documents were initially collected (getTotalHits() > 0)
+         *    but after collapse/grouping processing, all sub-queries end up with empty FieldDoc arrays
+         * 3. Collector2 processes a segment with normal results containing actual documents
+         * 4. During reduction, the system tries to merge results from both collectors
+         *
+         * THE PREVIOUS BUG:
+         * - When processing Collector1's results, getNewTopFieldDocs() was called instead of getCollapseTopFieldDocs()
+         * - Since all FieldDoc arrays were empty, delimiterDocId became -1
+         * - The method incorrectly returned TopFieldDocs instead of CollapseTopFieldDocs
+         * - Later, TopDocsMerger.merge() failed the type check: "Collapse enabled but source TopDocs is not an instance of CollapseTopFieldDocs"
+         *
+         * THE FIX:
+         * - Modified getSortedTopDocsAndMaxScore() to check if collapse is enabled
+         * - When collapse is enabled, it now calls getCollapseTopFieldDocs() which always returns CollapseTopFieldDocs
+         * - Even when delimiterDocId = -1, it returns an empty CollapseTopFieldDocs instead of TopFieldDocs
+         * - This ensures type consistency during merge operations
+         *
+         * WHY THIS TEST SHOULD PASS:
+         * With the fix, both collectors return CollapseTopFieldDocs (even if empty), so the merge operation
+         * succeeds without type mismatch exceptions.
+         */
+
+        // Setup search context with collapse enabled
+        SearchContext searchContext = mock(SearchContext.class);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        // Setup hybrid query
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().build();
+        HybridQuery hybridQueryWithTerm = new HybridQuery(
+            List.of(QueryBuilders.matchAllQuery().toQuery(mockQueryShardContext)),
+            hybridQueryContext
+        );
+        when(searchContext.query()).thenReturn(hybridQueryWithTerm);
+
+        // Setup mapper service and searcher
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        IndexObjects indexObjects = createIndexObjects(1);
+        IndexReader indexReader = indexObjects.indexReader();
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+        when(searchContext.size()).thenReturn(10);
+
+        // Setup sort and collapse
+        DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
+        SortField sortField = new SortField("id", SortField.Type.DOC);
+        Sort sort = new Sort(sortField);
+        SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
+        when(searchContext.sort()).thenReturn(sortAndFormats);
+
+        // Setup collapse context - THIS IS KEY
+        CollapseContext collapseContext = mock(CollapseContext.class);
+        when(collapseContext.getFieldName()).thenReturn("family_id_v2");
+        when(searchContext.collapse()).thenReturn(collapseContext);
+
+        // Setup concurrent search
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
+        when(searchContext.queryCollectorManagers()).thenReturn(new HashMap<>());
+
+        // Setup index shard to avoid NPE
+        IndexShard indexShard = mock(IndexShard.class);
+        IndexSettings indexSettings = mock(IndexSettings.class);
+        when(indexShard.indexSettings()).thenReturn(indexSettings);
+        when(searchContext.indexShard()).thenReturn(indexShard);
+
+        // Create two mock collectors
+        HybridCollapsingTopDocsCollector collector1 = mock(HybridCollapsingTopDocsCollector.class);
+        HybridCollapsingTopDocsCollector collector2 = mock(HybridCollapsingTopDocsCollector.class);
+
+        // COLLECTOR 1: The scenario that previously caused the bug
+        // - Has processed documents (getTotalHits > 0)
+        // - But topDocs() returns list with empty FieldDocs arrays
+        List<CollapseTopFieldDocs> collector1Results = new ArrayList<>();
+
+        // Create CollapseTopFieldDocs with EMPTY scoreDocs but representing processed documents
+        CollapseTopFieldDocs emptySubQuery1 = new CollapseTopFieldDocs(
+            "family_id_v2",
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO), // No docs for this subquery
+            new FieldDoc[0], // EMPTY scoreDocs
+            new SortField[] { sortField },
+            new Object[0] // EMPTY collapse values
+        );
+
+        CollapseTopFieldDocs emptySubQuery2 = new CollapseTopFieldDocs(
+            "family_id_v2",
+            new TotalHits(0, TotalHits.Relation.EQUAL_TO), // No docs for this subquery
+            new FieldDoc[0], // EMPTY scoreDocs
+            new SortField[] { sortField },
+            new Object[0] // EMPTY collapse values
+        );
+
+        collector1Results.add(emptySubQuery1);
+        collector1Results.add(emptySubQuery2);
+
+        when(collector1.topDocs()).thenReturn(collector1Results);
+        when(collector1.getTotalHits()).thenReturn(50); // KEY: Global hit count > 0
+        when(collector1.getMaxScore()).thenReturn(1.0f);
+
+        // COLLECTOR 2: Normal case with actual results
+        List<CollapseTopFieldDocs> collector2Results = new ArrayList<>();
+
+        CollapseTopFieldDocs nonEmptySubQuery1 = new CollapseTopFieldDocs(
+            "family_id_v2",
+            new TotalHits(10, TotalHits.Relation.EQUAL_TO),
+            new FieldDoc[] { new FieldDoc(1, 1.0f, new Object[] { 1 }), new FieldDoc(2, 0.9f, new Object[] { 2 }) },
+            new SortField[] { sortField },
+            new Object[] { "group1", "group2" }
+        );
+
+        CollapseTopFieldDocs nonEmptySubQuery2 = new CollapseTopFieldDocs(
+            "family_id_v2",
+            new TotalHits(5, TotalHits.Relation.EQUAL_TO),
+            new FieldDoc[] { new FieldDoc(3, 0.8f, new Object[] { 3 }) },
+            new SortField[] { sortField },
+            new Object[] { "group3" }
+        );
+
+        collector2Results.add(nonEmptySubQuery1);
+        collector2Results.add(nonEmptySubQuery2);
+
+        when(collector2.topDocs()).thenReturn(collector2Results);
+        when(collector2.getTotalHits()).thenReturn(15);
+        when(collector2.getMaxScore()).thenReturn(1.0f);
+
+        // Create collector manager
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQueryWithTerm);
+
+        // WITH THE FIX:
+        // 1. Collector1 has getTotalHits() = 50 (documents were processed)
+        // 2. But topDocs() returns list with all empty FieldDoc arrays
+        // 3. getTotalHits(topDocs) will return TotalHits(50) because list is not empty
+        // 4. getCollapseTopFieldDocs() will have delimiterDocId = -1 (no valid documents)
+        // 5. Will now return CollapseTopFieldDocs instead of TopFieldDocs (FIXED!)
+        // 6. Merge with collector2 will succeed because both are CollapseTopFieldDocs
+
+        // This should now succeed without throwing an exception
+        Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
+        assertNotNull(results);
+        assertTrue(results instanceof ReduceableSearchResult);
+
+        // Verify the results are properly merged
+        ReduceableSearchResult reduceableSearchResult = (ReduceableSearchResult) results;
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        reduceableSearchResult.reduce(querySearchResult);
+        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+
+        assertNotNull(topDocsAndMaxScore);
+        assertTrue(topDocsAndMaxScore.topDocs instanceof CollapseTopFieldDocs);
+        assertEquals(65, topDocsAndMaxScore.topDocs.totalHits.value());
     }
 
     private IndexObjects createIndexObjects(int numDocs) throws IOException {
