@@ -51,6 +51,7 @@ import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
 import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.TextInferenceRequest;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
@@ -77,7 +78,6 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -236,6 +236,34 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
         assertEquals(QUERY_TOKENS_SUPPLIER.get(), sparseEncodingQueryBuilder.queryTokensMapSupplier().get());
         assertEquals(sparseAnnQueryBuilder, sparseEncodingQueryBuilder.sparseAnnQueryBuilder());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenSeismicSupportedWithoutMethodParameters_thenBuildSuccessfully() {
+        /*
+          {
+              "VECTOR_FIELD": {
+                "query_tokens": {
+                    "token_a": float_score_a,
+                    "token_b": float_score_b
+                }
+             }
+          }
+        */
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject(FIELD_NAME)
+            .field(QUERY_TOKENS_FIELD.getPreferredName(), QUERY_TOKENS_SUPPLIER.get())
+            .endObject()
+            .endObject();
+
+        XContentParser contentParser = createParser(xContentBuilder);
+        contentParser.nextToken();
+        NeuralSparseQueryBuilder sparseEncodingQueryBuilder = NeuralSparseQueryBuilder.fromXContent(contentParser);
+
+        assertEquals(FIELD_NAME, sparseEncodingQueryBuilder.fieldName());
+        assertEquals(QUERY_TOKENS_SUPPLIER.get(), sparseEncodingQueryBuilder.queryTokensMapSupplier().get());
+        assertEquals(new SparseAnnQueryBuilder(), sparseEncodingQueryBuilder.sparseAnnQueryBuilder());
     }
 
     @SneakyThrows
@@ -543,13 +571,19 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     public void testStreams_whenCurrentVersion_thenSuccess() {
         setUpClusterService(Version.CURRENT);
         testStreams(true, true);
-        testStreamsWithQueryTokensOnly();
+        testStreamsWithQueryTokensOnly(true);
+    }
+
+    public void testStreams_whenMinVersionIsBeforeSparseAnn_thenSuccess() {
+        setUpClusterService(Version.V_3_2_0);
+        testStreams(true, false);
+        testStreamsWithQueryTokensOnly(false);
     }
 
     public void testStreams_whenMinVersionIsBeforeDefaultModelId_thenSuccess() {
         setUpClusterService(Version.V_2_12_0);
         testStreams(false, false);
-        testStreamsWithQueryTokensOnly();
+        testStreamsWithQueryTokensOnly(false);
     }
 
     @SneakyThrows
@@ -614,10 +648,13 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    private void testStreamsWithQueryTokensOnly() {
+    private void testStreamsWithQueryTokensOnly(boolean sparseAnnSupport) {
         NeuralSparseQueryBuilder original = new NeuralSparseQueryBuilder();
         original.fieldName(FIELD_NAME);
         original.queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER);
+        if (sparseAnnSupport) {
+            original.sparseAnnQueryBuilder(sparseAnnQueryBuilder);
+        }
 
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         original.writeTo(streamOutput);
@@ -823,11 +860,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
         }).when(mlCommonsClientAccessor)
-            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isNull(), isA(ActionListener.class));
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -863,11 +900,11 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 5f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
         }).when(mlCommonsClientAccessor)
-            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isNull(), isA(ActionListener.class));
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -898,13 +935,12 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .modelId(MODEL_ID);
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
-        ArgumentCaptor<MLAlgoParams> captor = ArgumentCaptor.forClass(MLAlgoParams.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
         }).when(mlCommonsClientAccessor)
-            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), any(), isA(ActionListener.class));
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -923,8 +959,9 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         }).when(queryRewriteContext).registerAsyncAction(any());
 
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) neuralSparseQueryBuilder.doRewrite(queryRewriteContext);
-        verify(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), captor.capture(), any());
-        MLAlgoParams params = captor.getValue();
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        verify(mlCommonsClientAccessor).inferenceSentencesWithMapResult(requestCaptor.capture(), any());
+        MLAlgoParams params = requestCaptor.getValue().getMlAlgoParams();
         assertTrue(params instanceof AsymmetricTextEmbeddingParameters);
         AsymmetricTextEmbeddingParameters asymmetricTextEmbeddingParameters = (AsymmetricTextEmbeddingParameters) params;
         assertEquals(SparseEmbeddingFormat.TOKEN_ID, asymmetricTextEmbeddingParameters.getSparseEmbeddingFormat());
@@ -940,13 +977,12 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .modelId(MODEL_ID);
         Map<String, Float> expectedMap = Map.of("1", 1f, "2", 2f);
         MLCommonsClientAccessor mlCommonsClientAccessor = mock(MLCommonsClientAccessor.class);
-        ArgumentCaptor<MLAlgoParams> captor = ArgumentCaptor.forClass(MLAlgoParams.class);
         doAnswer(invocation -> {
-            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(2);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
             listener.onResponse(List.of(Map.of("response", List.of(expectedMap))));
             return null;
         }).when(mlCommonsClientAccessor)
-            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), any(), isA(ActionListener.class));
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
         NeuralSparseQueryBuilder.initialize(mlCommonsClientAccessor);
 
         final CountDownLatch inProgressLatch = new CountDownLatch(1);
@@ -965,8 +1001,9 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         }).when(queryRewriteContext).registerAsyncAction(any());
 
         NeuralSparseQueryBuilder queryBuilder = (NeuralSparseQueryBuilder) neuralSparseQueryBuilder.doRewrite(queryRewriteContext);
-        verify(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), captor.capture(), any());
-        MLAlgoParams params = captor.getValue();
+        ArgumentCaptor<TextInferenceRequest> requestCaptor = ArgumentCaptor.forClass(TextInferenceRequest.class);
+        verify(mlCommonsClientAccessor).inferenceSentencesWithMapResult(requestCaptor.capture(), any());
+        MLAlgoParams params = requestCaptor.getValue().getMlAlgoParams();
         assertTrue(params instanceof AsymmetricTextEmbeddingParameters);
         AsymmetricTextEmbeddingParameters asymmetricTextEmbeddingParameters = (AsymmetricTextEmbeddingParameters) params;
         assertEquals(SparseEmbeddingFormat.TOKEN_ID, asymmetricTextEmbeddingParameters.getSparseEmbeddingFormat());
@@ -1019,7 +1056,8 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
             .maxTokenScore(MAX_TOKEN_SCORE)
             .queryText(QUERY_TEXT)
-            .searchAnalyzer(DEFAULT_ANALYZER);
+            .searchAnalyzer(DEFAULT_ANALYZER)
+            .sparseAnnQueryBuilder(new SparseAnnQueryBuilder());
         QueryShardContext mockedQueryShardContext = mock(QueryShardContext.class);
         IndexAnalyzers indexAnalyzers = mock(IndexAnalyzers.class);
         when(mockedQueryShardContext.getIndexAnalyzers()).thenReturn(indexAnalyzers);
@@ -1038,7 +1076,7 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         PayloadAttribute payload = mock(PayloadAttribute.class);
         when(tokenStream.addAttribute(eq(PayloadAttribute.class))).thenReturn(payload);
         when(tokenStream.incrementToken()).thenReturn(true, true, false);
-        when(term.toString()).thenReturn("hello", "world");
+        when(term.toString()).thenReturn("1000", "2000");
 
         when(payload.getPayload()).thenReturn(
             new BytesRef(ByteBuffer.allocate(4).putFloat(1.0f).array()),
@@ -1046,11 +1084,14 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         );
 
         BooleanQuery.Builder targetQueryBuilder = new BooleanQuery.Builder();
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "hello", 1.f), BooleanClause.Occur.SHOULD);
-        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "1000", 1.f), BooleanClause.Occur.SHOULD);
+        targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "2000", 2.f), BooleanClause.Occur.SHOULD);
+
         Query query = sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext);
-        verify(typeAttr).setType(eq(SparseEmbeddingFormat.TOKEN_ID.toString()));
-        assertEquals(query, targetQueryBuilder.build());
+        assertTrue(query instanceof SparseVectorQuery);
+        SparseVectorQuery sparseVectorQuery = (SparseVectorQuery) query;
+        BooleanQuery booleanQuery = targetQueryBuilder.build();
+        assertEquals(booleanQuery, sparseVectorQuery.getFallbackQuery());
     }
 
     @SneakyThrows

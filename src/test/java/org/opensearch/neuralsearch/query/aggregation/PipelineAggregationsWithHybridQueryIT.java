@@ -358,7 +358,8 @@ public class PipelineAggregationsWithHybridQueryIT extends BaseAggregationsWithH
             null,
             10,
             Map.of("search_pipeline", SEARCH_PIPELINE),
-            aggsBuilders
+            aggsBuilders,
+            null
         );
 
         assertHitResultsFromQuery(expectedHits, searchResponseAsMap);

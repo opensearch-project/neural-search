@@ -26,6 +26,8 @@ import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
 import org.opensearch.neuralsearch.processor.collapse.CollapseExecutor;
 import org.opensearch.neuralsearch.processor.combination.CombineScoresDto;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.CombinedExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
@@ -70,12 +72,15 @@ public class NormalizationProcessorWorkflow {
         log.debug("Pre-process query results");
         List<CompoundTopDocs> queryTopDocs = getQueryTopDocs(querySearchResults);
 
-        explain(request, queryTopDocs);
+        boolean isSingleShard = getIsSingleShard(request);
+
+        explain(request, queryTopDocs, isSingleShard);
 
         // Data transfer object for score normalization used to pass nullable rankConstant which is only used in RRF
         NormalizeScoresDTO normalizeScoresDTO = NormalizeScoresDTO.builder()
             .queryTopDocs(queryTopDocs)
             .normalizationTechnique(request.getNormalizationTechnique())
+            .singleShard(isSingleShard)
             .build();
 
         // normalize
@@ -88,7 +93,7 @@ public class NormalizationProcessorWorkflow {
             .querySearchResults(querySearchResults)
             .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
-            .isSingleShard(getIsSingleShard(request))
+            .isSingleShard(isSingleShard)
             .build();
 
         // combine
@@ -137,17 +142,19 @@ public class NormalizationProcessorWorkflow {
      * Collects explanations from normalization and combination techniques and save thme into pipeline context. Later that
      * information will be read by the response processor to add it to search response
      */
-    private void explain(NormalizationProcessorWorkflowExecuteRequest request, List<CompoundTopDocs> queryTopDocs) {
+    private void explain(NormalizationProcessorWorkflowExecuteRequest request, List<CompoundTopDocs> queryTopDocs, boolean isSingleShard) {
         if (!request.isExplain()) {
             return;
         }
         // build final result object with all explain related information
         if (Objects.nonNull(request.getPipelineProcessingContext())) {
             Sort sortForQuery = evaluateSortCriteria(request.getQuerySearchResults(), queryTopDocs);
-            Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(
-                queryTopDocs,
-                (ExplainableTechnique) request.getNormalizationTechnique()
-            );
+            ExplainDTO explainDTO = ExplainDTO.builder()
+                .queryTopDocs(queryTopDocs)
+                .explainableTechnique((ExplainableTechnique) request.getNormalizationTechnique())
+                .singleShard(isSingleShard)
+                .build();
+            Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(explainDTO);
             Map<SearchShard, List<ExplanationDetails>> combinationExplain = scoreCombiner.explain(
                 queryTopDocs,
                 request.getCombinationTechnique(),

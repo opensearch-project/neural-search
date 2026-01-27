@@ -17,6 +17,8 @@ import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.search.internal.SearchContext;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -50,30 +52,73 @@ public class HybridQueryUtil {
         }
 
         BooleanQuery boolQuery = (BooleanQuery) query;
-
-        return isHybridQueryWrappedInBooleanMustQueryWithFilters(boolQuery.clauses())
-            || ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
-                && isWrappedHybridQuery(query)
-                && boolQuery.clauses().isEmpty() == false);
+        return ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+            && isWrappedHybridQuery(query)
+            && boolQuery.clauses().isEmpty() == false);
     }
 
     /**
-     * This method checks if the hybrid query is in a MUST clause with additional FILTER clauses
+     * This method checks if the hybrid query is in a MUST clause with additional FILTER or MUST_NOT clauses and convert it into new boolean query
      * This format is used when inner hits are passed within the collapse parameter
-     * @param booleanClauses a list of boolean clauses from a boolean query
-     * @return true if the clauses represent a hybrid query wrapped in a boolean must clause with the rest of the clauses being filters
+     * @param booleanClauses list of clauses from the main query
+     * @return query if the clauses represent a hybrid query wrapped in a boolean must clause with the rest of the clause being a filter or must_not
      */
-    public static boolean isHybridQueryWrappedInBooleanMustQueryWithFilters(List<BooleanClause> booleanClauses) {
-        boolean isFirstClauseMustHybrid = !booleanClauses.isEmpty()
-            && booleanClauses.getFirst().occur() == BooleanClause.Occur.MUST
-            && booleanClauses.getFirst().query() instanceof HybridQuery;
+    public static Query transformHybridQueryWrappedInBooleanMustQuery(List<BooleanClause> booleanClauses) {
+        if (booleanClauses.isEmpty()) {
+            return null;
+        }
+        HybridQuery hybridQuery = (booleanClauses.getFirst().occur() == BooleanClause.Occur.MUST
+            && booleanClauses.getFirst().query() instanceof HybridQuery) ? (HybridQuery) booleanClauses.getFirst().query() : null;
 
-        boolean areRemainingClausesFilters = booleanClauses.size() <= 1
-            || booleanClauses.stream()
-                .skip(1)  // Skip the first clause since we checked it above for a hybrid within a must clause
-                .allMatch(clause -> clause.occur() == BooleanClause.Occur.FILTER);
+        // Either the boolean query will contain a filter clause or must_not clause depending on the field present in the hit.
+        // SourceCode:
+        // https://github.com/opensearch-project/OpenSearch/blob/3.2/server/src/main/java/org/opensearch/action/search/ExpandSearchPhase.java#L94
+        BooleanClause filterOrMustNotClause = null;
+        for (BooleanClause booleanClause : booleanClauses.stream().skip(1).toList()) {
+            if (booleanClause.occur() == BooleanClause.Occur.FILTER || booleanClause.occur() == BooleanClause.Occur.MUST_NOT) {
+                filterOrMustNotClause = booleanClause;
+                break;
+            }
+        }
 
-        return isFirstClauseMustHybrid && areRemainingClausesFilters;
+        return createBoolQueryFromHybridQuery(hybridQuery, filterOrMustNotClause);
+    }
+
+    /**
+     * This method creates bool query from the the hybrid query
+     * This format is used when inner hits are passed within the collapse parameter
+     * @param hybridQuery HQ from which subqueries need to be extracted
+     * @param filterOrMustNotClause boolean clause which can be either filter or must_not
+     * @return true if the clauses represent a hybrid query wrapped in a boolean must clause with the rest of the clauses being filters
+     * {
+     *     "bool": {
+     *         "must": [
+     *             {
+     *                 "bool": {
+     *                     "should" :[
+     *                        //subqueries that were present in hybrid clause.
+     *                     ]
+     *                 }
+     *             }
+     *         ],
+     *         "filter": [
+     *             ...
+     *         ]
+     *     }
+     * }
+     */
+    private static Query createBoolQueryFromHybridQuery(HybridQuery hybridQuery, BooleanClause filterOrMustNotClause) {
+        if (hybridQuery != null && filterOrMustNotClause != null) {
+            Collection<Query> subQueries = hybridQuery.getSubQueries();
+            List<BooleanClause> clauses = new ArrayList<>();
+            subQueries.forEach(subQuery -> {
+                BooleanClause booleanClause = new BooleanClause(subQuery, BooleanClause.Occur.SHOULD);
+                clauses.add(booleanClause);
+            });
+            BooleanQuery innerBooleanQuery = new BooleanQuery.Builder().add(clauses).build();
+            return new BooleanQuery.Builder().add(innerBooleanQuery, BooleanClause.Occur.MUST).add(filterOrMustNotClause).build();
+        }
+        return null;
     }
 
     /**

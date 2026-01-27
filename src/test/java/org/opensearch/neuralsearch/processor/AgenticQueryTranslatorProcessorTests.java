@@ -236,7 +236,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(invalidAgentResponse, null, null));
+            agentListener.onResponse(new AgentExecutionDTO(invalidAgentResponse, null, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -442,7 +442,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -490,7 +490,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(oversizedResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(oversizedResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -537,7 +537,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(null, null, null));
+            agentListener.onResponse(new AgentExecutionDTO(null, null, null, null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -600,7 +600,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -658,7 +658,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -717,7 +717,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -776,7 +776,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -876,7 +876,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
             ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
-            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id"));
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
             .executeAgent(
@@ -897,5 +897,64 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertNotNull(request.source().ext());
         assertEquals(1, request.source().ext().size());
         assertEquals(originalExtBuilders.get(0), request.source().ext().get(0));
+    }
+
+    public void testProcessRequestAsync_preservesSourceFields() throws IOException {
+        // Create processor with proper NamedXContentRegistry
+        List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
+        entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match_all"), MatchAllQueryBuilder::fromXContent));
+        NamedXContentRegistry registry = new NamedXContentRegistry(entries);
+
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            registry,
+            mockSettingsAccessor
+        );
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+
+        // Set up original source with field filtering
+        SearchSourceBuilder originalSource = new SearchSourceBuilder().query(agenticQuery)
+            .fetchSource(new String[] { "title", "description" }, new String[] { "internal_field" });
+        request.source(originalSource);
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+        doAnswer(invocation -> {
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, null, null));
+            return null;
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                any(NamedXContentRegistry.class),
+                any(ActionListener.class)
+            );
+
+        testProcessor.processRequestAsync(request, mockContext, listener);
+
+        // Verify source fields are preserved
+        ArgumentCaptor<SearchRequest> requestCaptor = ArgumentCaptor.forClass(SearchRequest.class);
+        verify(listener).onResponse(requestCaptor.capture());
+
+        SearchRequest modifiedRequest = requestCaptor.getValue();
+        assertNotNull(modifiedRequest.source().fetchSource());
+        assertArrayEquals(new String[] { "title", "description" }, modifiedRequest.source().fetchSource().includes());
+        assertArrayEquals(new String[] { "internal_field" }, modifiedRequest.source().fetchSource().excludes());
     }
 }

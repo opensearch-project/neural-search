@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.index.SegmentInfo;
 import org.apache.lucene.index.SegmentInfos;
+import org.opensearch.common.concurrent.GatedCloseable;
 import org.opensearch.index.IndexService;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.MapperService;
@@ -35,8 +36,9 @@ public class SparseIndexEventListener implements IndexEventListener {
      */
     public void beforeIndexRemoved(IndexService indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason reason) {
         for (IndexShard shard : indexService) {
-            try (MapperService mapperService = shard.mapperService()) {
-                SegmentInfos segmentInfos = shard.getSegmentInfosSnapshot().get();
+            try (GatedCloseable<SegmentInfos> snapshot = shard.getSegmentInfosSnapshot()) {
+                MapperService mapperService = shard.mapperService();
+                SegmentInfos segmentInfos = snapshot.get();
                 for (int i = 0; i < segmentInfos.size(); i++) {
                     SegmentInfo segmentInfo = segmentInfos.info(i).info;
                     for (MappedFieldType fieldType : mapperService.fieldTypes()) {

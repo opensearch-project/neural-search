@@ -53,7 +53,9 @@ public abstract class MemMonitoredCache<T extends Accountable> implements Accoun
     protected T getOrCreate(@NonNull CacheKey key, @NonNull Function<CacheKey, T> creator) {
         return cacheMap.computeIfAbsent(key, k -> {
             T value = creator.apply(k);
-            CircuitBreakerManager.addWithoutBreaking(RamUsageEstimator.shallowSizeOf(k));
+            MemoryUsageManager.getInstance()
+                .getMemoryUsageTracker()
+                .recordWithoutValidation(RamUsageEstimator.shallowSizeOf(k), CircuitBreakerManager::addWithoutBreaking);
             return value;
         });
     }

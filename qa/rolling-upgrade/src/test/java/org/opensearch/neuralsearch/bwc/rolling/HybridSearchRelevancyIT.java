@@ -191,7 +191,8 @@ public class HybridSearchRelevancyIT extends AbstractRollingUpgradeTestCase {
             queryBuilder,
             null,
             queryResultSize,
-            Map.of("search_pipeline", SEARCH_PIPELINE_NAME)
+            Map.of("search_pipeline", SEARCH_PIPELINE_NAME),
+            null
         );
         int hits = getHitCount(searchResponseAsMap);
         assertEquals(queryResultSize, hits);

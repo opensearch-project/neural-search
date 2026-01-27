@@ -67,6 +67,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;
 
+    // Error message templates for reuse across REST and gRPC paths
+    public static final String ERROR_MSG_QUERIES_REQUIRED = "[%s] requires 'queries' field with at least one clause";
+    public static final String ERROR_MSG_MAX_QUERIES_EXCEEDED = "Number of sub-queries exceeds maximum supported by [%s] query";
+    public static final String ERROR_MSG_BOOST_NOT_SUPPORTED = "[%s] query does not support [%s]";
+
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
         queries.addAll(readQueries(in));
@@ -225,7 +230,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         if (queries.size() == MAX_NUMBER_OF_SUB_QUERIES) {
                             throw new ParsingException(
                                 parser.getTokenLocation(),
-                                String.format(Locale.ROOT, "Number of sub-queries exceeds maximum supported by [%s] query", NAME)
+                                String.format(Locale.ROOT, ERROR_MSG_MAX_QUERIES_EXCEEDED, NAME)
                             );
                         }
                         queries.add(parseInnerQueryBuilder(parser));
@@ -261,10 +266,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
 
         if (queries.isEmpty()) {
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                String.format(Locale.ROOT, "[%s] requires 'queries' field with at least one clause", NAME)
-            );
+            throw new ParsingException(parser.getTokenLocation(), String.format(Locale.ROOT, ERROR_MSG_QUERIES_REQUIRED, NAME));
         }
 
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
@@ -426,7 +428,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
     }
 
-    private static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits) {
+    public static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits) {
         EventStatsManager.increment(EventStatName.HYBRID_QUERY_REQUESTS);
         if (hasFilter) {
             EventStatsManager.increment(EventStatName.HYBRID_QUERY_FILTER_REQUESTS);

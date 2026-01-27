@@ -11,9 +11,11 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
@@ -25,6 +27,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.mock;
 
 /**
  * Abstracts normalization of scores based on z_score method
@@ -292,7 +295,12 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         );
 
         ZScoreNormalizationTechnique normalizer = new ZScoreNormalizationTechnique();
-        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(Collections.singletonList(compoundTopDocs));
+        Map<DocIdAtSearchShard, ExplanationDetails> result = normalizer.explain(
+            ExplainDTO.builder()
+                .queryTopDocs(Collections.singletonList(compoundTopDocs))
+                .explainableTechnique(mock(ExplainableTechnique.class))
+                .build()
+        );
 
         // Verify results
         DocIdAtSearchShard doc1 = new DocIdAtSearchShard(1, searchShard);

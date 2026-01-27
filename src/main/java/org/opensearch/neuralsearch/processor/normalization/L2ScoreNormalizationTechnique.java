@@ -15,7 +15,8 @@ import java.util.Set;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
-import org.opensearch.neuralsearch.processor.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
+import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
@@ -81,7 +82,8 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
     }
 
     @Override
-    public Map<DocIdAtSearchShard, ExplanationDetails> explain(List<CompoundTopDocs> queryTopDocs) {
+    public Map<DocIdAtSearchShard, ExplanationDetails> explain(final ExplainDTO explainDTO) {
+        List<CompoundTopDocs> queryTopDocs = explainDTO.getQueryTopDocs();
         Map<DocIdAtSearchShard, List<Float>> normalizedScores = new HashMap<>();
         List<Float> normsPerSubquery = getL2Norm(queryTopDocs);
 

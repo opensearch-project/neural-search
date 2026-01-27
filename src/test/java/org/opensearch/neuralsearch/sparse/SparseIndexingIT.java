@@ -34,6 +34,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     private static final String NON_SPARSE_TEST_INDEX_NAME = TEST_INDEX_NAME + "_non_sparse";
     private static final String INVALID_PARAM_TEST_INDEX_NAME = TEST_INDEX_NAME + "_invalid";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
+    private static final String PIPELINE_NAME = "seismic_test_pipeline";
     private static final List<String> TEST_TOKENS = List.of("1000", "2000", "3000", "4000", "5000");
 
     @Before
@@ -299,7 +300,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     public void testSeismicIndexWithDocDeletion() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             NON_SPARSE_TEST_INDEX_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -335,7 +336,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     public void testSeismicIndexWithDocUpdate() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
 
-        ingestDocumentsAndForceMerge(
+        ingestDocumentsAndForceMergeForSingleShard(
             TEST_INDEX_NAME,
             NON_SPARSE_TEST_INDEX_NAME,
             TEST_SPARSE_FIELD_NAME,
@@ -369,5 +370,30 @@ public class SparseIndexingIT extends SparseBaseIT {
         searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
         Set<String> actualIds = new HashSet<>(getDocIDs(searchResults));
         assertEquals(Set.of("1"), actualIds);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testSearchNestedFieldWithModelInferencingAndEmptyString() throws Exception {
+        String modelId = prepareSparseEncodingModel();
+        String sparseFieldName = "title_sparse"; // configured in SparseEncodingPipelineConfiguration.json
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.SPARSE_ENCODING, 2);
+        createSparseIndex(TEST_INDEX_NAME, sparseFieldName, 4, 0.4f, 0.5f, 1);
+
+        String payload = prepareSparseBulkIngestPayload(TEST_INDEX_NAME, "title", null, List.of(), List.of(""), 1);
+        bulkIngest(payload, PIPELINE_NAME);
+        forceMerge(TEST_INDEX_NAME);
+        waitForSegmentMerge(TEST_INDEX_NAME);
+
+        assertEquals(1, getDocCount(TEST_INDEX_NAME));
+
+        Map<String, Object> document = getDocById(TEST_INDEX_NAME, "1");
+        assertNotNull(document);
+
+        Map<String, Object> source = (Map<String, Object>) document.get("_source");
+        assertNotNull(source);
+
+        assertEquals("", source.get("title"));
+
+        assertFalse("Sparse encoding field should not exist for empty string", source.containsKey(sparseFieldName));
     }
 }

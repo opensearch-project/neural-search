@@ -37,6 +37,7 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
+import org.opensearch.neuralsearch.grpc.proto.request.search.query.HybridQueryBuilderProtoConverter;
 import org.opensearch.neuralsearch.search.collector.HybridQueryCollectorContextSpecFactory;
 import org.opensearch.neuralsearch.search.query.HybridQueryPhaseSearcher;
 import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
@@ -143,6 +144,8 @@ import org.opensearch.neuralsearch.transport.NeuralSparseWarmupTransportAction;
 
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineServiceUtil;
+import org.opensearch.neuralsearch.search.HybridQuerySearchRequestFilter;
+import org.opensearch.action.support.ActionFilter;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.EnginePlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
@@ -241,7 +244,10 @@ public class NeuralSearch extends Plugin
         // Initialize the semantic highlighter
         this.semanticHighlighter.initialize(semanticHighlighterEngine);
 
-        return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager);
+        // Create and provide the Hybrid query converter for gRPC transport
+        HybridQueryBuilderProtoConverter hybridQueryConverter = new HybridQueryBuilderProtoConverter();
+
+        return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager, hybridQueryConverter);
     }
 
     @Override
@@ -500,5 +506,13 @@ public class NeuralSearch extends Plugin
     @Override
     public List<QueryCollectorContextSpecFactory> getCollectorContextSpecFactories() {
         return List.of(new HybridQueryCollectorContextSpecFactory());
+    }
+
+    /**
+     * Register action filters to intercept search requests.
+     */
+    @Override
+    public List<ActionFilter> getActionFilters() {
+        return List.of(new HybridQuerySearchRequestFilter());
     }
 }

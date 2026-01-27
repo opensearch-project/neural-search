@@ -59,6 +59,7 @@ import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.transport.NeuralStatsResponse;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.collapse.CollapseContext;
@@ -97,8 +98,6 @@ import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_TASK_RESULT_QUE
 import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.INGEST_PIPELINE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_RETRY;
-
-import org.opensearch.neuralsearch.util.RemoteModelTestUtils;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TASK_RETRIES;
 import static org.opensearch.neuralsearch.util.TestUtils.MAX_TIME_OUT_INTERVAL;
 import static org.opensearch.neuralsearch.util.TestUtils.ML_PLUGIN_SYSTEM_INDEX_PREFIX;
@@ -749,7 +748,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final QueryBuilder rescorer,
         final int resultSize
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, Map.of());
+        return search(index, queryBuilder, rescorer, resultSize, Map.of(), null);
     }
 
     /**
@@ -768,9 +767,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         final QueryBuilder queryBuilder,
         final QueryBuilder rescorer,
         final int resultSize,
-        final Map<String, String> requestParams
+        final Map<String, String> requestParams,
+        final List<Integer> preferenceShards
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, null);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, null, preferenceShards);
     }
 
     @SneakyThrows
@@ -780,9 +780,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         QueryBuilder rescorer,
         int resultSize,
         Map<String, String> requestParams,
-        List<Object> aggs
+        List<Object> aggs,
+        final List<Integer> preferenceShards
     ) {
-        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null, 0);
+        return search(index, queryBuilder, rescorer, resultSize, requestParams, aggs, null, null, false, null, 0, preferenceShards);
     }
 
     @SneakyThrows
@@ -797,7 +798,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         List<SortBuilder<?>> sortBuilders,
         boolean trackScores,
         List<Object> searchAfter,
-        int from
+        int from,
+        final List<Integer> preferenceShards
     ) {
         return search(
             index,
@@ -815,7 +817,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             null,
             null,
             null,
-            null
+            null,
+            preferenceShards
         );
     }
 
@@ -857,7 +860,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Map<String, Object> highlightOptions,
         List<String> preTags,
         List<String> postTags,
-        CollapseContext collapseContext
+        CollapseContext collapseContext,
+        List<Integer> preferenceShards
     ) {
         XContentBuilder builder = XContentFactory.jsonBuilder().startObject();
         builder.field("from", from);
@@ -961,6 +965,14 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
         request.addParameter("allow_partial_search_results", "false");
         request.addParameter("size", Integer.toString(resultSize));
+        if (preferenceShards != null && !preferenceShards.isEmpty()) {
+            StringBuilder shards = new StringBuilder("_shards:");
+            for (Integer shardId : preferenceShards) {
+                shards.append(shardId.toString()).append(",");
+            }
+            shards.delete(shards.length() - 1, shards.length());
+            request.addParameter("preference", shards.toString());
+        }
         if (requestParams != null && !requestParams.isEmpty()) {
             requestParams.forEach(request::addParameter);
         }
@@ -1034,6 +1046,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             highlightOptions,
             null,
             sourceExcludes,
+            null,
             null
         );
     }
@@ -1077,6 +1090,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             0,
             highlightFields,
             highlightOptions,
+            null,
             null,
             null,
             null
@@ -1314,12 +1328,12 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     @SneakyThrows
-    protected void bulkIngest(final String ingestBulkPayload, final String pipeline) {
+    public static void bulkIngest(final String ingestBulkPayload, final String pipeline) {
         bulkIngest(ingestBulkPayload, pipeline, null);
     }
 
     @SneakyThrows
-    protected void bulkIngest(final String ingestBulkPayload, final String pipeline, final String routing) {
+    public static void bulkIngest(final String ingestBulkPayload, final String pipeline, final String routing) {
         Map<String, String> params = new HashMap<>();
         params.put("refresh", "true");
         if (Objects.nonNull(pipeline)) {
@@ -1791,7 +1805,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return xContentBuilder.toString();
     }
 
-    protected static Response makeRequest(
+    public static Response makeRequest(
         RestClient client,
         String method,
         String endpoint,
@@ -1802,7 +1816,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return makeRequest(client, method, endpoint, params, entity, headers, false);
     }
 
-    protected static Response makeRequest(
+    public static Response makeRequest(
         RestClient client,
         String method,
         String endpoint,
@@ -1829,7 +1843,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return client.performRequest(request);
     }
 
-    protected static HttpEntity toHttpEntity(String jsonString) {
+    public static HttpEntity toHttpEntity(String jsonString) {
         return new StringEntity(jsonString, ContentType.APPLICATION_JSON);
     }
 

@@ -67,6 +67,9 @@ def versionsBelow2_19 = versionsBelow2_18 + "2.18"
 def versionsBelow2_20 = versionsBelow2_19 + "2.19"
 def versionsBelow3_0 = versionsBelow2_20 + "2.20"
 def versionsBelow3_1 = versionsBelow3_0 + "3.0"
+def versionsBelow3_2 = versionsBelow3_1 + "3.1"
+def versionsBelow3_3 = versionsBelow3_2 + "3.2"
+def versionsBelow3_4 = versionsBelow3_3 + "3.3"
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
@@ -74,6 +77,8 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         dependsOn "zipBwcPlugin"
     }
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.plugin_bwc_version', ext.neural_search_bwc_version
     systemProperty 'tests.skip_delete_model_index', 'true'
@@ -104,12 +109,28 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
         }
     }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
+        }
+    }
+
+    // Excluding sparse ann nested field tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnNestedIT.*"
+        }
+    }
 }
 
 // Part of rolling upgrade. Upgrades one node of the old cluster to new OpenSearch version with upgraded plugin version
 // This results in a mixed cluster with 2 nodes on the old version and 1 upgraded node.
 task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
     dependsOn rootProject.tasks.assemble
     dependsOn "testAgainstOldCluster"
 
@@ -157,6 +178,20 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
         }
     }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
+        }
+    }
+
+    // Excluding sparse ann nested field tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnNestedIT.*"
+        }
+    }
 }
 
 // Part of rolling upgrade. Upgrades the second node to new OpenSearch version with upgraded plugin version after the
@@ -164,6 +199,8 @@ task testAgainstOneThirdUpgradedCluster(type: StandaloneRestIntegTestTask) {
 task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOneThirdUpgradedCluster"
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
 
     doFirst {
         // This is added to prevent the cluster from getting stuck in yellow state
@@ -208,6 +245,20 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
         }
     }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
+        }
+    }
+
+    // Excluding sparse ann nested field tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnNestedIT.*"
+        }
+    }
 }
 
 // Part of rolling upgrade. Upgrades the third node to new OpenSearch version with upgraded plugin version after the
@@ -215,6 +266,8 @@ task testAgainstTwoThirdsUpgradedCluster(type: StandaloneRestIntegTestTask) {
 task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstTwoThirdsUpgradedCluster"
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
 
     doFirst {
         // This is added to prevent the cluster from getting stuck in yellow state
@@ -258,6 +311,20 @@ task testRollingUpgrade(type: StandaloneRestIntegTestTask) {
     if (ext.neural_search_bwc_version == "3.0.0") {
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.KnnRadialSearchIT.*"
+        }
+    }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnIT.*"
+        }
+    }
+
+    // Excluding sparse ann nested field tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.rolling.SparseAnnNestedIT.*"
         }
     }
 }

@@ -67,6 +67,9 @@ def versionsBelow2_19 = versionsBelow2_18 + "2.18"
 def versionsBelow2_20 = versionsBelow2_19 + "2.19"
 def versionsBelow3_0 = versionsBelow2_20 + "2.20"
 def versionsBelow3_1 = versionsBelow3_0 + "3.0"
+def versionsBelow3_2 = versionsBelow3_1 + "3.1"
+def versionsBelow3_3 = versionsBelow3_2 + "3.2"
+def versionsBelow3_4 = versionsBelow3_3 + "3.3"
 
 // Task to run BWC tests against the old cluster
 task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
@@ -74,6 +77,8 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         dependsOn "zipBwcPlugin"
     }
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
     systemProperty 'tests.rest.bwcsuite_cluster', 'old_cluster'
     systemProperty 'tests.is_old_cluster', 'true'
     systemProperty 'tests.skip_delete_model_index', 'true'
@@ -136,6 +141,20 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
         }
     }
 
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.SparseAnnIT.*"
+        }
+    }
+
+    // Excluding sparse ann nested field tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.SparseAnnNestedIT.*"
+        }
+    }
+
     nonInputProperties.systemProperty('tests.rest.cluster', "${-> testClusters."${baseName}".allHttpSocketURI.join(",")}")
     nonInputProperties.systemProperty('tests.clustername', "${-> testClusters."${baseName}".getName()}")
     systemProperty 'tests.security.manager', 'false'
@@ -146,6 +165,8 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     dependsOn "testAgainstOldCluster"
     dependsOn rootProject.tasks.assemble
     useCluster testClusters."${baseName}"
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
 
     doFirst {
         // This is added to prevent the cluster from getting stuck in yellow state
@@ -217,6 +238,20 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     if (versionsBelow3_1.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.SemanticFieldIT.*"
+        }
+    }
+
+    // Excluding sparse ann tests because we introduce this feature in 3.3
+    if (versionsBelow3_3.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.SparseAnnIT.*"
+        }
+    }
+
+    // Excluding sparse ann nested field tests because we introduce this feature in 3.4
+    if (versionsBelow3_4.any { ext.neural_search_bwc_version.startsWith(it) }){
+        filter {
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.SparseAnnNestedIT.*"
         }
     }
 

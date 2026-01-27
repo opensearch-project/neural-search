@@ -4,7 +4,9 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import com.google.common.annotations.VisibleForTesting;
 import lombok.Getter;
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
@@ -20,6 +22,7 @@ import java.util.Objects;
 /**
  * Bulk scorer for hybrid query
  */
+@Log4j2
 public class HybridBulkScorer extends BulkScorer {
     private static final int SHIFT = 12;
     private static final int WINDOW_SIZE = 1 << SHIFT;
@@ -81,17 +84,17 @@ public class HybridBulkScorer extends BulkScorer {
         return getNextDocIdCandidate(docIds);
     }
 
-    private void scoreWindow(LeafCollector collector, Bits acceptDocs, int min, int max, int[] docIds) throws IOException {
-        // find the first document ID below the maximum threshold to establish the next scoring window boundary
-        int topDoc = -1;
-        for (int docId : docIds) {
-            if (docId < max) {
-                topDoc = docId;
-                break;
-            }
+    @VisibleForTesting
+    public void scoreWindow(LeafCollector collector, Bits acceptDocs, int min, int max, int[] docIds) throws IOException {
+        // find the minimum docId to establish the next scoring window boundary
+        int topDoc = getNextDocIdCandidate(docIds);
+
+        // If minimum docId is >= max, no documents to process in this window
+        if (topDoc >= max) {
+            return;
         }
 
-        final int windowBase = topDoc & ~MASK; // take the next match (at random) and find the window where it belongs
+        final int windowBase = topDoc & ~MASK; // take the least maximum docId and find the window where it belongs
         final int windowMin = Math.max(min, windowBase);
         final int windowMax = Math.min(max, windowBase + WINDOW_SIZE);
         // collect doc ids and scores for this window using leaf collector
@@ -179,13 +182,13 @@ public class HybridBulkScorer extends BulkScorer {
     }
 
     private int getNextDocIdCandidate(final int[] docsIds) {
-        int nextDoc = -1;
-        for (int doc : docsIds) {
-            if (doc != DocIdSetIterator.NO_MORE_DOCS) {
-                nextDoc = Math.max(nextDoc, doc);
+        int minDocIdForNextIteration = DocIdSetIterator.NO_MORE_DOCS;
+        for (int docId : docsIds) {
+            if (docId < minDocIdForNextIteration) {
+                minDocIdForNextIteration = docId;
             }
         }
-        return nextDoc == -1 ? DocIdSetIterator.NO_MORE_DOCS : nextDoc;
+        return minDocIdForNextIteration;
     }
 
     /**

@@ -4,18 +4,16 @@
  */
 package org.opensearch.neuralsearch.sparse.cache;
 
+import com.googlecode.concurrentlinkedhashmap.ConcurrentLinkedHashMap;
 import lombok.extern.log4j.Log4j2;
 import lombok.NonNull;
 
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.Set;
 
 /**
- * Abstract LRU cache implementation for sparse vector caches.
+ * Abstract LRU cache implementation for sparse vector caches using ConcurrentLinkedHashMap.
  * This class provides common functionality for managing eviction of cache entries
- * based on least recently used policy.
+ * based on least recently used policy with high-performance concurrent access.
  *
  * @param <Key> The type of key used for cache entries
  */
@@ -23,18 +21,19 @@ import java.util.Map;
 public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
-     * Map to track access with LRU ordering
-     * We use Map instead of set because only linked hash map supports tracking the access order of items
+     * Concurrent map to track access with LRU ordering
+     * Uses ConcurrentLinkedHashMap for high-performance concurrent access
      */
-    protected final Map<Key, Boolean> accessRecencyMap;
+    protected final ConcurrentLinkedHashMap<Key, Boolean> accessRecencyMap;
 
     protected AbstractLruCache() {
-        this.accessRecencyMap = Collections.synchronizedMap(new LinkedHashMap<>(16, 0.75f, true));
+        this.accessRecencyMap = new ConcurrentLinkedHashMap.Builder<Key, Boolean>().maximumWeightedCapacity(Long.MAX_VALUE).build();
     }
 
     /**
      * Updates access to an item for a specific cache key.
      * This updates the item's position in the LRU order.
+     * Uses ConcurrentLinkedHashMap's high performance operations.
      *
      * @param key The key being accessed
      */
@@ -48,20 +47,18 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Retrieves the least recently used key without affecting its position in the access order.
+     * Uses ConcurrentLinkedHashMap's efficient ascendingKeySetWithLimit() method.
      *
      * @return The least recently used key, or null if the cache is empty
      */
     protected Key getLeastRecentlyUsedItem() {
-        // With accessOrder is true in the LinkedHashMap, the first entry is the least recently used
-        Iterator<Map.Entry<Key, Boolean>> iterator = accessRecencyMap.entrySet().iterator();
-        if (iterator.hasNext()) {
-            return iterator.next().getKey();
-        }
-        return null;
+        Set<Key> keySet = accessRecencyMap.ascendingKeySetWithLimit(1);
+        return keySet.isEmpty() ? null : keySet.iterator().next();
     }
 
     /**
      * Evicts least recently used items from cache until the specified amount of RAM has been freed.
+     * Uses ConcurrentLinkedHashMap for efficient concurrent eviction.
      *
      * @param ramBytesToRelease Number of bytes to evict
      */
@@ -94,6 +91,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Evicts a specific item from the cache.
+     * Uses ConcurrentLinkedHashMap's atomic remove operation.
      *
      * @param key The key to evict
      * @return number of bytes freed, or 0 if the item was not evicted
@@ -108,6 +106,7 @@ public abstract class AbstractLruCache<Key extends LruCacheKey> {
 
     /**
      * Removes all entries for a specific cache key when an index is removed.
+     * Uses ConcurrentLinkedHashMap's concurrent iteration capabilities.
      *
      * @param cacheKey The cache key to remove
      */

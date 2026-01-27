@@ -93,7 +93,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE)
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE),
+            null
         );
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
@@ -124,7 +125,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE)
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE),
+            null
         );
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
@@ -151,7 +153,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE)
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE),
+            null
         );
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
@@ -197,7 +200,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE)
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE),
+            null
         );
 
         List<Object> hitsNestedList = getInnerHitsFromSearchHits(searchResponseAsMap);
@@ -252,7 +256,8 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
             hybridQueryBuilder,
             null,
             10,
-            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString())
+            Map.of("search_pipeline", NORMALIZATION_SEARCH_PIPELINE, "explain", Boolean.TRUE.toString()),
+            null
         );
 
         List<Object> nestedHitsList = getInnerHitsFromSearchHits(searchResponseAsMap);

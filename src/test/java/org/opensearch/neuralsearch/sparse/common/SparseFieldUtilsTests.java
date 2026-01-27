@@ -12,10 +12,13 @@ import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -27,6 +30,7 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
 
     private static final String TEST_INDEX_NAME = "test_index";
     private static final String TEST_SPARSE_FIELD_NAME = "test_sparse_field";
+    private static final String TEST_PARENT_FIELD_NAME = "test_parent_field";
 
     @Mock
     private IndexMetadata indexMetadata;
@@ -110,6 +114,75 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         assertEquals(Set.of(TEST_SPARSE_FIELD_NAME), SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService));
     }
 
+    public void testGetSparseAnnFields_whenNestedSeismicField_thenReturnField() {
+        // Setup mock cluster service with nested seismic field
+        Map<String, Object> properties = createNestedFieldMappingProperties(
+            true,
+            TEST_PARENT_FIELD_NAME,
+            Collections.singletonList(TEST_SPARSE_FIELD_NAME)
+        );
+        configureIndexMappingProperties(properties);
+
+        assertEquals(
+            Set.of(TEST_PARENT_FIELD_NAME + "." + TEST_SPARSE_FIELD_NAME),
+            SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService)
+        );
+    }
+
+    public void testGetSparseAnnFields_whenNestedSeismicField_andExceedMapDepth_thenThrowException() {
+        // Setup mock cluster service with deeply nested seismic field that exceeds maxDepth
+        Map<String, Object> properties = createNestedFieldMappingProperties(
+            true,
+            TEST_PARENT_FIELD_NAME,
+            Collections.singletonList(TEST_SPARSE_FIELD_NAME)
+        );
+        configureIndexMappingProperties(properties);
+
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> {
+            SparseFieldUtils.getSparseAnnFields(TEST_INDEX_NAME, clusterService, 1);
+        });
+
+        assertTrue(exception.getMessage().contains("exceeds maximum mapping depth limit"));
+    }
+
+    public void testGetMaxDepth_whenNullIndex_thenReturnDefaultDepth() {
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(null, clusterService));
+    }
+
+    public void testGetMaxDepth_whenNullClusterService_thenReturnDefaultDepth() {
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, null));
+    }
+
+    public void testGetMaxDepth_whenIndexNotFound_thenReturnDefaultDepth() {
+        when(metadata.index(TEST_INDEX_NAME)).thenReturn(null);
+
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, clusterService));
+    }
+
+    public void testGetMaxDepth_whenCustomDepthConfigured_thenReturnCustomDepth() {
+        long customDepth = 50L;
+        Settings settings = Settings.builder().put(MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getKey(), customDepth).build();
+
+        when(indexMetadata.getSettings()).thenReturn(settings);
+
+        assertEquals(customDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, clusterService));
+    }
+
+    public void testGetMaxDepth_whenNoDepthConfigured_thenReturnDefaultDepth() {
+        Settings settings = Settings.builder().build();
+        when(indexMetadata.getSettings()).thenReturn(settings);
+
+        long defaultDepth = MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.getDefault(Settings.EMPTY);
+
+        assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, clusterService));
+    }
+
     private void configureSparseIndexSetting(boolean isSparseIndex) {
         Settings settings = Settings.builder().put("index.sparse", isSparseIndex).build();
         when(indexMetadata.getSettings()).thenReturn(settings);
@@ -119,5 +192,20 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         MappingMetadata mappingMetadata = new MappingMetadata("_doc", properties);
         configureSparseIndexSetting(true);
         when(indexMetadata.mapping()).thenReturn(mappingMetadata);
+    }
+
+    private Map<String, Object> createNestedFieldMappingProperties(boolean isSeismicField, String parentField, List<String> sparseFields) {
+        Map<String, Object> properties = new HashMap<>();
+        Map<String, Object> nestedFieldMapping = new HashMap<>();
+        Map<String, Object> sparseFieldMapping = new HashMap<>();
+        for (String sparseField : sparseFields) {
+            Map<String, Object> sparseFieldProperties = new HashMap<>();
+            sparseFieldProperties.put("type", isSeismicField ? "sparse_vector" : "rank_features");
+
+            sparseFieldMapping.put(sparseField, sparseFieldProperties);
+        }
+        nestedFieldMapping.put("properties", sparseFieldMapping);
+        properties.put("properties", Map.of(parentField, nestedFieldMapping));
+        return properties;
     }
 }
