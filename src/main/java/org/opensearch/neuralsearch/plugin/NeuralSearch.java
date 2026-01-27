@@ -144,6 +144,8 @@ import org.opensearch.neuralsearch.transport.NeuralSparseWarmupTransportAction;
 
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineServiceUtil;
+import org.opensearch.neuralsearch.search.HybridQuerySearchRequestFilter;
+import org.opensearch.action.support.ActionFilter;
 import org.opensearch.plugins.ActionPlugin;
 import org.opensearch.plugins.EnginePlugin;
 import org.opensearch.plugins.ExtensiblePlugin;
@@ -504,5 +506,13 @@ public class NeuralSearch extends Plugin
     @Override
     public List<QueryCollectorContextSpecFactory> getCollectorContextSpecFactories() {
         return List.of(new HybridQueryCollectorContextSpecFactory());
+    }
+
+    /**
+     * Register action filters to intercept search requests.
+     */
+    @Override
+    public List<ActionFilter> getActionFilters() {
+        return List.of(new HybridQuerySearchRequestFilter());
     }
 }

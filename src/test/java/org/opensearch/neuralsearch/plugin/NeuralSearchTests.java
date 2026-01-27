@@ -34,8 +34,10 @@ import org.opensearch.indices.IndicesService;
 import org.opensearch.indices.breaker.BreakerSettings;
 import org.opensearch.ingest.IngestService;
 import org.opensearch.ingest.Processor;
+import org.opensearch.action.support.ActionFilter;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
+import org.opensearch.neuralsearch.search.HybridQuerySearchRequestFilter;
 import org.opensearch.neuralsearch.processor.NeuralQueryEnricherProcessor;
 import org.opensearch.neuralsearch.processor.NeuralSparseTwoPhaseProcessor;
 import org.opensearch.neuralsearch.processor.NormalizationProcessor;
@@ -370,5 +372,13 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         Optional<CodecServiceFactory> result = plugin.getCustomCodecServiceFactory(indexSettings);
 
         assertFalse(result.isPresent());
+    }
+
+    public void testGetActionFilters_shouldReturnHybridQuerySearchRequestFilter() {
+        List<ActionFilter> actionFilters = plugin.getActionFilters();
+
+        assertNotNull(actionFilters);
+        assertEquals(1, actionFilters.size());
+        assertTrue(actionFilters.get(0) instanceof HybridQuerySearchRequestFilter);
     }
 }
