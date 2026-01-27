@@ -46,6 +46,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 public class HybridSearchCollectorResultUtil {
     private final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO;
     private final HybridSearchCollector hybridSearchCollector;
+    private static final SortField[] DEFAULT_SORT_FIELDS = new SortField[] { new SortField(null, SortField.Type.SCORE) };
 
     /**
      * This method merges topDocs from multiple segments of a shard.
@@ -106,7 +107,7 @@ public class HybridSearchCollectorResultUtil {
                 collapseField,
                 totalHits,
                 new FieldDoc[0],
-                sortFields == null ? new SortField[] { new SortField(null, SortField.Type.SCORE) } : sortFields,
+                sortFields == null ? DEFAULT_SORT_FIELDS : sortFields,
                 new Object[0]
             );
         }
@@ -115,20 +116,13 @@ public class HybridSearchCollectorResultUtil {
         // this is workaround for current core behaviour, for single shard fetch phase is executed
         // right after query phase and processors are called after actual fetch is done
         // find any valid doc Id, or set it to -1 if there is not a single match
-        int delimiterDocId = collapseTopFieldDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
-            .map(topFieldDoc -> topFieldDoc.scoreDocs)
-            .filter(scoreDoc -> scoreDoc.length > 0)
-            .map(scoreDoc -> scoreDoc[0].doc)
-            .findFirst()
-            .orElse(-1);
+        int delimiterDocId = findDelimiterDocId(collapseTopFieldDocs);
         if (delimiterDocId == -1) {
             return new CollapseTopFieldDocs(
                 collapseField,
                 totalHits,
                 new FieldDoc[0],
-                sortFields == null ? new SortField[] { new SortField(null, SortField.Type.SCORE) } : sortFields,
+                sortFields == null ? DEFAULT_SORT_FIELDS : sortFields,
                 new Object[0]
             );
         }
@@ -172,31 +166,16 @@ public class HybridSearchCollectorResultUtil {
 
     private TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
         if (Objects.isNull(topFieldDocs)) {
-            return new TopFieldDocs(
-                totalHits,
-                new FieldDoc[0],
-                sortFields == null ? new SortField[] { new SortField(null, SortField.Type.SCORE) } : sortFields
-            );
+            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields == null ? DEFAULT_SORT_FIELDS : sortFields);
         }
 
         // for a single shard case we need to do score processing at coordinator level.
         // this is workaround for current core behaviour, for single shard fetch phase is executed
         // right after query phase and processors are called after actual fetch is done
         // find any valid doc Id, or set it to -1 if there is not a single match
-        int delimiterDocId = topFieldDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
-            .map(topFieldDoc -> topFieldDoc.scoreDocs)
-            .filter(scoreDoc -> scoreDoc.length > 0)
-            .map(scoreDoc -> scoreDoc[0].doc)
-            .findFirst()
-            .orElse(-1);
+        int delimiterDocId = findDelimiterDocId(topFieldDocs);
         if (delimiterDocId == -1) {
-            return new TopFieldDocs(
-                totalHits,
-                new FieldDoc[0],
-                sortFields == null ? new SortField[] { new SortField(null, SortField.Type.SCORE) } : sortFields
-            );
+            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields == null ? DEFAULT_SORT_FIELDS : sortFields);
         }
 
         // format scores using following template:
@@ -264,14 +243,7 @@ public class HybridSearchCollectorResultUtil {
         // this is workaround for current core behaviour, for single shard fetch phase is executed
         // right after query phase and processors are called after actual fetch is done
         // find any valid doc Id, or set it to -1 if there is not a single match
-        int delimiterDocId = topDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
-            .map(topDoc -> topDoc.scoreDocs)
-            .filter(scoreDoc -> scoreDoc.length > 0)
-            .map(scoreDoc -> scoreDoc[0].doc)
-            .findFirst()
-            .orElse(-1);
+        int delimiterDocId = findDelimiterDocId(topDocs);
         if (delimiterDocId == -1) {
             return new TopDocs(totalHits, scoreDocs);
         }
@@ -299,6 +271,17 @@ public class HybridSearchCollectorResultUtil {
         scoreDocs = result.stream().map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
 
         return new TopDocs(totalHits, scoreDocs);
+    }
+
+    private int findDelimiterDocId(List<? extends TopDocs> topDocs) {
+        return topDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
+            .map(topDoc -> topDoc.scoreDocs)
+            .filter(scoreDoc -> scoreDoc.length > 0)
+            .map(scoreDoc -> scoreDoc[0].doc)
+            .findFirst()
+            .orElse(-1);
     }
 
     /**
