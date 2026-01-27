@@ -4,8 +4,13 @@
  */
 package org.opensearch.neuralsearch.grpc;
 
+import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.buildSearchRequest;
+import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createKnnQueryContainer;
+import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createMatchAllQueryContainer;
+import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createMatchQueryContainer;
+import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createTermQueryContainer;
+
 import java.util.Locale;
-import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -15,19 +20,13 @@ import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.protobufs.BoolQuery;
-import org.opensearch.protobufs.FieldValue;
 import org.opensearch.protobufs.HybridQuery;
-import org.opensearch.protobufs.MatchAllQuery;
-import org.opensearch.protobufs.MatchQuery;
 import org.opensearch.protobufs.QueryContainer;
 import org.opensearch.protobufs.SearchRequest;
-import org.opensearch.protobufs.SearchRequestBody;
 import org.opensearch.protobufs.SearchResponse;
-import org.opensearch.protobufs.TermQuery;
 import org.opensearch.protobufs.services.SearchServiceGrpc;
 
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.StatusRuntimeException;
 import lombok.SneakyThrows;
 
@@ -55,6 +54,8 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     private static final String TEST_TITLE_FIELD_NAME = "title";
     private static final String TEST_STATUS_FIELD_NAME = "status";
     private static final String TEST_CATEGORY_FIELD_NAME = "category";
+    private static final String TEST_VECTOR_FIELD_NAME = "embedding";
+    private static final int TEST_VECTOR_DIMENSION = 3;
 
     private ManagedChannel grpcChannel;
 
@@ -66,45 +67,13 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         // Set up test index with diverse test data
         initializeIndexIfNotExist(TEST_INDEX_NAME);
 
-        // Create gRPC channel for tests
-        grpcChannel = createGrpcChannel();
+        // Create gRPC channel for tests using the shared helper
+        grpcChannel = GrpcTestHelper.createGrpcChannel();
     }
 
     @After
     public void tearDownGrpc() throws Exception {
-        if (grpcChannel != null && !grpcChannel.isShutdown()) {
-            grpcChannel.shutdown();
-            grpcChannel.awaitTermination(5, TimeUnit.SECONDS);
-        }
-    }
-
-    /**
-     * Gets the gRPC server address from cluster configuration.
-     * gRPC port is typically HTTP port + 200 (e.g., 9200 -> 9400) or configured via aux.transport.transport-grpc.port
-     */
-    protected String getGrpcHost() {
-        // Use 127.0.0.1 directly to match OpenSearch gRPC bind address
-        return System.getProperty("tests.grpc.host", "127.0.0.1");
-    }
-
-    /**
-     * Gets the gRPC port. Defaults to HTTP port + 200 (e.g., 9200 -> 9400).
-     */
-    protected int getGrpcPort() {
-        // gRPC port is typically HTTP port + 200 (default range 9400-9500)
-        // Can be overridden via system property
-        return Integer.parseInt(System.getProperty("tests.grpc.port", "9400"));
-    }
-
-    /**
-     * Creates a gRPC channel connected to the cluster.
-     */
-    protected ManagedChannel createGrpcChannel() {
-        String target = getGrpcHost() + ":" + getGrpcPort();
-        logger.info("Creating gRPC channel to target: {}", target);
-        ManagedChannel channel = ManagedChannelBuilder.forTarget(target).usePlaintext().build();
-        logger.info("gRPC channel created, state: {}", channel.getState(true));
-        return channel;
+        GrpcTestHelper.shutdownChannel(grpcChannel);
     }
 
     // ===========================================================================================
@@ -117,18 +86,15 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testGrpcConnectivityWithMatchAllQuery() {
-        String host = getGrpcHost();
-        int port = getGrpcPort();
+        String host = GrpcTestHelper.getGrpcHost();
+        int port = GrpcTestHelper.getGrpcPort();
         logger.info("Testing gRPC connectivity to {}:{}", host, port);
 
         try {
             QueryContainer query = createMatchAllQueryContainer();
             SearchRequest request = buildSearchRequest(TEST_INDEX_NAME, query);
 
-            SearchServiceGrpc.SearchServiceBlockingStub stub = SearchServiceGrpc.newBlockingStub(grpcChannel)
-                .withDeadlineAfter(10, TimeUnit.SECONDS);
-
-            SearchResponse response = stub.search(request);
+            SearchResponse response = GrpcTestHelper.executeSearch(grpcChannel, request, 10);
 
             assertNotNull("Search response should not be null", response);
             logger.info("gRPC connection successful to {}:{}", host, port);
@@ -144,7 +110,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testBasicHybridQueryReturnsResults() {
-        // Query for documents containing "search" - should match doc1 and doc2
         HybridQuery hybridQuery = HybridQuery.newBuilder()
             .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "search"))
             .addQueries(createMatchAllQueryContainer())
@@ -154,7 +119,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         assertNotNull("Search response should not be null", response);
         assertTrue("Response should have hits", response.getHits().getHitsCount() > 0);
-        // Hybrid query should return results - exact count depends on scoring
         logger.info("Hybrid query returned {} hits", response.getHits().getHitsCount());
     }
 
@@ -164,7 +128,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testHybridQueryCombinesMultipleSubQueries() {
-        // Query for "machine" OR "vector" - should find doc1 (machine learning) and doc3 (vector database)
         HybridQuery hybridQuery = HybridQuery.newBuilder()
             .addQueries(createTermQueryContainer(TEST_TEXT_FIELD_NAME, "machine"))
             .addQueries(createTermQueryContainer(TEST_TEXT_FIELD_NAME, "vector"))
@@ -186,8 +149,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testHybridQueryWithFilterRestrictsResults() {
-        // Match all documents but filter to only "active" status
-        // doc1 and doc2 are active, doc3 and doc4 are inactive
         HybridQuery hybridQuery = HybridQuery.newBuilder()
             .addQueries(createMatchAllQueryContainer())
             .setFilter(createTermQueryContainer(TEST_STATUS_FIELD_NAME, "active"))
@@ -205,7 +166,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testHybridQueryWithFilterNoMatches() {
-        // Match all documents but filter to non-existent status
         HybridQuery hybridQuery = HybridQuery.newBuilder()
             .addQueries(createMatchAllQueryContainer())
             .setFilter(createTermQueryContainer(TEST_STATUS_FIELD_NAME, "nonexistent"))
@@ -222,7 +182,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     public void testHybridQueryWithBoolFilter() {
-        // Match all but filter to: status=active AND category=tech
         BoolQuery boolFilter = BoolQuery.newBuilder()
             .addMust(createTermQueryContainer(TEST_STATUS_FIELD_NAME, "active"))
             .addMust(createTermQueryContainer(TEST_CATEGORY_FIELD_NAME, "tech"))
@@ -236,7 +195,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         SearchResponse response = executeHybridSearch(hybridQuery);
 
         assertNotNull("Search response should not be null", response);
-        // Bool filter should work and return results
         logger.info("Bool filter test returned {} hits", response.getHits().getHitsCount());
     }
 
@@ -289,7 +247,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         SearchResponse response = executeHybridSearch(hybridQuery);
 
         assertNotNull("Search response should not be null", response);
-        // Should find active docs matching "search" or "learning"
         assertTrue("Should return matching active documents", response.getHits().getHitsCount() > 0);
     }
 
@@ -311,7 +268,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         SearchResponse response = executeHybridSearch(hybridQuery);
 
         assertNotNull("Search response should not be null", response);
-        // Should return results with mixed query types
         assertTrue("Should return results", response.getHits().getHitsCount() > 0);
         logger.info("Mixed query types test returned {} hits", response.getHits().getHitsCount());
     }
@@ -335,6 +291,46 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         assertTrue("Should execute with max sub-queries", response.getHits().getHitsCount() > 0);
     }
 
+    /**
+     * Test hybrid query with lexical (Match) + neural/vector (KNN) sub-queries.
+     * This demonstrates combining traditional text search with vector similarity search.
+     */
+    @SneakyThrows
+    public void testHybridQueryWithLexicalAndKnnSubQueries() {
+        // Query vector close to doc1's embedding [0.1, 0.2, 0.3]
+        float[] queryVector = new float[] { 0.15f, 0.25f, 0.35f };
+
+        HybridQuery hybridQuery = HybridQuery.newBuilder()
+            .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "neural search"))
+            .addQueries(createKnnQueryContainer(TEST_VECTOR_FIELD_NAME, queryVector, 3))
+            .build();
+
+        SearchResponse response = executeHybridSearch(hybridQuery);
+
+        assertNotNull("Search response should not be null", response);
+        assertTrue("Should return results from both lexical and KNN queries", response.getHits().getHitsCount() > 0);
+        logger.info("Lexical + KNN hybrid query returned {} hits", response.getHits().getHitsCount());
+    }
+
+    /**
+     * Test hybrid query with lexical + KNN + filter to demonstrate full hybrid search capability.
+     */
+    @SneakyThrows
+    public void testHybridQueryWithLexicalKnnAndFilter() {
+        float[] queryVector = new float[] { 0.4f, 0.5f, 0.6f };
+
+        HybridQuery hybridQuery = HybridQuery.newBuilder()
+            .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "search"))
+            .addQueries(createKnnQueryContainer(TEST_VECTOR_FIELD_NAME, queryVector, 4))
+            .setFilter(createTermQueryContainer(TEST_STATUS_FIELD_NAME, "active"))
+            .build();
+
+        SearchResponse response = executeHybridSearch(hybridQuery);
+
+        assertNotNull("Search response should not be null", response);
+        logger.info("Lexical + KNN + filter hybrid query returned {} hits", response.getHits().getHitsCount());
+    }
+
     // ===========================================================================================
     // ERROR HANDLING TESTS - Verify proper gRPC error codes for invalid requests
     // ===========================================================================================
@@ -345,7 +341,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testErrorExceedsMaxSubQueries() {
         HybridQuery.Builder builder = HybridQuery.newBuilder();
-        // Add 6 sub-queries (max is 5)
         for (int i = 0; i < 6; i++) {
             builder.addQueries(createTermQueryContainer(TEST_TEXT_FIELD_NAME, "term" + i));
         }
@@ -415,10 +410,8 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     private SearchResponse executeHybridSearch(HybridQuery hybridQuery) {
         QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
-        SearchRequest request = buildSearchRequest(TEST_INDEX_NAME, queryContainer);
-        SearchServiceGrpc.SearchServiceBlockingStub stub = SearchServiceGrpc.newBlockingStub(grpcChannel)
-            .withDeadlineAfter(30, TimeUnit.SECONDS);
-        return stub.search(request);
+        SearchRequest request = GrpcTestHelper.buildSearchRequest(TEST_INDEX_NAME, queryContainer);
+        return GrpcTestHelper.executeSearch(grpcChannel, request);
     }
 
     /**
@@ -426,10 +419,8 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     private SearchResponse executeHybridSearch(HybridQuery hybridQuery, int size) {
         QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
-        SearchRequest request = buildSearchRequest(TEST_INDEX_NAME, queryContainer, size);
-        SearchServiceGrpc.SearchServiceBlockingStub stub = SearchServiceGrpc.newBlockingStub(grpcChannel)
-            .withDeadlineAfter(30, TimeUnit.SECONDS);
-        return stub.search(request);
+        SearchRequest request = GrpcTestHelper.buildSearchRequest(TEST_INDEX_NAME, queryContainer, size);
+        return GrpcTestHelper.executeSearch(grpcChannel, request);
     }
 
     // ===========================================================================================
@@ -440,10 +431,10 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      * Initialize test index with mappings and diverse test documents.
      *
      * Test Documents:
-     * - doc1: text="neural search for machine learning", title="ML Guide", status=active, category=tech
-     * - doc2: text="semantic search with transformers", title="NLP Tutorial", status=active, category=science
-     * - doc3: text="vector database for embeddings", title="DB Overview", status=inactive, category=tech
-     * - doc4: text="traditional keyword search methods", title="Search Basics", status=inactive, category=education
+     * - doc1: text="neural search for machine learning", status=active, category=tech, embedding=[0.1, 0.2, 0.3]
+     * - doc2: text="semantic search with transformers", status=active, category=science, embedding=[0.4, 0.5, 0.6]
+     * - doc3: text="vector database for embeddings", status=inactive, category=tech, embedding=[0.7, 0.8, 0.9]
+     * - doc4: text="traditional keyword search methods", status=inactive, category=education, embedding=[0.2, 0.3, 0.4]
      */
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
@@ -453,17 +444,20 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         String indexConfiguration = String.format(
             Locale.ROOT,
-            "{\"settings\":{\"number_of_shards\":1,\"number_of_replicas\":0},"
+            "{\"settings\":{\"number_of_shards\":1,\"number_of_replicas\":0,\"index.knn\":true},"
                 + "\"mappings\":{\"properties\":{"
                 + "\"%s\":{\"type\":\"text\",\"analyzer\":\"standard\"},"
                 + "\"%s\":{\"type\":\"text\"},"
                 + "\"%s\":{\"type\":\"keyword\"},"
-                + "\"%s\":{\"type\":\"keyword\"}"
+                + "\"%s\":{\"type\":\"keyword\"},"
+                + "\"%s\":{\"type\":\"knn_vector\",\"dimension\":%d,\"method\":{\"name\":\"hnsw\",\"space_type\":\"l2\",\"engine\":\"lucene\"}}"
                 + "}}}",
             TEST_TEXT_FIELD_NAME,
             TEST_TITLE_FIELD_NAME,
             TEST_STATUS_FIELD_NAME,
-            TEST_CATEGORY_FIELD_NAME
+            TEST_CATEGORY_FIELD_NAME,
+            TEST_VECTOR_FIELD_NAME,
+            TEST_VECTOR_DIMENSION
         );
 
         createIndex(indexName, indexConfiguration);
@@ -488,47 +482,44 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     private void indexTestDocuments(String indexName) {
-        // Document 1: Active tech document about ML
         String doc1 = String.format(
             Locale.ROOT,
-            "{\"%s\":\"neural search for machine learning applications\"," + "\"%s\":\"ML Guide\",\"%s\":\"active\",\"%s\":\"tech\"}",
+            "{\"%s\":\"neural search for machine learning applications\",\"%s\":\"ML Guide\",\"%s\":\"active\",\"%s\":\"tech\",\"%s\":[0.1,0.2,0.3]}",
             TEST_TEXT_FIELD_NAME,
             TEST_TITLE_FIELD_NAME,
             TEST_STATUS_FIELD_NAME,
-            TEST_CATEGORY_FIELD_NAME
+            TEST_CATEGORY_FIELD_NAME,
+            TEST_VECTOR_FIELD_NAME
         );
 
-        // Document 2: Active science document about NLP
         String doc2 = String.format(
             Locale.ROOT,
-            "{\"%s\":\"semantic search with transformers and embeddings\","
-                + "\"%s\":\"NLP Tutorial\",\"%s\":\"active\",\"%s\":\"science\"}",
+            "{\"%s\":\"semantic search with transformers and embeddings\",\"%s\":\"NLP Tutorial\",\"%s\":\"active\",\"%s\":\"science\",\"%s\":[0.4,0.5,0.6]}",
             TEST_TEXT_FIELD_NAME,
             TEST_TITLE_FIELD_NAME,
             TEST_STATUS_FIELD_NAME,
-            TEST_CATEGORY_FIELD_NAME
+            TEST_CATEGORY_FIELD_NAME,
+            TEST_VECTOR_FIELD_NAME
         );
 
-        // Document 3: Inactive tech document about vector DB
         String doc3 = String.format(
             Locale.ROOT,
-            "{\"%s\":\"vector database for storing embeddings efficiently\","
-                + "\"%s\":\"DB Overview\",\"%s\":\"inactive\",\"%s\":\"tech\"}",
+            "{\"%s\":\"vector database for storing embeddings efficiently\",\"%s\":\"DB Overview\",\"%s\":\"inactive\",\"%s\":\"tech\",\"%s\":[0.7,0.8,0.9]}",
             TEST_TEXT_FIELD_NAME,
             TEST_TITLE_FIELD_NAME,
             TEST_STATUS_FIELD_NAME,
-            TEST_CATEGORY_FIELD_NAME
+            TEST_CATEGORY_FIELD_NAME,
+            TEST_VECTOR_FIELD_NAME
         );
 
-        // Document 4: Inactive education document about traditional search
         String doc4 = String.format(
             Locale.ROOT,
-            "{\"%s\":\"traditional keyword search methods and techniques\","
-                + "\"%s\":\"Search Basics\",\"%s\":\"inactive\",\"%s\":\"education\"}",
+            "{\"%s\":\"traditional keyword search methods and techniques\",\"%s\":\"Search Basics\",\"%s\":\"inactive\",\"%s\":\"education\",\"%s\":[0.2,0.3,0.4]}",
             TEST_TEXT_FIELD_NAME,
             TEST_TITLE_FIELD_NAME,
             TEST_STATUS_FIELD_NAME,
-            TEST_CATEGORY_FIELD_NAME
+            TEST_CATEGORY_FIELD_NAME,
+            TEST_VECTOR_FIELD_NAME
         );
 
         ingestDocument(indexName, doc1, "1");
@@ -538,54 +529,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         // Refresh to make documents searchable
         client().performRequest(new Request("POST", "/" + indexName + "/_refresh"));
-    }
-
-    // ===========================================================================================
-    // SEARCH REQUEST BUILDERS
-    // ===========================================================================================
-
-    /**
-     * Build a SearchRequest from index name and query container with default size.
-     */
-    private SearchRequest buildSearchRequest(String index, QueryContainer query) {
-        return buildSearchRequest(index, query, 10);
-    }
-
-    /**
-     * Build a SearchRequest from index name, query container, and size.
-     */
-    private SearchRequest buildSearchRequest(String index, QueryContainer query, int size) {
-        return SearchRequest.newBuilder()
-            .addIndex(index)
-            .setSearchRequestBody(SearchRequestBody.newBuilder().setQuery(query).setSize(size).build())
-            .build();
-    }
-
-    // ===========================================================================================
-    // QUERY CONTAINER BUILDERS
-    // ===========================================================================================
-
-    /**
-     * Create a TermQuery QueryContainer (exact match on keyword fields).
-     */
-    private QueryContainer createTermQueryContainer(String field, String value) {
-        TermQuery termQuery = TermQuery.newBuilder().setField(field).setValue(FieldValue.newBuilder().setString(value).build()).build();
-        return QueryContainer.newBuilder().setTerm(termQuery).build();
-    }
-
-    /**
-     * Create a MatchQuery QueryContainer (analyzed text search).
-     */
-    private QueryContainer createMatchQueryContainer(String field, String query) {
-        MatchQuery matchQuery = MatchQuery.newBuilder().setField(field).setQuery(FieldValue.newBuilder().setString(query).build()).build();
-        return QueryContainer.newBuilder().setMatch(matchQuery).build();
-    }
-
-    /**
-     * Create a MatchAll QueryContainer.
-     */
-    private QueryContainer createMatchAllQueryContainer() {
-        return QueryContainer.newBuilder().setMatchAll(MatchAllQuery.newBuilder().build()).build();
     }
 
     @Override
