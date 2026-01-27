@@ -42,7 +42,7 @@ public class HybridCollectorResultsUtilParams {
             this.docValueFormats = new DocValueFormat[] { DocValueFormat.RAW };
         }
 
-        if (isSortEnabled || isCollapseEnabled) {
+        if ((isSortEnabled || isCollapseEnabled) && sortFields == null) {
             this.sortFields = DEFAULT_SORT_FIELDS;
         }
         this.rescoreContexts = searchContext.rescore();
