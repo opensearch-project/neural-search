@@ -4,4 +4,13 @@ grant {
     permission java.lang.RuntimePermission "accessDeclaredMembers";
     permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
     permission java.lang.RuntimePermission "setContextClassLoader";
+
+    // gRPC Netty transport permissions
+    // These permissions are required for gRPC/Netty to initialize properly, especially on Windows
+    // where WEPollSelectorImpl creates temporary files during pipe initialization.
+    // On Linux (epoll), these permissions are not strictly required but don't hurt.
+    permission java.io.FilePermission "${java.io.tmpdir}/-", "read,write,delete";
+    permission java.net.SocketPermission "*", "connect,accept,resolve";
+    permission java.lang.RuntimePermission "modifyThread";
+    permission java.lang.RuntimePermission "modifyThreadGroup";
 };
