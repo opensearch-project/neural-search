@@ -1164,6 +1164,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
         when(searchContext.sort()).thenReturn(sortAndFormats);
+        when(searchContext.minimumScore()).thenReturn(null);
 
         // Setup collapse context - THIS IS KEY
         CollapseContext collapseContext = mock(CollapseContext.class);
