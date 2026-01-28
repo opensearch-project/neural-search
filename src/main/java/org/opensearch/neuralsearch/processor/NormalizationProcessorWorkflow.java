@@ -67,6 +67,7 @@ public class NormalizationProcessorWorkflow {
         List<QuerySearchResult> querySearchResults = request.getQuerySearchResults();
         Optional<FetchSearchResult> fetchSearchResultOptional = request.getFetchSearchResultOptional();
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
+        Float minScore = getMinScore(request);
 
         // pre-process data
         log.debug("Pre-process query results");
@@ -94,6 +95,7 @@ public class NormalizationProcessorWorkflow {
             .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
             .isSingleShard(isSingleShard)
+            .minScore(minScore)
             .build();
 
         // combine
@@ -114,6 +116,24 @@ public class NormalizationProcessorWorkflow {
     private boolean getIsSingleShard(final NormalizationProcessorWorkflowExecuteRequest request) {
         final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
         return searchPhaseContext.getNumShards() == 1 || request.fetchSearchResultOptional.isEmpty() == false;
+    }
+
+    private Float getMinScore(final NormalizationProcessorWorkflowExecuteRequest request) {
+        final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
+        Float minScore = null;
+        if (searchPhaseContext.getRequest() != null && searchPhaseContext.getRequest().source() != null) {
+            minScore = searchPhaseContext.getRequest().source().minScore();
+            validateMinScore(minScore);
+        }
+        return minScore;
+    }
+
+    private void validateMinScore(final Float minScore) {
+        if (Objects.nonNull(minScore) && (minScore.isInfinite() || minScore.isNaN())) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "min_score is invalid : [%f], must neither be Infinity nor NaN", minScore)
+            );
+        }
     }
 
     /**
@@ -155,10 +175,12 @@ public class NormalizationProcessorWorkflow {
                 .singleShard(isSingleShard)
                 .build();
             Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(explainDTO);
+            Float minScore = getMinScore(request);
             Map<SearchShard, List<ExplanationDetails>> combinationExplain = scoreCombiner.explain(
                 queryTopDocs,
                 request.getCombinationTechnique(),
-                sortForQuery
+                sortForQuery,
+                minScore
             );
             Map<SearchShard, List<CombinedExplanationDetails>> combinedExplanations = new HashMap<>();
             for (Map.Entry<SearchShard, List<ExplanationDetails>> entry : combinationExplain.entrySet()) {

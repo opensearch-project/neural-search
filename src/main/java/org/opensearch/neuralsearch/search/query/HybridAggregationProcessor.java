@@ -23,6 +23,12 @@ public class HybridAggregationProcessor implements AggregationProcessor {
     public void preProcess(SearchContext context) {
         // Simply delegate the call
         delegateAggsProcessor.preProcess(context);
+
+        if (context.minimumScore() != null && isHybridQuery(context.query(), context)) {
+            // unset min_score, so it will not work for when executing sub-queries,
+            // and we will retrieve it from search source to filter out final results after normalization and combination
+            context.minimumScore(Float.NEGATIVE_INFINITY);
+        }
     }
 
     @Override

@@ -21,6 +21,9 @@ import java.util.Map;
 
 import lombok.SneakyThrows;
 
+import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
+import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
+
 public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     private static final String COLLAPSE_TEST_INDEX = "collapse-test-index";
@@ -51,6 +54,10 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_thenSuccessful();
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
+
+        // For min_score=0.5005f, it filters out no docs; for min_score=1.0f, it filters out 1 doc.
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 2, 3);
+        testCollapse_whenE2E_withMinScore_thenSuccessful(1.0f, 1, 2);
     }
 
     public void testCollapse_withMultipleShard_thenSuccessful() {
@@ -59,6 +66,10 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
         testCollapse_whenShardHasNoDocuments_thenSuccessful();
+
+        // For min_score=0.5005f, it filters out no docs; for min_score=1.0f, it filters out 1 doc.
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 2, 3);
+        testCollapse_whenE2E_withMinScore_thenSuccessful(1.0f, 1, 2);
     }
 
     public void testCollapseOnNestedFieldWithInnerHits_withoutReferenceOnGroup_thenSuccessful() {
@@ -331,6 +342,44 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
         String collapseDuplicate = "Chocolate Cake";
         assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
+    }
+
+    private void testCollapse_whenE2E_withMinScore_thenSuccessful(Float minScore, int expectedCollectedHits, int expectedTotalHits) {
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_ITEM, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_CATEGORY, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null,
+            minScore
+        );
+
+        String collapseDuplicate = "Chocolate Cake";
+        assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
+
+        assertEquals(expectedCollectedHits, getHitCount(searchResponse));
+        Map<String, Object> total = getTotalHits(searchResponse);
+        assertNotNull(total.get("value"));
+        assertEquals(expectedTotalHits, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows
