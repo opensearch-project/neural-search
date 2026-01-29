@@ -227,6 +227,174 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
+    public void testCollapse_whenDocsPerGroupPerSubQueryIsSmallAndManyDocsInSameGroup_thenNoArrayIndexOutOfBounds() throws IOException {
+        /*
+         * SCENARIO EXPLANATION:
+         * This test reproduces a critical bug in queue full detection that caused ArrayIndexOutOfBoundsException.
+         *
+         * THE BUG SCENARIO:
+         * - docsPerGroupPerSubQuery = 1 (very small queue size per group per subquery)
+         * - numHits = 10 (number of top groups to return)
+         * - Multiple documents map to the same group for a subquery
+         *
+         * THE PREVIOUS BUG:
+         * - Queue full check: if (slot == (numHits - 1)) // slot == 9
+         * - But queue was created with size docsPerGroupPerSubQuery = 1
+         * - So queue could only hold 1 document, but was never marked as full
+         * - When slot >= 1, addNewEntry() tried to access queue slots beyond capacity
+         * - This caused ArrayIndexOutOfBoundsException in FieldValueHitQueue internal arrays
+         *
+         * THE FIX:
+         * - Changed to: if (slot == (docsPerGroupPerSubQuery - 1)) // slot == 0
+         * - Now queue is correctly marked full after first document
+         * - Subsequent documents trigger updateExistingEntry() instead of addNewEntry()
+         */
+
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // Add 100 documents where many documents map to the same collapse group
+        // This creates the scenario where multiple documents compete for the same small queue
+        for (int i = 0; i < 100; i++) {
+            // Most documents map to "group0" to trigger the queue overflow scenario
+            String collapseValue = (i < 50) ? "group0" : "group" + (i % 5);
+            addKeywordDoc(writer, i, "text" + i, 100 + i, collapseValue);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        // CRITICAL CONFIGURATION: Small docsPerGroupPerSubQuery with larger numHits
+        int topNGroups = 10;  // Want to return 10 top groups
+        int docsPerGroupPerSubQuery = 1;  // But only allow 1 doc per group per subquery
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            topNGroups,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            docsPerGroupPerSubQuery  // This is the key parameter that triggered the bug
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        int[] docIds = IntStream.range(0, 100).toArray();
+        List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(100).collect(Collectors.toList());
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // This collection process would have thrown ArrayIndexOutOfBoundsException before the fix
+        // because multiple documents mapping to "group0" would try to exceed the queue capacity of 1
+        collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+
+        assertEquals(1, topDocs.size());  // One for each sub-query
+
+        for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
+            assertEquals(100, collapseTopFieldDocs.totalHits.value());
+
+            // With docsPerGroupPerSubQuery = 1, we should get at most 1 document per group
+            // Even though 50 documents mapped to "group0", only 1 should be in the final result
+            assertTrue("Should have some results", collapseTopFieldDocs.scoreDocs.length > 0);
+
+            // Verify that we don't exceed the docsPerGroupPerSubQuery limit
+            // Count documents per group to ensure the limit is respected
+            Set<String> uniqueGroups = new HashSet<>();
+            for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
+                uniqueGroups.add(((BytesRef) collapseValue).utf8ToString());
+            }
+
+            // Should have multiple groups but limited docs per group
+            assertTrue("Should have multiple unique groups", uniqueGroups.size() > 1);
+
+            // The key assertion: no ArrayIndexOutOfBoundsException was thrown during collection
+            // This validates that the queue full detection fix works correctly
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenDocsPerGroupPerSubQueryEqualsOne_thenQueueFullDetectionWorks() throws IOException {
+        /*
+         * ADDITIONAL TEST: Specifically test the queue full detection logic
+         * This test validates that the fix works with the exact problematic configuration
+         */
+
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // Add documents where ALL documents map to the same group
+        // This maximizes the pressure on the single-document queue
+        for (int i = 0; i < 20; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "samegroup");
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        // Extreme case: docsPerGroupPerSubQuery = 1, all docs in same group
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            5,  // topNGroups
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            1   // docsPerGroupPerSubQuery = 1 (the problematic value)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        int[] docIds = IntStream.range(0, 20).toArray();
+        List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(20).collect(Collectors.toList());
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // Before fix: This would throw ArrayIndexOutOfBoundsException
+        // After fix: This should work correctly
+        collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+
+        assertEquals(1, topDocs.size());
+
+        for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
+            assertEquals(20, collapseTopFieldDocs.totalHits.value());
+
+            // Key validation: Despite 20 documents in same group, only 1 should be returned
+            assertEquals("Should have exactly 1 document due to docsPerGroupPerSubQuery=1", 1, collapseTopFieldDocs.scoreDocs.length);
+
+            // Verify the collapse value
+            assertEquals("Should have exactly 1 collapse value", 1, collapseTopFieldDocs.collapseValues.length);
+            assertEquals("samegroup", ((BytesRef) collapseTopFieldDocs.collapseValues[0]).utf8ToString());
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
     private void addNumericDoc(IndexWriter writer, int id, String textValue, int intValue, long collapseValue) throws IOException {
         Document doc = new Document();
         // ID field

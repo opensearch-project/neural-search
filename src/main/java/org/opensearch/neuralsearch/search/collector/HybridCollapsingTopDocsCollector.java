@@ -470,7 +470,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 updateMaps(comparators, fieldValueLeafTrackers, compoundScores);
 
                 // Check if the queue is full for this subquery
-                if (slot == (numHits - 1)) {
+                if (slot == (docsPerGroupPerSubQuery - 1)) {
                     boolean[] queueFullArray = queueFullMap.get(groupValue);
                     queueFullArray[subQueryNumber] = true;
                     queueFullMap.put(groupSelector.copyValue(), queueFullArray);
