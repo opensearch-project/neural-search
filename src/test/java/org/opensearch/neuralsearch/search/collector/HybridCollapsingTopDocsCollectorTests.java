@@ -89,7 +89,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             assertEquals(1000, collapseTopFieldDocs.totalHits.value());
-            assertEquals(TOP_N_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
+            assertEquals(DOCS_PER_GROUP_PER_SUBQUERY * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify collapse values
             Set<String> uniqueGroups = new HashSet<>();
@@ -152,7 +152,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             assertEquals(1000, collapseTopFieldDocs.totalHits.value());
-            assertEquals(TOP_N_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
+            assertEquals(DOCS_PER_GROUP_PER_SUBQUERY * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify collapse values
             Set<Long> uniqueGroups = new HashSet<>();
