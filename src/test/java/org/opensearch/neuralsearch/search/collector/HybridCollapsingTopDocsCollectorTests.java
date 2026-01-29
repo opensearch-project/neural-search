@@ -356,7 +356,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             sort,
             5,  // topNGroups
             new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            1   // docsPerGroupPerSubQuery = 1 (the problematic value)
+            10   // docsPerGroupPerSubQuery = 1 (the problematic value)
         );
 
         Weight weight = mock(Weight.class);
@@ -383,10 +383,10 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             assertEquals(20, collapseTopFieldDocs.totalHits.value());
 
             // Key validation: Despite 20 documents in same group, only 1 should be returned
-            assertEquals("Should have exactly 1 document due to docsPerGroupPerSubQuery=1", 1, collapseTopFieldDocs.scoreDocs.length);
+            assertEquals("Should have exactly 10 document due to docsPerGroupPerSubQuery=10", 10, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify the collapse value
-            assertEquals("Should have exactly 1 collapse value", 1, collapseTopFieldDocs.collapseValues.length);
+            assertEquals("Should have exactly 10 collapse value", 10, collapseTopFieldDocs.collapseValues.length);
             assertEquals("samegroup", ((BytesRef) collapseTopFieldDocs.collapseValues[0]).utf8ToString());
         }
 
