@@ -733,6 +733,66 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         testNormalization_withMinScore_thenFail(Float.NaN);
     }
 
+    public void testSearchResultTypes_whenNullInstanceShard_thenHandleGracefully() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+
+        // First shard returns normal results
+        SearchShardTarget searchShardTarget1 = new SearchShardTarget("node", new ShardId("index", "uuid", 0), null, OriginalIndices.NONE);
+        QuerySearchResult normalQuerySearchResult = new QuerySearchResult();
+        normalQuerySearchResult.topDocs(
+            new TopDocsAndMaxScore(
+                new TopDocs(
+                    new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        createStartStopElementForHybridSearchResults(0),
+                        createDelimiterElementForHybridSearchResults(0),
+                        new ScoreDoc(0, 0.5f),
+                        new ScoreDoc(2, 0.3f),
+                        createStartStopElementForHybridSearchResults(0) }
+                ),
+                0.5f
+            ),
+            null
+        );
+        normalQuerySearchResult.setSearchShardTarget(searchShardTarget1);
+        normalQuerySearchResult.setShardIndex(0);
+        querySearchResults.add(normalQuerySearchResult);
+
+        // Second shard returns nullInstance - simulates match_no_docs, empty index, or query rewrite to empty
+        // This is what causes the bug - nullInstance has topDocsAndMaxScore = null (never set)
+        QuerySearchResult nullInstanceResult = QuerySearchResult.nullInstance();
+        SearchShardTarget searchShardTarget2 = new SearchShardTarget("node", new ShardId("index", "uuid", 1), null, OriginalIndices.NONE);
+        nullInstanceResult.setSearchShardTarget(searchShardTarget2);
+        nullInstanceResult.setShardIndex(1);
+        querySearchResults.add(nullInstanceResult);
+
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.from(0);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        when(searchRequest.source()).thenReturn(searchSourceBuilder);
+        when(searchPhaseContext.getNumShards()).thenReturn(2);
+
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.empty())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .searchPhaseContext(searchPhaseContext)
+            .build();
+
+        normalizationProcessorWorkflow.execute(normalizationExecuteDTO);
+
+        // Assert
+        assertNotNull("Query search results should not be null", querySearchResults);
+        assertEquals("Should have 2 query search results", 2, querySearchResults.size());
+    }
+
     private void testNormalization_withMinScore_thenFail(Float minScore) {
         NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())

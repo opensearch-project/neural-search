@@ -64,8 +64,17 @@ public class NormalizationProcessorWorkflow {
      *  combinationTechnique technique for score combination, and nullable rankConstant only used in RRF technique
      */
     public void execute(final NormalizationProcessorWorkflowExecuteRequest request) {
-        List<QuerySearchResult> querySearchResults = request.getQuerySearchResults();
+        List<QuerySearchResult> originalQuerySearchResults = request.getQuerySearchResults();
         Optional<FetchSearchResult> fetchSearchResultOptional = request.getFetchSearchResultOptional();
+
+        // Filter out null instance results early - these occur when:
+        // 1. A shard has no matching documents (match_no_docs)
+        // 2. A shard's query was rewritten to empty
+        // 3. Partial reduce consumed the topDocs during batched shard processing (>512 shards)
+        // We must filter these before any processing because isNull() results have topDocsAndMaxScore = null
+        // and calling topDocs() on them throws IllegalStateException("topDocs already consumed")
+        List<QuerySearchResult> querySearchResults = filterValidResults(originalQuerySearchResults);
+
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
         Float minScore = getMinScore(request);
 
@@ -404,5 +413,20 @@ public class NormalizationProcessorWorkflow {
                 .map(scoreDoc -> scoreDoc.doc)
                 .collect(Collectors.toList());
         return docIds;
+    }
+
+    /**
+     * Filters out null instance results from the query search results.
+     * Null instances occur when:
+     * 1. A shard has no matching documents (match_no_docs)
+     * 2. A shard's query was rewritten to empty
+     * 3. Partial reduce consumed the topDocs during batched shard processing (>512 shards)
+     * @param querySearchResults the list of QuerySearchResult from all shards
+     * @return list containing only valid (non-null) results
+     */
+    private List<QuerySearchResult> filterValidResults(final List<QuerySearchResult> querySearchResults) {
+        return querySearchResults.stream()
+            .filter(searchResult -> Objects.nonNull(searchResult) && !searchResult.isNull())
+            .collect(Collectors.toList());
     }
 }
