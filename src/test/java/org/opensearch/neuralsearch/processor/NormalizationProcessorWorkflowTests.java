@@ -770,13 +770,16 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         nullInstanceResult.setShardIndex(1);
         querySearchResults.add(nullInstanceResult);
 
+        // Third element is an actual null in the list - tests the Objects.nonNull() check
+        querySearchResults.add(null);
+
         SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
         SearchRequest searchRequest = mock(SearchRequest.class);
         SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
         searchSourceBuilder.from(0);
         when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
         when(searchRequest.source()).thenReturn(searchSourceBuilder);
-        when(searchPhaseContext.getNumShards()).thenReturn(2);
+        when(searchPhaseContext.getNumShards()).thenReturn(3);
 
         NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
             .querySearchResults(querySearchResults)
@@ -790,7 +793,7 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
 
         // Assert
         assertNotNull("Query search results should not be null", querySearchResults);
-        assertEquals("Should have 2 query search results", 2, querySearchResults.size());
+        assertEquals("Should have 3 query search results in original list", 3, querySearchResults.size());
     }
 
     private void testNormalization_withMinScore_thenFail(Float minScore) {
