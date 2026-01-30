@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Include AdditionalCodecs argument to allow additional Codec registration ([#1741](https://github.com/opensearch-project/neural-search/pull/1741))
 
 ### Bug Fixes
+- Fix flaky test in `NeuralQueryEnricherProcessorIT` by waiting for model deployment ([#1617](https://github.com/opensearch-project/neural-search/pull/1617))
 - [SEISMIC]: Fix the memory usage track upon cache entry creation ([#1701](https://github.com/opensearch-project/neural-search/pull/1701))
 - [HYBRID]: Fix for Hybrid Query with Collapse bugs([#1702](https://github.com/opensearch-project/neural-search/pull/1702))
 - [HYBRID]: Fix position overflow of docIds in HybridBulkScorer to increase search relevance ([#1706](https://github.com/opensearch-project/neural-search/pull/1706))
