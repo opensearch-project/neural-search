@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [HYBRID]: Fix CollapseTopFieldDocs logic when a segment has no collapsed fieldDocs but has totalHits > 0 ([#1740](https://github.com/opensearch-project/neural-search/pull/1740))
 - [HYBRID]: Fix array_index_out_of_bound_exception in case of docsPerGroupPerSubQuery greater or lesser than numHits ([#1742](https://github.com/opensearch-project/neural-search/pull/1742))
 - [HYBRID]: Fix null instance handling for empty and skipped shards ([#1745](https://github.com/opensearch-project/neural-search/pull/1745))
+- [HYBRID]: Fix relevancy bugs in hybrid query collapse ([#1753](https://github.com/opensearch-project/neural-search/pull/1753))
 
 ### Infrastructure
 - [BWC]: Enable BWC tests after upgrading to Grade 9 ([#1729](https://github.com/opensearch-project/neural-search/pull/1729))
