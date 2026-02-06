@@ -445,4 +445,65 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
         reader.close();
         directory.close();
     }
+
+    /**
+     * Tests that HybridLeafCollector can find HybridSubQueryScorer when it's wrapped in nested children.
+     * This simulates wrapper scorers that expose the nested scorer via getChildren().
+     */
+    @SneakyThrows
+    public void testCompoundScorer_whenHybridScorerIsNestedInMultipleLevels_thenSuccessful() {
+        HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_1, FIELD_1_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_2, FIELD_2_VALUE, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, DOC_ID_3, FIELD_3_VALUE, ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+        LeafCollector leafCollector = hybridTopScoreDocCollector.getLeafCollector(leafReaderContext);
+
+        assertNotNull(leafCollector);
+
+        int[] docIds = new int[] { DOC_ID_1, DOC_ID_2, DOC_ID_3 };
+        Arrays.sort(docIds);
+        final List<Float> scores = Stream.generate(() -> random().nextFloat()).limit(NUM_DOCS).collect(Collectors.toList());
+
+        // Create the HybridSubQueryScorer
+        HybridSubQueryScorer hybridSubQueryScorer = new HybridSubQueryScorer(1);
+
+        // Create a nested wrapper - inner wrapper directly holds HybridSubQueryScorer
+        Scorer innerWrapper = mock(Scorer.class);
+        Collection<Scorable.ChildScorable> innerChildren = List.of(new Scorable.ChildScorable(hybridSubQueryScorer, "MUST"));
+        when(innerWrapper.getChildren()).thenReturn(innerChildren);
+
+        // Create outer wrapper that holds the inner wrapper
+        Scorer outerWrapper = mock(Scorer.class);
+        Collection<Scorable.ChildScorable> outerChildren = List.of(new Scorable.ChildScorable(innerWrapper, "MUST"));
+        when(outerWrapper.getChildren()).thenReturn(outerChildren);
+
+        // Set the doubly-wrapped scorer - the collector should traverse and find HybridSubQueryScorer
+        leafCollector.setScorer(outerWrapper);
+
+        // Collect some documents
+        collectDocsAndScores(hybridSubQueryScorer, scores, leafCollector, 0, docIds);
+
+        List<TopDocs> topDocs = hybridTopScoreDocCollector.topDocs();
+        assertNotNull(topDocs);
+        assertEquals(1, topDocs.size());
+        assertEquals(3, topDocs.get(0).totalHits.value());
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
 }

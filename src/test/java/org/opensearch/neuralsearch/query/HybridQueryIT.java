@@ -42,6 +42,8 @@ import com.google.common.primitives.Floats;
 import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 
+import org.apache.hc.core5.http.ParseException;
+
 public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-hybrid-basic-index";
     private static final String TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME = "test-hybrid-vector-doc-field-index";
@@ -1115,6 +1117,140 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         assertEquals(3, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    /**
+     * Tests that hybrid query works with profiler enabled (profile: true).
+     * This is a regression test for https://github.com/opensearch-project/neural-search/issues/1255
+     * When profiling is enabled, OpenSearch wraps scorers in ProfileScorer which was causing
+     * NullPointerException because HybridLeafCollector couldn't find HybridSubQueryScorer.
+     */
+    @SneakyThrows
+    public void testProfile_whenHybridQueryWithProfilerEnabled_thenSuccessful() throws IOException, ParseException {
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+
+        // Build raw JSON query with profile: true
+        String query = "{\n"
+            + "  \"query\": {\n"
+            + "    \"hybrid\": {\n"
+            + "      \"queries\": [\n"
+            + "        {\n"
+            + "          \"term\": {\n"
+            + "            \""
+            + TEST_TEXT_FIELD_NAME_1
+            + "\": \""
+            + TEST_QUERY_TEXT3
+            + "\"\n"
+            + "          }\n"
+            + "        },\n"
+            + "        {\n"
+            + "          \"term\": {\n"
+            + "            \""
+            + TEST_TEXT_FIELD_NAME_1
+            + "\": \""
+            + TEST_QUERY_TEXT4
+            + "\"\n"
+            + "          }\n"
+            + "        }\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  },\n"
+            + "  \"profile\": true\n"
+            + "}";
+
+        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, query, 10);
+
+        // Verify search succeeded and returned results
+        int hitCount = getHitCount(searchResponseAsMap);
+        assertTrue("Expected at least 1 hit", hitCount >= 1);
+
+        // Verify profile data is present in response
+        assertNotNull("Profile data should be present in response", searchResponseAsMap.get("profile"));
+
+        Map<String, Object> profile = (Map<String, Object>) searchResponseAsMap.get("profile");
+        assertNotNull("Profile shards should be present", profile.get("shards"));
+
+        List<Map<String, Object>> shards = (List<Map<String, Object>>) profile.get("shards");
+        assertFalse("Profile shards should not be empty", shards.isEmpty());
+
+        // Verify each shard has profiler searches
+        for (Map<String, Object> shard : shards) {
+            List<Map<String, Object>> searches = (List<Map<String, Object>>) shard.get("searches");
+            assertNotNull("Shard should have searches", searches);
+            assertFalse("Shard searches should not be empty", searches.isEmpty());
+
+            for (Map<String, Object> searchProfile : searches) {
+                // Verify query profile exists
+                List<Map<String, Object>> queryProfiles = (List<Map<String, Object>>) searchProfile.get("query");
+                assertNotNull("Query profile should exist", queryProfiles);
+                assertFalse("Query profile should not be empty", queryProfiles.isEmpty());
+
+                // Verify timing information is present
+                for (Map<String, Object> queryProfile : queryProfiles) {
+                    assertNotNull("Query type should be present", queryProfile.get("type"));
+                    assertNotNull("Query time_in_nanos should be present", queryProfile.get("time_in_nanos"));
+                }
+            }
+        }
+
+        // Verify scores are properly calculated (not NaN or invalid)
+        List<Map<String, Object>> hitsNestedList = getNestedHits(searchResponseAsMap);
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            Double score = (Double) oneHit.get("_score");
+            assertNotNull("Score should not be null", score);
+            assertFalse("Score should not be NaN", score.isNaN());
+            assertTrue("Score should be positive", score > 0);
+        }
+    }
+
+    /**
+     * Tests that hybrid query with multiple shards works with profiler enabled.
+     * This tests the distributed profiling scenario.
+     */
+    @SneakyThrows
+    public void testProfile_whenHybridQueryWithMultipleShardsAndProfiler_thenSuccessful() throws IOException, ParseException {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+
+        // Build raw JSON query with profile: true
+        String query = "{\n"
+            + "  \"query\": {\n"
+            + "    \"hybrid\": {\n"
+            + "      \"queries\": [\n"
+            + "        {\n"
+            + "          \"match_all\": {}\n"
+            + "        },\n"
+            + "        {\n"
+            + "          \"term\": {\n"
+            + "            \""
+            + TEST_TEXT_FIELD_NAME_1
+            + "\": \""
+            + TEST_QUERY_TEXT3
+            + "\"\n"
+            + "          }\n"
+            + "        }\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  },\n"
+            + "  \"profile\": true\n"
+            + "}";
+
+        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, query, 10);
+
+        // Verify search succeeded
+        int hitCount = getHitCount(searchResponseAsMap);
+        assertTrue("Expected hits", hitCount >= 1);
+
+        // Verify profile data is present
+        assertNotNull("Profile data should be present", searchResponseAsMap.get("profile"));
+
+        Map<String, Object> profile = (Map<String, Object>) searchResponseAsMap.get("profile");
+        List<Map<String, Object>> shards = (List<Map<String, Object>>) profile.get("shards");
+        assertNotNull("Profile shards should be present", shards);
+
+        // With multiple shards, we expect profile data from multiple shards
+        assertFalse("Should have profile data from shards", shards.isEmpty());
     }
 
     @SneakyThrows
