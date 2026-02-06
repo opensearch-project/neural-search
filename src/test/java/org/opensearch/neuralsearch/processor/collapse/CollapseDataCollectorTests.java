@@ -304,11 +304,7 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
         );
 
         CollapseDataCollector<BytesRef> collector = new CollapseDataCollector<>(collapseDTO);
-        collector.collectCollapseData(collapseDTO);
-
-        // Should skip the doc with empty fields
-        List<Map.Entry<BytesRef, FieldDoc>> sortedEntries = collector.getSortedCollapseEntries();
-        assertTrue(sortedEntries.isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> collector.collectCollapseData(collapseDTO));
     }
 
     public void testCollectCollapseData_whenFieldDocHasNullFields_thenException() {
