@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.collapse;
 
+import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.util.BytesRef;
@@ -29,6 +30,7 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
 
         CollapseDTO mockCollapseDTO = mock(CollapseDTO.class);
         when(mockCollapseDTO.getCollapseQueryTopDocs()).thenReturn(List.of(compoundTopDocs));
+        when(mockCollapseDTO.getCollapseSort()).thenReturn(new Sort());
         CollapseDataCollector<?> collector = new CollapseDataCollector<>(mockCollapseDTO);
         assertNotNull(collector);
     }
@@ -45,6 +47,7 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
 
         CollapseDTO mockCollapseDTO = mock(CollapseDTO.class);
         when(mockCollapseDTO.getCollapseQueryTopDocs()).thenReturn(List.of(compoundTopDocs));
+        when(mockCollapseDTO.getCollapseSort()).thenReturn(new Sort());
         CollapseDataCollector<?> collector = new CollapseDataCollector<>(mockCollapseDTO);
         assertNotNull(collector);
     }
