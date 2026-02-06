@@ -99,9 +99,16 @@ public class CollapseDataCollector<T> {
             );
         }
 
-        if (fieldDoc.fields == null || fieldDoc.fields.length == 0) {
-            log.info("Field doc 'fields' attribute does not contain any values");
-            return;
+        if (fieldDoc.fields == null) {
+            throw new IllegalStateException(
+                String.format(Locale.ROOT, "FieldDoc has null fields for shardId: %s and docId: %s", fieldDoc.shardIndex, fieldDoc.doc)
+            );
+        }
+
+        if (fieldDoc.fields.length == 0) {
+            throw new IllegalStateException(
+                String.format(Locale.ROOT, "FieldDoc has empty fields for shardId: %s and docId: %s", fieldDoc.shardIndex, fieldDoc.doc)
+            );
         }
 
         Object collapseValueObj = fieldDoc.fields[fieldDoc.fields.length - 1];
