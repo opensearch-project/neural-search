@@ -244,16 +244,6 @@ public class NormalizationProcessorWorkflow {
         final Sort sort = combineScoresDTO.getSort();
         int totalScoreDocsCount = 0;
 
-        // Get index of first non-empty CompoundTopDocs to check if collapse is enabled
-        // int firstNonEmptyIndex = -1;
-        // for (int queryTopDocIndex = 0; queryTopDocIndex < queryTopDocs.size(); queryTopDocIndex++) {
-        // List<TopDocs> topDocsList = queryTopDocs.get(queryTopDocIndex).getTopDocs();
-        // if (!topDocsList.isEmpty() && topDocsList.getFirst() instanceof CollapseTopFieldDocs) {
-        // isCollapseEnabled = true;
-        // firstNonEmptyIndex = queryTopDocIndex;
-        // break;
-        // }
-        // }
         if (combineScoresDTO.isCollapseEnabled()) {
             CollapseExecutor collapseExecutor = new CollapseExecutor();
             CollapseDTO collapseDTO = new CollapseDTO(
@@ -264,7 +254,6 @@ public class NormalizationProcessorWorkflow {
                 combineScoresDTO,
                 getCollapseFieldType(queryTopDocs)
             );
-
             totalScoreDocsCount = collapseExecutor.executeCollapse(collapseDTO);
         } else {
             for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
