@@ -417,9 +417,6 @@ public class ScoreCombiner {
             )
         );
         compoundQueryTopDocs.setTotalHits(newTotalHits);
-        for (ScoreDoc scoreDoc : compoundQueryTopDocs.getScoreDocs()) {
-            log.info("after normalization the docId is {} and score is {}", scoreDoc.doc, scoreDoc.score);
-        }
     }
 
     private TotalHits getTotalHits(final List<TopDocs> topDocsPerSubQuery, final long maxHits) {
