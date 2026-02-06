@@ -244,29 +244,31 @@ public class ScoreCombiner {
                     // If sort by score then replace sort field value with normalized score.
                     // If collapse is enabled, then we append the collapse value to the end of the sort fields
                     // in order to more easily access it later.
+                    Object[] sortFields;
+
                     if (isSortByScore) {
-                        docIdSortFieldMap.put(
-                            fieldDoc.doc,
-                            isCollapseEnabled
-                                ? new Object[] {
-                                    combinedNormalizedScoresByDocId.get(fieldDoc.doc),
-                                    ((CollapseTopFieldDocs) topDocs).collapseValues[scoreDocIndex] }
-                                : new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) }
-                        );
+                        sortFields = new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) };
                     } else {
-                        if (isCollapseEnabled) {
-                            Object[] fields = new Object[fieldDoc.fields.length + 1];
-                            System.arraycopy(fieldDoc.fields, 0, fields, 0, fieldDoc.fields.length);
-                            fields[fieldDoc.fields.length] = ((CollapseTopFieldDocs) topDocs).collapseValues[scoreDocIndex];
-                            docIdSortFieldMap.put(fieldDoc.doc, fields);
-                        } else {
-                            docIdSortFieldMap.put(fieldDoc.doc, fieldDoc.fields);
-                        }
+                        sortFields = fieldDoc.fields;
                     }
+
+                    if (isCollapseEnabled) {
+                        Object collapseValue = ((CollapseTopFieldDocs) topDocs).collapseValues[scoreDocIndex];
+                        sortFields = appendCollapseValue(sortFields, collapseValue);
+                    }
+
+                    docIdSortFieldMap.put(fieldDoc.doc, sortFields);
                 }
             }
         }
         return docIdSortFieldMap;
+    }
+
+    private Object[] appendCollapseValue(Object[] fields, Object collapseValue) {
+        Object[] result = new Object[fields.length + 1];
+        System.arraycopy(fields, 0, result, 0, fields.length);
+        result[fields.length] = collapseValue;
+        return result;
     }
 
     private List<Integer> getSortedDocIds(final Map<Integer, Float> combinedNormalizedScoresByDocId) {
