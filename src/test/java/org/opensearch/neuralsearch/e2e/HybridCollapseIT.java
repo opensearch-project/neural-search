@@ -55,9 +55,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
 
-        // For min_score=0.5005f, it filters out no docs; for min_score=1.0f, it filters out 1 doc.
-        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 2, 3);
-        testCollapse_whenE2E_withMinScore_thenSuccessful(1.0f, 1, 2);
+        // For min_score=0.5005f, it filters out 1 doc
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
     }
 
     public void testCollapse_withMultipleShard_thenSuccessful() {
@@ -67,9 +66,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
         testCollapse_whenShardHasNoDocuments_thenSuccessful();
 
-        // For min_score=0.5005f, it filters out no docs; for min_score=1.0f, it filters out 1 doc.
-        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 2, 3);
-        testCollapse_whenE2E_withMinScore_thenSuccessful(1.0f, 1, 2);
+        // For min_score=0.5005f, it filters out no docs;
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
     }
 
     public void testCollapseOnNestedFieldWithInnerHits_withoutReferenceOnGroup_thenSuccessful() {

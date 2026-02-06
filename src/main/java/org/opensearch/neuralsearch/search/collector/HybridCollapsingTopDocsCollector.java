@@ -352,7 +352,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                         continue;
                     }
 
-                    log.info("The docId is {} and score is {}", doc, score);
                     // Retrieve the array of collected hits for the current group
                     int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
                     int slot = collectedHitsForCurrentSubQuery[subQueryNumber];

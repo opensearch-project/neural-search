@@ -16,6 +16,7 @@ import org.opensearch.neuralsearch.search.query.HybridQueryFieldDocComparator;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,7 +30,7 @@ import java.util.Map;
 @Log4j2
 public class CollapseDataCollector<T> {
 
-    private final Map<T, FieldDoc> collapseValueToTopDocMap = new HashMap<>();
+    private final Map<T, FieldDoc> collapseValueToTopDocMap = new LinkedHashMap<>();
     private final Map<T, Integer> collapseValueToShardMap = new HashMap<>();
     private final HybridQueryFieldDocComparator collapseComparator;
     private final Class<T> expectedType;
@@ -49,21 +50,6 @@ public class CollapseDataCollector<T> {
         );
         this.expectedType = (Class<T>) collapseDTO.getCollapseFieldType();
     }
-
-    // @SuppressWarnings("unchecked")
-    // private Class<T> determineExpectedType(CollapseDTO collapseDTO) {
-    // Object firstCollapseValue = ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
-    // .get(collapseDTO.getIndexOfFirstNonEmpty())
-    // .getTopDocs()
-    // .getFirst()).collapseValues[0];
-    //
-    // if (firstCollapseValue instanceof BytesRef) {
-    // return (Class<T>) BytesRef.class;
-    // } else if (firstCollapseValue instanceof Long) {
-    // return (Class<T>) Long.class;
-    // }
-    // return null;
-    // }
 
     /**
      * Processes and collects collapse data from search results across all shards.

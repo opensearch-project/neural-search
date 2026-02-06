@@ -148,7 +148,6 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
                     continue;
                 }
 
-                log.info("The docId is {} and score is {}", doc, score);
                 if (hitsThresholdChecker.isThresholdReached() && totalHitsRelation == TotalHits.Relation.EQUAL_TO) {
                     totalHitsRelation = TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO;
                 }
