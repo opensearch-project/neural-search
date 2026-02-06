@@ -347,7 +347,12 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 for (int subQueryNumber = 0; subQueryNumber < subScoresByQuery.length; subQueryNumber++) {
                     float score = subScoresByQuery[subQueryNumber];
+                    // if score is 0.0 there is no hits for that sub-query
+                    if (score == 0) {
+                        continue;
+                    }
 
+                    log.info("The docId is {} and score is {}", doc, score);
                     // Retrieve the array of collected hits for the current group
                     int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
                     int slot = collectedHitsForCurrentSubQuery[subQueryNumber];

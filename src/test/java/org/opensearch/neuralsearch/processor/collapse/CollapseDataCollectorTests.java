@@ -29,8 +29,6 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
 
         CollapseDTO mockCollapseDTO = mock(CollapseDTO.class);
         when(mockCollapseDTO.getCollapseQueryTopDocs()).thenReturn(List.of(compoundTopDocs));
-        when(mockCollapseDTO.getIndexOfFirstNonEmpty()).thenReturn(0);
-
         CollapseDataCollector<?> collector = new CollapseDataCollector<>(mockCollapseDTO);
         assertNotNull(collector);
     }
@@ -47,8 +45,6 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
 
         CollapseDTO mockCollapseDTO = mock(CollapseDTO.class);
         when(mockCollapseDTO.getCollapseQueryTopDocs()).thenReturn(List.of(compoundTopDocs));
-        when(mockCollapseDTO.getIndexOfFirstNonEmpty()).thenReturn(0);
-
         CollapseDataCollector<?> collector = new CollapseDataCollector<>(mockCollapseDTO);
         assertNotNull(collector);
     }

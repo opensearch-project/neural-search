@@ -44,30 +44,26 @@ public class CollapseDataCollector<T> {
      */
     public CollapseDataCollector(CollapseDTO collapseDTO) {
         this.collapseComparator = new HybridQueryFieldDocComparator(
-            ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
-                .get(collapseDTO.getIndexOfFirstNonEmpty())
-                .getTopDocs()
-                .getFirst()).fields,
+            collapseDTO.getCollapseSort().getSort(),
             Comparator.comparing((ScoreDoc scoreDoc) -> scoreDoc.score)
         );
-
-        this.expectedType = determineExpectedType(collapseDTO);
+        this.expectedType = (Class<T>) collapseDTO.getCollapseFieldType();
     }
 
-    @SuppressWarnings("unchecked")
-    private Class<T> determineExpectedType(CollapseDTO collapseDTO) {
-        Object firstCollapseValue = ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
-            .get(collapseDTO.getIndexOfFirstNonEmpty())
-            .getTopDocs()
-            .getFirst()).collapseValues[0];
-
-        if (firstCollapseValue instanceof BytesRef) {
-            return (Class<T>) BytesRef.class;
-        } else if (firstCollapseValue instanceof Long) {
-            return (Class<T>) Long.class;
-        }
-        return null;
-    }
+    // @SuppressWarnings("unchecked")
+    // private Class<T> determineExpectedType(CollapseDTO collapseDTO) {
+    // Object firstCollapseValue = ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
+    // .get(collapseDTO.getIndexOfFirstNonEmpty())
+    // .getTopDocs()
+    // .getFirst()).collapseValues[0];
+    //
+    // if (firstCollapseValue instanceof BytesRef) {
+    // return (Class<T>) BytesRef.class;
+    // } else if (firstCollapseValue instanceof Long) {
+    // return (Class<T>) Long.class;
+    // }
+    // return null;
+    // }
 
     /**
      * Processes and collects collapse data from search results across all shards.
