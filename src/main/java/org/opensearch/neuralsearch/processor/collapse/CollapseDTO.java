@@ -43,6 +43,7 @@ public class CollapseDTO {
      * @param collapseSort Sort criteria for collapse operation
      * @param isFetchPhaseExecuted Flag indicating if  fetch phase is complete
      * @param collapseCombineScoresDTO DTO containing score combination parameters
+     * @param collapseFieldType Contains class type of collapse field
      */
     public CollapseDTO(
         List<CompoundTopDocs> collapseQueryTopDocs,

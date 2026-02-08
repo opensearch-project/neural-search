@@ -304,7 +304,7 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
         );
 
         CollapseDataCollector<BytesRef> collector = new CollapseDataCollector<>(collapseDTO);
-        assertThrows(IllegalArgumentException.class, () -> collector.collectCollapseData(collapseDTO));
+        assertThrows(IllegalStateException.class, () -> collector.collectCollapseData(collapseDTO));
     }
 
     public void testCollectCollapseData_whenFieldDocHasNullFields_thenException() {
@@ -336,7 +336,6 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
         );
 
         CollapseDataCollector<BytesRef> collector = new CollapseDataCollector<>(collapseDTO);
-        assertThrows(IllegalArgumentException.class, () -> collector.collectCollapseData(collapseDTO));
+        assertThrows(IllegalStateException.class, () -> collector.collectCollapseData(collapseDTO));
     }
-
 }
