@@ -32,4 +32,5 @@ public class CombineScoresDto {
     private int fromValueForSingleShard;
     private boolean isSingleShard;
     private Float minScore;
+    private boolean isCollapseEnabled;
 }

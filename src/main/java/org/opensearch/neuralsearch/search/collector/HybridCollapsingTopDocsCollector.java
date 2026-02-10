@@ -337,6 +337,8 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 // Gets the collapse group value associated with the current document
                 groupSelector.advanceTo(doc);
+                // currentValue() returns a potentially reusable reference - safe for immediate use
+                // but NOT safe for storing as map keys or persisting across document iterations
                 T groupValue = groupSelector.currentValue();
 
                 float[] subScoresByQuery = compoundQueryScorer.getSubQueryScores();
@@ -347,8 +349,13 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 for (int subQueryNumber = 0; subQueryNumber < subScoresByQuery.length; subQueryNumber++) {
                     float score = subScoresByQuery[subQueryNumber];
+                    // if score is 0.0 there is no hits for that sub-query
+                    if (score == 0) {
+                        continue;
+                    }
 
                     // Retrieve the array of collected hits for the current group
+                    // Use groupValue for immediate map lookups - safe because we're not storing it
                     int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
                     int slot = collectedHitsForCurrentSubQuery[subQueryNumber];
 
@@ -389,6 +396,9 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     int[] reverseMuls = compoundScores[subQueryNumber].getReverseMul();
 
                     if (leafFieldComparators.length == 1) {
+                        // Use copyValue() as map key - creates persistent copy safe from mutation
+                        // Example: If groupValue is BytesRef("A"), copyValue() creates independent BytesRef("A")
+                        // Without this, the next document's BytesRef("B") would overwrite our map key
                         reverseMulMap.put(groupSelector.copyValue(), reverseMuls[0]);
                         comparators[subQueryNumber] = leafFieldComparators[0];
                     } else {
@@ -398,6 +408,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     comparators[subQueryNumber].setScorer(compoundQueryScorer);
                 }
 
+                // Use copyValue() as map key to ensure persistence across document iterations
                 comparatorsMap.put(groupSelector.copyValue(), comparators);
                 initializeLeafComparatorsPerSegmentOnceMap.put(groupSelector.copyValue(), false);
             }
@@ -473,6 +484,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 if (slot == (docsPerGroupPerSubQuery - 1)) {
                     boolean[] queueFullArray = queueFullMap.get(groupValue);
                     queueFullArray[subQueryNumber] = true;
+                    // Use copyValue() as map key to persist the queue full state
                     queueFullMap.put(groupSelector.copyValue(), queueFullArray);
                 }
             }
@@ -482,6 +494,8 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 FieldValueHitQueue.Entry[] fieldValueLeafTrackers,
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores
             ) throws IOException {
+                // Use copyValue() as map keys to ensure data persists correctly across document iterations
+                // This prevents map corruption when groupSelector reuses internal objects (e.g., BytesRef)
                 comparatorsMap.put(groupSelector.copyValue(), comparators);
                 fieldValueLeafTrackersMap.put(groupSelector.copyValue(), fieldValueLeafTrackers);
                 groupQueueMap.put(groupSelector.copyValue(), compoundScores);
@@ -491,8 +505,13 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = new FieldValueHitQueue[numSubQueries];
                 for (int i = 0; i < numSubQueries; i++) {
                     compoundScores[i] = FieldValueHitQueue.create(sort.getSort(), docsPerGroupPerSubQuery);
+                    // Use copyValue() as map key - critical for BytesRef types where the same instance is reused
+                    // Example: Doc1 has groupValue BytesRef("A"), Doc2 has groupValue BytesRef("B")
+                    // Without copyValue(), both map entries would point to the same mutating BytesRef object
                     firstComparatorMap.put(groupSelector.copyValue(), compoundScores[i].getComparators()[0]);
                 }
+                // Use copyValue() for all map keys to create independent, persistent copies
+                // This ensures map integrity when groupSelector reuses internal objects across documents
                 groupQueueMap.put(groupSelector.copyValue(), compoundScores);
                 collectedHitsPerSubQueryMap.put(groupSelector.copyValue(), new int[numSubQueries]);
                 comparatorsMap.put(groupSelector.copyValue(), new LeafFieldComparator[numSubQueries]);

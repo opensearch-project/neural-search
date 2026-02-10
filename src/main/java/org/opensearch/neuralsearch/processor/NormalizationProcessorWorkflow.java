@@ -19,7 +19,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
@@ -45,6 +44,7 @@ import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
+import static org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil.getCollapseFieldType;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -105,6 +105,7 @@ public class NormalizationProcessorWorkflow {
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
             .isSingleShard(isSingleShard)
             .minScore(minScore)
+            .isCollapseEnabled(request.searchPhaseContext.getRequest().source().collapse() != null)
             .build();
 
         // combine
@@ -243,28 +244,16 @@ public class NormalizationProcessorWorkflow {
         final Sort sort = combineScoresDTO.getSort();
         int totalScoreDocsCount = 0;
 
-        // Get index of first non-empty CompoundTopDocs to check if collapse is enabled
-        boolean isCollapseEnabled = false;
-        int firstNonEmptyIndex = -1;
-        for (int queryTopDocIndex = 0; queryTopDocIndex < queryTopDocs.size(); queryTopDocIndex++) {
-            List<TopDocs> topDocsList = queryTopDocs.get(queryTopDocIndex).getTopDocs();
-            if (!topDocsList.isEmpty() && topDocsList.getFirst() instanceof CollapseTopFieldDocs) {
-                isCollapseEnabled = true;
-                firstNonEmptyIndex = queryTopDocIndex;
-                break;
-            }
-        }
-        if (isCollapseEnabled) {
+        if (combineScoresDTO.isCollapseEnabled()) {
             CollapseExecutor collapseExecutor = new CollapseExecutor();
             CollapseDTO collapseDTO = new CollapseDTO(
                 queryTopDocs,
                 querySearchResults,
                 sort,
-                firstNonEmptyIndex,
                 isFetchPhaseExecuted,
-                combineScoresDTO
+                combineScoresDTO,
+                getCollapseFieldType(queryTopDocs)
             );
-
             totalScoreDocsCount = collapseExecutor.executeCollapse(collapseDTO);
         } else {
             for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {

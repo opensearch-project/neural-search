@@ -25,7 +25,6 @@ public class CollapseDTO {
     private final List<CompoundTopDocs> collapseQueryTopDocs;
     private final List<QuerySearchResult> collapseQuerySearchResults;
     private final Sort collapseSort;
-    private final int indexOfFirstNonEmpty;
     private final boolean isFetchPhaseExecuted;
     private final CombineScoresDto collapseCombineScoresDTO;
 
@@ -34,6 +33,7 @@ public class CollapseDTO {
     private String collapseField;
     private CompoundTopDocs updatedCollapseTopDocs;
     private int collapseShardIndex;
+    private Class<?> collapseFieldType;
 
     /**
      * Constructor to create a new CollapseDTO instance with initial collapse parameters.
@@ -41,24 +41,24 @@ public class CollapseDTO {
      * @param collapseQueryTopDocs List of compound top documents from collapse query
      * @param collapseQuerySearchResults List of search results from collapse query
      * @param collapseSort Sort criteria for collapse operation
-     * @param indexOfFirstNonEmpty Index of the first non-empty result
      * @param isFetchPhaseExecuted Flag indicating if  fetch phase is complete
      * @param collapseCombineScoresDTO DTO containing score combination parameters
+     * @param collapseFieldType Contains class type of collapse field
      */
     public CollapseDTO(
         List<CompoundTopDocs> collapseQueryTopDocs,
         List<QuerySearchResult> collapseQuerySearchResults,
         Sort collapseSort,
-        int indexOfFirstNonEmpty,
         boolean isFetchPhaseExecuted,
-        CombineScoresDto collapseCombineScoresDTO
+        CombineScoresDto collapseCombineScoresDTO,
+        Class<?> collapseFieldType
     ) {
         this.collapseQueryTopDocs = Collections.unmodifiableList(collapseQueryTopDocs);
         this.collapseQuerySearchResults = collapseQuerySearchResults;
         this.collapseSort = collapseSort;
-        this.indexOfFirstNonEmpty = indexOfFirstNonEmpty;
         this.isFetchPhaseExecuted = isFetchPhaseExecuted;
         this.collapseCombineScoresDTO = collapseCombineScoresDTO;
+        this.collapseFieldType = collapseFieldType;
     }
 
     /**
@@ -81,5 +81,4 @@ public class CollapseDTO {
         this.updatedCollapseTopDocs = updatedCollapseTopDocs;
         this.collapseShardIndex = collapseShardIndex;
     }
-
 }
