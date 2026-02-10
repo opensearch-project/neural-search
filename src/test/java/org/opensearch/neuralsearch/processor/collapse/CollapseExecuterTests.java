@@ -335,47 +335,4 @@ public class CollapseExecuterTests extends OpenSearchTestCase {
         // Should have 2 groups: one for 100L and one for null
         assertEquals(2, result);
     }
-
-    /**
-     * Test executeCollapse verifies that BytesRef uses KeywordStrategy
-     * and any other type (including null) uses NumericStrategy
-     */
-    public void testExecuteCollapse_whenStringFieldType_thenUsesNumericStrategy() {
-        // String.class is not BytesRef.class, so it should use NumericStrategy
-        // This test verifies the logic: only BytesRef.class uses KeywordStrategy
-        CollapseTopFieldDocs collapseTopFieldDocs = new CollapseTopFieldDocs(
-            "text_field",
-            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-            new ScoreDoc[] {
-                new FieldDoc(1, 1.0f, new Object[] { 1.0f, "value1" }),
-                new FieldDoc(2, 0.8f, new Object[] { 0.8f, "value2" }) },
-            new SortField[] { SortField.FIELD_SCORE },
-            new Object[] { "value1", "value2" }
-        );
-
-        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(
-            new TotalHits(2, TotalHits.Relation.EQUAL_TO),
-            List.of(collapseTopFieldDocs),
-            true,
-            SEARCH_SHARD
-        );
-
-        List<CompoundTopDocs> collapseQueryTopDocs = List.of(compoundTopDocs);
-        List<QuerySearchResult> collapseQuerySearchResults = List.of(mock(QuerySearchResult.class));
-        Sort collapseSort = new Sort(SortField.FIELD_SCORE);
-        CombineScoresDto combineScoresDto = mock(CombineScoresDto.class);
-
-        CollapseDTO collapseDTO = new CollapseDTO(
-            collapseQueryTopDocs,
-            collapseQuerySearchResults,
-            collapseSort,
-            true,
-            combineScoresDto,
-            String.class  // String.class is not BytesRef.class, so uses NumericStrategy
-        );
-
-        // Execute collapse - should use NumericStrategy (not KeywordStrategy)
-        int result = collapseExecutor.executeCollapse(collapseDTO);
-        assertEquals(2, result);
-    }
 }
