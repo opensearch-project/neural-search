@@ -33,7 +33,7 @@ public class CollapseDTO {
     private String collapseField;
     private CompoundTopDocs updatedCollapseTopDocs;
     private int collapseShardIndex;
-    private Class<? extends Object> collapseFieldType;
+    private Class<?> collapseFieldType;
 
     /**
      * Constructor to create a new CollapseDTO instance with initial collapse parameters.

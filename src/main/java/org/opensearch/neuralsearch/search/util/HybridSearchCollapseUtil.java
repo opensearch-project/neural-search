@@ -54,6 +54,7 @@ public class HybridSearchCollapseUtil {
             List<TopDocs> topDocsList = queryTopDoc.getTopDocs();
             if (topDocsList != null && !topDocsList.isEmpty()) {
                 for (TopDocs topDocs : topDocsList) {
+                    assert topDocs instanceof CollapseTopFieldDocs;
                     CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) topDocs;
                     // In case of multiple subqueries, if the subquery does not have result then it will have CollapseTopFieldDoc with empty
                     // collapseValues.
