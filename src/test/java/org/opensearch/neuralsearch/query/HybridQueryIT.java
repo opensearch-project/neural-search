@@ -24,9 +24,15 @@ import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.commons.lang3.RandomUtils;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
 import org.opensearch.client.ResponseException;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -41,8 +47,6 @@ import com.google.common.primitives.Floats;
 
 import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
-
-import org.apache.hc.core5.http.ParseException;
 
 public class HybridQueryIT extends BaseNeuralSearchIT {
     private static final String TEST_BASIC_INDEX_NAME = "test-hybrid-basic-index";
@@ -1126,7 +1130,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      * NullPointerException because HybridLeafCollector couldn't find HybridSubQueryScorer.
      */
     @SneakyThrows
-    public void testProfile_whenHybridQueryWithProfilerEnabled_thenSuccessful() throws IOException, ParseException {
+    public void testProfile_whenHybridQueryWithProfilerEnabled_thenSuccessful() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
@@ -1159,7 +1163,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             + "  \"profile\": true\n"
             + "}";
 
-        Map<String, Object> searchResponseAsMap = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, query, 10);
+        Map<String, Object> searchResponseAsMap = searchWithRawQuery(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, query, 10, SEARCH_PIPELINE);
 
         // Verify search succeeded and returned results
         int hitCount = getHitCount(searchResponseAsMap);
@@ -1209,7 +1213,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
      * This tests the distributed profiling scenario.
      */
     @SneakyThrows
-    public void testProfile_whenHybridQueryWithMultipleShardsAndProfiler_thenSuccessful() throws IOException, ParseException {
+    public void testProfile_whenHybridQueryWithMultipleShardsAndProfiler_thenSuccessful() {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
@@ -1236,7 +1240,7 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             + "  \"profile\": true\n"
             + "}";
 
-        Map<String, Object> searchResponseAsMap = search(TEST_MULTI_DOC_INDEX_NAME, query, 10);
+        Map<String, Object> searchResponseAsMap = searchWithRawQuery(TEST_MULTI_DOC_INDEX_NAME, query, 10, SEARCH_PIPELINE);
 
         // Verify search succeeded
         int hitCount = getHitCount(searchResponseAsMap);
@@ -1587,6 +1591,24 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     private Optional<Float> getMaxScore(Map<String, Object> searchResponseAsMap) {
         Map<String, Object> hitsMap = (Map<String, Object>) searchResponseAsMap.get("hits");
         return hitsMap.get("max_score") == null ? Optional.empty() : Optional.of(((Double) hitsMap.get("max_score")).floatValue());
+    }
+
+    /**
+     * Execute a search with raw JSON query body and search pipeline parameter.
+     */
+    @SneakyThrows
+    private Map<String, Object> searchWithRawQuery(String index, String query, int resultSize, String searchPipeline) {
+        Request request = new Request("POST", "/" + index + "/_search");
+        request.setJsonEntity(query);
+        request.addParameter("size", Integer.toString(resultSize));
+        request.addParameter("search_type", "query_then_fetch");
+        if (searchPipeline != null) {
+            request.addParameter("search_pipeline", searchPipeline);
+        }
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        String responseBody = EntityUtils.toString(response.getEntity());
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 
     private void addDocWithKeywordsAndIntFields(
