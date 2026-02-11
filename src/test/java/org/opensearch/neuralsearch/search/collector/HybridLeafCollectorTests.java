@@ -18,9 +18,11 @@ import org.apache.lucene.search.Weight;
 import org.apache.lucene.store.Directory;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
+import org.opensearch.search.profile.ProfilingWrapper;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -268,6 +270,55 @@ public class HybridLeafCollectorTests extends HybridCollectorTestCase {
         w.close();
         directory.close();
     }
+
+    @SneakyThrows
+    public void testSetScorer_whenProfilingWrapperWrapsHybridQueryScorer_thenProfilerModeActivated() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, 1, "text1", ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector collector = new HybridTopScoreDocCollector(NUM_DOCS, new HitsThresholdChecker(TOTAL_HITS_UP_TO));
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        // Create a HybridQueryScorer with 2 sub-query scorers
+        Scorer subScorer1 = mock(Scorer.class);
+        Scorer subScorer2 = mock(Scorer.class);
+        when(subScorer1.iterator()).thenReturn(DocIdSetIterator.empty());
+        when(subScorer2.iterator()).thenReturn(DocIdSetIterator.empty());
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(Arrays.asList(subScorer1, subScorer2));
+
+        // Create a mock that implements both Scorer and ProfilingWrapper<Scorer>,
+        // simulating what ProfileScorer does when profiling is enabled
+        ProfilingWrapperScorer profilingWrapper = mock(ProfilingWrapperScorer.class);
+        when(profilingWrapper.getDelegate()).thenReturn(hybridQueryScorer);
+        when(profilingWrapper.getChildren()).thenReturn(Collections.emptyList());
+
+        // Set the profiling wrapper as the scorer
+        leafCollector.setScorer(profilingWrapper);
+
+        // Verify profiler mode was activated through ProfilingWrapper unwrap
+        HybridTopScoreDocCollector.HybridTopScoreLeafCollector hybridLeafCollector =
+            (HybridTopScoreDocCollector.HybridTopScoreLeafCollector) leafCollector;
+        assertNotNull("compoundQueryScorer should be created as adapter", hybridLeafCollector.getCompoundQueryScorer());
+        assertNotNull("hybridQueryScorer should be found via ProfilingWrapper", hybridLeafCollector.getHybridQueryScorer());
+        assertEquals("adapter should have 2 sub-queries", 2, hybridLeafCollector.getCompoundQueryScorer().getNumOfSubQueries());
+
+        reader.close();
+        w.close();
+        directory.close();
+    }
+
+    /**
+     * Abstract class combining Scorer and ProfilingWrapper for mocking purposes.
+     * This simulates how ProfileScorer extends Scorer and implements ProfilingWrapper<Scorer>.
+     */
+    static abstract class ProfilingWrapperScorer extends Scorer implements ProfilingWrapper<Scorer> {}
 
     @SneakyThrows
     public void testPopulateScores_whenSubScorerOnNoMoreDocs_thenScoreIsZero() {

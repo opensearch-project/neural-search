@@ -13,10 +13,9 @@ import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.Scorer;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
+import org.opensearch.search.profile.ProfilingWrapper;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Objects;
 
@@ -34,9 +33,6 @@ public abstract class HybridLeafCollector implements LeafCollector {
     @Getter(AccessLevel.PACKAGE)
     HybridQueryScorer hybridQueryScorer;
 
-    // ProfileScorer is package-private in OpenSearch core, so we identify it by class name
-    private static final String PROFILE_SCORER_CLASS_NAME = "org.opensearch.search.profile.query.ProfileScorer";
-
     @Override
     public void setScorer(Scorable scorer) throws IOException {
         if (scorer instanceof HybridSubQueryScorer) {
@@ -44,7 +40,7 @@ public abstract class HybridLeafCollector implements LeafCollector {
             compoundQueryScorer = (HybridSubQueryScorer) scorer;
         } else {
             // Try to find HybridSubQueryScorer in the hierarchy (existing behavior)
-            compoundQueryScorer = getHybridSubQueryScorer(scorer);
+            compoundQueryScorer = findScorerInHierarchy(scorer, HybridSubQueryScorer.class);
 
             if (Objects.isNull(compoundQueryScorer)) {
                 // Profiler path: DefaultBulkScorer is used, so we look for HybridQueryScorer instead.
@@ -85,27 +81,11 @@ public abstract class HybridLeafCollector implements LeafCollector {
         }
     }
 
-    private HybridSubQueryScorer getHybridSubQueryScorer(final Scorable scorer) throws IOException {
-        if (Objects.isNull(scorer)) {
-            return null;
-        }
-        if (scorer instanceof HybridSubQueryScorer) {
-            return (HybridSubQueryScorer) scorer;
-        }
-
-        for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
-            HybridSubQueryScorer hybridQueryScorer = getHybridSubQueryScorer(childScorable.child());
-            if (Objects.nonNull(hybridQueryScorer)) {
-                return hybridQueryScorer;
-            }
-        }
-        return null;
-    }
-
     /**
-     * Finds HybridQueryScorer in the scorer hierarchy. When profiling is enabled,
-     * the hierarchy is ProfileScorer -> HybridQueryScorer.
+     * Finds HybridQueryScorer in the scorer hierarchy. Uses ProfilingWrapper interface to unwrap
+     * profiling wrappers (like ProfileScorer) without reflection.
      */
+    @SuppressWarnings("unchecked")
     private HybridQueryScorer findHybridQueryScorer(final Scorable scorer) throws IOException {
         if (Objects.isNull(scorer)) {
             return null;
@@ -113,42 +93,39 @@ public abstract class HybridLeafCollector implements LeafCollector {
         if (scorer instanceof HybridQueryScorer) {
             return (HybridQueryScorer) scorer;
         }
-
-        // When profiling is enabled, ProfileScorer wraps HybridQueryScorer.
-        // ProfileScorer doesn't expose children via getChildren() so we need reflection.
-        if (isProfileScorer(scorer)) {
-            Scorer wrappedScorer = getWrappedScorerFromProfileScorer(scorer);
+        // when profiling is enabled, ProfileScorer implements ProfilingWrapper
+        if (scorer instanceof ProfilingWrapper) {
+            Scorer wrappedScorer = ((ProfilingWrapper<Scorer>) scorer).getDelegate();
             if (Objects.nonNull(wrappedScorer)) {
                 return findHybridQueryScorer(wrappedScorer);
+            }
+        }
+        // Also check children for other wrapper types
+        for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
+            HybridQueryScorer found = findHybridQueryScorer(childScorable.child());
+            if (Objects.nonNull(found)) {
+                return found;
             }
         }
         return null;
     }
 
     /**
-     * Checks if the given scorer is a ProfileScorer by comparing class name.
-     * We use class name comparison because ProfileScorer is package-private in OpenSearch core.
+     * Traverses the scorer tree via getChildren() to find a scorer of the specified type.
      */
-    private boolean isProfileScorer(Scorable scorer) {
-        return Objects.nonNull(scorer) && PROFILE_SCORER_CLASS_NAME.equals(scorer.getClass().getName());
-    }
-
-    /**
-     * Extracts the wrapped scorer from a ProfileScorer using reflection.
-     * ProfileScorer is package-private in OpenSearch core, so we use reflection to call
-     * its public getWrappedScorer() method which is available since OpenSearch 3.6.0.
-     */
-    private Scorer getWrappedScorerFromProfileScorer(Scorable profileScorer) {
-        try {
-            Method getWrappedScorerMethod = profileScorer.getClass().getMethod("getWrappedScorer");
-            Object result = getWrappedScorerMethod.invoke(profileScorer);
-            if (result instanceof Scorer) {
-                return (Scorer) result;
+    @SuppressWarnings("unchecked")
+    private <T extends Scorable> T findScorerInHierarchy(final Scorable scorer, final Class<T> targetType) throws IOException {
+        if (Objects.isNull(scorer)) {
+            return null;
+        }
+        if (targetType.isInstance(scorer)) {
+            return (T) scorer;
+        }
+        for (Scorable.ChildScorable childScorable : scorer.getChildren()) {
+            T found = findScorerInHierarchy(childScorable.child(), targetType);
+            if (Objects.nonNull(found)) {
+                return found;
             }
-        } catch (NoSuchMethodException e) {
-            log.error("ProfileScorer doesn't have getWrappedScorer method, profiling with hybrid query requires OpenSearch 3.6.0+");
-        } catch (IllegalAccessException | InvocationTargetException e) {
-            log.error("Failed to invoke getWrappedScorer on ProfileScorer: {}", e.getMessage());
         }
         return null;
     }
