@@ -86,8 +86,69 @@ public class HybridSearchCollectorResultUtil {
 
     private TopDocsAndMaxScore getSortedTopDocsAndMaxScore(List<TopFieldDocs> topDocs) {
         final SortField sortFields[] = hybridSearchCollectorResultsDTO.getSortFields();
-        TopDocs sortedTopDocs = getNewTopFieldDocs(getTotalHits(topDocs), topDocs, sortFields);
+        TopDocs sortedTopDocs;
+        if (hybridSearchCollectorResultsDTO.isCollapseEnabled()) {
+            sortedTopDocs = getCollapseTopFieldDocs(getTotalHits(topDocs), topDocs, sortFields);
+        } else {
+            sortedTopDocs = getNewTopFieldDocs(getTotalHits(topDocs), topDocs, sortFields);
+        }
         return new TopDocsAndMaxScore(sortedTopDocs, hybridSearchCollector.getMaxScore());
+    }
+
+    private TopDocs getCollapseTopFieldDocs(
+        final TotalHits totalHits,
+        final List<TopFieldDocs> collapseTopFieldDocs,
+        final SortField sortFields[]
+    ) {
+        String collapseField = hybridSearchCollectorResultsDTO.getSearchContext().collapse().getFieldName();
+        if (Objects.isNull(collapseTopFieldDocs)) {
+            return new CollapseTopFieldDocs(collapseField, totalHits, new FieldDoc[0], sortFields, new Object[0]);
+        }
+
+        // for a single shard case we need to do score processing at coordinator level.
+        // this is workaround for current core behaviour, for single shard fetch phase is executed
+        // right after query phase and processors are called after actual fetch is done
+        // find any valid doc Id, or set it to -1 if there is not a single match
+        int delimiterDocId = findDelimiterDocId(collapseTopFieldDocs);
+        if (delimiterDocId == -1) {
+            return new CollapseTopFieldDocs(collapseField, totalHits, new FieldDoc[0], sortFields, new Object[0]);
+        }
+
+        ArrayList<Object> collapseValues = new ArrayList<>();
+        ArrayList<FieldDoc> fieldDocs = new ArrayList<>();
+
+        List<FieldDoc> result = new ArrayList<>();
+        Object[] fields = createSortFieldsForDelimiterResults(collapseTopFieldDocs.getFirst().fields);
+        result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
+        collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
+        for (TopDocs topDoc : collapseTopFieldDocs) {
+            CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
+            collapseField = collapseTopFieldDoc.field;
+            if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
+                result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
+                continue;
+            }
+
+            List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
+            for (ScoreDoc scoreDoc : collapseTopFieldDoc.scoreDocs) {
+                fieldDocsPerQuery.add((FieldDoc) scoreDoc);
+            }
+            result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
+            result.addAll(fieldDocsPerQuery);
+            collapseValues.add(new BytesRef(createCollapseValueDelimiterElementForHybridSearchResults()));
+            collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
+        }
+        result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
+        collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
+        fieldDocs.addAll(result);
+
+        return new CollapseTopFieldDocs(
+            collapseField,
+            totalHits,
+            fieldDocs.toArray(new FieldDoc[0]),
+            collapseTopFieldDocs.getFirst().fields,
+            collapseValues.toArray(new Object[0])
+        );
     }
 
     private TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
@@ -99,20 +160,9 @@ public class HybridSearchCollectorResultUtil {
         // this is workaround for current core behaviour, for single shard fetch phase is executed
         // right after query phase and processors are called after actual fetch is done
         // find any valid doc Id, or set it to -1 if there is not a single match
-        int delimiterDocId = topFieldDocs.stream()
-            .filter(Objects::nonNull)
-            .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
-            .map(topFieldDoc -> topFieldDoc.scoreDocs)
-            .filter(scoreDoc -> scoreDoc.length > 0)
-            .map(scoreDoc -> scoreDoc[0].doc)
-            .findFirst()
-            .orElse(-1);
+        int delimiterDocId = findDelimiterDocId(topFieldDocs);
         if (delimiterDocId == -1) {
-            return new TopFieldDocs(
-                totalHits,
-                new FieldDoc[0],
-                sortFields == null ? new SortField[] { new SortField(null, SortField.Type.SCORE) } : sortFields
-            );
+            return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
         }
 
         // format scores using following template:
@@ -127,67 +177,25 @@ public class HybridSearchCollectorResultUtil {
         // ...
         // doc_id | magic_number_1 | [1,1.0f]
 
-        if (hybridSearchCollectorResultsDTO.isCollapseEnabled()) {
-            ArrayList<Object> collapseValues = new ArrayList<>();
-            String collapseField = "";
-            ArrayList<FieldDoc> fieldDocs = new ArrayList<>();
-
-            List<FieldDoc> result = new ArrayList<>();
-            Object[] fields = createSortFieldsForDelimiterResults(topFieldDocs.getFirst().fields);
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
-            collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
-            for (TopDocs topDoc : topFieldDocs) {
-                CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
-                collapseField = collapseTopFieldDoc.field;
-                if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
-                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
-                    continue;
-                }
-
-                List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
-                for (ScoreDoc scoreDoc : collapseTopFieldDoc.scoreDocs) {
-                    fieldDocsPerQuery.add((FieldDoc) scoreDoc);
-                }
-                result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
-                result.addAll(fieldDocsPerQuery);
-                collapseValues.add(new BytesRef(createCollapseValueDelimiterElementForHybridSearchResults()));
-                collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
-            }
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
-            collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
-            fieldDocs.addAll(result);
-
-            return new CollapseTopFieldDocs(
-                collapseField,
-                totalHits,
-                fieldDocs.toArray(new FieldDoc[0]),
-                topFieldDocs.getFirst().fields,
-                collapseValues.toArray(new Object[0])
-            );
-
-        } else {
-            final Object[] sortFieldsForDelimiterResults = createSortFieldsForDelimiterResults(sortFields);
-            List<FieldDoc> result = new ArrayList<>();
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
-            for (TopFieldDocs topFieldDoc : topFieldDocs) {
-                if (Objects.isNull(topFieldDoc) || Objects.isNull(topFieldDoc.scoreDocs)) {
-                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
-                    continue;
-                }
-
-                List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
-                for (ScoreDoc scoreDoc : topFieldDoc.scoreDocs) {
-                    fieldDocsPerQuery.add((FieldDoc) scoreDoc);
-                }
+        final Object[] sortFieldsForDelimiterResults = createSortFieldsForDelimiterResults(sortFields);
+        List<FieldDoc> result = new ArrayList<>();
+        result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+        for (TopFieldDocs topFieldDoc : topFieldDocs) {
+            if (Objects.isNull(topFieldDoc) || Objects.isNull(topFieldDoc.scoreDocs)) {
                 result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
-                result.addAll(fieldDocsPerQuery);
+                continue;
             }
-            result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
 
-            FieldDoc[] fieldDocs = result.toArray(new FieldDoc[0]);
-
-            return new TopFieldDocs(totalHits, fieldDocs, sortFields);
+            List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
+            for (ScoreDoc scoreDoc : topFieldDoc.scoreDocs) {
+                fieldDocsPerQuery.add((FieldDoc) scoreDoc);
+            }
+            result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+            result.addAll(fieldDocsPerQuery);
         }
+        result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, sortFieldsForDelimiterResults));
+        FieldDoc[] fieldDocs = result.toArray(new FieldDoc[0]);
+        return new TopFieldDocs(totalHits, fieldDocs, sortFields);
     }
 
     private TotalHits getTotalHits(final List<?> topDocs) {
@@ -213,91 +221,54 @@ public class HybridSearchCollectorResultUtil {
     }
 
     private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
-        boolean isCollapseEnabled = topDocs.isEmpty() == false && topDocs.get(0) instanceof CollapseTopFieldDocs;
         ScoreDoc[] scoreDocs = new ScoreDoc[0];
-        ArrayList<Object> collapseValues = new ArrayList<>();
-        String collapseField = "";
-        ArrayList<FieldDoc> fieldDocs = new ArrayList<>();
-        ArrayList<SortField> sortFields = new ArrayList<>();
-        if (Objects.nonNull(topDocs)) {
-            // for a single shard case we need to do score processing at coordinator level.
-            // this is workaround for current core behaviour, for single shard fetch phase is executed
-            // right after query phase and processors are called after actual fetch is done
-            // find any valid doc Id, or set it to -1 if there is not a single match
-            int delimiterDocId = topDocs.stream()
-                .filter(Objects::nonNull)
-                .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
-                .map(topDoc -> topDoc.scoreDocs)
-                .filter(scoreDoc -> scoreDoc.length > 0)
-                .map(scoreDoc -> scoreDoc[0].doc)
-                .findFirst()
-                .orElse(-1);
-            if (delimiterDocId == -1) {
-                return new TopDocs(totalHits, scoreDocs);
-            }
-            // format scores using following template:
-            // doc_id | magic_number_1
-            // doc_id | magic_number_2
-            // ...
-            // doc_id | magic_number_2
-            // ...
-            // doc_id | magic_number_2
-            // ...
-            // doc_id | magic_number_1
-
-            if (isCollapseEnabled) {
-                List<FieldDoc> result = new ArrayList<>();
-                Object[] fields = new Object[0];
-                result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
-                collapseValues.add(0);
-                for (TopDocs topDoc : topDocs) {
-                    CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
-                    collapseField = collapseTopFieldDoc.field;
-                    sortFields.addAll(Arrays.asList(collapseTopFieldDoc.fields));
-                    if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
-                        result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
-                        continue;
-                    }
-
-                    List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
-                    for (ScoreDoc scoreDoc : collapseTopFieldDoc.scoreDocs) {
-                        fieldDocsPerQuery.add(new FieldDoc(scoreDoc.doc, scoreDoc.score, new Object[0]));
-                    }
-                    result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
-                    result.addAll(fieldDocsPerQuery);
-                    // Dummy delimiter element
-                    collapseValues.add(0);
-                    collapseValues.addAll(Arrays.asList(collapseTopFieldDoc.collapseValues));
-
-                }
-                result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
-                collapseValues.add(0);
-                fieldDocs.addAll(result);
-            } else {
-                List<ScoreDoc> result = new ArrayList<>();
-                result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
-                for (TopDocs topDoc : topDocs) {
-                    if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
-                        result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
-                        continue;
-                    }
-                    result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
-                    result.addAll(Arrays.asList(topDoc.scoreDocs));
-                }
-                result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
-                scoreDocs = result.stream().map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
-            }
+        if (Objects.isNull(topDocs)) {
+            return new TopDocs(totalHits, scoreDocs);
         }
-        if (isCollapseEnabled) {
-            return new CollapseTopFieldDocs(
-                collapseField,
-                totalHits,
-                fieldDocs.toArray(new FieldDoc[0]),
-                sortFields.toArray(new SortField[0]),
-                collapseValues.toArray(new Object[0])
-            );
+
+        // for a single shard case we need to do score processing at coordinator level.
+        // this is workaround for current core behaviour, for single shard fetch phase is executed
+        // right after query phase and processors are called after actual fetch is done
+        // find any valid doc Id, or set it to -1 if there is not a single match
+        int delimiterDocId = findDelimiterDocId(topDocs);
+        if (delimiterDocId == -1) {
+            return new TopDocs(totalHits, scoreDocs);
         }
+        // format scores using following template:
+        // doc_id | magic_number_1
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_2
+        // ...
+        // doc_id | magic_number_1
+
+        List<ScoreDoc> result = new ArrayList<>();
+        result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
+        for (TopDocs topDoc : topDocs) {
+            if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
+                result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
+                continue;
+            }
+            result.add(createDelimiterElementForHybridSearchResults(delimiterDocId));
+            result.addAll(Arrays.asList(topDoc.scoreDocs));
+        }
+        result.add(createStartStopElementForHybridSearchResults(delimiterDocId));
+        scoreDocs = result.stream().map(doc -> new ScoreDoc(doc.doc, doc.score, doc.shardIndex)).toArray(ScoreDoc[]::new);
+
         return new TopDocs(totalHits, scoreDocs);
+    }
+
+    private int findDelimiterDocId(List<? extends TopDocs> topDocs) {
+        return topDocs.stream()
+            .filter(Objects::nonNull)
+            .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
+            .map(topDoc -> topDoc.scoreDocs)
+            .filter(scoreDoc -> scoreDoc.length > 0)
+            .map(scoreDoc -> scoreDoc[0].doc)
+            .findFirst()
+            .orElse(-1);
     }
 
     /**

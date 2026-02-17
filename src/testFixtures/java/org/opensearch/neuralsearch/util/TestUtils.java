@@ -41,6 +41,7 @@ import org.opensearch.search.query.QuerySearchResult;
 public class TestUtils {
 
     public static final String RELATION_EQUAL_TO = "eq";
+    public static final String RELATION_GREATER_THAN_OR_EQUAL_TO = "gte";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
     public static final float DELTA_FOR_FLOATS_ASSERTION = 0.001f;
     public static final String RESTART_UPGRADE_OLD_CLUSTER = "tests.is_old_cluster";
@@ -357,6 +358,7 @@ public class TestUtils {
         assertEquals(expectedTotalHits, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+
     }
 
     public static Map<String, Object> getTotalHits(Map<String, Object> searchResponseAsMap) {
@@ -377,9 +379,13 @@ public class TestUtils {
     }
 
     public static String getModelId(Map<String, Object> pipeline, String processor) {
+        return getModelId(pipeline, processor, 0);
+    }
+
+    public static String getModelId(Map<String, Object> pipeline, String processor, int processorId) {
         assertNotNull(pipeline);
         ArrayList<Map<String, Object>> processors = (ArrayList<Map<String, Object>>) pipeline.get("processors");
-        Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(0).get(processor);
+        Map<String, Object> textEmbeddingProcessor = (Map<String, Object>) processors.get(processorId).get(processor);
         String modelId = (String) textEmbeddingProcessor.get("model_id");
         assertNotNull(modelId);
         return modelId;

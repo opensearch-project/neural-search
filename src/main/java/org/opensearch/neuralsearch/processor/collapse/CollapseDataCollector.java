@@ -16,6 +16,7 @@ import org.opensearch.neuralsearch.search.query.HybridQueryFieldDocComparator;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -29,7 +30,7 @@ import java.util.Map;
 @Log4j2
 public class CollapseDataCollector<T> {
 
-    private final Map<T, FieldDoc> collapseValueToTopDocMap = new HashMap<>();
+    private final Map<T, FieldDoc> collapseValueToTopDocMap = new LinkedHashMap<>();
     private final Map<T, Integer> collapseValueToShardMap = new HashMap<>();
     private final HybridQueryFieldDocComparator collapseComparator;
     private final Class<T> expectedType;
@@ -44,29 +45,10 @@ public class CollapseDataCollector<T> {
      */
     public CollapseDataCollector(CollapseDTO collapseDTO) {
         this.collapseComparator = new HybridQueryFieldDocComparator(
-            ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
-                .get(collapseDTO.getIndexOfFirstNonEmpty())
-                .getTopDocs()
-                .getFirst()).fields,
+            collapseDTO.getCollapseSort().getSort(),
             Comparator.comparing((ScoreDoc scoreDoc) -> scoreDoc.score)
         );
-
-        this.expectedType = determineExpectedType(collapseDTO);
-    }
-
-    @SuppressWarnings("unchecked")
-    private Class<T> determineExpectedType(CollapseDTO collapseDTO) {
-        Object firstCollapseValue = ((CollapseTopFieldDocs) collapseDTO.getCollapseQueryTopDocs()
-            .get(collapseDTO.getIndexOfFirstNonEmpty())
-            .getTopDocs()
-            .getFirst()).collapseValues[0];
-
-        if (firstCollapseValue instanceof BytesRef) {
-            return (Class<T>) BytesRef.class;
-        } else if (firstCollapseValue instanceof Long) {
-            return (Class<T>) Long.class;
-        }
-        return null;
+        this.expectedType = (Class<T>) collapseDTO.getCollapseFieldType();
     }
 
     /**
@@ -117,9 +99,16 @@ public class CollapseDataCollector<T> {
             );
         }
 
-        if (fieldDoc.fields == null || fieldDoc.fields.length == 0) {
-            log.info("Field doc 'fields' attribute does not contain any values");
-            return;
+        if (fieldDoc.fields == null) {
+            throw new IllegalStateException(
+                String.format(Locale.ROOT, "FieldDoc has null fields for shardId: %s and docId: %s", fieldDoc.shardIndex, fieldDoc.doc)
+            );
+        }
+
+        if (fieldDoc.fields.length == 0) {
+            throw new IllegalStateException(
+                String.format(Locale.ROOT, "FieldDoc has empty fields for shardId: %s and docId: %s", fieldDoc.shardIndex, fieldDoc.doc)
+            );
         }
 
         Object collapseValueObj = fieldDoc.fields[fieldDoc.fields.length - 1];

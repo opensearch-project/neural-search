@@ -19,7 +19,6 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.FieldDoc;
-import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.processor.collapse.CollapseDTO;
@@ -45,6 +44,7 @@ import lombok.extern.log4j.Log4j2;
 
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 import static org.opensearch.neuralsearch.search.util.HybridSearchSortUtil.evaluateSortCriteria;
+import static org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil.getCollapseFieldType;
 
 /**
  * Class abstracts steps required for score normalization and combination, this includes pre-processing of incoming data
@@ -64,9 +64,19 @@ public class NormalizationProcessorWorkflow {
      *  combinationTechnique technique for score combination, and nullable rankConstant only used in RRF technique
      */
     public void execute(final NormalizationProcessorWorkflowExecuteRequest request) {
-        List<QuerySearchResult> querySearchResults = request.getQuerySearchResults();
+        List<QuerySearchResult> originalQuerySearchResults = request.getQuerySearchResults();
         Optional<FetchSearchResult> fetchSearchResultOptional = request.getFetchSearchResultOptional();
+
+        // Filter out null instance results early - these occur when:
+        // 1. A shard has no matching documents (match_no_docs)
+        // 2. A shard's query was rewritten to empty
+        // 3. Partial reduce consumed the topDocs during batched shard processing (>512 shards)
+        // We must filter these before any processing because isNull() results have topDocsAndMaxScore = null
+        // and calling topDocs() on them throws IllegalStateException("topDocs already consumed")
+        List<QuerySearchResult> querySearchResults = filterValidResults(originalQuerySearchResults);
+
         List<Integer> unprocessedDocIds = unprocessedDocIds(querySearchResults);
+        Float minScore = getMinScore(request);
 
         // pre-process data
         log.debug("Pre-process query results");
@@ -94,6 +104,8 @@ public class NormalizationProcessorWorkflow {
             .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
             .isSingleShard(isSingleShard)
+            .minScore(minScore)
+            .isCollapseEnabled(request.searchPhaseContext.getRequest().source().collapse() != null)
             .build();
 
         // combine
@@ -114,6 +126,24 @@ public class NormalizationProcessorWorkflow {
     private boolean getIsSingleShard(final NormalizationProcessorWorkflowExecuteRequest request) {
         final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
         return searchPhaseContext.getNumShards() == 1 || request.fetchSearchResultOptional.isEmpty() == false;
+    }
+
+    private Float getMinScore(final NormalizationProcessorWorkflowExecuteRequest request) {
+        final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
+        Float minScore = null;
+        if (searchPhaseContext.getRequest() != null && searchPhaseContext.getRequest().source() != null) {
+            minScore = searchPhaseContext.getRequest().source().minScore();
+            validateMinScore(minScore);
+        }
+        return minScore;
+    }
+
+    private void validateMinScore(final Float minScore) {
+        if (Objects.nonNull(minScore) && (minScore.isInfinite() || minScore.isNaN())) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "min_score is invalid : [%f], must neither be Infinity nor NaN", minScore)
+            );
+        }
     }
 
     /**
@@ -155,10 +185,12 @@ public class NormalizationProcessorWorkflow {
                 .singleShard(isSingleShard)
                 .build();
             Map<DocIdAtSearchShard, ExplanationDetails> normalizationExplain = scoreNormalizer.explain(explainDTO);
+            Float minScore = getMinScore(request);
             Map<SearchShard, List<ExplanationDetails>> combinationExplain = scoreCombiner.explain(
                 queryTopDocs,
                 request.getCombinationTechnique(),
-                sortForQuery
+                sortForQuery,
+                minScore
             );
             Map<SearchShard, List<CombinedExplanationDetails>> combinedExplanations = new HashMap<>();
             for (Map.Entry<SearchShard, List<ExplanationDetails>> entry : combinationExplain.entrySet()) {
@@ -212,28 +244,16 @@ public class NormalizationProcessorWorkflow {
         final Sort sort = combineScoresDTO.getSort();
         int totalScoreDocsCount = 0;
 
-        // Get index of first non-empty CompoundTopDocs to check if collapse is enabled
-        boolean isCollapseEnabled = false;
-        int firstNonEmptyIndex = -1;
-        for (int queryTopDocIndex = 0; queryTopDocIndex < queryTopDocs.size(); queryTopDocIndex++) {
-            List<TopDocs> topDocsList = queryTopDocs.get(queryTopDocIndex).getTopDocs();
-            if (!topDocsList.isEmpty() && topDocsList.getFirst() instanceof CollapseTopFieldDocs) {
-                isCollapseEnabled = true;
-                firstNonEmptyIndex = queryTopDocIndex;
-                break;
-            }
-        }
-        if (isCollapseEnabled) {
+        if (combineScoresDTO.isCollapseEnabled()) {
             CollapseExecutor collapseExecutor = new CollapseExecutor();
             CollapseDTO collapseDTO = new CollapseDTO(
                 queryTopDocs,
                 querySearchResults,
                 sort,
-                firstNonEmptyIndex,
                 isFetchPhaseExecuted,
-                combineScoresDTO
+                combineScoresDTO,
+                getCollapseFieldType(queryTopDocs)
             );
-
             totalScoreDocsCount = collapseExecutor.executeCollapse(collapseDTO);
         } else {
             for (int shardIndex = 0; shardIndex < querySearchResults.size(); shardIndex++) {
@@ -382,5 +402,20 @@ public class NormalizationProcessorWorkflow {
                 .map(scoreDoc -> scoreDoc.doc)
                 .collect(Collectors.toList());
         return docIds;
+    }
+
+    /**
+     * Filters out null instance results from the query search results.
+     * Null instances occur when:
+     * 1. A shard has no matching documents (match_no_docs)
+     * 2. A shard's query was rewritten to empty
+     * 3. Partial reduce consumed the topDocs during batched shard processing (>512 shards)
+     * @param querySearchResults the list of QuerySearchResult from all shards
+     * @return list containing only valid (non-null) results
+     */
+    private List<QuerySearchResult> filterValidResults(final List<QuerySearchResult> querySearchResults) {
+        return querySearchResults.stream()
+            .filter(searchResult -> Objects.nonNull(searchResult) && !searchResult.isNull())
+            .collect(Collectors.toList());
     }
 }

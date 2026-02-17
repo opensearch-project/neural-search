@@ -16,10 +16,14 @@ import org.opensearch.search.sort.SortBuilders;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import lombok.SneakyThrows;
+
+import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
+import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
 
 public class HybridCollapseIT extends BaseNeuralSearchIT {
 
@@ -38,7 +42,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_INTEGER_FIELD_AGE = "age";
     private static final String DEFAULT_INDEX_CONFIGURATION = "default_config";
     private static final String KNN_INDEX_CONFIGURATION = "knn_config";
-    private static final String KNN_NESTED_INDEX_CONFIGURATION = "knn_nested_config";
+    public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
 
     @Before
     public void setUp() throws Exception {
@@ -51,6 +55,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_thenSuccessful();
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
+
+        // For min_score=0.5005f, it filters out 1 doc
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
     }
 
     public void testCollapse_withMultipleShard_thenSuccessful() {
@@ -59,6 +66,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
         testCollapse_whenShardHasNoDocuments_thenSuccessful();
+
+        // For min_score=0.5005f, it filters out no docs;
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
     }
 
     public void testCollapseOnNestedFieldWithInnerHits_withoutReferenceOnGroup_thenSuccessful() {
@@ -212,7 +222,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
         CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
 
-        Map<String, Object> searchResponse = search(
+        Map<String, Object> searchResponseWithCollapse = search(
             COLLAPSE_TEST_INDEX,
             hybridQuery,
             null,
@@ -233,7 +243,38 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         );
 
         String collapseDuplicate = "Chocolate Cake";
-        assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
+        assertTrue(isCollapseDuplicateRemoved(searchResponseWithCollapse.toString(), collapseDuplicate));
+
+        Map<String, Object> searchResponseWithoutCollapse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+        Map<Object, Double> fieldToHighestScoreMap = getFieldWithHighestScoreMap(searchResponseWithoutCollapse, "item", "keyword");
+
+        Map<String, Double> collapseValueToScoreMap = getCollapseValueWithScoreMap(searchResponseWithCollapse);
+
+        for (Map.Entry<String, Double> entry : collapseValueToScoreMap.entrySet()) {
+            String key = entry.getKey();
+            Double value = entry.getValue();
+
+            Double scoreFromWithoutCollapse = fieldToHighestScoreMap.get(key);
+            assertEquals(value, scoreFromWithoutCollapse, DELTA_FOR_SCORE_ASSERTION);
+        }
     }
 
     private void testCollapse_whenE2E_andSortEnabled_thenSuccessful() {
@@ -331,6 +372,44 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
         String collapseDuplicate = "Chocolate Cake";
         assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
+    }
+
+    private void testCollapse_whenE2E_withMinScore_thenSuccessful(Float minScore, int expectedCollectedHits, int expectedTotalHits) {
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_ITEM, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_CATEGORY, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null,
+            minScore
+        );
+
+        String collapseDuplicate = "Chocolate Cake";
+        assertTrue(isCollapseDuplicateRemoved(searchResponse.toString(), collapseDuplicate));
+
+        assertEquals(expectedCollectedHits, getHitCount(searchResponse));
+        Map<String, Object> total = getTotalHits(searchResponse);
+        assertNotNull(total.get("value"));
+        assertEquals(expectedTotalHits, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
     @SneakyThrows
@@ -610,5 +689,45 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
                 .toString();
             default -> throw new IllegalStateException("Unexpected value: " + configuration);
         };
+    }
+
+    private Map<String, Double> getCollapseValueWithScoreMap(Map<String, Object> collapseResponse) {
+        Map<String, Double> collapseValueToScoreMap = new HashMap<>();
+        Map<String, Object> hits = (Map<String, Object>) collapseResponse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        for (Map<String, Object> actualHit : actualHits) {
+            Double score = (Double) actualHit.get("_score");
+            Map<String, Object> fields = (Map<String, Object>) actualHit.get("fields");
+            ArrayList<Object> items = (ArrayList<Object>) fields.get("item");
+            for (Object item : items) {
+                String collapsedValue = item.toString();
+                collapseValueToScoreMap.put(collapsedValue, score);
+            }
+        }
+        return collapseValueToScoreMap;
+    }
+
+    private Map<Object, Double> getFieldWithHighestScoreMap(
+        Map<String, Object> searchResponseWithoutCollapse,
+        String fieldName,
+        String fieldType
+    ) {
+        Map<Object, Double> fieldWithHighestScoreMap = new HashMap<>();
+        Map<String, Object> hits = (Map<String, Object>) searchResponseWithoutCollapse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        for (Map<String, Object> actualHit : actualHits) {
+            Map<String, Object> source = (Map<String, Object>) actualHit.get("_source");
+            Double score = (Double) actualHit.get("_score");
+            if (fieldType.equals("keyword")) {
+                String fieldValue = source.get(fieldName).toString();
+                fieldWithHighestScoreMap.put(fieldValue, score);
+            } else if (fieldType.equals("numeric")) {
+                Long fieldValue = (Long) source.get(fieldName);
+                fieldWithHighestScoreMap.put(fieldValue, score);
+            } else {
+                throw new IllegalStateException("Unexpected field type: " + fieldType);
+            }
+        }
+        return fieldWithHighestScoreMap;
     }
 }

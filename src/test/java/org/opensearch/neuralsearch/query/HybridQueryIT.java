@@ -790,6 +790,13 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testPaginationOnSingleShard_whenMinScoreIsSet_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_withMinScore_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME_ONE_SHARD);
+    }
+
+    @SneakyThrows
     public void testPaginationOnMultipleShard_whenConcurrentSearchEnabled_thenSuccessful() {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_ENABLED, true);
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
@@ -803,6 +810,13 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
         testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
+    }
+
+    @SneakyThrows
+    public void testPaginationOnMultipleShard_whenMinScoreIsSet_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_MULTI_DOC_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_withMinScore_thenSuccessful(TEST_MULTI_DOC_INDEX_NAME);
     }
 
     @SneakyThrows
@@ -830,6 +844,50 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         Map<String, Object> total = getTotalHits(searchResponseAsMap);
         assertNotNull(total.get("value"));
         assertEquals(4, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    @SneakyThrows
+    public void testHybridQuery_whenFromAndPaginationDepthIsGreaterThanZero_withMinScore_thenSuccessful(String indexName) {
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        TermQueryBuilder termQueryBuilder1 = new TermQueryBuilder(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = new TermQueryBuilder(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(termQueryBuilder1).should(termQueryBuilder2);
+        hybridQueryBuilder.add(new MatchAllQueryBuilder());
+        hybridQueryBuilder.add(boolQueryBuilder);
+        hybridQueryBuilder.paginationDepth(10);
+
+        // Results will be: {doc1[score=1.0f], doc2[score=0.5005f], doc3[score=0.5f], doc4[score=0.5f]}
+        // MinScore will filter out two results.
+        Float minScore = 0.5005f;
+
+        Map<String, Object> searchResponseAsMap = search(
+            indexName,
+            hybridQueryBuilder,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            1,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            minScore
+        );
+
+        assertEquals(1, getHitCount(searchResponseAsMap));
+        Map<String, Object> total = getTotalHits(searchResponseAsMap);
+        assertNotNull(total.get("value"));
+        assertEquals(2, total.get("value"));
         assertNotNull(total.get("relation"));
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
@@ -944,7 +1002,128 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     @SneakyThrows
+    public void testComplexQuery_whenMultipleSubqueriesWithMinScoreFilterSome_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, SINGLE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(termQueryBuilder2).should(termQueryBuilder3);
+
+        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+        hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
+
+        Float minScore = 0.1f;
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            minScore
+        );
+
+        assertEquals(2, getHitCount(searchResponseAsMap1));
+
+        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hits1NestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
+        }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
+        assertNotNull(total.get("value"));
+        assertEquals(2, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    @SneakyThrows
+    public void testComplexQuery_whenMultipleSubqueriesWithMinScoreFilterNone_thenSuccessful() {
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, SINGLE_SHARD);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+        TermQueryBuilder termQueryBuilder1 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT3);
+        TermQueryBuilder termQueryBuilder2 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT4);
+        TermQueryBuilder termQueryBuilder3 = QueryBuilders.termQuery(TEST_TEXT_FIELD_NAME_1, TEST_QUERY_TEXT5);
+        BoolQueryBuilder boolQueryBuilder = new BoolQueryBuilder();
+        boolQueryBuilder.should(termQueryBuilder2).should(termQueryBuilder3);
+
+        HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
+        hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
+        hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
+
+        Float minScore = 0.0f;
+        Map<String, Object> searchResponseAsMap1 = search(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            hybridQueryBuilderNeuralThenTerm,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            minScore
+        );
+
+        assertEquals(3, getHitCount(searchResponseAsMap1));
+
+        List<Map<String, Object>> hits1NestedList = getNestedHits(searchResponseAsMap1);
+        List<String> ids = new ArrayList<>();
+        List<Double> scores = new ArrayList<>();
+        for (Map<String, Object> oneHit : hits1NestedList) {
+            ids.add((String) oneHit.get("_id"));
+            scores.add((Double) oneHit.get("_score"));
+        }
+
+        // verify that scores are in desc order
+        assertTrue(IntStream.range(0, scores.size() - 1).noneMatch(idx -> scores.get(idx) < scores.get(idx + 1)));
+        // verify that all ids are unique
+        assertEquals(Set.copyOf(ids).size(), ids.size());
+
+        Map<String, Object> total = getTotalHits(searchResponseAsMap1);
+        assertNotNull(total.get("value"));
+        assertEquals(3, total.get("value"));
+        assertNotNull(total.get("relation"));
+        assertEquals(RELATION_EQUAL_TO, total.get("relation"));
+    }
+
+    @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) throws IOException {
+        initializeIndexIfNotExist(indexName, 3);
+    }
+
+    @SneakyThrows
+    private void initializeIndexIfNotExist(String indexName, final int numOfShards) throws IOException {
         if (TEST_BASIC_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_INDEX_NAME)) {
             prepareKnnIndex(
                 TEST_BASIC_INDEX_NAME,
@@ -957,6 +1136,41 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
                 Collections.singletonList(Floats.asList(testVector1).toArray())
             );
             assertEquals(1, getDocCount(TEST_BASIC_INDEX_NAME));
+        }
+        if (TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME)) {
+            prepareKnnIndex(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                List.of(
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_DIMENSION, TEST_SPACE_TYPE),
+                    new KNNFieldConfig(TEST_KNN_VECTOR_FIELD_NAME_2, TEST_DIMENSION, TEST_SPACE_TYPE)
+                ),
+                numOfShards
+            );
+            addKnnDoc(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                "1",
+                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                List.of(Floats.asList(testVector1).toArray(), Floats.asList(testVector1).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT1)
+            );
+            addKnnDoc(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                "2",
+                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                List.of(Floats.asList(testVector2).toArray(), Floats.asList(testVector2).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT2)
+            );
+            addKnnDoc(
+                TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+                "3",
+                List.of(TEST_KNN_VECTOR_FIELD_NAME_1, TEST_KNN_VECTOR_FIELD_NAME_2),
+                List.of(Floats.asList(testVector3).toArray(), Floats.asList(testVector3).toArray()),
+                Collections.singletonList(TEST_TEXT_FIELD_NAME_1),
+                Collections.singletonList(TEST_DOC_TEXT3)
+            );
+            assertEquals(3, getDocCount(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME));
         }
         if (TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME.equals(indexName) && !indexExists(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME)) {
             prepareKnnIndex(

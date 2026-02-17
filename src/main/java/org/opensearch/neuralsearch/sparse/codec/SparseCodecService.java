@@ -14,7 +14,12 @@ import org.opensearch.index.codec.CodecServiceConfig;
 public class SparseCodecService extends CodecService {
 
     public SparseCodecService(CodecServiceConfig codecServiceConfig) {
-        super(codecServiceConfig.getMapperService(), codecServiceConfig.getIndexSettings(), codecServiceConfig.getLogger());
+        super(
+            codecServiceConfig.getMapperService(),
+            codecServiceConfig.getIndexSettings(),
+            codecServiceConfig.getLogger(),
+            codecServiceConfig.getAdditionalCodecs()
+        );
     }
 
     @Override
