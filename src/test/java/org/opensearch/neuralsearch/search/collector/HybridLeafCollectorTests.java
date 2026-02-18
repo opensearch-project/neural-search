@@ -321,6 +321,117 @@ public class HybridLeafCollectorTests extends HybridCollectorTestCase {
     static abstract class ProfilingWrapperScorer extends Scorer implements ProfilingWrapper<Scorer> {}
 
     @SneakyThrows
+    public void testSetScorer_whenProfilingWrapperReturnsNullDelegate_thenFallsThrough() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, 1, "text1", ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector collector = new HybridTopScoreDocCollector(NUM_DOCS, new HitsThresholdChecker(TOTAL_HITS_UP_TO));
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        // Create a ProfilingWrapper that returns null from getDelegate()
+        ProfilingWrapperScorer profilingWrapper = mock(ProfilingWrapperScorer.class);
+        when(profilingWrapper.getDelegate()).thenReturn(null);
+        when(profilingWrapper.getChildren()).thenReturn(Collections.emptyList());
+
+        // This should NPE because no HybridQueryScorer is found, compoundQueryScorer is null
+        assertThrows(NullPointerException.class, () -> leafCollector.setScorer(profilingWrapper));
+
+        reader.close();
+        w.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testCollect_whenInProfilerMode_thenScoresPopulatedViaCollect() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, 1, "text1", ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector collector = new HybridTopScoreDocCollector(NUM_DOCS, new HitsThresholdChecker(TOTAL_HITS_UP_TO));
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        // Create mock scorers positioned on doc 0
+        Scorer subScorer1 = mock(Scorer.class);
+        when(subScorer1.docID()).thenReturn(0);
+        when(subScorer1.score()).thenReturn(2.0f);
+        when(subScorer1.iterator()).thenReturn(DocIdSetIterator.empty());
+
+        HybridQueryScorer mockHybridScorer = mock(HybridQueryScorer.class);
+        when(mockHybridScorer.docID()).thenReturn(0);
+        when(mockHybridScorer.getSubScorers()).thenReturn(Arrays.asList(subScorer1));
+
+        HybridTopScoreDocCollector.HybridTopScoreLeafCollector hybridLeafCollector =
+            (HybridTopScoreDocCollector.HybridTopScoreLeafCollector) leafCollector;
+
+        // Set profiler-mode fields
+        hybridLeafCollector.hybridQueryScorer = mockHybridScorer;
+        hybridLeafCollector.compoundQueryScorer = new HybridSubQueryScorer(1);
+
+        // Call collect() which should internally call populateScoresFromHybridQueryScorer()
+        leafCollector.collect(0);
+
+        // Verify that scores were collected (totalHits incremented)
+        assertTrue("totalHits should be > 0 after collect", collector.getTotalHits() > 0);
+
+        reader.close();
+        w.close();
+        directory.close();
+    }
+
+    /**
+     * Test findHybridQueryScorer traversal via getChildren() path.
+     * When scorer has children containing HybridQueryScorer, it should be found.
+     */
+    @SneakyThrows
+    public void testSetScorer_whenHybridQueryScorerInChildren_thenProfilerModeActivated() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, 1, "text1", ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector collector = new HybridTopScoreDocCollector(NUM_DOCS, new HitsThresholdChecker(TOTAL_HITS_UP_TO));
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        // Create a HybridQueryScorer
+        Scorer subScorer1 = mock(Scorer.class);
+        when(subScorer1.iterator()).thenReturn(DocIdSetIterator.empty());
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(Arrays.asList(subScorer1));
+
+        // Create a wrapper that exposes HybridQueryScorer via getChildren()
+        Scorable wrapperScorer = mock(Scorable.class);
+        when(wrapperScorer.getChildren()).thenReturn(Collections.singletonList(new Scorable.ChildScorable(hybridQueryScorer, "MUST")));
+
+        leafCollector.setScorer(wrapperScorer);
+
+        HybridTopScoreDocCollector.HybridTopScoreLeafCollector hybridLeafCollector =
+            (HybridTopScoreDocCollector.HybridTopScoreLeafCollector) leafCollector;
+        assertNotNull("hybridQueryScorer should be found via getChildren traversal", hybridLeafCollector.getHybridQueryScorer());
+        assertNotNull("compoundQueryScorer adapter should be created", hybridLeafCollector.getCompoundQueryScorer());
+
+        reader.close();
+        w.close();
+        directory.close();
+    }
+
+    @SneakyThrows
     public void testPopulateScores_whenSubScorerOnNoMoreDocs_thenScoreIsZero() {
         final Directory directory = newDirectory();
         final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());

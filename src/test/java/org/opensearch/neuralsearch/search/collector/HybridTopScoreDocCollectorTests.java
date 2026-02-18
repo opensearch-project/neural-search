@@ -446,10 +446,6 @@ public class HybridTopScoreDocCollectorTests extends HybridCollectorTestCase {
         directory.close();
     }
 
-    /**
-     * Tests that HybridLeafCollector can find HybridSubQueryScorer when it's wrapped in nested children.
-     * This simulates wrapper scorers that expose the nested scorer via getChildren().
-     */
     @SneakyThrows
     public void testCompoundScorer_whenHybridScorerIsNestedInMultipleLevels_thenSuccessful() {
         HybridTopScoreDocCollector hybridTopScoreDocCollector = new HybridTopScoreDocCollector(
