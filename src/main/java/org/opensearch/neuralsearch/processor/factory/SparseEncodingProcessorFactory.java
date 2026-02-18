@@ -8,7 +8,9 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.AbstractBatchingProcessor;
+import org.opensearch.ingest.ConfigurationUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.InferenceProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -23,6 +25,8 @@ import static org.opensearch.ingest.ConfigurationUtils.readDoubleProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+import static org.opensearch.neuralsearch.processor.InferenceProcessor.BATCH_SIZE_BYTES_FIELD;
+import static org.opensearch.neuralsearch.processor.InferenceProcessor.DEFAULT_BATCH_SIZE_BYTES;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.DEFAULT_SKIP_EXISTING;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.SKIP_EXISTING;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
@@ -57,6 +61,12 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
         String modelId = readStringProperty(TYPE, tag, config, MODEL_ID_FIELD);
         Map<String, Object> fieldMap = readMap(TYPE, tag, config, FIELD_MAP_FIELD);
         boolean skipExisting = readBooleanProperty(TYPE, tag, config, SKIP_EXISTING, DEFAULT_SKIP_EXISTING);
+        int batchSizeBytes = ConfigurationUtils.readIntProperty(TYPE, tag, config, BATCH_SIZE_BYTES_FIELD, DEFAULT_BATCH_SIZE_BYTES);
+        // When batch_size_bytes is set but batch_size was not explicitly configured (still at core default of 1),
+        // auto-elevate batch_size so the byte limit becomes the effective constraint.
+        if (batchSizeBytes > 0 && batchSize == InferenceProcessor.CORE_DEFAULT_BATCH_SIZE) {
+            batchSize = InferenceProcessor.AUTO_BATCH_SIZE_FOR_BYTE_BATCHING;
+        }
         // if the field is miss, will return PruneType.None
         PruneType pruneType = PruneType.fromString(readOptionalStringProperty(TYPE, tag, config, PruneUtils.PRUNE_TYPE_FIELD));
         float pruneRatio = 0;
@@ -84,6 +94,7 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
             tag,
             description,
             batchSize,
+            batchSizeBytes,
             modelId,
             fieldMap,
             skipExisting,

@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+- Add size-based (byte-aware) batching for neural search ingest processors ([#1762](https://github.com/opensearch-project/neural-search/pull/1762))
 
 ### Enhancements
 

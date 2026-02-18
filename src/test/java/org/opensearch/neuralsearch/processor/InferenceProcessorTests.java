@@ -193,6 +193,114 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         assertEquals(List.of("value4"), processor.getAllInferenceInputs().get(2));
     }
 
+    public void test_splitInferenceListByBytes_singleBatch() {
+        List<String> inferenceList = List.of("hello", "world");
+        // 10 bytes total for ASCII, set limit high enough for one batch
+        List<List<String>> result = InferenceProcessor.splitInferenceListByBytes(inferenceList, 1000);
+        assertEquals(1, result.size());
+        assertEquals(List.of("hello", "world"), result.get(0));
+    }
+
+    public void test_splitInferenceListByBytes_multipleBatches() {
+        // "aaa" = 3 bytes, "bbb" = 3 bytes, "ccc" = 3 bytes, "ddd" = 3 bytes
+        List<String> inferenceList = List.of("aaa", "bbb", "ccc", "ddd");
+        // Set limit to 6 bytes: should produce batches of [aaa, bbb], [ccc, ddd]
+        List<List<String>> result = InferenceProcessor.splitInferenceListByBytes(inferenceList, 6);
+        assertEquals(2, result.size());
+        assertEquals(List.of("aaa", "bbb"), result.get(0));
+        assertEquals(List.of("ccc", "ddd"), result.get(1));
+    }
+
+    public void test_splitInferenceListByBytes_singleItemExceedsLimit() {
+        // A single text that exceeds the byte limit should still be in its own batch (floor of 1)
+        List<String> inferenceList = List.of("this_is_a_long_text", "short");
+        List<List<String>> result = InferenceProcessor.splitInferenceListByBytes(inferenceList, 5);
+        assertEquals(2, result.size());
+        assertEquals(List.of("this_is_a_long_text"), result.get(0));
+        assertEquals(List.of("short"), result.get(1));
+    }
+
+    public void test_splitInferenceListByBytes_exactBoundary() {
+        // "abc" = 3 bytes each. Limit of 3 means each item gets its own batch
+        List<String> inferenceList = List.of("abc", "def", "ghi");
+        List<List<String>> result = InferenceProcessor.splitInferenceListByBytes(inferenceList, 3);
+        assertEquals(3, result.size());
+        assertEquals(List.of("abc"), result.get(0));
+        assertEquals(List.of("def"), result.get(1));
+        assertEquals(List.of("ghi"), result.get(2));
+    }
+
+    public void test_splitInferenceListByBytes_emptyList() {
+        List<String> inferenceList = Collections.emptyList();
+        List<List<String>> result = InferenceProcessor.splitInferenceListByBytes(inferenceList, 100);
+        assertTrue(result.isEmpty());
+    }
+
+    public void test_splitInferenceListByBytes_utf8MultiByte() {
+        // Unicode characters: "日本" = 6 bytes in UTF-8 (3 bytes per CJK character)
+        List<String> inferenceList = List.of("日本", "語");
+        // "日本" = 6 bytes, "語" = 3 bytes. Limit of 6 means first item fills a batch, second goes to next
+        List<List<String>> result = InferenceProcessor.splitInferenceListByBytes(inferenceList, 6);
+        assertEquals(2, result.size());
+        assertEquals(List.of("日本"), result.get(0));
+        assertEquals(List.of("語"), result.get(1));
+    }
+
+    public void test_batchExecute_byteSizeSubBatches() {
+        final int docCount = 3;
+        List<List<Float>> inferenceResults = createMockVectorWithLength(6);
+        // batchSize=100 (high, won't limit), batchSizeBytes=10 (will split)
+        TestInferenceProcessor processor = new TestInferenceProcessor(inferenceResults, 100, 10, null);
+        List<IngestDocumentWrapper> wrapperList = createIngestDocumentWrappers(docCount);
+        // Each "valueX" is 6 bytes. With batchSizeBytes=10, we can fit 1 per batch (6 > 10/2 but 6+6=12 > 10)
+        wrapperList.get(0).getIngestDocument().setFieldValue("key1", "value0");
+        wrapperList.get(1).getIngestDocument().setFieldValue("key1", "value1");
+        wrapperList.get(2).getIngestDocument().setFieldValue("key1", "value2");
+        List<IngestDocumentWrapper> allResults = new ArrayList<>();
+        processor.batchExecute(wrapperList, allResults::addAll);
+        // "value0"=6 bytes, "value1"=6 bytes, "value2"=6 bytes
+        // With limit 10: batch1=[value0] (6 bytes), then value1 would make 12 > 10, so flush
+        // After sort by length (all same length), batches should be:
+        // [value0, value1] would be 12 > 10, so: [value0](6), [value1](6), [value2](6)
+        // Actually: first item "value0" (6 bytes) fits. Second "value1" (6+6=12 > 10) triggers flush.
+        // So: [value0], [value1], [value2] = 3 sub-batches
+        assertEquals(3, processor.getAllInferenceInputs().size());
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(wrapperList.get(i).getIngestDocument(), allResults.get(i).getIngestDocument());
+        }
+    }
+
+    public void test_batchExecute_byteSizeDisabled() {
+        final int docCount = 2;
+        List<List<Float>> inferenceResults = createMockVectorWithLength(6);
+        // batchSizeBytes=-1 means disabled, should behave like normal batch
+        TestInferenceProcessor processor = new TestInferenceProcessor(inferenceResults, 100, -1, null);
+        List<IngestDocumentWrapper> wrapperList = createIngestDocumentWrappers(docCount);
+        wrapperList.get(0).getIngestDocument().setFieldValue("key1", "value0");
+        wrapperList.get(1).getIngestDocument().setFieldValue("key1", "value1");
+        List<IngestDocumentWrapper> allResults = new ArrayList<>();
+        processor.batchExecute(wrapperList, allResults::addAll);
+        // All in one batch since batchSizeBytes is disabled
+        assertEquals(1, processor.getAllInferenceInputs().size());
+        assertEquals(2, processor.getAllInferenceInputs().get(0).size());
+    }
+
+    public void test_batchExecute_byteSizeLargeEnough() {
+        final int docCount = 3;
+        List<List<Float>> inferenceResults = createMockVectorWithLength(6);
+        // batchSizeBytes large enough to fit all texts in one batch
+        TestInferenceProcessor processor = new TestInferenceProcessor(inferenceResults, 100, 100000, null);
+        List<IngestDocumentWrapper> wrapperList = createIngestDocumentWrappers(docCount);
+        wrapperList.get(0).getIngestDocument().setFieldValue("key1", "value0");
+        wrapperList.get(1).getIngestDocument().setFieldValue("key1", "value1");
+        wrapperList.get(2).getIngestDocument().setFieldValue("key1", "value2");
+        List<IngestDocumentWrapper> allResults = new ArrayList<>();
+        processor.batchExecute(wrapperList, allResults::addAll);
+        // All in one batch
+        assertEquals(1, processor.getAllInferenceInputs().size());
+        assertEquals(3, processor.getAllInferenceInputs().get(0).size());
+    }
+
     private class TestInferenceProcessor extends InferenceProcessor {
         List<?> vectors;
         Exception exception;
@@ -202,6 +310,24 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
 
         public TestInferenceProcessor(List<?> vectors, int batchSize, Exception exception) {
             super(TAG, DESCRIPTION, batchSize, TYPE, MAP_KEY, MODEL_ID, FIELD_MAP, clientAccessor, environment, mockClusterService);
+            this.vectors = vectors;
+            this.exception = exception;
+        }
+
+        public TestInferenceProcessor(List<?> vectors, int batchSize, int batchSizeBytes, Exception exception) {
+            super(
+                TAG,
+                DESCRIPTION,
+                batchSize,
+                batchSizeBytes,
+                TYPE,
+                MAP_KEY,
+                MODEL_ID,
+                FIELD_MAP,
+                clientAccessor,
+                environment,
+                mockClusterService
+            );
             this.vectors = vectors;
             this.exception = exception;
         }
