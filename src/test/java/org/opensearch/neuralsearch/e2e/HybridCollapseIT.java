@@ -57,7 +57,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         // testCollapse_whenE2EWithInnerHits_thenSuccessful();
 
         // For min_score=0.5005f, it filters out 1 doc
-        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 1);
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
     }
 
     public void testCollapse_withMultipleShard_thenSuccessful() {

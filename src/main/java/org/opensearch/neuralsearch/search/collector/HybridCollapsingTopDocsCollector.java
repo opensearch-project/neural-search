@@ -95,8 +95,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         this.numHits = topNGroups;
         this.hitsThresholdChecker = hitsThresholdChecker;
         // If docsPerGroupPerSubQuery is not larger than 0, use the size for hybrid search without collapse
-        // this.docsPerGroupPerSubQuery = docsPerGroupPerSubQuery > 0 ? docsPerGroupPerSubQuery : topNGroups;
-        this.docsPerGroupPerSubQuery = 1;
+        this.docsPerGroupPerSubQuery = docsPerGroupPerSubQuery > 0 ? docsPerGroupPerSubQuery : topNGroups;
     }
 
     /**
