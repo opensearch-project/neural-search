@@ -42,3 +42,4 @@ jobs:
       - name: publish snapshots to maven
         run: |
           ./gradlew publishPluginZipPublicationToSnapshotsRepository
+          ./gradlew publishNebulaPublicationToSnapshotsRepository
