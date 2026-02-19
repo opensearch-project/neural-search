@@ -15,7 +15,6 @@ import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.FieldValueHitQueue;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.LeafFieldComparator;
-import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
@@ -31,10 +30,12 @@ import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.TreeMap;
 
 /**
  * Collects the CollapseTopFieldDocs based on a collapse field passed in a search request containing a hybrid query.
@@ -58,6 +59,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private Map<T, boolean[]> queueFullMap;
     private final int numHits;
     private final int docsPerGroupPerSubQuery;
+    private boolean isSortByScore;
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private HitsThresholdChecker hitsThresholdChecker;
@@ -78,6 +80,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
         for (int i = 0; i < sortFields.length; ++i) {
             SortField sortField = sortFields[i];
+            isSortByScore = SortField.Type.SCORE.equals(sortField.getType());
             this.reversed[i] = sortField.getReverse() ? -1 : 1;
         }
 
@@ -92,16 +95,17 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         this.numHits = topNGroups;
         this.hitsThresholdChecker = hitsThresholdChecker;
         // If docsPerGroupPerSubQuery is not larger than 0, use the size for hybrid search without collapse
-        this.docsPerGroupPerSubQuery = docsPerGroupPerSubQuery > 0 ? docsPerGroupPerSubQuery : topNGroups;
+        // this.docsPerGroupPerSubQuery = docsPerGroupPerSubQuery > 0 ? docsPerGroupPerSubQuery : topNGroups;
+        this.docsPerGroupPerSubQuery = 1;
     }
 
     /**
      * Creates a HybridCollapsingTopDocsCollector for keyword fields.
      *
-     * @param collapseField The field to collapse on
-     * @param fieldType The mapped field type
-     * @param sort The sort criteria to apply
-     * @param topNGroups The number of top groups to collect
+     * @param collapseField        The field to collapse on
+     * @param fieldType            The mapped field type
+     * @param sort                 The sort criteria to apply
+     * @param topNGroups           The number of top groups to collect
      * @param hitsThresholdChecker Checker for hits threshold
      * @return A new HybridCollapsingTopDocsCollector instance for keyword fields
      */
@@ -126,10 +130,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     /**
      * Creates a HybridCollapsingTopDocsCollector for numeric fields.
      *
-     * @param collapseField The field to collapse on
-     * @param fieldType The mapped field type
-     * @param sort The sort criteria to apply
-     * @param topNGroups The number of top groups to collect
+     * @param collapseField        The field to collapse on
+     * @param fieldType            The mapped field type
+     * @param sort                 The sort criteria to apply
+     * @param topNGroups           The number of top groups to collect
      * @param hitsThresholdChecker Checker for hits threshold
      * @return A new HybridCollapsingTopDocsCollector instance for numeric fields
      */
@@ -174,6 +178,19 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 totalHitsForSubQuery += hits[subQueryNumber];
             }
 
+            if (totalHitsForSubQuery == 0) {
+                topDocsList.add(
+                    new CollapseTopFieldDocs(
+                        collapseField,
+                        new TotalHits(0, totalHitsRelation),
+                        new FieldDoc[0],
+                        sort.getSort(),
+                        new Object[0]
+                    )
+                );
+                continue;
+            }
+
             // Collect top N groups
             for (Map.Entry<T, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> entry : groupQueueMap.entrySet()) {
                 T groupValue = entry.getKey();
@@ -183,8 +200,12 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 }
             }
 
-            ArrayList<ScoreDoc> fieldDocs = new ArrayList<>();
-            ArrayList<T> collapseValues = new ArrayList<>();
+            // Get comparators from any group (they're all the same type)
+            final FieldComparator<?>[] comparators = topGroupsQueue.top().queue.getComparators();
+            final int[] reverseMul = topGroupsQueue.top().queue.getReverseMul();
+
+            // Use TreeMap with simple comparator
+            TreeMap<FieldDoc, T> fieldDocsMap = new TreeMap<>(createFieldDocComparator(comparators, reverseMul));
 
             // Pop entries in reverse order to maintain sorting
             GroupEntry<T>[] topGroups = new GroupEntry[topGroupsQueue.size()];
@@ -210,9 +231,19 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     for (int k = 0; k < n; ++k) {
                         fields[k] = priorityQueue.getComparators()[k].value(queueEntry.slot);
                     }
-                    fieldDocs.add(new FieldDoc(queueEntry.doc, queueEntry.score, fields));
-                    collapseValues.add(groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue);
+                    FieldDoc fieldDoc = new FieldDoc(queueEntry.doc, queueEntry.score, fields);
+                    T collapseValue = groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue;
+                    fieldDocsMap.put(fieldDoc, collapseValue);
                 }
+            }
+
+            // Extract in sorted order
+            ArrayList<FieldDoc> fieldDocs = new ArrayList<>();
+            ArrayList<T> collapseValues = new ArrayList<>();
+
+            for (Map.Entry<FieldDoc, T> entry : fieldDocsMap.entrySet()) {
+                fieldDocs.add(entry.getKey());
+                collapseValues.add(entry.getValue());
             }
 
             topDocsList.add(
@@ -255,23 +286,57 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             FieldValueHitQueue.Entry entryA = queueA.top();
             FieldValueHitQueue.Entry entryB = queueB.top();
 
-            FieldComparator<?>[] comparators = queueA.getComparators();
+            FieldComparator<?>[] comparatorsA = queueA.getComparators();
+            FieldComparator<?>[] comparatorsB = queueB.getComparators();
+
+            assert comparatorsA.length == comparatorsB.length;
             int[] reverseMul = queueA.getReverseMul();
 
-            for (int i = 0; i < comparators.length; i++) {
-                FieldComparator<Object> comparator = (FieldComparator<Object>) comparators[i];
-                Object valueA = comparator.value(entryA.slot);
-                Object valueB = comparator.value(entryB.slot);
+            for (int i = 0; i < comparatorsA.length; i++) {
+                FieldComparator<Object> comparatorA = (FieldComparator<Object>) comparatorsA[i];
+                FieldComparator<Object> comparatorB = (FieldComparator<Object>) comparatorsB[i];
+                Object valueA = comparatorA.value(entryA.slot);
+                Object valueB = comparatorB.value(entryB.slot);
 
-                int comparison = comparator.compareValues(valueA, valueB);
+                int comparison = comparatorA.compareValues(valueA, valueB);
                 if (comparison != 0) {
-                    return reverseMul[i] * comparison < 0;
+                    return reverseMul[i] * comparison > 0;
                 }
             }
 
             // If all comparisons are equal, use score as a tie-breaker.
-            return entryB.score < entryA.score;
+            return entryA.score < entryB.score;
         }
+    }
+
+    /**
+     * Creates a comparator for FieldDoc objects based on sort criteria.
+     *
+     * @param comparators The field comparators for each sort field
+     * @param reverseMul The reverse multipliers for sort order
+     * @return A comparator that sorts FieldDocs according to the sort criteria
+     */
+    private Comparator<FieldDoc> createFieldDocComparator(final FieldComparator<?>[] comparators, final int[] reverseMul) {
+        return (a, b) -> {
+            if (comparators != null) {
+                for (int i = 0; i < comparators.length; i++) {
+                    FieldComparator<Object> comparator = (FieldComparator<Object>) comparators[i];
+                    Object valueA = a.fields[i];
+                    Object valueB = b.fields[i];
+
+                    int cmp = comparator.compareValues(valueA, valueB);
+                    if (cmp != 0) {
+                        return reverseMul[i] * cmp;
+                    }
+                }
+            }
+
+            // Tie-breaker: score then doc ID
+            if (a.score != b.score) {
+                return Float.compare(b.score, a.score);
+            }
+            return Integer.compare(a.doc, b.doc);
+        };
     }
 
     /**
@@ -354,20 +419,17 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                         continue;
                     }
 
-                    // Retrieve the array of collected hits for the current group
-                    // Use groupValue for immediate map lookups - safe because we're not storing it
-                    int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
-                    int slot = collectedHitsForCurrentSubQuery[subQueryNumber];
-
-                    // Increment the hit count for the current subquery
-                    collectedHitsForCurrentSubQuery[subQueryNumber]++;
-                    collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
-
                     // If the priority queue is full, replace the lowest scoring document per the comparator.
                     // If the priority queue is not full, add the entry to the queue.
                     if (isQueueFull(groupValue, subQueryNumber)) {
-                        updateExistingEntry(groupValue, subQueryNumber, doc);
+                        updateExistingEntry(groupValue, subQueryNumber, doc, score);
                     } else {
+                        // Retrieve the array of collected hits for the current group
+                        // Use groupValue for immediate map lookups - safe because we're not storing it
+                        int[] collectedHitsForCurrentSubQuery = collectedHitsPerSubQueryMap.get(groupValue);
+                        int slot = collectedHitsForCurrentSubQuery[subQueryNumber];
+                        collectedHitsForCurrentSubQuery[subQueryNumber]++;
+                        collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
                         addNewEntry(groupValue, subQueryNumber, doc, score, slot);
                     }
                 }
@@ -391,26 +453,39 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
 
+                // Use copyValue() once for all map operations - creates persistent copy safe from mutation
+                T persistentGroupValue = groupSelector.copyValue();
+
                 for (int subQueryNumber = 0; subQueryNumber < numSubQueries; subQueryNumber++) {
                     LeafFieldComparator[] leafFieldComparators = compoundScores[subQueryNumber].getComparators(context);
                     int[] reverseMuls = compoundScores[subQueryNumber].getReverseMul();
 
+                    LeafFieldComparator comparator;
+                    int reverseMul;
+
                     if (leafFieldComparators.length == 1) {
-                        // Use copyValue() as map key - creates persistent copy safe from mutation
-                        // Example: If groupValue is BytesRef("A"), copyValue() creates independent BytesRef("A")
-                        // Without this, the next document's BytesRef("B") would overwrite our map key
-                        reverseMulMap.put(groupSelector.copyValue(), reverseMuls[0]);
-                        comparators[subQueryNumber] = leafFieldComparators[0];
+                        // Single comparator - wrap if sorting by score
+                        reverseMul = reverseMuls[0];
+                        LeafFieldComparator actualComparator = leafFieldComparators[0];
+
+                        comparator = isSortByScore ? new HybridLeafFieldComparator(actualComparator) : actualComparator;
                     } else {
-                        reverseMulMap.put(groupSelector.copyValue(), 1);
-                        comparators[subQueryNumber] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
+                        // Multiple comparators - MultiLeafFieldComparator handles reverseMul internally
+                        reverseMul = 1;
+                        comparator = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
                     }
-                    comparators[subQueryNumber].setScorer(compoundQueryScorer);
+
+                    // Configure and store comparator
+                    comparator.setScorer(compoundQueryScorer);
+                    comparators[subQueryNumber] = comparator;
+
+                    // Store reverseMul for this group (only needs to be done once, but harmless to repeat)
+                    reverseMulMap.put(persistentGroupValue, reverseMul);
                 }
 
-                // Use copyValue() as map key to ensure persistence across document iterations
-                comparatorsMap.put(groupSelector.copyValue(), comparators);
-                initializeLeafComparatorsPerSegmentOnceMap.put(groupSelector.copyValue(), false);
+                // Update maps with persistent group value
+                comparatorsMap.put(persistentGroupValue, comparators);
+                initializeLeafComparatorsPerSegmentOnceMap.put(persistentGroupValue, false);
             }
 
             private void updateHitCount() throws CollectionTerminatedException {
@@ -429,10 +504,18 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 return queueFullArray[index];
             }
 
-            private void updateExistingEntry(T groupValue, int index, int doc) throws IOException {
+            private void updateExistingEntry(T groupValue, int index, int doc, float score) throws IOException {
                 // Retrieve the array of comparators for the current group
                 LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
+                float scoreOfLastTopEntry = 0;
 
+                // If the sort criteria is score then we need to update the currentSubQueryScore to compare it will last bottom entry value.
+                // We do this to evaluate whether it should be added in the priority queue of not.
+                if (isSortByScore) {
+                    assert comparators[index] instanceof HybridLeafFieldComparator;
+                    scoreOfLastTopEntry = ((HybridLeafFieldComparator) comparators[index]).getCurrentSubQueryScore();
+                    ((HybridLeafFieldComparator) comparators[index]).setCurrentSubQueryScore(score);
+                }
                 // Check if the current document should replace the bottom entry in the queue
                 // The comparison is multiplied by reverseMul to handle ascending/descending order
                 if (reverseMulMap.get(groupValue) * comparators[index].compareBottom(doc) > 0) {
@@ -442,9 +525,9 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                     // Copy the current document's data to the slot of the bottom entry
                     comparators[index].copy(fieldValueLeafTrackers[index].slot, doc);
-
                     // Update the document ID in the leaf tracker
                     fieldValueLeafTrackers[index].doc = docBase + doc;
+                    fieldValueLeafTrackers[index].score = score;
 
                     // Update the top entry in the compound scores and get the new bottom entry
                     fieldValueLeafTrackers[index] = compoundScores[index].updateTop();
@@ -454,6 +537,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                     // Update related maps with the new information
                     updateMaps(comparators, fieldValueLeafTrackers, compoundScores);
+                } else {
+                    if (isSortByScore) {
+                        ((HybridLeafFieldComparator) comparators[index]).setCurrentSubQueryScore(scoreOfLastTopEntry);
+                    }
                 }
             }
 
@@ -462,10 +549,14 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
                 // Update the maximum score if necessary
                 maxScore = Math.max(score, maxScore);
-
                 // Retrieve leaf trackers and comparators for the current group
                 FieldValueHitQueue.Entry[] fieldValueLeafTrackers = fieldValueLeafTrackersMap.get(groupValue);
                 LeafFieldComparator[] comparators = comparatorsMap.get(groupValue);
+
+                if (isSortByScore) {
+                    assert comparators[subQueryNumber] instanceof HybridLeafFieldComparator;
+                    ((HybridLeafFieldComparator) comparators[subQueryNumber]).setCurrentSubQueryScore(score);
+                }
 
                 // Copy the document data to the appropriate slot in the comparator
                 comparators[subQueryNumber].copy(slot, doc);
@@ -486,6 +577,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     queueFullArray[subQueryNumber] = true;
                     // Use copyValue() as map key to persist the queue full state
                     queueFullMap.put(groupSelector.copyValue(), queueFullArray);
+                    comparators[subQueryNumber].setBottom(fieldValueLeafTrackers[subQueryNumber].slot);
                 }
             }
 
