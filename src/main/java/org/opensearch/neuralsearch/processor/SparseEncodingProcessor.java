@@ -84,7 +84,53 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         Environment environment,
         ClusterService clusterService
     ) {
-        super(tag, description, batchSize, TYPE, LIST_TYPE_NESTED_MAP_KEY, modelId, fieldMap, clientAccessor, environment, clusterService);
+        this(
+            tag,
+            description,
+            batchSize,
+            DEFAULT_BATCH_SIZE_BYTES,
+            modelId,
+            fieldMap,
+            skipExisting,
+            textEmbeddingInferenceFilter,
+            pruneType,
+            pruneRatio,
+            openSearchClient,
+            clientAccessor,
+            environment,
+            clusterService
+        );
+    }
+
+    public SparseEncodingProcessor(
+        String tag,
+        String description,
+        int batchSize,
+        int batchSizeBytes,
+        String modelId,
+        Map<String, Object> fieldMap,
+        boolean skipExisting,
+        TextEmbeddingInferenceFilter textEmbeddingInferenceFilter,
+        PruneType pruneType,
+        float pruneRatio,
+        OpenSearchClient openSearchClient,
+        MLCommonsClientAccessor clientAccessor,
+        Environment environment,
+        ClusterService clusterService
+    ) {
+        super(
+            tag,
+            description,
+            batchSize,
+            batchSizeBytes,
+            TYPE,
+            LIST_TYPE_NESTED_MAP_KEY,
+            modelId,
+            fieldMap,
+            clientAccessor,
+            environment,
+            clusterService
+        );
         this.pruneType = pruneType;
         this.pruneRatio = pruneRatio;
         this.skipExisting = skipExisting;

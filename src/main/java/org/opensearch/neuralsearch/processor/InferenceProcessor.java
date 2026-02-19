@@ -33,9 +33,11 @@ import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -44,6 +46,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -66,6 +70,18 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     public static final String FIELD_MAP_FIELD = "field_map";
     public static final String SKIP_EXISTING = "skip_existing";
     public static final boolean DEFAULT_SKIP_EXISTING = false;
+    public static final String BATCH_SIZE_BYTES_FIELD = "batch_size_bytes";
+    public static final int DEFAULT_BATCH_SIZE_BYTES = -1;
+    /**
+     * When batch_size_bytes is configured but batch_size is not explicitly set by the user,
+     * we auto-elevate batch_size to this value so that the byte-based limit becomes the
+     * effective batching constraint. Without this, the core default batch_size of 1 would
+     * cause documents to be sent one at a time, making batch_size_bytes a no-op.
+     * OpenSearch bulk requests are bounded by http.max_content_length (default 100MB),
+     * not by document count, so 1000 is a safe upper bound.
+     */
+    public static final int AUTO_BATCH_SIZE_FOR_BYTE_BATCHING = 1000;
+    public static final int CORE_DEFAULT_BATCH_SIZE = 1;
     private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {
         if (v1 instanceof Collection && v2 instanceof Collection) {
             ((Collection) v1).addAll((Collection) v2);
@@ -92,11 +108,40 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     private final Environment environment;
     private final ClusterService clusterService;
+    private final int batchSizeBytes;
 
     public InferenceProcessor(
         String tag,
         String description,
         int batchSize,
+        String type,
+        String listTypeNestedMapKey,
+        String modelId,
+        Map<String, Object> fieldMap,
+        MLCommonsClientAccessor clientAccessor,
+        Environment environment,
+        ClusterService clusterService
+    ) {
+        this(
+            tag,
+            description,
+            batchSize,
+            DEFAULT_BATCH_SIZE_BYTES,
+            type,
+            listTypeNestedMapKey,
+            modelId,
+            fieldMap,
+            clientAccessor,
+            environment,
+            clusterService
+        );
+    }
+
+    public InferenceProcessor(
+        String tag,
+        String description,
+        int batchSize,
+        int batchSizeBytes,
         String type,
         String listTypeNestedMapKey,
         String modelId,
@@ -115,6 +160,7 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
+        this.batchSizeBytes = batchSizeBytes;
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
@@ -208,6 +254,10 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     /**
      * This is a helper function for subBatchExecute, which invokes doBatchExecute for given inference list.
+     * When batch_size_bytes is configured, the inference list is further split into sub-batches based on
+     * cumulative byte size of the texts. Each sub-batch is sent to doBatchExecute independently and results
+     * are stitched back together before being passed to batchExecuteHandler.
+     *
      * @param ingestDocumentWrappers a list of IngestDocuments in a batch.
      * @param inferenceList a list of String for inference.
      * @param dataForInferences a list of data for inference, which includes ingestDocumentWrapper, processMap, inferenceList.
@@ -221,10 +271,85 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
         inferenceList = sortedResult.v1();
         Map<Integer, Integer> originalOrder = sortedResult.v2();
-        doBatchExecute(inferenceList, results -> {
-            batchExecuteHandler(results, dataForInferences, originalOrder);
-            handler.accept(ingestDocumentWrappers);
-        }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+
+        if (batchSizeBytes <= 0) {
+            // No byte-based batching — send the entire inference list in one call (existing behavior)
+            doBatchExecute(inferenceList, results -> {
+                batchExecuteHandler(results, dataForInferences, originalOrder);
+                handler.accept(ingestDocumentWrappers);
+            }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+            return;
+        }
+
+        // Split inference list into sub-batches based on cumulative byte size
+        List<List<String>> subBatches = splitInferenceListByBytes(inferenceList, batchSizeBytes);
+
+        if (subBatches.size() == 1) {
+            // Only one sub-batch, no need for stitching logic
+            doBatchExecute(subBatches.get(0), results -> {
+                batchExecuteHandler(results, dataForInferences, originalOrder);
+                handler.accept(ingestDocumentWrappers);
+            }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+            return;
+        }
+
+        // Multiple sub-batches: execute sequentially and stitch results
+        List<Object> allResults = Collections.synchronizedList(new ArrayList<>());
+        AtomicInteger subBatchIndex = new AtomicInteger(0);
+        AtomicReference<Consumer<Void>> processNextRef = new AtomicReference<>();
+
+        Consumer<Void> processNext = (v) -> processNextRef.get().accept(v);
+        processNextRef.set((v) -> {
+            int idx = subBatchIndex.getAndIncrement();
+            if (idx >= subBatches.size()) {
+                // All sub-batches done, stitch results and handle
+                batchExecuteHandler(allResults, dataForInferences, originalOrder);
+                handler.accept(ingestDocumentWrappers);
+                return;
+            }
+            doBatchExecute(subBatches.get(idx), results -> {
+                allResults.addAll(results);
+                processNext.accept(null);
+            }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+        });
+
+        processNext.accept(null);
+    }
+
+    /**
+     * Splits an inference list into sub-batches where each sub-batch's cumulative UTF-8 byte size
+     * does not exceed maxBytes. A single text that exceeds maxBytes is always placed in its own
+     * sub-batch (floor of 1 item per batch).
+     *
+     * @param inferenceList the list of inference texts to split
+     * @param maxBytes the maximum cumulative byte size per sub-batch
+     * @return a list of sub-batches
+     */
+    @VisibleForTesting
+    static List<List<String>> splitInferenceListByBytes(List<String> inferenceList, int maxBytes) {
+        List<List<String>> subBatches = new ArrayList<>();
+        List<String> currentBatch = new ArrayList<>();
+        long currentBatchBytes = 0;
+
+        for (String text : inferenceList) {
+            long textBytes = text.getBytes(StandardCharsets.UTF_8).length;
+
+            if (!currentBatch.isEmpty() && currentBatchBytes + textBytes > maxBytes) {
+                // Adding this text would exceed the limit — flush current batch
+                subBatches.add(currentBatch);
+                currentBatch = new ArrayList<>();
+                currentBatchBytes = 0;
+            }
+
+            currentBatch.add(text);
+            currentBatchBytes += textBytes;
+        }
+
+        if (!currentBatch.isEmpty()) {
+            subBatches.add(currentBatch);
+        }
+
+        return subBatches;
     }
 
     protected void batchExecuteHandler(List<?> results, List<DataForInference> dataForInferences, Map<Integer, Integer> originalOrder) {
