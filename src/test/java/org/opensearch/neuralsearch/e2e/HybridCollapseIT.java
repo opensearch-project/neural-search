@@ -52,9 +52,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     public void testCollapse_withSingleShard_thenSuccessful() {
         createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION, NUMBER_OF_SHARDS_ONE);
-        // testCollapse_whenE2E_thenSuccessful();
-        // testCollapse_whenE2E_andSortEnabled_thenSuccessful();
-        // testCollapse_whenE2EWithInnerHits_thenSuccessful();
+        testCollapse_whenE2E_thenSuccessful();
+        testCollapse_whenE2E_andSortEnabled_thenSuccessful();
+        testCollapse_whenE2EWithInnerHits_thenSuccessful();
 
         // For min_score=0.5005f, it filters out 1 doc
         testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
@@ -62,10 +62,10 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     public void testCollapse_withMultipleShard_thenSuccessful() {
         createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION, NUMBER_OF_SHARDS_FIVE);
-        // testCollapse_whenE2E_thenSuccessful();
-        // testCollapse_whenE2E_andSortEnabled_thenSuccessful();
-        // testCollapse_whenE2EWithInnerHits_thenSuccessful();
-        // testCollapse_whenShardHasNoDocuments_thenSuccessful();
+        testCollapse_whenE2E_thenSuccessful();
+        testCollapse_whenE2E_andSortEnabled_thenSuccessful();
+        testCollapse_whenE2EWithInnerHits_thenSuccessful();
+        testCollapse_whenShardHasNoDocuments_thenSuccessful();
 
         // For min_score=0.5005f, it filters out no docs;
         testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
