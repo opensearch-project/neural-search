@@ -1131,6 +1131,31 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(1, innerHitsMap.size());
     }
 
+    public void testQueries_whenAccessedViaPublicMethod_thenReturnUnmodifiableList() {
+        setUpClusterService();
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder();
+        TermQueryBuilder termQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
+        hybridQueryBuilder.add(termQuery);
+
+        List<QueryBuilder> returnedQueries = hybridQueryBuilder.queries();
+
+        // verify the returned list reflects internal state
+        assertEquals(1, returnedQueries.size());
+        assertSame(termQuery, returnedQueries.get(0));
+
+        // verify add throws UnsupportedOperationException
+        expectThrows(UnsupportedOperationException.class, () -> returnedQueries.add(QueryBuilders.termQuery("field", "value")));
+
+        // verify remove throws UnsupportedOperationException
+        expectThrows(UnsupportedOperationException.class, () -> returnedQueries.remove(0));
+
+        // verify clear throws UnsupportedOperationException
+        expectThrows(UnsupportedOperationException.class, () -> returnedQueries.clear());
+
+        // verify internal state is not affected by failed mutation attempts
+        assertEquals(1, hybridQueryBuilder.queries().size());
+    }
+
     public void testExtractInnerHitsBuilders_whenMultipleInnerHitsOnSamePath_thenFail() {
         InnerHitBuilder innerHitBuilder = new InnerHitBuilder();
         NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder(

@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.query;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.ListIterator;
@@ -34,6 +35,7 @@ import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.QueryShardException;
 import org.opensearch.index.query.QueryBuilderVisitor;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -60,9 +62,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private static final ParseField FILTER_FIELD = new ParseField("filter");
     private static final ParseField PAGINATION_DEPTH_FIELD = new ParseField("pagination_depth");
 
+    @Getter(AccessLevel.NONE)
     private final List<QueryBuilder> queries = new ArrayList<>();
 
     private Integer paginationDepth;
+
+    /**
+     * Returns an unmodifiable view of the sub-queries in this hybrid query.
+     * Clients cannot modify the returned list, ensuring the internal state of this builder is protected.
+     * @return unmodifiable list of query builders
+     */
+    public List<QueryBuilder> queries() {
+        return Collections.unmodifiableList(queries);
+    }
 
     public static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;

@@ -19,3 +19,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Maintenance
 
 ### Refactoring
+- [HYBRID] Return unmodifiable list from HybridQueryBuilder queries() accessor to prevent external state mutation ([#1764](https://github.com/opensearch-project/neural-search/pull/1764))
