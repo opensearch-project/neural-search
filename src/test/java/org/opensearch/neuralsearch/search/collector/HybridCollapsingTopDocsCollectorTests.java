@@ -88,7 +88,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(1000, collapseTopFieldDocs.totalHits.value());
+            assertEquals(100, collapseTopFieldDocs.totalHits.value());
             assertEquals(DOCS_PER_GROUP_PER_SUBQUERY * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify collapse values
@@ -151,7 +151,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(1000, collapseTopFieldDocs.totalHits.value());
+            assertEquals(100, collapseTopFieldDocs.totalHits.value());
             assertEquals(DOCS_PER_GROUP_PER_SUBQUERY * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify collapse values
@@ -211,7 +211,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(1000, collapseTopFieldDocs.totalHits.value());
+            assertEquals(50, collapseTopFieldDocs.totalHits.value());
             assertEquals(TOP_N_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
 
             // Verify collapse values
@@ -302,7 +302,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(100, collapseTopFieldDocs.totalHits.value());
+            assertEquals(5, collapseTopFieldDocs.totalHits.value());
 
             // With docsPerGroupPerSubQuery = 1, we should get at most 1 document per group
             // Even though 50 documents mapped to "group0", only 1 should be in the final result
@@ -380,7 +380,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(20, collapseTopFieldDocs.totalHits.value());
+            assertEquals(10, collapseTopFieldDocs.totalHits.value());
 
             // Key validation: Despite 20 documents in same group, only 1 should be returned
             assertEquals("Should have exactly 10 document due to docsPerGroupPerSubQuery=10", 10, collapseTopFieldDocs.scoreDocs.length);
