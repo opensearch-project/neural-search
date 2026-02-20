@@ -86,12 +86,12 @@ public class NeuralSearchMLInputBuilderTests extends OpenSearchTestCase {
 
         List<String> inputTexts = Arrays.asList("test text");
 
-        // Execute & Verify
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> NeuralSearchMLInputBuilder.createTextEmbeddingInput(model, null, inputTexts, request)
-        );
-        assertEquals("Remote models are only supported for asymmetric E5 text embedding", exception.getMessage());
+        // Execute
+        MLInput result = NeuralSearchMLInputBuilder.createTextEmbeddingInput(model, null, inputTexts, request);
+
+        // Verify
+        assertNotNull(result);
+        assertEquals(FunctionName.TEXT_EMBEDDING, result.getAlgorithm());
     }
 
     public void testCreateTextEmbeddingInput_remoteModel_multipleInputs() {
