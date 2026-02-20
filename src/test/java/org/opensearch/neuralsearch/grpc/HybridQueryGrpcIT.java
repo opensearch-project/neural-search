@@ -73,7 +73,30 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
     @After
     public void tearDownGrpc() throws Exception {
+        // Shutdown gRPC channel
         GrpcTestHelper.shutdownChannel(grpcChannel);
+
+        // Clean up test resources - delete test index
+        deleteTestIndex();
+    }
+
+    /**
+     * Delete the test index to clean up resources after test execution.
+     */
+    @SneakyThrows
+    private void deleteTestIndex() {
+        try {
+            if (checkIndexExists(TEST_INDEX_NAME)) {
+                logger.info("Deleting test index: {}", TEST_INDEX_NAME);
+                Request deleteRequest = new Request("DELETE", "/" + TEST_INDEX_NAME);
+                Response response = client().performRequest(deleteRequest);
+                if (response.getStatusLine().getStatusCode() == 200) {
+                    logger.info("Successfully deleted test index: {}", TEST_INDEX_NAME);
+                }
+            }
+        } catch (Exception e) {
+            logger.warn("Failed to delete test index {}: {}", TEST_INDEX_NAME, e.getMessage());
+        }
     }
 
     // ===========================================================================================
@@ -119,7 +142,14 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         assertNotNull("Search response should not be null", response);
         assertTrue("Response should have hits", response.getHits().getHitsCount() > 0);
-        logger.info("Hybrid query returned {} hits", response.getHits().getHitsCount());
+        // Verify total hits count
+        assertTrue("Total hits should be greater than 0", response.getHits().getTotal().getTotalHits().getValue() > 0);
+        assertEquals("Total relation should be EQUAL_TO", "EQUAL_TO", response.getHits().getTotal().getTotalHits().getRelation().name());
+        logger.info(
+            "Hybrid query returned {} hits, total: {}",
+            response.getHits().getHitsCount(),
+            response.getHits().getTotal().getTotalHits().getValue()
+        );
     }
 
     /**
@@ -137,6 +167,13 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         assertNotNull("Search response should not be null", response);
         assertTrue("Should find documents matching either sub-query", response.getHits().getHitsCount() >= 2);
+        // Verify total hits count
+        assertTrue("Total hits should be at least 2", response.getHits().getTotal().getTotalHits().getValue() >= 2);
+        logger.info(
+            "Multiple sub-queries returned {} hits, total: {}",
+            response.getHits().getHitsCount(),
+            response.getHits().getTotal().getTotalHits().getValue()
+        );
     }
 
     // ===========================================================================================
@@ -158,7 +195,13 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         assertNotNull("Search response should not be null", response);
         assertTrue("Should return results with filter", response.getHits().getHitsCount() > 0);
-        logger.info("Filter test returned {} hits", response.getHits().getHitsCount());
+        // Based on test data, 2 documents have status=active (doc1, doc2)
+        assertEquals("Should return exactly 2 active documents", 2, response.getHits().getTotal().getTotalHits().getValue());
+        logger.info(
+            "Filter test returned {} hits, total: {}",
+            response.getHits().getHitsCount(),
+            response.getHits().getTotal().getTotalHits().getValue()
+        );
     }
 
     /**
@@ -175,6 +218,7 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         assertNotNull("Search response should not be null", response);
         assertEquals("Should return no documents with non-matching filter", 0, response.getHits().getHitsCount());
+        assertEquals("Total hits should be 0", 0, response.getHits().getTotal().getTotalHits().getValue());
     }
 
     /**
@@ -406,21 +450,21 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     // ===========================================================================================
 
     /**
-     * Execute a hybrid search using the shared gRPC channel.
+     * Execute a hybrid search using the shared gRPC channel with retry logic.
      */
     private SearchResponse executeHybridSearch(HybridQuery hybridQuery) {
         QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
         SearchRequest request = GrpcTestHelper.buildSearchRequest(TEST_INDEX_NAME, queryContainer);
-        return GrpcTestHelper.executeSearch(grpcChannel, request);
+        return GrpcTestHelper.executeSearchWithRetry(grpcChannel, request);
     }
 
     /**
-     * Execute a hybrid search with custom size.
+     * Execute a hybrid search with custom size and retry logic.
      */
     private SearchResponse executeHybridSearch(HybridQuery hybridQuery, int size) {
         QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
         SearchRequest request = GrpcTestHelper.buildSearchRequest(TEST_INDEX_NAME, queryContainer, size);
-        return GrpcTestHelper.executeSearch(grpcChannel, request);
+        return GrpcTestHelper.executeSearchWithRetry(grpcChannel, request);
     }
 
     // ===========================================================================================

@@ -57,9 +57,14 @@ public class GrpcTestHelper {
     public static ManagedChannel createGrpcChannel(String host, int port) {
         String target = host + ":" + port;
         logger.info("Creating gRPC channel to target: {}", target);
-        ManagedChannel channel = ManagedChannelBuilder.forTarget(target).usePlaintext().build();
-        logger.info("gRPC channel created, state: {}", channel.getState(true));
-        return channel;
+        try {
+            ManagedChannel channel = ManagedChannelBuilder.forTarget(target).usePlaintext().build();
+            logger.info("gRPC channel created, state: {}", channel.getState(true));
+            return channel;
+        } catch (Exception e) {
+            logger.error("Failed to create gRPC channel to target: {}. Error: {}", target, e.getMessage(), e);
+            throw new RuntimeException("Failed to create gRPC channel to " + target, e);
+        }
     }
 
     public static void shutdownChannel(ManagedChannel channel, int timeoutSeconds) throws InterruptedException {
@@ -100,6 +105,50 @@ public class GrpcTestHelper {
         SearchServiceGrpc.SearchServiceBlockingStub stub = SearchServiceGrpc.newBlockingStub(channel)
             .withDeadlineAfter(timeoutSeconds, TimeUnit.SECONDS);
         return stub.search(request);
+    }
+
+    /**
+     * Execute a search with retry logic to handle transient failures and reduce test flakiness.
+     *
+     * @param channel the gRPC channel
+     * @param request the search request
+     * @param timeoutSeconds timeout for each attempt
+     * @param maxRetries maximum number of retry attempts
+     * @param retryDelayMs delay between retries in milliseconds
+     * @return the search response
+     * @throws RuntimeException if all retry attempts fail
+     */
+    public static SearchResponse executeSearchWithRetry(
+        ManagedChannel channel,
+        SearchRequest request,
+        int timeoutSeconds,
+        int maxRetries,
+        long retryDelayMs
+    ) {
+        Exception lastException = null;
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                if (attempt > 0) {
+                    logger.info("Retry attempt {} of {} for search request", attempt, maxRetries);
+                    Thread.sleep(retryDelayMs);
+                }
+                return executeSearch(channel, request, timeoutSeconds);
+            } catch (Exception e) {
+                lastException = e;
+                logger.warn("Search attempt {} failed: {}", attempt + 1, e.getMessage());
+                if (attempt == maxRetries) {
+                    logger.error("All {} retry attempts exhausted for search request", maxRetries + 1);
+                }
+            }
+        }
+        throw new RuntimeException("Search failed after " + (maxRetries + 1) + " attempts", lastException);
+    }
+
+    /**
+     * Execute a search with default retry settings (3 retries, 1 second delay).
+     */
+    public static SearchResponse executeSearchWithRetry(ManagedChannel channel, SearchRequest request) {
+        return executeSearchWithRetry(channel, request, DEFAULT_TIMEOUT_SECONDS, 3, 1000);
     }
 
     // ===========================================================================================
