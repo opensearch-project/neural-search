@@ -432,6 +432,41 @@ public class HybridLeafCollectorTests extends HybridCollectorTestCase {
     }
 
     @SneakyThrows
+    public void testPopulateScores_whenHybridScorerSetButCompoundScorerNull_thenNoOp() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, 1, "text1", ft));
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        HybridTopScoreDocCollector collector = new HybridTopScoreDocCollector(NUM_DOCS, new HitsThresholdChecker(TOTAL_HITS_UP_TO));
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        HybridQueryScorer mockHybridScorer = mock(HybridQueryScorer.class);
+
+        HybridTopScoreDocCollector.HybridTopScoreLeafCollector hybridLeafCollector =
+            (HybridTopScoreDocCollector.HybridTopScoreLeafCollector) leafCollector;
+
+        // Set hybridQueryScorer but leave compoundQueryScorer null
+        hybridLeafCollector.hybridQueryScorer = mockHybridScorer;
+        hybridLeafCollector.compoundQueryScorer = null;
+
+        // Should be a no-op (early return), not throw
+        hybridLeafCollector.populateScoresFromHybridQueryScorer();
+
+        // Verify compoundQueryScorer is still null
+        assertNull("compoundQueryScorer should remain null", hybridLeafCollector.getCompoundQueryScorer());
+
+        reader.close();
+        w.close();
+        directory.close();
+    }
+
+    @SneakyThrows
     public void testPopulateScores_whenSubScorerOnNoMoreDocs_thenScoreIsZero() {
         final Directory directory = newDirectory();
         final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
