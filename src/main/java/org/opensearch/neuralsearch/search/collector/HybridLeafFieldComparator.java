@@ -27,7 +27,7 @@ import java.io.IOException;
  *   <li>Delegating all other comparator operations to the underlying comparator</li>
  * </ol>
  *
- * <h3>Example Usage:</h3>
+ * <p><b>Example Usage:</b>
  * <pre>{@code
  * // When collecting a document for sub-query 0 with score 0.9
  * HybridLeafFieldComparator wrapper = new HybridLeafFieldComparator(actualComparator);
@@ -36,7 +36,7 @@ import java.io.IOException;
  * wrapper.copy(slot, doc);                  // Copies 0.9 (not 1.4) to the comparator
  * }</pre>
  *
- * <h3>Why This is Needed:</h3>
+ * <p><b>Why This is Needed:</b>
  * <p>Consider a hybrid query with two sub-queries where a document matches both:
  * <ul>
  *   <li>Sub-query 0 score: 0.9</li>
