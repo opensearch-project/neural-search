@@ -37,7 +37,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -293,27 +292,31 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             return;
         }
 
-        // Multiple sub-batches: execute sequentially and stitch results
-        List<Object> allResults = Collections.synchronizedList(new ArrayList<>());
-        AtomicInteger subBatchIndex = new AtomicInteger(0);
-        AtomicReference<Consumer<Void>> processNextRef = new AtomicReference<>();
+        // Multiple sub-batches: execute in parallel and stitch results in order
+        int numBatches = subBatches.size();
+        List<?>[] orderedResults = new List<?>[numBatches];
+        AtomicInteger completedCount = new AtomicInteger(0);
+        AtomicReference<Exception> firstException = new AtomicReference<>();
 
-        Consumer<Void> processNext = (v) -> processNextRef.get().accept(v);
-        processNextRef.set((v) -> {
-            int idx = subBatchIndex.getAndIncrement();
-            if (idx >= subBatches.size()) {
-                // All sub-batches done, stitch results and handle
-                batchExecuteHandler(allResults, dataForInferences, originalOrder);
-                handler.accept(ingestDocumentWrappers);
-                return;
-            }
-            doBatchExecute(subBatches.get(idx), results -> {
-                allResults.addAll(results);
-                processNext.accept(null);
-            }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
-        });
-
-        processNext.accept(null);
+        for (int i = 0; i < numBatches; i++) {
+            final int batchIdx = i;
+            doBatchExecute(subBatches.get(batchIdx), results -> {
+                orderedResults[batchIdx] = results;
+                if (completedCount.incrementAndGet() == numBatches) {
+                    // All sub-batches done — stitch results in original order
+                    List<Object> allResults = new ArrayList<>();
+                    for (List<?> batchResult : orderedResults) {
+                        allResults.addAll(batchResult);
+                    }
+                    batchExecuteHandler(allResults, dataForInferences, originalOrder);
+                    handler.accept(ingestDocumentWrappers);
+                }
+            }, exception -> {
+                if (firstException.compareAndSet(null, exception)) {
+                    updateWithExceptions(ingestDocumentWrappers, handler, exception);
+                }
+            });
+        }
     }
 
     /**

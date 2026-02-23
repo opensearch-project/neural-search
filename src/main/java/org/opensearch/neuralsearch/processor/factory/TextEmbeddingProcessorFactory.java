@@ -59,6 +59,9 @@ public final class TextEmbeddingProcessorFactory extends AbstractBatchingProcess
         Map<String, Object> fieldMap = readMap(TYPE, tag, config, FIELD_MAP_FIELD);
         boolean skipExisting = readBooleanProperty(TYPE, tag, config, SKIP_EXISTING, DEFAULT_SKIP_EXISTING);
         int batchSizeBytes = ConfigurationUtils.readIntProperty(TYPE, tag, config, BATCH_SIZE_BYTES_FIELD, DEFAULT_BATCH_SIZE_BYTES);
+        if (batchSizeBytes != DEFAULT_BATCH_SIZE_BYTES && batchSizeBytes <= 0) {
+            throw new IllegalArgumentException("[" + BATCH_SIZE_BYTES_FIELD + "] must be a positive integer when specified");
+        }
         // When batch_size_bytes is set but batch_size was not explicitly configured (still at core default of 1),
         // auto-elevate batch_size so the byte limit becomes the effective constraint.
         if (batchSizeBytes > 0 && batchSize == InferenceProcessor.CORE_DEFAULT_BATCH_SIZE) {

@@ -2722,4 +2722,30 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         );
         assertNotNull(processor);
     }
+
+    public void testFactory_withInvalidBatchSizeBytes_throwsException() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, 0);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertTrue(exception.getMessage().contains("must be a positive integer"));
+    }
+
+    public void testFactory_withNegativeBatchSizeBytes_throwsException() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, -5);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertTrue(exception.getMessage().contains("must be a positive integer"));
+    }
 }
