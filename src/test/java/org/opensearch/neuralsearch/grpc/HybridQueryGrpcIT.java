@@ -144,7 +144,11 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         assertTrue("Response should have hits", response.getHits().getHitsCount() > 0);
         // Verify total hits count
         assertTrue("Total hits should be greater than 0", response.getHits().getTotal().getTotalHits().getValue() > 0);
-        assertEquals("Total relation should be EQUAL_TO", "EQUAL_TO", response.getHits().getTotal().getTotalHits().getRelation().name());
+        assertEquals(
+            "Total relation should be TOTAL_HITS_RELATION_EQ",
+            "TOTAL_HITS_RELATION_EQ",
+            response.getHits().getTotal().getTotalHits().getRelation().name()
+        );
         logger.info(
             "Hybrid query returned {} hits, total: {}",
             response.getHits().getHitsCount(),
@@ -389,7 +393,10 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
             builder.addQueries(createTermQueryContainer(TEST_TEXT_FIELD_NAME, "term" + i));
         }
 
-        StatusRuntimeException exception = expectThrows(StatusRuntimeException.class, () -> executeHybridSearch(builder.build()));
+        StatusRuntimeException exception = expectThrows(
+            StatusRuntimeException.class,
+            () -> executeHybridSearchWithoutRetry(builder.build())
+        );
 
         assertTrue(
             "Error should indicate max sub-queries exceeded",
@@ -405,7 +412,7 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     public void testErrorEmptyQueries() {
         HybridQuery hybridQuery = HybridQuery.newBuilder().build();
 
-        StatusRuntimeException exception = expectThrows(StatusRuntimeException.class, () -> executeHybridSearch(hybridQuery));
+        StatusRuntimeException exception = expectThrows(StatusRuntimeException.class, () -> executeHybridSearchWithoutRetry(hybridQuery));
 
         assertTrue(
             "Error should indicate queries required",
@@ -420,7 +427,7 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     public void testErrorNonDefaultBoost() {
         HybridQuery hybridQuery = HybridQuery.newBuilder().addQueries(createMatchAllQueryContainer()).setBoost(2.0f).build();
 
-        StatusRuntimeException exception = expectThrows(StatusRuntimeException.class, () -> executeHybridSearch(hybridQuery));
+        StatusRuntimeException exception = expectThrows(StatusRuntimeException.class, () -> executeHybridSearchWithoutRetry(hybridQuery));
 
         assertTrue(
             "Error should indicate boost not supported",
@@ -465,6 +472,16 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
         SearchRequest request = GrpcTestHelper.buildSearchRequest(TEST_INDEX_NAME, queryContainer, size);
         return GrpcTestHelper.executeSearchWithRetry(grpcChannel, request);
+    }
+
+    /**
+     * Execute a hybrid search WITHOUT retry logic - for error handling tests.
+     * Error tests expect specific exceptions, so we don't want retry logic wrapping them.
+     */
+    private SearchResponse executeHybridSearchWithoutRetry(HybridQuery hybridQuery) {
+        QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
+        SearchRequest request = GrpcTestHelper.buildSearchRequest(TEST_INDEX_NAME, queryContainer);
+        return GrpcTestHelper.executeSearch(grpcChannel, request);
     }
 
     // ===========================================================================================
