@@ -41,6 +41,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_NESTED_FIELD_USER = "user";
     private static final String TEST_INTEGER_FIELD_AGE = "age";
     private static final String DEFAULT_INDEX_CONFIGURATION = "default_config";
+    private static final String DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET = "default_config_with_large_dataset";
     private static final String KNN_INDEX_CONFIGURATION = "knn_config";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
 
@@ -412,6 +413,71 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
     }
 
+    public void testCollapseOnLargerDataset_whenE2E_thenSuccessful() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET, NUMBER_OF_SHARDS_FIVE);
+        var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_ITEM, "Chocolate Cake"))
+            .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_CATEGORY, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponseWithCollapse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        String collapseDuplicate = "Chocolate Cake";
+        assertTrue(isCollapseDuplicateRemoved(searchResponseWithCollapse.toString(), collapseDuplicate));
+
+        Map<String, Object> searchResponseWithoutCollapse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null
+        );
+        Map<Object, Double> fieldToHighestScoreMap = getFieldWithHighestScoreMap(searchResponseWithoutCollapse, "item", "keyword");
+
+        Map<String, Double> collapseValueToScoreMap = getCollapseValueWithScoreMap(searchResponseWithCollapse);
+
+        for (Map.Entry<Object, Double> entry : fieldToHighestScoreMap.entrySet()) {
+            String key = entry.getKey().toString();
+            Double scoreWithoutCollapse = entry.getValue();
+
+            Double value = collapseValueToScoreMap.get(key);
+            if (value != null) {
+                assertEquals(scoreWithoutCollapse, value, DELTA_FOR_SCORE_ASSERTION);
+
+            }
+        }
+    }
+
     @SneakyThrows
     private void createTestIndexAndIngestDocuments(String configuration, int numOfShards) {
         String indexConfiguration = getIndexConfiguration(configuration, numOfShards);
@@ -428,6 +494,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
                 break;
             case KNN_INDEX_CONFIGURATION:
                 indexDocumentsForKNNConfiguration();
+                break;
+            case DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET:
+                index100DocumentsForDefaultConfiguration();
                 break;
             default:
                 throw new IllegalArgumentException("Invalid configuration: " + configuration);
@@ -625,7 +694,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     private String getIndexConfiguration(String configuration, int numberOfShards) throws IOException {
         return switch (configuration) {
-            case DEFAULT_INDEX_CONFIGURATION -> XContentFactory.jsonBuilder()
+            case DEFAULT_INDEX_CONFIGURATION, DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET -> XContentFactory.jsonBuilder()
                 .startObject()
                 .startObject("settings")
                 .field("number_of_shards", numberOfShards)
@@ -729,5 +798,160 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             }
         }
         return fieldWithHighestScoreMap;
+    }
+
+    private void index100DocumentsForDefaultConfiguration() {
+        List<String> textFields = List.of(TEST_TEXT_FIELD_ITEM, TEST_TEXT_FIELD_CATEGORY);
+
+        // Categories to distribute items across
+        String[] categories = { "cakes", "pies", "cookies", "pastries", "breads", "desserts", "beverages", "snacks" };
+
+        // Items - 100 different items with some sharing categories
+        String[][] itemsWithCategories = {
+            // Cakes (15 items)
+            { "Chocolate Cake", "cakes" },
+            { "Vanilla Cake", "cakes" },
+            { "Red Velvet Cake", "cakes" },
+            { "Carrot Cake", "cakes" },
+            { "Lemon Cake", "cakes" },
+            { "Strawberry Cake", "cakes" },
+            { "Black Forest Cake", "cakes" },
+            { "Cheesecake", "cakes" },
+            { "Pound Cake", "cakes" },
+            { "Angel Food Cake", "cakes" },
+            { "Marble Cake", "cakes" },
+            { "Coconut Cake", "cakes" },
+            { "Pineapple Upside Down Cake", "cakes" },
+            { "Coffee Cake", "cakes" },
+            { "Tiramisu Cake", "cakes" },
+
+            // Pies (12 items)
+            { "Apple Pie", "pies" },
+            { "Cherry Pie", "pies" },
+            { "Pumpkin Pie", "pies" },
+            { "Pecan Pie", "pies" },
+            { "Blueberry Pie", "pies" },
+            { "Lemon Meringue Pie", "pies" },
+            { "Key Lime Pie", "pies" },
+            { "Banana Cream Pie", "pies" },
+            { "Chocolate Cream Pie", "pies" },
+            { "Peach Pie", "pies" },
+            { "Strawberry Rhubarb Pie", "pies" },
+            { "Coconut Cream Pie", "pies" },
+
+            // Cookies (15 items)
+            { "Chocolate Chip Cookie", "cookies" },
+            { "Oatmeal Cookie", "cookies" },
+            { "Sugar Cookie", "cookies" },
+            { "Peanut Butter Cookie", "cookies" },
+            { "Snickerdoodle Cookie", "cookies" },
+            { "Gingerbread Cookie", "cookies" },
+            { "Macaron", "cookies" },
+            { "Biscotti", "cookies" },
+            { "Shortbread Cookie", "cookies" },
+            { "Molasses Cookie", "cookies" },
+            { "White Chocolate Macadamia Cookie", "cookies" },
+            { "Almond Cookie", "cookies" },
+            { "Coconut Macaroon", "cookies" },
+            { "Lemon Cookie", "cookies" },
+            { "Double Chocolate Cookie", "cookies" },
+
+            // Pastries (13 items)
+            { "Croissant", "pastries" },
+            { "Danish Pastry", "pastries" },
+            { "Eclair", "pastries" },
+            { "Cream Puff", "pastries" },
+            { "Turnover", "pastries" },
+            { "Strudel", "pastries" },
+            { "Baklava", "pastries" },
+            { "Cannoli", "pastries" },
+            { "Palmier", "pastries" },
+            { "Napoleon", "pastries" },
+            { "Profiterole", "pastries" },
+            { "Tart", "pastries" },
+            { "Fruit Danish", "pastries" },
+
+            // Breads (12 items)
+            { "Sourdough Bread", "breads" },
+            { "Baguette", "breads" },
+            { "Ciabatta", "breads" },
+            { "Focaccia", "breads" },
+            { "Rye Bread", "breads" },
+            { "Whole Wheat Bread", "breads" },
+            { "Brioche", "breads" },
+            { "Challah", "breads" },
+            { "Pumpernickel Bread", "breads" },
+            { "Multigrain Bread", "breads" },
+            { "Pita Bread", "breads" },
+            { "Naan Bread", "breads" },
+
+            // Desserts (13 items)
+            { "Brownie", "desserts" },
+            { "Fudge", "desserts" },
+            { "Pudding", "desserts" },
+            { "Mousse", "desserts" },
+            { "Parfait", "desserts" },
+            { "Trifle", "desserts" },
+            { "Panna Cotta", "desserts" },
+            { "Creme Brulee", "desserts" },
+            { "Flan", "desserts" },
+            { "Ice Cream Sundae", "desserts" },
+            { "Gelato", "desserts" },
+            { "Sorbet", "desserts" },
+            { "Frozen Yogurt", "desserts" },
+
+            // Beverages (10 items)
+            { "Espresso", "beverages" },
+            { "Cappuccino", "beverages" },
+            { "Latte", "beverages" },
+            { "Mocha", "beverages" },
+            { "Hot Chocolate", "beverages" },
+            { "Iced Coffee", "beverages" },
+            { "Smoothie", "beverages" },
+            { "Milkshake", "beverages" },
+            { "Frappe", "beverages" },
+            { "Chai Latte", "beverages" },
+
+            // Snacks (10 items)
+            { "Muffin", "snacks" },
+            { "Scone", "snacks" },
+            { "Donut", "snacks" },
+            { "Bagel", "snacks" },
+            { "Pretzel", "snacks" },
+            { "Granola Bar", "snacks" },
+            { "Energy Bar", "snacks" },
+            { "Trail Mix", "snacks" },
+            { "Popcorn", "snacks" },
+            { "Chips", "snacks" } };
+
+        // Index 100 documents with varying prices
+        for (int i = 0; i < 100; i++) {
+            String[] itemData = itemsWithCategories[i];
+            String item = itemData[0];
+            String category = itemData[1];
+
+            // Generate price between 10 and 30 with some variation
+            float price = 10.0f + (i % 20) + (i % 3) * 0.5f;
+
+            indexTheDocument(
+                COLLAPSE_TEST_INDEX,
+                String.valueOf(i + 1),
+                List.of(),
+                List.of(),
+                textFields,
+                List.of(item, category),
+                List.of(),
+                Map.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(TEST_FLOAT_FIELD),
+                List.of(String.valueOf(price)),
+                null
+            );
+        }
     }
 }

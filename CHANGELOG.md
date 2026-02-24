@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Bug Fixes
 - [HYBRID]: Fix relevancy bugs in hybrid query collapse ([#1753](https://github.com/opensearch-project/neural-search/pull/1753))
 - [HYBRID]: Fix profiler support for hybrid query by unwrapping ProfileScorer to access HybridSubQueryScorer ([#1754](https://github.com/opensearch-project/neural-search/pull/1754))
+- [HYBRID]: Fix missing results and ranking issue in hybrid query collapse([#1763](https://github.com/opensearch-project/neural-search/pull/1763))
 
 ### Infrastructure
 
