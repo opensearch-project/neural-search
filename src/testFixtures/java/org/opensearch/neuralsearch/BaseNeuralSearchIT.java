@@ -161,7 +161,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-        numOfNodes = System.getProperty("cluster.number_of_nodes", "1");
+        numOfNodes = getClusterNumberOfNodes();
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
@@ -2187,6 +2187,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             logger.info(EntityUtils.toString(client().performRequest(health).getEntity()));
             throw e;
         }
+    }
+
+    @SneakyThrows
+    protected String getClusterNumberOfNodes() {
+        Request request = new Request("GET", "/_cluster/health");
+        Response response = client().performRequest(request);
+        Map<String, Object> clusterHealth = entityAsMap(response);
+        int numberOfNodes = ((Number) clusterHealth.get("number_of_nodes")).intValue();
+        return String.valueOf(numberOfNodes);
     }
 
     /**
