@@ -133,6 +133,9 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
 
         @Override
         public void collect(int doc) throws IOException {
+            // In profiler mode, populate scores from HybridQueryScorer before reading them
+            populateScoresFromHybridQueryScorer();
+
             HybridSubQueryScorer compoundQueryScorer = getCompoundQueryScorer();
             if (Objects.isNull(compoundQueryScorer)) {
                 return;
