@@ -161,7 +161,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-        numOfNodes = System.getProperty("cluster.number_of_nodes", "1");
+        // Dynamically determine node count from the cluster to handle remote test clusters correctly.
+        // Falls back to the system property if the cluster is not yet reachable (e.g., during startup).
+        // See https://github.com/opensearch-project/neural-search/issues/1774
+        try {
+            int actualNodeCount = getClusterNodeCount();
+            numOfNodes = String.valueOf(actualNodeCount);
+        } catch (Exception e) {
+            numOfNodes = System.getProperty("cluster.number_of_nodes", "1");
+            log.warn("Could not dynamically determine cluster node count, falling back to system property: {}", numOfNodes);
+        }
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
@@ -2150,9 +2159,28 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         return modelGroupId;
     }
 
+    /**
+     * Dynamically retrieve the number of data nodes in the cluster via the _cluster/health API.
+     *
+     * @return the number of nodes currently in the cluster
+     * @throws IOException if the request fails
+     * @throws ParseException if the response cannot be parsed
+     */
+    protected int getClusterNodeCount() throws IOException, ParseException {
+        Request request = new Request("GET", "/_cluster/health");
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> health = createParser(XContentType.JSON.xContent(), responseBody).map();
+        return ((Number) health.get("number_of_nodes")).intValue();
+    }
+
     protected void waitForClusterHealthGreen(final String numOfNodes, final int timeoutInSeconds) throws IOException {
         Request waitForGreen = new Request("GET", "/_cluster/health");
-        waitForGreen.addParameter("wait_for_nodes", numOfNodes);
+        // Use ">=" syntax to tolerate clusters with more nodes than expected,
+        // which avoids timeout failures when the configured node count doesn't
+        // exactly match the actual cluster (e.g., in remote integration tests).
+        // See https://github.com/opensearch-project/neural-search/issues/1774
+        waitForGreen.addParameter("wait_for_nodes", ">=" + numOfNodes);
         waitForGreen.addParameter("wait_for_status", "green");
         waitForGreen.addParameter("wait_for_active_shards", "all");
         waitForGreen.addParameter("cluster_manager_timeout", String.format(LOCALE, "%ds", timeoutInSeconds));
