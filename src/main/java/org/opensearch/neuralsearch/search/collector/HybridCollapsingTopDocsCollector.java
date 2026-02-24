@@ -78,9 +78,12 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         SortField[] sortFields = groupSort.getSort();
         this.reversed = new int[sortFields.length];
 
+        isSortByScore = false;
         for (int i = 0; i < sortFields.length; ++i) {
             SortField sortField = sortFields[i];
-            isSortByScore = SortField.Type.SCORE.equals(sortField.getType());
+            if (SortField.Type.SCORE.equals(sortField.getType())) {
+                isSortByScore = true;
+            }
             this.reversed[i] = sortField.getReverse() ? -1 : 1;
         }
 
@@ -332,9 +335,15 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
             // Tie-breaker: score then doc ID
             if (a.score != b.score) {
-                return Float.compare(b.score, a.score);
+                return Float.compare(a.score, b.score);
             }
-            return Integer.compare(a.doc, b.doc);
+
+            if (a.doc != b.doc) {
+                return Integer.compare(a.doc, b.doc);
+            }
+
+            // final tie-breaker to prevent TreeMap key collision
+            return Integer.compare(System.identityHashCode(a), System.identityHashCode(b));
         };
     }
 
@@ -515,9 +524,18 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     scoreOfLastTopEntry = ((HybridLeafFieldComparator) comparators[index]).getCurrentSubQueryScore();
                     ((HybridLeafFieldComparator) comparators[index]).setCurrentSubQueryScore(score);
                 }
+
+                boolean accepted = false;
+                try {
+                    accepted = reverseMulMap.get(groupValue) * comparators[index].compareBottom(doc) > 0;
+                } finally {
+                    if (!accepted && isSortByScore) {
+                        ((HybridLeafFieldComparator) comparators[index]).setCurrentSubQueryScore(scoreOfLastTopEntry);
+                    }
+                }
                 // Check if the current document should replace the bottom entry in the queue
                 // The comparison is multiplied by reverseMul to handle ascending/descending order
-                if (reverseMulMap.get(groupValue) * comparators[index].compareBottom(doc) > 0) {
+                if (accepted) {
                     // Retrieve the leaf trackers and compound scores for the current group
                     FieldValueHitQueue.Entry[] fieldValueLeafTrackers = fieldValueLeafTrackersMap.get(groupValue);
                     FieldValueHitQueue<FieldValueHitQueue.Entry>[] compoundScores = groupQueueMap.get(groupValue);
@@ -536,10 +554,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                     // Update related maps with the new information
                     updateMaps(comparators, fieldValueLeafTrackers, compoundScores);
-                } else {
-                    if (isSortByScore) {
-                        ((HybridLeafFieldComparator) comparators[index]).setCurrentSubQueryScore(scoreOfLastTopEntry);
-                    }
                 }
             }
 
