@@ -156,21 +156,19 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final long TIMEOUT = 10000;
     protected String numOfNodes;
 
+    @SneakyThrows
     @Before
     public void setupSettings() {
         threadPool = setUpThreadPool();
         clusterService = createClusterService(threadPool);
         final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
-        // Dynamically determine node count from the cluster to handle remote test clusters correctly.
-        // Falls back to the system property if the cluster is not yet reachable (e.g., during startup).
+        // Dynamically determine node count from the cluster to correctly set replica count
+        // and health check parameters. This replaces the static system property approach that
+        // caused failures in remote integration tests when the configured node count didn't
+        // match the actual cluster. If the cluster is unreachable, the exception propagates
+        // directly to fail the test fast — an unavailable cluster is a test environment problem.
         // See https://github.com/opensearch-project/neural-search/issues/1774
-        try {
-            int actualNodeCount = getClusterNodeCount();
-            numOfNodes = String.valueOf(actualNodeCount);
-        } catch (Exception e) {
-            numOfNodes = System.getProperty("cluster.number_of_nodes", "1");
-            log.warn("Could not dynamically determine cluster node count, falling back to system property: {}", numOfNodes);
-        }
+        numOfNodes = String.valueOf(getClusterNodeCount());
         if (isUpdateClusterSettings()) {
             updateClusterSettings();
         }
