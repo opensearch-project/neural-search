@@ -320,6 +320,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
      */
     private Comparator<FieldDoc> createFieldDocComparator(final FieldComparator<?>[] comparators, final int[] reverseMul) {
         return (a, b) -> {
+            // Primary sort: by field values according to sort criteria
             if (comparators != null) {
                 for (int i = 0; i < comparators.length; i++) {
                     FieldComparator<Object> comparator = (FieldComparator<Object>) comparators[i];
@@ -333,17 +334,13 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 }
             }
 
-            // Tie-breaker: score then doc ID
+            // Secondary sort: by score (descending - higher scores first)
             if (a.score != b.score) {
-                return Float.compare(a.score, b.score);
+                return Float.compare(b.score, a.score);
             }
 
-            if (a.doc != b.doc) {
-                return Integer.compare(a.doc, b.doc);
-            }
-
-            // final tie-breaker to prevent TreeMap key collision
-            return Integer.compare(System.identityHashCode(a), System.identityHashCode(b));
+            // Tertiary sort: by doc ID (ascending - lower doc IDs first)
+            return Integer.compare(a.doc, b.doc);
         };
     }
 
