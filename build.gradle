@@ -47,6 +47,7 @@ buildscript {
             resolutionStrategy {
                 force("org.eclipse.platform:org.eclipse.core.runtime:4.29.0") // CVE for < 4.29
                 force("org.eclipse.platform:org.eclipse.core.resources:4.20.0") // CVE for < 4.20
+                force("com.google.errorprone:error_prone_annotations:${versions.error_prone_annotations}")
             }
         }
     }
