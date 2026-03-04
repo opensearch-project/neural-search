@@ -58,10 +58,6 @@ public class NeuralSearchMLInputBuilder {
         boolean isAsymmetric = AsymmetricModelDetector.isAsymmetricModel(model);
         MLModelConfig modelConfig = model.getModelConfig();
 
-        if (modelConfig instanceof RemoteModelConfig && !isAsymmetric) {
-            throw new IllegalArgumentException("Remote models are only supported for asymmetric E5 text embedding");
-        }
-
         if (isAsymmetric && modelConfig instanceof RemoteModelConfig) {
             return createAsymmetricRemoteInput(inputText, inferenceRequest);
         }
@@ -71,7 +67,7 @@ public class NeuralSearchMLInputBuilder {
         MLAlgoParams mlAlgoParams = createMLAlgoParams(isAsymmetric, inferenceRequest);
         ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return createLocalInput(FunctionName.TEXT_EMBEDDING, inputDataset, mlAlgoParams);
+        return new MLInput(FunctionName.TEXT_EMBEDDING, mlAlgoParams, inputDataset);
     }
 
     /**
