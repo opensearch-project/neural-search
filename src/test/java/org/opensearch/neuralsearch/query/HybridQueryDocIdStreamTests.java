@@ -122,6 +122,49 @@ public class HybridQueryDocIdStreamTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testIntoArray_whenMultipleMatchingDocs_thenArrayFilled() {
+        // setup
+        FixedBitSet matchingDocs = new FixedBitSet(NUM_DOCS);
+        matchingDocs.set(DOC_ID_1);
+        matchingDocs.set(DOC_ID_2);
+        matchingDocs.set(DOC_ID_3);
+
+        HybridBulkScorer mockScorer = createMockScorerWithDocs(matchingDocs);
+        HybridQueryDocIdStream stream = new HybridQueryDocIdStream(mockScorer);
+        int[] docIds = new int[5];
+
+        // execute
+        int count = stream.intoArray(Integer.MAX_VALUE, docIds);
+
+        // verify
+        assertEquals(3, count);
+        assertEquals(DOC_ID_1, docIds[0]);
+        assertEquals(DOC_ID_2, docIds[1]);
+        assertEquals(DOC_ID_3, docIds[2]);
+    }
+
+    @SneakyThrows
+    public void testIntoArray_whenArraySmallerThanMatches_thenPartialFill() {
+        // setup
+        FixedBitSet matchingDocs = new FixedBitSet(NUM_DOCS);
+        matchingDocs.set(DOC_ID_1);
+        matchingDocs.set(DOC_ID_2);
+        matchingDocs.set(DOC_ID_3);
+
+        HybridBulkScorer mockScorer = createMockScorerWithDocs(matchingDocs);
+        HybridQueryDocIdStream stream = new HybridQueryDocIdStream(mockScorer);
+        int[] docIds = new int[2];
+
+        // execute
+        int count = stream.intoArray(Integer.MAX_VALUE, docIds);
+
+        // verify
+        assertEquals(2, count);
+        assertEquals(DOC_ID_1, docIds[0]);
+        assertEquals(DOC_ID_2, docIds[1]);
+    }
+
+    @SneakyThrows
     public void testForEach_whenSubsequentCalls_thenUpToParameterIgnored() {
         // setup
         FixedBitSet matchingDocs = new FixedBitSet(NUM_DOCS);
