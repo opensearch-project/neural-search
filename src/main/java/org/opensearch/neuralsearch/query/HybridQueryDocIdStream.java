@@ -42,6 +42,21 @@ public class HybridQueryDocIdStream extends DocIdStream {
         return false;
     }
 
+    @Override
+    public int intoArray(int upTo, int[] docIds) {
+        final int[] index = { 0 };
+        try {
+            forEach(upTo, docId -> {
+                if (index[0] < docIds.length) {
+                    docIds[index[0]++] = docId;
+                }
+            });
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        return index[0];
+    }
+
     // This class does not respect the upTo value; it consumes all matching documents.
     @Override
     public void forEach(int upTo, CheckedIntConsumer<IOException> consumer) throws IOException {
@@ -70,13 +85,5 @@ public class HybridQueryDocIdStream extends DocIdStream {
                 bits ^= 1L << numberOfTrailingZeros;
             }
         }
-    }
-
-    // This lazy loading is necessary because the matching bit isn't available at the time this class is constructed.
-    private FixedBitSet getLocalMatchingBitSet() {
-        if (localMatchingBitSet == null) {
-            localMatchingBitSet = hybridBulkScorer.getMatching().clone();
-        }
-        return localMatchingBitSet;
     }
 }
