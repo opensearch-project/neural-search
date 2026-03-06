@@ -1,0 +1,23 @@
+{
+  "description": "text embedding pipeline with batch_size_bytes",
+  "processors": [
+    {
+      "text_embedding": {
+        "model_id": "%s",
+        "batch_size": 100,
+        "batch_size_bytes": %d,
+        "field_map": {
+          "title": "title_knn",
+          "favor_list": "favor_list_knn",
+          "favorites": {
+            "game": "game_knn",
+            "movie": "movie_knn"
+          },
+          "nested_passages": {
+            "text": "embedding"
+          }
+        }
+      }
+    }
+  ]
+}
