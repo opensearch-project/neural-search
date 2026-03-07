@@ -30,6 +30,7 @@ import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -63,6 +64,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private HitsThresholdChecker hitsThresholdChecker;
+    // One GroupPriorityQueue per sub-query, each of size numHits
+    private GroupPriorityQueue<T>[] liveTopGroupsPerSubQuery;
+    // Per sub-query: which groups are currently in the top-K
+    private Map<T, GroupEntry<T>>[] liveGroupEntriesPerSubQuery;
+    private float[] minScoreThresholds;
 
     HybridCollapsingTopDocsCollector(
         GroupSelector<T> groupSelector,
@@ -172,15 +178,14 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         int numSubQueries = collectedHitsPerSubQueryMap.values().iterator().next().length;
 
         for (int subQueryNumber = 0; subQueryNumber < numSubQueries; subQueryNumber++) {
-            GroupPriorityQueue<T> topGroupsQueue = new GroupPriorityQueue<>(numHits);
-
             // Calculate total hits for current subquery
             int totalHitsForSubQuery = 0;
             for (int[] hits : collectedHitsPerSubQueryMap.values()) {
                 totalHitsForSubQuery += hits[subQueryNumber];
             }
 
-            if (totalHitsForSubQuery == 0) {
+            Map<T, GroupEntry<T>> liveEntries = liveGroupEntriesPerSubQuery[subQueryNumber];
+            if (totalHitsForSubQuery == 0 || liveEntries.isEmpty()) {
                 topDocsList.add(
                     new CollapseTopFieldDocs(
                         collapseField,
@@ -193,45 +198,37 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 continue;
             }
 
-            // Collect top N groups
-            for (Map.Entry<T, FieldValueHitQueue<FieldValueHitQueue.Entry>[]> entry : groupQueueMap.entrySet()) {
-                T groupValue = entry.getKey();
-                FieldValueHitQueue<FieldValueHitQueue.Entry> queue = entry.getValue()[subQueryNumber];
-                if (queue.size() > 0) {
-                    topGroupsQueue.insertWithOverflow(new GroupEntry<>(groupValue, queue));
-                }
-            }
-
-            // Get comparators from any group (they're all the same type)
-            final FieldComparator<?>[] comparators = topGroupsQueue.top().queue.getComparators();
-            final int[] reverseMul = topGroupsQueue.top().queue.getReverseMul();
+            // liveGroupEntriesPerSubQuery is the source of truth for which groups survived
+            Map.Entry<T, GroupEntry<T>> anyLiveEntry = liveEntries.entrySet().iterator().next();
+            FieldValueHitQueue<FieldValueHitQueue.Entry> anyQueue = anyLiveEntry.getValue().queue;
+            final FieldComparator<?>[] comparators = anyQueue.getComparators();
+            final int[] reverseMul = anyQueue.getReverseMul();
 
             // Use TreeMap with simple comparator
             TreeMap<FieldDoc, T> fieldDocsMap = new TreeMap<>(createFieldDocComparator(comparators, reverseMul));
 
-            // Pop entries in reverse order to maintain sorting
-            GroupEntry<T>[] topGroups = new GroupEntry[topGroupsQueue.size()];
-            for (int j = topGroupsQueue.size() - 1; j >= 0; j--) {
-                topGroups[j] = topGroupsQueue.pop();
-            }
+            // Iterate only surviving groups — at most numHits entries
+            for (Map.Entry<T, GroupEntry<T>> liveEntry : liveEntries.entrySet()) {
+                T groupValue = liveEntry.getKey();
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] queues = groupQueueMap.get(groupValue);
+                if (queues == null) {
+                    continue;
+                }
+                FieldValueHitQueue<FieldValueHitQueue.Entry> queue = queues[subQueryNumber];
+                if (queue.size() == 0) {
+                    continue;
+                }
+                final int n = queue.getComparators().length;
 
-            // Process the top groups and include all docs from each group
-            for (GroupEntry<T> groupEntry : topGroups) {
-                T groupValue = groupEntry.groupValue;
-                FieldValueHitQueue<FieldValueHitQueue.Entry> priorityQueue = groupEntry.queue;
-                final int n = priorityQueue.getComparators().length;
-
-                // Get all entries from the priority queue
-                FieldValueHitQueue.Entry[] entries = new FieldValueHitQueue.Entry[priorityQueue.size()];
-                for (int i = priorityQueue.size() - 1; i >= 0; i--) {
-                    entries[i] = priorityQueue.pop();
+                FieldValueHitQueue.Entry[] entries = new FieldValueHitQueue.Entry[queue.size()];
+                for (int i = queue.size() - 1; i >= 0; i--) {
+                    entries[i] = queue.pop();
                 }
 
-                // Add all entries from this group
                 for (FieldValueHitQueue.Entry queueEntry : entries) {
                     final Object[] fields = new Object[n];
                     for (int k = 0; k < n; ++k) {
-                        fields[k] = priorityQueue.getComparators()[k].value(queueEntry.slot);
+                        fields[k] = queue.getComparators()[k].value(queueEntry.slot);
                     }
                     FieldDoc fieldDoc = new FieldDoc(queueEntry.doc, queueEntry.score, fields);
                     T collapseValue = groupValue instanceof BytesRef ? (T) BytesRef.deepCopyOf((BytesRef) groupValue) : groupValue;
@@ -243,7 +240,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             ArrayList<FieldDoc> fieldDocs = new ArrayList<>();
             ArrayList<T> collapseValues = new ArrayList<>();
 
+            int count = 0;
             for (Map.Entry<FieldDoc, T> entry : fieldDocsMap.entrySet()) {
+                if (count++ >= numHits) {
+                    break;
+                }
                 fieldDocs.add(entry.getKey());
                 collapseValues.add(entry.getValue());
             }
@@ -413,6 +414,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 float[] subScoresByQuery = compoundQueryScorer.getSubQueryScores();
                 initializeQueueIfNeeded(groupValue, subScoresByQuery.length);
+                initializeLiveTopGroupsIfNeeded(subScoresByQuery.length);
                 initializeLeafComparatorsIfNeeded(groupValue, subScoresByQuery.length, compoundQueryScorer);
 
                 updateHitCount();
@@ -421,6 +423,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     float score = subScoresByQuery[subQueryNumber];
                     // if score is 0.0 there is no hits for that sub-query
                     if (score == 0) {
+                        continue;
+                    }
+
+                    if (isSortByScore && score <= 0 && score < minScoreThresholds[subQueryNumber]) {
                         continue;
                     }
 
@@ -437,6 +443,8 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                         collectedHitsPerSubQueryMap.put(groupValue, collectedHitsForCurrentSubQuery);
                         addNewEntry(groupValue, subQueryNumber, doc, score, slot);
                     }
+                    // Update this sub-query's live top groups
+                    updateLiveTopGroupForSubQuery(compoundQueryScorer, groupValue, subQueryNumber);
                 }
             }
 
@@ -619,6 +627,80 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 comparatorsMap.put(groupSelector.copyValue(), new LeafFieldComparator[numSubQueries]);
                 fieldValueLeafTrackersMap.put(groupSelector.copyValue(), new FieldValueHitQueue.Entry[numSubQueries]);
                 queueFullMap.put(groupSelector.copyValue(), new boolean[numSubQueries]);
+            }
+
+            @SuppressWarnings("unchecked")
+            private void initializeLiveTopGroupsIfNeeded(int numSubQueries) {
+                if (liveTopGroupsPerSubQuery != null) {
+                    return;
+                }
+                liveTopGroupsPerSubQuery = new GroupPriorityQueue[numSubQueries];
+                liveGroupEntriesPerSubQuery = new Map[numSubQueries];
+                for (int i = 0; i < numSubQueries; i++) {
+                    liveTopGroupsPerSubQuery[i] = new GroupPriorityQueue<>(numHits);
+                    liveGroupEntriesPerSubQuery[i] = new HashMap<>();
+                }
+                if (isSortByScore) {
+                    minScoreThresholds = new float[numSubQueries];
+                    Arrays.fill(minScoreThresholds, Float.MIN_VALUE);
+                }
+            }
+
+            /**
+             * After a doc is collected, insert/update the current group in the live top groups queue.
+             * If the queue overflows, the weakest group is evicted.
+             * When sorting by score, the evicted group's top score is used to update minScores.
+             */
+            private void updateLiveTopGroupForSubQuery(HybridSubQueryScorer compoundQueryScorer, T groupValue, int subQueryNumber)
+                throws IOException {
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] queues = groupQueueMap.get(groupValue);
+                if (queues == null || queues[subQueryNumber].size() == 0) {
+                    return;
+                }
+
+                GroupPriorityQueue<T> liveQueue = liveTopGroupsPerSubQuery[subQueryNumber];
+                Map<T, GroupEntry<T>> liveEntries = liveGroupEntriesPerSubQuery[subQueryNumber];
+
+                // If this group is already tracked for this sub-query, the underlying
+                // queue reference is shared so comparisons will see updated state
+                if (liveEntries.containsKey(groupValue)) {
+                    return;
+                }
+
+                T persistentGroupValue = groupSelector.copyValue();
+                GroupEntry<T> newEntry = new GroupEntry<>(persistentGroupValue, queues[subQueryNumber]);
+                GroupEntry<T> evicted = liveQueue.insertWithOverflow(newEntry);
+                liveEntries.put(persistentGroupValue, newEntry);
+
+                if (evicted != null && evicted != newEntry) {
+                    // A different group was evicted from this sub-query's top-K
+                    T evictedGroup = evicted.groupValue;
+                    liveEntries.remove(evictedGroup);
+
+                    if (isSortByScore) {
+                        updateMinScoreForSubQuery(compoundQueryScorer, evictedGroup, subQueryNumber);
+                    }
+                } else if (evicted == newEntry) {
+                    // The new entry itself was too weak
+                    liveEntries.remove(persistentGroupValue);
+
+                    if (isSortByScore) {
+                        updateMinScoreForSubQuery(compoundQueryScorer, persistentGroupValue, subQueryNumber);
+                    }
+                }
+            }
+
+            private void updateMinScoreForSubQuery(HybridSubQueryScorer compoundQueryScorer, T evictedGroup, int subQueryNumber) {
+                FieldValueHitQueue<FieldValueHitQueue.Entry>[] evictedQueues = groupQueueMap.get(evictedGroup);
+                if (evictedQueues == null || evictedQueues[subQueryNumber].size() == 0) {
+                    return;
+                }
+                float evictedTopScore = evictedQueues[subQueryNumber].top().score;
+                minScoreThresholds[subQueryNumber] = Math.max(minScoreThresholds[subQueryNumber], evictedTopScore);
+                compoundQueryScorer.getMinScores()[subQueryNumber] = Math.max(
+                    compoundQueryScorer.getMinScores()[subQueryNumber],
+                    evictedTopScore
+                );
             }
         };
     }
