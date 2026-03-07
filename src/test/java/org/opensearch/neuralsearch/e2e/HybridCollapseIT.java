@@ -462,6 +462,13 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null,
             null
         );
+        Map<String, Object> totalHitsWithCollapse = getTotalHits(searchResponseWithCollapse);
+        assertNotNull(totalHitsWithCollapse.get("value"));
+
+        Map<String, Object> totalHitsWithoutCollapse = getTotalHits(searchResponseWithoutCollapse);
+        assertNotNull(totalHitsWithoutCollapse.get("value"));
+
+        assertEquals(totalHitsWithoutCollapse.get("value"), totalHitsWithCollapse.get("value"));
         Map<Object, Double> fieldToHighestScoreMap = getFieldWithHighestScoreMap(searchResponseWithoutCollapse, "item", "keyword");
 
         Map<String, Double> collapseValueToScoreMap = getCollapseValueWithScoreMap(searchResponseWithCollapse);
@@ -473,7 +480,6 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             Double value = collapseValueToScoreMap.get(key);
             if (value != null) {
                 assertEquals(scoreWithoutCollapse, value, DELTA_FOR_SCORE_ASSERTION);
-
             }
         }
     }
