@@ -144,7 +144,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
      */
     @Override
     public List<CollapseTopFieldDocs> topDocs() throws IOException {
-        log.info("totalHits is {}", totalHitCount);
         List<CollapseTopFieldDocs> topDocsList = new ArrayList<>();
         if (subQueryQueues == null) {
             return topDocsList;
@@ -239,7 +238,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
             @Override
             public void collect(int doc) throws IOException {
-                log.info("docId {}", doc);
                 HybridSubQueryScorer compoundQueryScorer = getCompoundQueryScorer();
                 if (Objects.isNull(compoundQueryScorer)) {
                     return;
