@@ -64,6 +64,7 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
      * @return
      */
     public List<TopDocs> topDocs() {
+        log.info("totalHits is {}", totalHits);
         if (compoundScores == null) {
             return new ArrayList<>();
         }
@@ -133,6 +134,7 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
 
         @Override
         public void collect(int doc) throws IOException {
+            log.info("docId {}", doc);
             // In profiler mode, populate scores from HybridQueryScorer before reading them
             populateScoresFromHybridQueryScorer();
 
