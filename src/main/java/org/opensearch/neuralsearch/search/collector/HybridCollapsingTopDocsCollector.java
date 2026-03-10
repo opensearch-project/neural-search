@@ -40,11 +40,16 @@ import java.util.Objects;
  * mirroring the pattern used by {@link HybridTopScoreDocCollector}. Each entry in the queue carries
  * docId, score, sort field values, and the associated group (collapse) value.
  *
+ * <p>When sorting by score, evicted entries propagate their scores as minimum thresholds to
+ * {@link HybridSubQueryScorer}, enabling {@code HybridBulkScorer} to skip non-competitive
+ * documents early.
+ *
  * <p>The actual collapse deduplication (one result per group) does NOT happen here — it happens
  * downstream in the normalization pipeline (CollapseDataCollector and related classes). This
  * collector's job is to collect the top {@code numHits} competitive docs per sub-query with
  * their group values attached.
  */
+
 @Log4j2
 public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollector {
     protected final String collapseField;
