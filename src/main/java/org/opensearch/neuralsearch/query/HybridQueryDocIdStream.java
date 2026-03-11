@@ -20,7 +20,6 @@ import java.util.Objects;
 public class HybridQueryDocIdStream extends DocIdStream {
     private static final int BLOCK_SHIFT = 6;
     private final HybridBulkScorer hybridBulkScorer;
-    private FixedBitSet localMatchingBitSet;
     @Setter
     private int base;
 
@@ -40,6 +39,39 @@ public class HybridQueryDocIdStream extends DocIdStream {
     @Override
     public boolean mayHaveRemaining() {
         return false;
+    }
+
+    // This method iterates the matching bitset directly instead of delegating to forEach, enabling early
+    // termination when the docIds array is full. Like forEach, it does not respect the upTo parameter —
+    // it processes matching documents until the array is full or all matches are exhausted.
+    @Override
+    public int intoArray(int upTo, int[] docIds) {
+        FixedBitSet matchingBitSet = hybridBulkScorer.getMatching();
+        long[] bitArray = matchingBitSet.getBits();
+        int index = 0;
+
+        for (int idx = 0; idx < bitArray.length && index < docIds.length; idx++) {
+            long bits = bitArray[idx];
+            while (bits != 0L && index < docIds.length) {
+                int numberOfTrailingZeros = Long.numberOfTrailingZeros(bits);
+                final int docIndexInWindow = (idx << BLOCK_SHIFT) | numberOfTrailingZeros;
+                final int docId = base | docIndexInWindow;
+
+                float[][] windowScores = hybridBulkScorer.getWindowScores();
+                for (int subQueryIndex = 0; subQueryIndex < windowScores.length; subQueryIndex++) {
+                    if (Objects.isNull(windowScores[subQueryIndex])) {
+                        continue;
+                    }
+                    float scoreOfDocIdForSubQuery = windowScores[subQueryIndex][docIndexInWindow];
+                    hybridBulkScorer.getHybridSubQueryScorer().getSubQueryScores()[subQueryIndex] = scoreOfDocIdForSubQuery;
+                }
+                docIds[index++] = docId;
+                hybridBulkScorer.getHybridSubQueryScorer().resetScores();
+
+                bits ^= 1L << numberOfTrailingZeros;
+            }
+        }
+        return index;
     }
 
     // This class does not respect the upTo value; it consumes all matching documents.
@@ -70,13 +102,5 @@ public class HybridQueryDocIdStream extends DocIdStream {
                 bits ^= 1L << numberOfTrailingZeros;
             }
         }
-    }
-
-    // This lazy loading is necessary because the matching bit isn't available at the time this class is constructed.
-    private FixedBitSet getLocalMatchingBitSet() {
-        if (localMatchingBitSet == null) {
-            localMatchingBitSet = hybridBulkScorer.getMatching().clone();
-        }
-        return localMatchingBitSet;
     }
 }
