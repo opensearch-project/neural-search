@@ -20,6 +20,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 import java.io.IOException;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -33,7 +34,9 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
+import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
@@ -2001,6 +2004,345 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
             0,
             Version.CURRENT
         );
+        when(searchContext.query()).thenReturn(query);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> hybridQueryPhaseSearcher.searchWith(
+                searchContext,
+                contextIndexSearcher,
+                query,
+                collectors,
+                hasFilterCollector,
+                hasTimeout
+            )
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            exception.getMessage(),
+            containsString("hybrid query must be a top level query and cannot be wrapped into other queries")
+        );
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testSearchWith_whenHybridNestedInBoolInsideFunctionScore_thenFail() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        MapperService mapperService = mock(MapperService.class);
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
+        w.commit();
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(4);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
+        boolean hasFilterCollector = randomBoolean();
+        boolean hasTimeout = randomBoolean();
+
+        // function_score(bool(must: hybrid)) — mixed nesting across type boundaries
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1));
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+        queryBuilder.paginationDepth(10);
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        BooleanQuery boolWrapper = new BooleanQuery.Builder().add(hybridQuery, BooleanClause.Occur.MUST).build();
+        Query query = new FunctionScoreQuery(boolWrapper, (Float) null, Float.MAX_VALUE);
+        when(searchContext.query()).thenReturn(query);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> hybridQueryPhaseSearcher.searchWith(
+                searchContext,
+                contextIndexSearcher,
+                query,
+                collectors,
+                hasFilterCollector,
+                hasTimeout
+            )
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            exception.getMessage(),
+            containsString("hybrid query must be a top level query and cannot be wrapped into other queries")
+        );
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testSearchWith_whenHybridNestedInFunctionScoreInsideBool_thenFail() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        MapperService mapperService = mock(MapperService.class);
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
+        w.commit();
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(4);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
+        boolean hasFilterCollector = randomBoolean();
+        boolean hasTimeout = randomBoolean();
+
+        // bool(should: function_score(hybrid)) — wrapper query inside bool
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1));
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+        queryBuilder.paginationDepth(10);
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        Query functionScoreWrapper = new FunctionScoreQuery(hybridQuery, (Float) null, Float.MAX_VALUE);
+        BooleanQuery query = new BooleanQuery.Builder().add(functionScoreWrapper, BooleanClause.Occur.SHOULD).build();
+        when(searchContext.query()).thenReturn(query);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> hybridQueryPhaseSearcher.searchWith(
+                searchContext,
+                contextIndexSearcher,
+                query,
+                collectors,
+                hasFilterCollector,
+                hasTimeout
+            )
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            exception.getMessage(),
+            containsString("hybrid query must be a top level query and cannot be wrapped into other queries")
+        );
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testSearchWith_whenHybridNestedInDisMaxInsideBool_thenFail() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        MapperService mapperService = mock(MapperService.class);
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
+        w.commit();
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(4);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
+        boolean hasFilterCollector = randomBoolean();
+        boolean hasTimeout = randomBoolean();
+
+        // bool(must: dis_max(hybrid)) — dis_max inside bool, crossing type boundaries
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1));
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+        queryBuilder.paginationDepth(10);
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        DisjunctionMaxQuery disMaxWrapper = new DisjunctionMaxQuery(List.of(hybridQuery), 0.0f);
+        BooleanQuery query = new BooleanQuery.Builder().add(disMaxWrapper, BooleanClause.Occur.MUST).build();
+        when(searchContext.query()).thenReturn(query);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> hybridQueryPhaseSearcher.searchWith(
+                searchContext,
+                contextIndexSearcher,
+                query,
+                collectors,
+                hasFilterCollector,
+                hasTimeout
+            )
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            exception.getMessage(),
+            containsString("hybrid query must be a top level query and cannot be wrapped into other queries")
+        );
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
+    public void testSearchWith_whenHybridNestedInBoostQuery_thenFail() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        MapperService mapperService = mock(MapperService.class);
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
+        w.commit();
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(4);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(1);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
+        IndexMetadata indexMetadata = getIndexMetadata();
+        Settings settings = Settings.builder().put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, Integer.toString(1)).build();
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, settings);
+        when(mockQueryShardContext.getIndexSettings()).thenReturn(indexSettings);
+
+        LinkedList<QueryCollectorContext> collectors = new LinkedList<>();
+        boolean hasFilterCollector = randomBoolean();
+        boolean hasTimeout = randomBoolean();
+
+        // BoostQuery(hybrid) — Lucene-level wrapper created when boost != 1.0
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1));
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+        queryBuilder.paginationDepth(10);
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        Query query = new BoostQuery(hybridQuery, 2.0f);
         when(searchContext.query()).thenReturn(query);
 
         IllegalArgumentException exception = expectThrows(

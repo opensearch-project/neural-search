@@ -8,9 +8,9 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.Objects;
 
 import lombok.NoArgsConstructor;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
@@ -102,18 +102,11 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             if (transformedBooleanQuery != null) {
                 return transformedBooleanQuery;
             }
-            for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
-            }
-        } else if (query instanceof DisjunctionMaxQuery) {
-            for (Query disjunct : (DisjunctionMaxQuery) query) {
-                validateNestedDisJunctionQuery(disjunct, getMaxDepthLimit(searchContext));
-            }
-        } else if (containsHybridQuery(query)) {
-            // Block hybrid query nested inside compound queries like function_score, script_score,
-            // constant_score, or boosting. These queries use DefaultBulkScorer instead of HybridBulkScorer,
-            // causing DISI/TPI desync. The hybrid query produces identical scores to a bool+should query
-            // in this context (normalization is not applied), so customers should use bool+should instead.
+        }
+
+        // Only check for nested hybrid if the query is a compound type that could contain one.
+        // Simple leaf queries (term, match, etc.) cannot contain hybrid queries.
+        if (isCompoundQuery(query) && containsHybridQuery(query, getMaxDepthLimit(searchContext))) {
             throw new IllegalArgumentException(
                 "hybrid query must be a top level query and cannot be wrapped into other queries."
                     + " To use scoring wrapper queries (function_score, script_score, etc.) with hybrid sub-queries,"
@@ -123,67 +116,52 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         return query;
     }
 
-    private void validateNestedBooleanQuery(final Query query, final int level) {
-        if (query instanceof HybridQuery) {
-            throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
-        }
-        if (level <= 0) {
-            // ideally we should throw an error here but this code is on the main search workflow path and that might block
-            // execution of some queries. Instead, we're silently exit and allow such query to execute and potentially produce incorrect
-            // results in case hybrid query is wrapped into such bool query
-            log.error("reached max nested query limit, cannot process bool query with that many nested clauses");
-            return;
-        }
-        if (query instanceof BooleanQuery) {
-            for (BooleanClause booleanClause : ((BooleanQuery) query).clauses()) {
-                validateNestedBooleanQuery(booleanClause.query(), level - 1);
-            }
-        }
-    }
-
-    private void validateNestedDisJunctionQuery(final Query query, final int level) {
-        if (query instanceof HybridQuery) {
-            throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
-        }
-        if (level <= 0) {
-            // ideally we should throw an error here but this code is on the main search workflow path and that might block
-            // execution of some queries. Instead, we're silently exit and allow such query to execute and potentially produce incorrect
-            // results in case hybrid query is wrapped into such dis_max query
-            log.error("reached max nested query limit, cannot process dis_max query with that many nested clauses");
-            return;
-        }
-        if (query instanceof DisjunctionMaxQuery) {
-            for (Query disjunct : (DisjunctionMaxQuery) query) {
-                validateNestedDisJunctionQuery(disjunct, level - 1);
-            }
-        }
-    }
-
-    private int getMaxDepthLimit(final SearchContext searchContext) {
-        Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
-        return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
+    /**
+     * Check if a query is a compound type that could potentially contain a nested HybridQuery.
+     */
+    private boolean isCompoundQuery(final Query query) {
+        return query instanceof BooleanQuery
+            || query instanceof DisjunctionMaxQuery
+            || query instanceof FunctionScoreQuery
+            || query instanceof ConstantScoreQuery
+            || query instanceof BoostQuery
+            || query instanceof ScriptScoreQuery;
     }
 
     /**
-     * Check if a query contains a HybridQuery anywhere in its tree. This detects hybrid queries
-     * nested inside compound queries like function_score, script_score, constant_score, or boosting.
+     * Recursively check if a query tree contains a HybridQuery at any depth.
+     * Traverses all compound query types uniformly: BooleanQuery, DisjunctionMaxQuery,
+     * FunctionScoreQuery, ConstantScoreQuery, BoostQuery, and ScriptScoreQuery.
      */
-    private boolean containsHybridQuery(final Query query) {
-        // Unwrap compound queries to find the inner query
-        Query innerQuery = null;
-        if (query instanceof FunctionScoreQuery functionScoreQuery) {
-            innerQuery = functionScoreQuery.getSubQuery();
+    private boolean containsHybridQuery(final Query query, final int depth) {
+        if (query instanceof HybridQuery) {
+            return true;
+        }
+        if (depth <= 0) {
+            log.error("reached max nested query limit while checking for hybrid query");
+            return false;
+        }
+
+        if (query instanceof BooleanQuery booleanQuery) {
+            for (BooleanClause clause : booleanQuery.clauses()) {
+                if (containsHybridQuery(clause.query(), depth - 1)) {
+                    return true;
+                }
+            }
+        } else if (query instanceof DisjunctionMaxQuery disjunctionMaxQuery) {
+            for (Query disjunct : disjunctionMaxQuery) {
+                if (containsHybridQuery(disjunct, depth - 1)) {
+                    return true;
+                }
+            }
+        } else if (query instanceof FunctionScoreQuery functionScoreQuery) {
+            return containsHybridQuery(functionScoreQuery.getSubQuery(), depth - 1);
         } else if (query instanceof ConstantScoreQuery constantScoreQuery) {
-            innerQuery = constantScoreQuery.getQuery();
-        }
-
-        if (Objects.nonNull(innerQuery)) {
-            return innerQuery instanceof HybridQuery || containsHybridQuery(innerQuery);
-        }
-
-        // ScriptScoreQuery has no public getter for its inner query.
-        // Check the type and use QueryVisitor to detect HybridQuery in the tree.
-        if (query instanceof ScriptScoreQuery) {
+            return containsHybridQuery(constantScoreQuery.getQuery(), depth - 1);
+        } else if (query instanceof BoostQuery boostQuery) {
+            return containsHybridQuery(boostQuery.getQuery(), depth - 1);
+        } else if (query instanceof ScriptScoreQuery) {
+            // ScriptScoreQuery has no public getter for its inner query, use QueryVisitor
             AtomicBoolean found = new AtomicBoolean(false);
             query.visit(new org.apache.lucene.search.QueryVisitor() {
                 @Override
@@ -198,6 +176,11 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         }
 
         return false;
+    }
+
+    private int getMaxDepthLimit(final SearchContext searchContext) {
+        Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
+        return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
     }
 
     @Override
