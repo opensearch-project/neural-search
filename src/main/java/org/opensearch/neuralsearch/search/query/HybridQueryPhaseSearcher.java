@@ -7,12 +7,17 @@ package org.opensearch.neuralsearch.search.query;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import lombok.NoArgsConstructor;
+import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.search.Query;
+import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
+import org.opensearch.common.lucene.search.function.ScriptScoreQuery;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.HybridQuery;
@@ -80,7 +85,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
      *      }
      *   ]
      * }
-     * TODO add similar validation for other compound type queries like constant_score, function_score etc.
      * @param searchContext search context
      * @param query query to validate
      */
@@ -98,51 +102,80 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             if (transformedBooleanQuery != null) {
                 return transformedBooleanQuery;
             }
-            for (BooleanClause booleanClause : booleanClauses) {
-                validateNestedBooleanQuery(booleanClause.query(), getMaxDepthLimit(searchContext));
-            }
-        } else if (query instanceof DisjunctionMaxQuery) {
-            for (Query disjunct : (DisjunctionMaxQuery) query) {
-                validateNestedDisJunctionQuery(disjunct, getMaxDepthLimit(searchContext));
-            }
+        }
+
+        // Only check for nested hybrid if the query is a compound type that could contain one.
+        // Simple leaf queries (term, match, etc.) cannot contain hybrid queries.
+        if (isCompoundQuery(query) && containsHybridQuery(query, getMaxDepthLimit(searchContext))) {
+            throw new IllegalArgumentException(
+                "hybrid query must be a top level query and cannot be wrapped into other queries."
+                    + " To use scoring wrapper queries (function_score, script_score, etc.) with hybrid sub-queries,"
+                    + " replace the hybrid clause with a bool query using should clauses containing the same sub-queries"
+            );
         }
         return query;
     }
 
-    private void validateNestedBooleanQuery(final Query query, final int level) {
-        if (query instanceof HybridQuery) {
-            throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
-        }
-        if (level <= 0) {
-            // ideally we should throw an error here but this code is on the main search workflow path and that might block
-            // execution of some queries. Instead, we're silently exit and allow such query to execute and potentially produce incorrect
-            // results in case hybrid query is wrapped into such bool query
-            log.error("reached max nested query limit, cannot process bool query with that many nested clauses");
-            return;
-        }
-        if (query instanceof BooleanQuery) {
-            for (BooleanClause booleanClause : ((BooleanQuery) query).clauses()) {
-                validateNestedBooleanQuery(booleanClause.query(), level - 1);
-            }
-        }
+    /**
+     * Check if a query is a compound type that could potentially contain a nested HybridQuery.
+     */
+    private boolean isCompoundQuery(final Query query) {
+        return query instanceof BooleanQuery
+            || query instanceof DisjunctionMaxQuery
+            || query instanceof FunctionScoreQuery
+            || query instanceof ConstantScoreQuery
+            || query instanceof BoostQuery
+            || query instanceof ScriptScoreQuery;
     }
 
-    private void validateNestedDisJunctionQuery(final Query query, final int level) {
+    /**
+     * Recursively check if a query tree contains a HybridQuery at any depth.
+     * Traverses all compound query types uniformly: BooleanQuery, DisjunctionMaxQuery,
+     * FunctionScoreQuery, ConstantScoreQuery, BoostQuery, and ScriptScoreQuery.
+     */
+    private boolean containsHybridQuery(final Query query, final int depth) {
         if (query instanceof HybridQuery) {
-            throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
+            return true;
         }
-        if (level <= 0) {
-            // ideally we should throw an error here but this code is on the main search workflow path and that might block
-            // execution of some queries. Instead, we're silently exit and allow such query to execute and potentially produce incorrect
-            // results in case hybrid query is wrapped into such dis_max query
-            log.error("reached max nested query limit, cannot process dis_max query with that many nested clauses");
-            return;
+        if (depth <= 0) {
+            log.error("reached max nested query limit while checking for hybrid query");
+            return false;
         }
-        if (query instanceof DisjunctionMaxQuery) {
-            for (Query disjunct : (DisjunctionMaxQuery) query) {
-                validateNestedDisJunctionQuery(disjunct, level - 1);
+
+        if (query instanceof BooleanQuery booleanQuery) {
+            for (BooleanClause clause : booleanQuery.clauses()) {
+                if (containsHybridQuery(clause.query(), depth - 1)) {
+                    return true;
+                }
             }
+        } else if (query instanceof DisjunctionMaxQuery disjunctionMaxQuery) {
+            for (Query disjunct : disjunctionMaxQuery) {
+                if (containsHybridQuery(disjunct, depth - 1)) {
+                    return true;
+                }
+            }
+        } else if (query instanceof FunctionScoreQuery functionScoreQuery) {
+            return containsHybridQuery(functionScoreQuery.getSubQuery(), depth - 1);
+        } else if (query instanceof ConstantScoreQuery constantScoreQuery) {
+            return containsHybridQuery(constantScoreQuery.getQuery(), depth - 1);
+        } else if (query instanceof BoostQuery boostQuery) {
+            return containsHybridQuery(boostQuery.getQuery(), depth - 1);
+        } else if (query instanceof ScriptScoreQuery) {
+            // ScriptScoreQuery has no public getter for its inner query, use QueryVisitor
+            AtomicBoolean found = new AtomicBoolean(false);
+            query.visit(new org.apache.lucene.search.QueryVisitor() {
+                @Override
+                public org.apache.lucene.search.QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {
+                    if (parent instanceof HybridQuery) {
+                        found.set(true);
+                    }
+                    return this;
+                }
+            });
+            return found.get();
         }
+
+        return false;
     }
 
     private int getMaxDepthLimit(final SearchContext searchContext) {
