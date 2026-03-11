@@ -7,12 +7,17 @@ package org.opensearch.neuralsearch.search.query;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Objects;
 
 import lombok.NoArgsConstructor;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.search.Query;
+import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
+import org.opensearch.common.lucene.search.function.ScriptScoreQuery;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.query.HybridQuery;
@@ -80,7 +85,6 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
      *      }
      *   ]
      * }
-     * TODO add similar validation for other compound type queries like constant_score, function_score etc.
      * @param searchContext search context
      * @param query query to validate
      */
@@ -105,6 +109,16 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
             for (Query disjunct : (DisjunctionMaxQuery) query) {
                 validateNestedDisJunctionQuery(disjunct, getMaxDepthLimit(searchContext));
             }
+        } else if (containsHybridQuery(query)) {
+            // Block hybrid query nested inside compound queries like function_score, script_score,
+            // constant_score, or boosting. These queries use DefaultBulkScorer instead of HybridBulkScorer,
+            // causing DISI/TPI desync. The hybrid query produces identical scores to a bool+should query
+            // in this context (normalization is not applied), so customers should use bool+should instead.
+            throw new IllegalArgumentException(
+                "hybrid query must be a top level query and cannot be wrapped into other queries."
+                    + " To use scoring wrapper queries (function_score, script_score, etc.) with hybrid sub-queries,"
+                    + " replace the hybrid clause with a bool query using should clauses containing the same sub-queries"
+            );
         }
         return query;
     }
@@ -148,6 +162,42 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
     private int getMaxDepthLimit(final SearchContext searchContext) {
         Settings indexSettings = searchContext.getQueryShardContext().getIndexSettings().getSettings();
         return MapperService.INDEX_MAPPING_DEPTH_LIMIT_SETTING.get(indexSettings).intValue();
+    }
+
+    /**
+     * Check if a query contains a HybridQuery anywhere in its tree. This detects hybrid queries
+     * nested inside compound queries like function_score, script_score, constant_score, or boosting.
+     */
+    private boolean containsHybridQuery(final Query query) {
+        // Unwrap compound queries to find the inner query
+        Query innerQuery = null;
+        if (query instanceof FunctionScoreQuery functionScoreQuery) {
+            innerQuery = functionScoreQuery.getSubQuery();
+        } else if (query instanceof ConstantScoreQuery constantScoreQuery) {
+            innerQuery = constantScoreQuery.getQuery();
+        }
+
+        if (Objects.nonNull(innerQuery)) {
+            return innerQuery instanceof HybridQuery || containsHybridQuery(innerQuery);
+        }
+
+        // ScriptScoreQuery has no public getter for its inner query.
+        // Check the type and use QueryVisitor to detect HybridQuery in the tree.
+        if (query instanceof ScriptScoreQuery) {
+            AtomicBoolean found = new AtomicBoolean(false);
+            query.visit(new org.apache.lucene.search.QueryVisitor() {
+                @Override
+                public org.apache.lucene.search.QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {
+                    if (parent instanceof HybridQuery) {
+                        found.set(true);
+                    }
+                    return this;
+                }
+            });
+            return found.get();
+        }
+
+        return false;
     }
 
     @Override
