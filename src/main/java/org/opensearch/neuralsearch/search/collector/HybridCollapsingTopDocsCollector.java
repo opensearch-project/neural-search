@@ -250,7 +250,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 // Get the collapse group value for this document
                 groupSelector.advanceTo(doc);
-                T groupValue = groupSelector.currentValue();
 
                 float[] subScoresByQuery = compoundQueryScorer.getSubQueryScores();
                 ensureQueuesInitialized(subScoresByQuery.length);
@@ -275,10 +274,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                     if (queueFull[subQuery]) {
                         // Queue is full — compare with bottom and replace if competitive
-                        updateExistingEntry(compoundQueryScorer, groupValue, subQuery, doc, score);
+                        updateExistingEntry(compoundQueryScorer, subQuery, doc, score);
                     } else {
                         // Queue not full — add directly
-                        addNewEntry(compoundQueryScorer, groupValue, subQuery, doc, score);
+                        addNewEntry(subQuery, doc, score);
                     }
                 }
             }
@@ -333,7 +332,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 }
             }
 
-            private void updateExistingEntry(HybridSubQueryScorer compoundQueryScorer, T groupValue, int subQuery, int doc, float score)
+            private void updateExistingEntry(HybridSubQueryScorer compoundQueryScorer, int subQuery, int doc, float score)
                 throws IOException {
                 LeafFieldComparator comparator = leafComparators[subQuery];
                 float scoreOfLastTopEntry = 0;
@@ -362,8 +361,8 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     bottom.doc = docBase + doc;
                     bottom.score = score;
 
-                    // Store group value for this slot (deep copy BytesRef since groupSelector reuses it)
-                    groupValueBySlot[subQuery][bottom.slot] = copyGroupValue(groupValue);
+                    // Store group value for this slot (already deep-copied by copyValue() above)
+                    groupValueBySlot[subQuery][bottom.slot] = groupSelector.copyValue();
 
                     // Update the queue and get the new bottom
                     bottomEntries[subQuery] = subQueryQueues[subQuery].updateTop();
@@ -377,8 +376,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 }
             }
 
-            private void addNewEntry(HybridSubQueryScorer compoundQueryScorer, T groupValue, int subQuery, int doc, float score)
-                throws IOException {
+            private void addNewEntry(int subQuery, int doc, float score) throws IOException {
                 LeafFieldComparator comparator = leafComparators[subQuery];
                 int slot = subQueryQueues[subQuery].size();
 
@@ -393,7 +391,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 entry.score = score;
 
                 // Store group value for this slot
-                groupValueBySlot[subQuery][slot] = copyGroupValue(groupValue);
+                groupValueBySlot[subQuery][slot] = groupSelector.copyValue();
 
                 bottomEntries[subQuery] = subQueryQueues[subQuery].add(entry);
 
@@ -402,17 +400,6 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     queueFull[subQuery] = true;
                     comparator.setBottom(bottomEntries[subQuery].slot);
                 }
-            }
-
-            /**
-             * Creates a persistent copy of the group value. BytesRef instances from the
-             * GroupSelector are reused across documents, so we must deep-copy them.
-             */
-            private Object copyGroupValue(T groupValue) {
-                if (groupValue instanceof BytesRef) {
-                    return BytesRef.deepCopyOf((BytesRef) groupValue);
-                }
-                return groupValue;
             }
 
             /**

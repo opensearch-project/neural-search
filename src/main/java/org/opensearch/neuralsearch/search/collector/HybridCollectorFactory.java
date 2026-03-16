@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Sort;
@@ -18,9 +19,12 @@ import org.opensearch.search.sort.SortAndFormats;
 
 import java.util.Locale;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
+
 /**
  * A factory class for creating various types of Hybrid Collectors based on the provided configuration.
  */
+@Log4j2
 public class HybridCollectorFactory {
 
     /**
@@ -39,6 +43,12 @@ public class HybridCollectorFactory {
         int numHits = hybridCollectorFactoryDTO.getNumHits();
         FieldDoc after = hybridCollectorFactoryDTO.getAfter();
         if (collapseContext != null) {
+            int docsPerGroupPerSubquery = HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.get(
+                searchContext.indexShard().indexSettings().getSettings()
+            );
+            if (docsPerGroupPerSubquery > 0) {
+                log.warn("index.neural_search.hybrid_collapse_docs_per_group_per_subquery setting is deprecated for all release versions");
+            }
             MappedFieldType fieldType = collapseContext.getFieldType();
             if (fieldType instanceof KeywordFieldMapper.KeywordFieldType) {
                 return HybridCollapsingTopDocsCollector.createKeyword(
