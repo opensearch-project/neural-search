@@ -28,6 +28,9 @@ public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
         return new HybridTopDocSortLeafCollector() {
             @Override
             public void collect(int doc) throws IOException {
+                // In profiler mode, populate scores from HybridQueryScorer before reading them
+                populateScoresFromHybridQueryScorer();
+
                 if (Objects.isNull(compoundQueryScorer)) {
                     throw new IllegalArgumentException("scorers are null for all sub-queries in hybrid query");
                 }

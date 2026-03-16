@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import lombok.SneakyThrows;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericDocValuesField;
@@ -17,6 +18,7 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.Weight;
@@ -25,6 +27,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.index.mapper.KeywordFieldMapper;
 import org.opensearch.index.mapper.NumberFieldMapper;
+import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
@@ -37,6 +40,7 @@ import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCase {
 
@@ -1146,6 +1150,69 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         doc.add(new SortedDocValuesField(COLLAPSE_FIELD_NAME, new BytesRef(collapseValue)));
 
         writer.addDocument(doc);
+    }
+
+    @SneakyThrows
+    public void testKeywordCollapse_whenProfilerMode_thenResultsNotEmpty() {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // setup: index 20 documents across 4 groups
+        for (int i = 0; i < 20; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + (i % 4));
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            TOP_N_GROUPS,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            DOCS_PER_GROUP_PER_SUBQUERY
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        // setup: simulate profiler mode by directly setting hybridQueryScorer and compoundQueryScorer
+        Scorer subScorer1 = mock(Scorer.class);
+        HybridQueryScorer mockHybridScorer = mock(HybridQueryScorer.class);
+        when(mockHybridScorer.getSubScorers()).thenReturn(java.util.Arrays.asList(subScorer1));
+
+        HybridSubQueryScorer adapter = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        HybridLeafCollector hybridLeaf = (HybridLeafCollector) leafCollector;
+        hybridLeaf.hybridQueryScorer = mockHybridScorer;
+        hybridLeaf.compoundQueryScorer = adapter;
+
+        // execute: collect docs
+        for (int doc = 0; doc < 20; doc++) {
+            float score = 1.0f + doc * 0.05f;
+            when(mockHybridScorer.docID()).thenReturn(doc);
+            when(subScorer1.docID()).thenReturn(doc);
+            when(subScorer1.score()).thenReturn(score);
+            leafCollector.collect(doc);
+        }
+
+        // verify: results should not be empty
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertNotNull(topDocs);
+        assertEquals(1, topDocs.size());
+        assertTrue("profiler mode should produce non-empty results", topDocs.get(0).scoreDocs.length > 0);
+        assertTrue("totalHits should be > 0", topDocs.get(0).totalHits.value() > 0);
+
+        writer.close();
+        reader.close();
+        directory.close();
     }
 
 }

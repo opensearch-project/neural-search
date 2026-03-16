@@ -24,6 +24,7 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopFieldDocs;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.when;
 
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
@@ -213,6 +215,134 @@ public class HybridTopFieldDocSortCollectorTests extends HybridCollectorTestCase
             List<Integer> docIdsByQueryList = Arrays.stream(docIdsForQuery).boxed().collect(Collectors.toList());
             resultDocIds.stream().forEach(val -> assertTrue(docIdsByQueryList.contains(val)));
         }
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testSimpleFieldCollector_whenProfilerMode_thenResultsNotEmpty() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+
+        // setup: index 4 documents
+        List<Document> documents = new ArrayList<>();
+        for (int i = 0; i < NUM_DOCS; i++) {
+            Document doc = new Document();
+            doc.add(new NumericDocValuesField("_id", i));
+            doc.add(new IntField(INT_FIELD_NAME, (i + 1) * 100, Field.Store.YES));
+            doc.add(new TextField(TEXT_FIELD_NAME, "text" + (i + 1), Field.Store.YES));
+            documents.add(doc);
+        }
+        w.addDocuments(documents);
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        SortField sortField = new SortField(DOC_FIELD_NAME, SortField.Type.DOC);
+        SimpleFieldCollector collector = new SimpleFieldCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            new Sort(sortField)
+        );
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        // setup: simulate profiler mode by directly setting hybridQueryScorer and compoundQueryScorer
+        // on the leaf collector, matching what HybridLeafCollector.setScorer() does in the profiler path
+        Scorer subScorer1 = mock(Scorer.class);
+        HybridQueryScorer mockHybridScorer = mock(HybridQueryScorer.class);
+        when(mockHybridScorer.getSubScorers()).thenReturn(Arrays.asList(subScorer1));
+
+        HybridSubQueryScorer adapter = new HybridSubQueryScorer(1);
+        HybridTopFieldDocSortCollector.HybridTopDocSortLeafCollector hybridLeaf =
+            (HybridTopFieldDocSortCollector.HybridTopDocSortLeafCollector) leafCollector;
+        hybridLeaf.hybridQueryScorer = mockHybridScorer;
+        hybridLeaf.compoundQueryScorer = adapter;
+
+        // execute: collect docs — populateScoresFromHybridQueryScorer() populates scores from mock
+        for (int doc = 0; doc < NUM_DOCS; doc++) {
+            float score = 1.0f + doc * 0.1f;
+            when(mockHybridScorer.docID()).thenReturn(doc);
+            when(subScorer1.docID()).thenReturn(doc);
+            when(subScorer1.score()).thenReturn(score);
+            leafCollector.collect(doc);
+        }
+
+        // verify: results should not be empty
+        List<TopFieldDocs> topFieldDocs = collector.topDocs();
+        assertNotNull(topFieldDocs);
+        assertEquals(1, topFieldDocs.size());
+        assertTrue("profiler mode should produce non-empty results", topFieldDocs.get(0).scoreDocs.length > 0);
+        assertEquals(NUM_DOCS, topFieldDocs.get(0).totalHits.value());
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    @SneakyThrows
+    public void testPagingFieldCollector_whenProfilerMode_thenResultsNotEmpty() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+
+        List<Document> documents = new ArrayList<>();
+        for (int i = 0; i < NUM_DOCS; i++) {
+            Document doc = new Document();
+            doc.add(new NumericDocValuesField("_id", i));
+            doc.add(new IntField(INT_FIELD_NAME, (i + 1) * 100, Field.Store.YES));
+            doc.add(new TextField(TEXT_FIELD_NAME, "text" + (i + 1), Field.Store.YES));
+            documents.add(doc);
+        }
+        w.addDocuments(documents);
+        w.commit();
+
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        SortField sortField = new SortField(DOC_FIELD_NAME, SortField.Type.DOC);
+        PagingFieldCollector collector = new PagingFieldCollector(
+            NUM_DOCS,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            new Sort(sortField),
+            new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 0 })
+        );
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+
+        // setup: simulate profiler mode
+        Scorer subScorer1 = mock(Scorer.class);
+        HybridQueryScorer mockHybridScorer = mock(HybridQueryScorer.class);
+        when(mockHybridScorer.getSubScorers()).thenReturn(Arrays.asList(subScorer1));
+
+        HybridSubQueryScorer adapter = new HybridSubQueryScorer(1);
+        HybridTopFieldDocSortCollector.HybridTopDocSortLeafCollector hybridLeaf =
+            (HybridTopFieldDocSortCollector.HybridTopDocSortLeafCollector) leafCollector;
+        hybridLeaf.hybridQueryScorer = mockHybridScorer;
+        hybridLeaf.compoundQueryScorer = adapter;
+
+        // execute: collect docs starting after doc 0
+        for (int doc = 1; doc < NUM_DOCS; doc++) {
+            float score = 1.0f + doc * 0.1f;
+            when(mockHybridScorer.docID()).thenReturn(doc);
+            when(subScorer1.docID()).thenReturn(doc);
+            when(subScorer1.score()).thenReturn(score);
+            leafCollector.collect(doc);
+        }
+
+        // verify: results should not be empty
+        List<TopFieldDocs> topFieldDocs = collector.topDocs();
+        assertNotNull(topFieldDocs);
+        assertEquals(1, topFieldDocs.size());
+        assertTrue("profiler mode should produce non-empty results", topFieldDocs.get(0).scoreDocs.length > 0);
+
         w.close();
         reader.close();
         directory.close();
