@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [HYBRID]: Fix profiler support for hybrid query by unwrapping ProfileScorer to access HybridSubQueryScorer ([#1754](https://github.com/opensearch-project/neural-search/pull/1754))
 - [HYBRID]: Fix missing results and ranking issue in hybrid query collapse([#1763](https://github.com/opensearch-project/neural-search/pull/1763))
 - [HYBRID]: Fix HybridQueryDocIdStream by adding intoArray overridden method from upstream ([#1780](https://github.com/opensearch-project/neural-search/pull/1780))
+- [HYBRID]: Block hybrid query nested inside compound queries like function_score, constant_score, and script_score ([#1791](https://github.com/opensearch-project/neural-search/pull/1791))
 - [HYBRID]: Fix response of hybrid search with collapse same as without collapse ([#1787](https://github.com/opensearch-project/neural-search/pull/1787))
 
 ### Infrastructure
