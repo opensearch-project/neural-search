@@ -91,7 +91,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             // With flat queue, totalHits counts all docs with score > 0 per sub-query
-            // random().nextFloat() returns [0.0, 1.0), so nearly all 1000 docs have score > 0
+            // random().nextFloat() returns [0.0, 1.0). CollapseTopFieldDocs will have totalHits as per minScoreThresholds.
             assertEquals(getExpectedCount(scores, numHits), collapseTopFieldDocs.totalHits.value(), 0.001);
             assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
