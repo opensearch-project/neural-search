@@ -23,11 +23,8 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 
 public class HybridCollectorFactoryTests extends OpenSearchTestCase {
-
-    private final static int DOCS_PER_GROUP_PER_SUBQUERY = 10;
 
     public void testCreateCollector_whenKeywordCollapse_thenSuccessful() {
         KeywordFieldMapper.KeywordFieldType fieldType = mock(KeywordFieldMapper.KeywordFieldType.class);
@@ -38,9 +35,7 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
-            .put(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), DOCS_PER_GROUP_PER_SUBQUERY);
-
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID());
         IndexMetadata indexMetadata = IndexMetadata.builder("test-index").settings(settingsBuilder).build();
 
         IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
@@ -70,9 +65,7 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
-            .put(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), DOCS_PER_GROUP_PER_SUBQUERY);
-
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID());
         IndexMetadata indexMetadata = IndexMetadata.builder("test-index").settings(settingsBuilder).build();
 
         IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
@@ -102,9 +95,7 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
-            .put(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), 0);
-
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID());
         IndexMetadata indexMetadata = IndexMetadata.builder("test-index").settings(settingsBuilder).build();
 
         IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
@@ -134,9 +125,7 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
             .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
             .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
             .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
-            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
-            .put(HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY.getKey(), DOCS_PER_GROUP_PER_SUBQUERY);
-
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID());
         IndexMetadata indexMetadata = IndexMetadata.builder("test-index").settings(settingsBuilder).build();
 
         IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);

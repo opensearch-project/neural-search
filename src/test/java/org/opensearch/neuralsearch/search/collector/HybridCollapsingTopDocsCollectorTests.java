@@ -12,7 +12,9 @@ import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Sort;
@@ -41,9 +43,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
     private static final String TEXT_FIELD_NAME = "field";
     private static final String INT_FIELD_NAME = "integerField";
     private static final String COLLAPSE_FIELD_NAME = "collapseField";
-    private static final int TOP_N_GROUPS = 5;
+    private static final int numHits = 5;
     private static final int TOTAL_HITS_UP_TO = 1001;
-    private static final int DOCS_PER_GROUP_PER_SUBQUERY = 10;
 
     public void testKeywordCollapse_whenCollectAndTopDocs_thenSuccessful() throws IOException {
         Directory directory = newDirectory();
@@ -65,9 +66,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -89,15 +89,10 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(100, collapseTopFieldDocs.totalHits.value());
-            assertEquals(DOCS_PER_GROUP_PER_SUBQUERY * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
-
-            // Verify collapse values
-            Set<String> uniqueGroups = new HashSet<>();
-            for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
-                uniqueGroups.add(((BytesRef) collapseValue).utf8ToString());
-            }
-            assertEquals(5, uniqueGroups.size());
+            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            // random().nextFloat() returns [0.0, 1.0), so nearly all 1000 docs have score > 0
+            assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
+            assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
 
         reader.close();
@@ -128,9 +123,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -152,15 +146,9 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(100, collapseTopFieldDocs.totalHits.value());
-            assertEquals(DOCS_PER_GROUP_PER_SUBQUERY * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
-
-            // Verify collapse values
-            Set<Long> uniqueGroups = new HashSet<>();
-            for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
-                uniqueGroups.add((Long) (collapseValue));
-            }
-            assertEquals(5, uniqueGroups.size());
+            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
+            assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
 
         reader.close();
@@ -168,7 +156,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testCollapse_whenZeroDocsPerGroupPerSubQuery_thenSuccessful() throws IOException {
+    public void testCollapse_whenDefaultConfig_thenFlatQueueCollectsSuccessfully() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
@@ -188,9 +176,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            0
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -212,15 +199,9 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(50, collapseTopFieldDocs.totalHits.value());
-            assertEquals(TOP_N_GROUPS * TOP_N_GROUPS, collapseTopFieldDocs.scoreDocs.length);
-
-            // Verify collapse values
-            Set<String> uniqueGroups = new HashSet<>();
-            for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
-                uniqueGroups.add(((BytesRef) collapseValue).utf8ToString());
-            }
-            assertEquals(5, uniqueGroups.size());
+            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
+            assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
 
         reader.close();
@@ -228,27 +209,11 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testCollapse_whenDocsPerGroupPerSubQueryIsSmallAndManyDocsInSameGroup_thenNoArrayIndexOutOfBounds() throws IOException {
+    public void testCollapse_whenManyDocsInSameGroup_thenFlatQueueHandlesCorrectly() throws IOException {
         /*
-         * SCENARIO EXPLANATION:
-         * This test reproduces a critical bug in queue full detection that caused ArrayIndexOutOfBoundsException.
-         *
-         * THE BUG SCENARIO:
-         * - docsPerGroupPerSubQuery = 1 (very small queue size per group per subquery)
-         * - numHits = 10 (number of top groups to return)
-         * - Multiple documents map to the same group for a subquery
-         *
-         * THE PREVIOUS BUG:
-         * - Queue full check: if (slot == (numHits - 1)) // slot == 9
-         * - But queue was created with size docsPerGroupPerSubQuery = 1
-         * - So queue could only hold 1 document, but was never marked as full
-         * - When slot >= 1, addNewEntry() tried to access queue slots beyond capacity
-         * - This caused ArrayIndexOutOfBoundsException in FieldValueHitQueue internal arrays
-         *
-         * THE FIX:
-         * - Changed to: if (slot == (docsPerGroupPerSubQuery - 1)) // slot == 0
-         * - Now queue is correctly marked full after first document
-         * - Subsequent documents trigger updateExistingEntry() instead of addNewEntry()
+         * Tests that the flat per-sub-query queue correctly handles many documents
+         * mapping to the same collapse group. With the flat queue approach, all docs
+         * compete globally for the top-K slots regardless of group membership.
          */
 
         Directory directory = newDirectory();
@@ -269,17 +234,15 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         Sort sort = new Sort(SortField.FIELD_SCORE);
         KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
 
-        // CRITICAL CONFIGURATION: Small docsPerGroupPerSubQuery with larger numHits
-        int topNGroups = 10;  // Want to return 10 top groups
-        int docsPerGroupPerSubQuery = 1;  // But only allow 1 doc per group per subquery
+        // CONFIGURATION: topNGroups with many docs in same group
+        int topNGroups = 10;  // Want to return 10 top results
 
         HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
             topNGroups,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            docsPerGroupPerSubQuery  // This is the key parameter that triggered the bug
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -294,8 +257,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
-        // This collection process would have thrown ArrayIndexOutOfBoundsException before the fix
-        // because multiple documents mapping to "group0" would try to exceed the queue capacity of 1
+        // This exercises the flat queue with many docs competing for the same slots
         collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
 
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
@@ -303,24 +265,12 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(5, collapseTopFieldDocs.totalHits.value());
+            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            assertEquals(100, collapseTopFieldDocs.totalHits.value());
 
-            // With docsPerGroupPerSubQuery = 1, we should get at most 1 document per group
-            // Even though 50 documents mapped to "group0", only 1 should be in the final result
+            // Flat queue of size topNGroups=10, so at most 10 results
             assertTrue("Should have some results", collapseTopFieldDocs.scoreDocs.length > 0);
-
-            // Verify that we don't exceed the docsPerGroupPerSubQuery limit
-            // Count documents per group to ensure the limit is respected
-            Set<String> uniqueGroups = new HashSet<>();
-            for (Object collapseValue : collapseTopFieldDocs.collapseValues) {
-                uniqueGroups.add(((BytesRef) collapseValue).utf8ToString());
-            }
-
-            // Should have multiple groups but limited docs per group
-            assertTrue("Should have multiple unique groups", uniqueGroups.size() > 1);
-
-            // The key assertion: no ArrayIndexOutOfBoundsException was thrown during collection
-            // This validates that the queue full detection fix works correctly
+            assertTrue("Should not exceed topNGroups", collapseTopFieldDocs.scoreDocs.length <= 10);
         }
 
         reader.close();
@@ -328,10 +278,10 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testCollapse_whenDocsPerGroupPerSubQueryEqualsOne_thenQueueFullDetectionWorks() throws IOException {
+    public void testCollapse_whenAllDocsInSameGroup_thenQueueFillsCorrectly() throws IOException {
         /*
-         * ADDITIONAL TEST: Specifically test the queue full detection logic
-         * This test validates that the fix works with the exact problematic configuration
+         * Tests that when ALL documents map to the same collapse group,
+         * the flat queue correctly fills to capacity and evicts weaker entries.
          */
 
         Directory directory = newDirectory();
@@ -356,8 +306,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             fieldType,
             sort,
             5,  // topNGroups
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            10   // docsPerGroupPerSubQuery = 1 (the problematic value)
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -372,8 +321,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
-        // Before fix: This would throw ArrayIndexOutOfBoundsException
-        // After fix: This should work correctly
+        // Before: queue not full, docs added directly
+        // After queue fills to 5: subsequent docs compete via updateExistingEntry
         collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
 
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
@@ -381,13 +330,15 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            assertEquals(10, collapseTopFieldDocs.totalHits.value());
+            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            assertEquals(20, collapseTopFieldDocs.totalHits.value());
 
-            // Key validation: Despite 20 documents in same group, only 1 should be returned
-            assertEquals("Should have exactly 10 document due to docsPerGroupPerSubQuery=10", 10, collapseTopFieldDocs.scoreDocs.length);
+            // Flat queue of size 5, all 20 docs are in same group "samegroup"
+            // Queue holds top 5 docs globally
+            assertEquals("Should have exactly 5 docs in flat queue", 5, collapseTopFieldDocs.scoreDocs.length);
 
-            // Verify the collapse value
-            assertEquals("Should have exactly 10 collapse value", 10, collapseTopFieldDocs.collapseValues.length);
+            // All collapse values should be "samegroup" since all docs are in the same group
+            assertEquals("Should have exactly 5 collapse values", 5, collapseTopFieldDocs.collapseValues.length);
             assertEquals("samegroup", ((BytesRef) collapseTopFieldDocs.collapseValues[0]).utf8ToString());
         }
 
@@ -421,9 +372,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -484,9 +434,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -545,9 +494,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -619,9 +567,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -677,9 +624,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -730,9 +676,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -762,6 +707,400 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             int currentValue = ((Number) fieldDoc.fields[0]).intValue();
             assertTrue("Field values should be in descending order", currentValue <= previousValue);
             previousValue = currentValue;
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    /**
+     * Test that when more groups than numHits exist, only the top-K groups survive in topDocs.
+     */
+    public void testCollapse_whenMoreGroupsThanNumHits_thenOnlyTopKGroupsSurvive() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // 20 unique groups, TOP_N_GROUPS=5, so 15 groups should be evicted
+        for (int i = 0; i < 20; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        // Deterministic descending scores: group0=1.0, group1=0.95, ..., group19=0.05
+        List<Float> scores = IntStream.range(0, 20).mapToObj(i -> 1.0f - (i * 0.05f)).collect(Collectors.toList());
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        collectDocsAndScores(hybridScorer, scores, leafCollector, 0, IntStream.range(0, 20).toArray());
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+        assertEquals(numHits, result.scoreDocs.length);
+        assertEquals(numHits, result.collapseValues.length);
+
+        // Verify the surviving groups are the top-5 scoring ones
+        Set<String> survivingGroups = new HashSet<>();
+        for (Object cv : result.collapseValues) {
+            survivingGroups.add(((BytesRef) cv).utf8ToString());
+        }
+        for (int i = 0; i < numHits; i++) {
+            assertTrue("group" + i + " should survive", survivingGroups.contains("group" + i));
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapseWithMultipleSegments_whenMoreGroupsThanNumHits_thenOnlyTopKGroupsSurvive() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriterConfig config = newIndexWriterConfig();
+        config.setMergePolicy(NoMergePolicy.INSTANCE); // prevent auto-merging
+        IndexWriter writer = new IndexWriter(directory, config);
+
+        // Write docs in batches, flushing between to create separate segments
+        for (int i = 0; i < 10; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.flush();
+        writer.commit();
+
+        for (int i = 10; i < 20; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.flush();
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+        assertTrue("Expected multiple segments", reader.leaves().size() > 1);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        // Global score map: original doc with stored id=i gets score 1.0 - (i * 0.05)
+        // We need to read each segment to find which stored IDs are in it,
+        // then assign the correct score per segment-local doc.
+        for (LeafReaderContext leafCtx : reader.leaves()) {
+            LeafCollector leafCollector = collector.getLeafCollector(leafCtx);
+            leafCollector.setScorer(hybridScorer);
+
+            int maxDoc = leafCtx.reader().maxDoc();
+            for (int segDoc = 0; segDoc < maxDoc; segDoc++) {
+                // Read the stored "id" field to determine the original group index
+                Document doc = leafCtx.reader().storedFields().document(segDoc);
+                int originalId = doc.getField("_id").numericValue().intValue();
+                float score = 1.0f - (originalId * 0.05f);
+
+                hybridScorer.resetScores();
+                hybridScorer.getSubQueryScores()[0] = score;
+                leafCollector.collect(segDoc);
+            }
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+        assertEquals(numHits, result.scoreDocs.length);
+        assertEquals(numHits, result.collapseValues.length);
+
+        // Verify the surviving groups are the top-5 scoring ones
+        Set<String> survivingGroups = new HashSet<>();
+        for (Object cv : result.collapseValues) {
+            survivingGroups.add(((BytesRef) cv).utf8ToString());
+        }
+        for (int i = 0; i < numHits; i++) {
+            assertTrue("group" + i + " should survive", survivingGroups.contains("group" + i));
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    /**
+     * Test that minScores on HybridSubQueryScorer are updated when groups are evicted (sort by score).
+     */
+    public void testCollapse_whenGroupsEvictedSortByScore_thenMinScoresUpdated() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // 10 groups, TOP_N_GROUPS=5, so evictions start after 6th group
+        for (int i = 0; i < 10; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        assertEquals(0.0f, hybridScorer.getMinScores()[0], 0.0001f);
+
+        // Ascending scores: 0.1, 0.2, 0.3, ..., 1.0
+        // First 5 (0.1-0.5) fill the queue, then docs 6-10 (0.6-1.0) evict weaker entries
+        for (int i = 0; i < 10; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = 0.1f + (i * 0.1f);
+            leafCollector.collect(i);
+        }
+
+        // After 10 groups with numHits=5, minScores should have been updated from evictions
+        assertTrue("minScores should be > 0 after evictions", hybridScorer.getMinScores()[0] > 0.0f);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    /**
+     * Test that a group evicted from the live top-K can still receive new docs without NPE.
+     */
+    public void testCollapse_whenEvictedGroupReappears_thenNoError() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // groupA appears first with low score, then 4 other groups push it out, then groupA reappears with high score
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupB");
+        addKeywordDoc(writer, 2, "text2", 102, "groupC");
+        addKeywordDoc(writer, 3, "text3", 103, "groupD");
+        addKeywordDoc(writer, 4, "text4", 104, "groupE");
+        addKeywordDoc(writer, 5, "text5", 105, "groupF");
+        // groupA reappears
+        addKeywordDoc(writer, 6, "text6", 106, "groupA");
+        addKeywordDoc(writer, 7, "text7", 107, "groupA");
+
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // groupA starts low, gets evicted, then comes back with higher scores
+        float[] scores = new float[] { 0.1f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f, 0.95f, 0.99f };
+
+        for (int i = 0; i < scores.length; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[i];
+            leafCollector.collect(i);
+        }
+
+        // Should not throw NPE or any exception
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+        CollapseTopFieldDocs result = topDocs.get(0);
+        // 6 unique groups, numHits=5, so exactly 5 groups survive
+        assertEquals(numHits, result.collapseValues.length);
+
+        // Verify groupA survived (it re-entered with 0.95 and 0.99)
+        Set<String> survivingGroups = new HashSet<>();
+        for (Object cv : result.collapseValues) {
+            survivingGroups.add(((BytesRef) cv).utf8ToString());
+        }
+        assertTrue("groupA should be back in top-K after high-score re-entry", survivingGroups.contains("groupA"));
+
+        // groupF (0.5) should have been evicted since it's the weakest among the 6 groups
+        assertFalse("groupF should be evicted as the weakest group", survivingGroups.contains("groupF"));
+
+        // Verify scores are in descending order
+        float previousScore = Float.MAX_VALUE;
+        for (int i = 0; i < result.scoreDocs.length; i++) {
+            float currentScore = result.scoreDocs[i].score;
+            assertTrue("Scores should be in descending order", currentScore <= previousScore);
+            previousScore = currentScore;
+        }
+
+        // Verify the top score is from groupA's best doc (0.99)
+        assertEquals(0.99f, result.scoreDocs[0].score, 0.001f);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    /**
+     * Test that when sorting by field (not score), minScores are NOT updated on eviction.
+     */
+    public void testCollapse_whenSortByFieldAndGroupsEvicted_thenMinScoresNotUpdated() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // 10 groups, TOP_N_GROUPS=5, so evictions happen
+        for (int i = 0; i < 10; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        // Sort by INT field, NOT score
+        Sort sort = new Sort(new SortField(INT_FIELD_NAME, SortField.Type.INT, false));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        List<Float> scores = IntStream.range(0, 10).mapToObj(i -> 1.0f - (i * 0.1f)).collect(Collectors.toList());
+        collectDocsAndScores(hybridScorer, scores, leafCollector, 0, IntStream.range(0, 10).toArray());
+
+        // minScores should remain 0 since we're not sorting by score
+        assertEquals(0.0f, hybridScorer.getMinScores()[0], 0.0001f);
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+        assertEquals(numHits, topDocs.get(0).scoreDocs.length);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    /**
+     * Test that docs with scores below the minScore threshold are skipped during collection.
+     */
+    public void testCollapse_whenScoreBelowThreshold_thenDocSkipped() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // 10 unique groups
+        for (int i = 0; i < 10; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // First 5: high scores that fill the queue and cause evictions
+        // Last 5: very low scores that should be below the evicted threshold
+        float[] scores = new float[] { 0.9f, 0.8f, 0.7f, 0.6f, 0.5f, 0.4f, 0.01f, 0.01f, 0.01f, 0.01f };
+
+        for (int i = 0; i < 10; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[i];
+            leafCollector.collect(i);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+        assertEquals(numHits, result.scoreDocs.length);
+
+        // All surviving docs should have scores above the threshold
+        for (int i = 0; i < result.scoreDocs.length; i++) {
+            assertTrue("Surviving doc score should be above threshold", result.scoreDocs[i].score > 0.1f);
         }
 
         reader.close();

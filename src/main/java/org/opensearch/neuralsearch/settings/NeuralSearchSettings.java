@@ -70,17 +70,20 @@ public final class NeuralSearchSettings {
     );
 
     /**
+     * @deprecated
      * Setting representing how many documents are stored per group per subquery in HybridCollapsingTopDocsCollector
      * Default is set to 0, which will use the size passed via the query instead of 0, which is the standard practice for non-collapse hybrid search.
      *
      */
+    @Deprecated
     public static final Setting<Integer> HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY = Setting.intSetting(
         "index.neural_search.hybrid_collapse_docs_per_group_per_subquery",
         0,
         0,
         1000,
         Setting.Property.IndexScope,
-        Setting.Property.Dynamic
+        Setting.Property.Dynamic,
+        Setting.Property.Deprecated
     );
 
     public static Setting<Integer> SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING = Setting.intSetting(
