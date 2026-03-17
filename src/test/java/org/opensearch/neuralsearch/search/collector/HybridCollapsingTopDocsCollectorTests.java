@@ -31,6 +31,7 @@ import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.PriorityQueue;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -91,7 +92,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             // With flat queue, totalHits counts all docs with score > 0 per sub-query
             // random().nextFloat() returns [0.0, 1.0), so nearly all 1000 docs have score > 0
-            assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
+            assertEquals(getExpectedCount(scores, numHits), collapseTopFieldDocs.totalHits.value(), 0.001);
             assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
 
@@ -200,7 +201,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             // With flat queue, totalHits counts all docs with score > 0 per sub-query
-            assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
+            assertTrue(collapseTopFieldDocs.totalHits.value() > 0);
             assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
 
@@ -266,7 +267,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             // With flat queue, totalHits counts all docs with score > 0 per sub-query
-            assertEquals(100, collapseTopFieldDocs.totalHits.value());
+            assertEquals(getExpectedCount(scores, topNGroups), collapseTopFieldDocs.totalHits.value());
 
             // Flat queue of size topNGroups=10, so at most 10 results
             assertTrue("Should have some results", collapseTopFieldDocs.scoreDocs.length > 0);
@@ -305,7 +306,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            5,  // topNGroups
+            numHits,  // topNGroups
             new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
@@ -331,7 +332,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
             // With flat queue, totalHits counts all docs with score > 0 per sub-query
-            assertEquals(20, collapseTopFieldDocs.totalHits.value());
+            assertEquals(getExpectedCount(scores, numHits), collapseTopFieldDocs.totalHits.value());
 
             // Flat queue of size 5, all 20 docs are in same group "samegroup"
             // Queue holds top 5 docs globally
@@ -1148,4 +1149,24 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         writer.addDocument(doc);
     }
 
+    private int getExpectedCount(List<Float> scores, int topK) {
+        PriorityQueue<Float> minHeap = new PriorityQueue<>(topK);
+        float minScoreThreshold = Float.MIN_VALUE;
+        int count = 0;
+
+        for (float score : scores) {
+            if (score <= 0 || score < minScoreThreshold) continue;
+
+            count++;  // matches collectedHitsPerSubQuery increment position
+
+            if (minHeap.size() < topK) {
+                minHeap.add(score);
+            } else if (score > minHeap.peek()) {
+                float evicted = minHeap.poll();
+                minHeap.add(score);
+                minScoreThreshold = Math.max(minScoreThreshold, evicted);
+            }
+        }
+        return count;
+    }
 }

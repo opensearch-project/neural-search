@@ -173,7 +173,7 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
         }
 
         private boolean isNonCompetitiveScore(float score, int subQueryIndex) {
-            return score <= 0 && score < minScoreThresholds[subQueryIndex];
+            return score <= 0 || score < minScoreThresholds[subQueryIndex];
         }
 
         /**
