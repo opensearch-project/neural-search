@@ -1173,9 +1173,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
             COLLAPSE_FIELD_NAME,
             fieldType,
             sort,
-            TOP_N_GROUPS,
-            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
-            DOCS_PER_GROUP_PER_SUBQUERY
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
         );
 
         Weight weight = mock(Weight.class);
@@ -1190,6 +1189,10 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         LeafReaderContext context = reader.leaves().getFirst();
         LeafCollector leafCollector = collector.getLeafCollector(context);
+
+        // First set the adapter via setScorer() to trigger minScoreThresholds initialization,
+        // then override with profiler-mode fields
+        leafCollector.setScorer(adapter);
         HybridLeafCollector hybridLeaf = (HybridLeafCollector) leafCollector;
         hybridLeaf.hybridQueryScorer = mockHybridScorer;
         hybridLeaf.compoundQueryScorer = adapter;
