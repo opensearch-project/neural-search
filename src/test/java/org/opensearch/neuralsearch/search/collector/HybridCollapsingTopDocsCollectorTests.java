@@ -1157,7 +1157,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         for (float score : scores) {
             if (score <= 0 || score < minScoreThreshold) continue;
 
-            count++;  // matches collectedHitsPerSubQuery increment position
+            count++;
 
             if (minHeap.size() < topK) {
                 minHeap.add(score);
