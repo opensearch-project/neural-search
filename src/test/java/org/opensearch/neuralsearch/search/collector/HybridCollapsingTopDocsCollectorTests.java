@@ -12,7 +12,9 @@ import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Sort;
@@ -752,6 +754,85 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         leafCollector.setScorer(hybridScorer);
 
         collectDocsAndScores(hybridScorer, scores, leafCollector, 0, IntStream.range(0, 20).toArray());
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+        assertEquals(numHits, result.scoreDocs.length);
+        assertEquals(numHits, result.collapseValues.length);
+
+        // Verify the surviving groups are the top-5 scoring ones
+        Set<String> survivingGroups = new HashSet<>();
+        for (Object cv : result.collapseValues) {
+            survivingGroups.add(((BytesRef) cv).utf8ToString());
+        }
+        for (int i = 0; i < numHits; i++) {
+            assertTrue("group" + i + " should survive", survivingGroups.contains("group" + i));
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapseWithMultipleSegments_whenMoreGroupsThanNumHits_thenOnlyTopKGroupsSurvive() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriterConfig config = newIndexWriterConfig();
+        config.setMergePolicy(NoMergePolicy.INSTANCE); // prevent auto-merging
+        IndexWriter writer = new IndexWriter(directory, config);
+
+        // Write docs in batches, flushing between to create separate segments
+        for (int i = 0; i < 10; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.flush();
+        writer.commit();
+
+        for (int i = 10; i < 20; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.flush();
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+        assertTrue("Expected multiple segments", reader.leaves().size() > 1);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        // Global score map: original doc with stored id=i gets score 1.0 - (i * 0.05)
+        // We need to read each segment to find which stored IDs are in it,
+        // then assign the correct score per segment-local doc.
+        for (LeafReaderContext leafCtx : reader.leaves()) {
+            LeafCollector leafCollector = collector.getLeafCollector(leafCtx);
+            leafCollector.setScorer(hybridScorer);
+
+            int maxDoc = leafCtx.reader().maxDoc();
+            for (int segDoc = 0; segDoc < maxDoc; segDoc++) {
+                // Read the stored "id" field to determine the original group index
+                Document doc = leafCtx.reader().storedFields().document(segDoc);
+                int originalId = doc.getField("_id").numericValue().intValue();
+                float score = 1.0f - (originalId * 0.05f);
+
+                hybridScorer.resetScores();
+                hybridScorer.getSubQueryScores()[0] = score;
+                leafCollector.collect(segDoc);
+            }
+        }
 
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
         assertEquals(1, topDocs.size());
