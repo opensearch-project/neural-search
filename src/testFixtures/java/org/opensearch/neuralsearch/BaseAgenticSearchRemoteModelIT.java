@@ -250,4 +250,36 @@ public abstract class BaseAgenticSearchRemoteModelIT extends BaseNeuralSearchIT 
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
     }
 
+    /**
+     * Create an alias pointing to multiple indices
+     */
+    public void createAlias(String aliasName, String... indices) throws Exception {
+        StringBuilder actionsBuilder = new StringBuilder();
+        actionsBuilder.append("{ \"actions\": [");
+
+        for (int i = 0; i < indices.length; i++) {
+            if (i > 0) {
+                actionsBuilder.append(",");
+            }
+            actionsBuilder.append(
+                String.format(Locale.ROOT, "{ \"add\": { \"index\": \"%s\", \"alias\": \"%s\" } }", indices[i], aliasName)
+            );
+        }
+
+        actionsBuilder.append("] }");
+
+        makeRequest(client(), "POST", "/_aliases", null, toHttpEntity(actionsBuilder.toString()), null);
+    }
+
+    /**
+     * Delete an alias
+     */
+    public void deleteAlias(String aliasName) throws Exception {
+        try {
+            makeRequest(client(), "DELETE", "/_alias/" + aliasName, null, null, null);
+        } catch (Exception e) {
+            log.debug("Failed to delete alias {}: {}", aliasName, e.getMessage());
+        }
+    }
+
 }
