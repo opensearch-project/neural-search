@@ -1147,9 +1147,51 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         assertEquals("Unsupported agent type: unsupported", exceptionCaptor.getValue().getMessage());
     }
 
+    public void testExecuteAgent_FlowAgentWithAlias() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+        final String expectedResponse = "{\"query\": {\"match\": {\"field\": \"value\"}}}";
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "products-alias" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("find products");
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createModelTensorOutputWithResult(expectedResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false, null);
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
+
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals(expectedResponse, result.getDslQuery());
+        assertNull(result.getAgentStepsSummary());
+        assertNull(result.getMemoryId());
+
+        // Verify that the agent input contains the alias name
+        ArgumentCaptor<AgentMLInput> inputCaptor = ArgumentCaptor.forClass(AgentMLInput.class);
+        verify(client).execute(any(), inputCaptor.capture(), any());
+
+        AgentMLInput capturedInput = inputCaptor.getValue();
+        RemoteInferenceInputDataSet dataset = (RemoteInferenceInputDataSet) capturedInput.getInputDataset();
+        assertEquals("products-alias", dataset.getParameters().get("index_name"));
+    }
+
     public void testExecuteAgent_FlowAgentWithMultipleIndices() throws Exception {
         final String agentId = "test-agent-id";
         final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+        final String expectedResponse = "{\"query\": {\"match\": {\"field\": \"value\"}}}";
 
         SearchRequest mockRequest = mock(SearchRequest.class);
         when(mockRequest.indices()).thenReturn(new String[] { "index1", "index2" });
@@ -1157,14 +1199,26 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
         when(mockQuery.getQueryText()).thenReturn("test query");
 
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createModelTensorOutputWithResult(expectedResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
         AgentInfoDTO agentInfo = new AgentInfoDTO("flow", false, false, "bedrock/converse/claude");
 
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener)
-        );
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, mock(NamedXContentRegistry.class), listener);
 
-        assertEquals("Flow agent does not support multiple indices", exception.getMessage());
+        verify(client).execute(any(), any(), any());
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals(expectedResponse, result.getDslQuery());
+        assertNull(result.getAgentStepsSummary());
+        assertNull(result.getMemoryId());
     }
 
     public void testExecuteAgent_FlowAgentWithMemoryId() throws Exception {
