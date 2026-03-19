@@ -1,0 +1,9 @@
+{
+  "request_processors": [
+    {
+      "agentic_query_translator": {
+        "agent_id": "%s"
+      }
+    }
+  ]
+}
