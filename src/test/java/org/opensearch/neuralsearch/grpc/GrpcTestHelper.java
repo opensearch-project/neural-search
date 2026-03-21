@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.grpc;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.logging.log4j.LogManager;
@@ -22,6 +24,8 @@ import org.opensearch.protobufs.services.SearchServiceGrpc;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import io.grpc.Metadata;
+import io.grpc.stub.MetadataUtils;
 import lombok.experimental.UtilityClass;
 
 /**
@@ -104,7 +108,29 @@ public class GrpcTestHelper {
     public static SearchResponse executeSearch(ManagedChannel channel, SearchRequest request, int timeoutSeconds) {
         SearchServiceGrpc.SearchServiceBlockingStub stub = SearchServiceGrpc.newBlockingStub(channel)
             .withDeadlineAfter(timeoutSeconds, TimeUnit.SECONDS);
+
+        if (isSecurityEnabled()) {
+            stub = addBasicAuthentication(stub);
+        }
+
         return stub.search(request);
+    }
+
+    private static boolean isSecurityEnabled() {
+        return "true".equals(System.getProperty("security.enabled"));
+    }
+
+    private static SearchServiceGrpc.SearchServiceBlockingStub addBasicAuthentication(SearchServiceGrpc.SearchServiceBlockingStub stub) {
+        String username = System.getProperty("user", "admin");
+        String password = System.getProperty("password", "admin");
+        String base64Credentials = Base64.getEncoder().encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8));
+
+        Metadata headers = new Metadata();
+        headers.put(Metadata.Key.of("Authorization", Metadata.ASCII_STRING_MARSHALLER), "Basic " + base64Credentials);
+
+        logger.debug("Adding Basic Auth for gRPC: user={}", username);
+
+        return stub.withInterceptors(MetadataUtils.newAttachHeadersInterceptor(headers));
     }
 
     /**
