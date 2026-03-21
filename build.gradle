@@ -318,6 +318,7 @@ dependencies {
     testImplementation "io.grpc:grpc-stub:${versions.grpc}"
     testImplementation "io.grpc:grpc-protobuf:${versions.grpc}"
     testImplementation "io.grpc:grpc-protobuf-lite:${versions.grpc}"
+    testRuntimeOnly "io.perfmark:perfmark-api:0.27.0"
     testRuntimeOnly "com.google.guava:guava:${versions.guava}"
 }
 
