@@ -24,7 +24,6 @@ import org.opensearch.protobufs.HybridQuery;
 import org.opensearch.protobufs.QueryContainer;
 import org.opensearch.protobufs.SearchRequest;
 import org.opensearch.protobufs.SearchResponse;
-import org.opensearch.protobufs.services.SearchServiceGrpc;
 
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
@@ -73,11 +72,11 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
     @After
     public void tearDownGrpc() throws Exception {
-        // Shutdown gRPC channel
-        GrpcTestHelper.shutdownChannel(grpcChannel);
-
-        // Clean up test resources - delete test index
-        deleteTestIndex();
+        try {
+            deleteTestIndex();
+        } finally {
+            GrpcTestHelper.shutdownChannel(grpcChannel);
+        }
     }
 
     /**
@@ -86,7 +85,7 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     @SneakyThrows
     private void deleteTestIndex() {
         try {
-            if (checkIndexExists(TEST_INDEX_NAME)) {
+            if (indexExists(TEST_INDEX_NAME)) {
                 logger.info("Deleting test index: {}", TEST_INDEX_NAME);
                 Request deleteRequest = new Request("DELETE", "/" + TEST_INDEX_NAME);
                 Response response = client().performRequest(deleteRequest);
@@ -445,9 +444,10 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
         SearchRequest request = buildSearchRequest("non-existent-index-12345", queryContainer);
 
-        SearchServiceGrpc.SearchServiceBlockingStub stub = SearchServiceGrpc.newBlockingStub(grpcChannel);
-
-        StatusRuntimeException exception = expectThrows(StatusRuntimeException.class, () -> stub.search(request));
+        StatusRuntimeException exception = expectThrows(
+            StatusRuntimeException.class,
+            () -> GrpcTestHelper.executeSearch(grpcChannel, request)
+        );
 
         assertNotNull("Should throw exception for non-existent index", exception);
     }
@@ -499,7 +499,7 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     private void initializeIndexIfNotExist(String indexName) {
-        if (checkIndexExists(indexName)) {
+        if (indexExists(indexName)) {
             return;
         }
 
@@ -523,19 +523,6 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
 
         createIndex(indexName, indexConfiguration);
         indexTestDocuments(indexName);
-    }
-
-    /**
-     * Check if index exists
-     */
-    @SneakyThrows
-    private boolean checkIndexExists(String indexName) {
-        try {
-            Response response = client().performRequest(new Request("HEAD", "/" + indexName));
-            return response.getStatusLine().getStatusCode() == 200;
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     /**

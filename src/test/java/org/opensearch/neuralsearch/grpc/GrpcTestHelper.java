@@ -22,6 +22,8 @@ import org.opensearch.protobufs.SearchResponse;
 import org.opensearch.protobufs.TermQuery;
 import org.opensearch.protobufs.services.SearchServiceGrpc;
 
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Metadata;
@@ -159,6 +161,17 @@ public class GrpcTestHelper {
                     Thread.sleep(retryDelayMs);
                 }
                 return executeSearch(channel, request, timeoutSeconds);
+            } catch (StatusRuntimeException e) {
+                Status.Code code = e.getStatus().getCode();
+                if (code == Status.Code.UNAVAILABLE || code == Status.Code.DEADLINE_EXCEEDED) {
+                    lastException = e;
+                    logger.warn("Search attempt {} failed with transient error {}: {}", attempt + 1, code, e.getMessage());
+                    if (attempt == maxRetries) {
+                        logger.error("All {} retry attempts exhausted for search request", maxRetries + 1);
+                    }
+                } else {
+                    throw e;
+                }
             } catch (Exception e) {
                 lastException = e;
                 logger.warn("Search attempt {} failed: {}", attempt + 1, e.getMessage());
