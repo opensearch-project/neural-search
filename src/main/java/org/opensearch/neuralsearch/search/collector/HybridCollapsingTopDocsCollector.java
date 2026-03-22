@@ -268,7 +268,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     }
 
                     // Skip non-competitive docs when sorting by score
-                    if (isSortByScore && score <= 0 && score < minScoreThresholds[subQuery]) {
+                    if (isSortByScore && (score <= 0 || score < minScoreThresholds[subQuery])) {
                         continue;
                     }
 
