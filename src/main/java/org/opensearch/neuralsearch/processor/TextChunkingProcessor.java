@@ -14,11 +14,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 import org.apache.commons.lang3.StringUtils;
-import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.env.Environment;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.index.analysis.AnalysisRegistry;
-import org.opensearch.index.IndexSettings;
 import org.opensearch.ingest.AbstractProcessor;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.neuralsearch.processor.chunker.Chunker;
@@ -27,6 +25,7 @@ import org.opensearch.neuralsearch.processor.chunker.ChunkerFactory;
 import org.opensearch.neuralsearch.processor.chunker.DelimiterChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedCharLengthChunker;
 import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
+import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
@@ -172,14 +171,7 @@ public final class TextChunkingProcessor extends AbstractProcessor {
     }
 
     private int getMaxTokenCount(final Map<String, Object> sourceAndMetadataMap) {
-        int defaultMaxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(environment.settings());
-        String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
-        IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
-        if (Objects.isNull(indexMetadata)) {
-            return defaultMaxTokenCount;
-        }
-        // if the index is specified in the metadata, read maxTokenCount from the index setting
-        return IndexSettings.MAX_TOKEN_COUNT_SETTING.get(indexMetadata.getSettings());
+        return ProcessorUtils.getMaxTokenCount(sourceAndMetadataMap, environment.settings(), clusterService);
     }
 
     /**

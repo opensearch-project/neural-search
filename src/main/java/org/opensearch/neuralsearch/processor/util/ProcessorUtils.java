@@ -6,7 +6,9 @@ package org.opensearch.neuralsearch.processor.util;
 
 import lombok.NonNull;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.cluster.metadata.IndexAbstraction;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.settings.Settings;
@@ -415,7 +417,15 @@ public class ProcessorUtils {
     ) {
         int defaultMaxTokenCount = IndexSettings.MAX_TOKEN_COUNT_SETTING.get(settings);
         String indexName = sourceAndMetadataMap.get(IndexFieldMapper.NAME).toString();
-        IndexMetadata indexMetadata = clusterService.state().metadata().index(indexName);
+        Metadata metadata = clusterService.state().metadata();
+        IndexMetadata indexMetadata = metadata.index(indexName);
+        // if not found as concrete index, try resolving as alias or data stream
+        if (Objects.isNull(indexMetadata)) {
+            IndexAbstraction indexAbstraction = metadata.getIndicesLookup().get(indexName);
+            if (Objects.nonNull(indexAbstraction)) {
+                indexMetadata = indexAbstraction.getWriteIndex();
+            }
+        }
         if (Objects.isNull(indexMetadata)) {
             return defaultMaxTokenCount;
         }
