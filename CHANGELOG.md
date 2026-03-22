@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+- [Agentic Search]: Support embedding model id in agentic query translator processor for neural queries ([#1800](https://github.com/opensearch-project/neural-search/pull/1800))
 
 ### Enhancements
 
