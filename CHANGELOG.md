@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [HYBRID]: Fix empty results when using profiler with hybrid query sort, pagination, or collapse ([#1794](https://github.com/opensearch-project/neural-search/pull/1794))
 
 ### Infrastructure
+- [GRPC] Add Integration test for Hybrid Query ([#1734](https://github.com/opensearch-project/neural-search/pull/1734))
 - Fix integration test health check failures in remote clusters by dynamically discovering node count and using >= syntax for wait_for_nodes ([#1776](https://github.com/opensearch-project/neural-search/pull/1776))
 
 ### Documentation
