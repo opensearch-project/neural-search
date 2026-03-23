@@ -52,8 +52,8 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
     public static final String TYPE = "agentic_query_translator";
     public static final String EMBEDDING_MODEL_ID_FIELD = "embedding_model_id";
     private static final int MAX_AGENT_RESPONSE_SIZE = 10_000;
-    private static final int MAX_AGENT_ID_LENGTH = 100;
-    private static final String AGENT_ID_PATTERN = "^[a-zA-Z0-9_-]+$";
+    private static final int MAX_ML_RESOURCE_ID_LENGTH = 100;
+    private static final String ML_RESOURCE_ID_PATTERN = "^[a-zA-Z0-9_-]+$";
     private final MLCommonsClientAccessor mlClient;
     private final String agentId;
     private final String embeddingModelId;
@@ -280,22 +280,42 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
             }
 
             // Validate agent ID length
-            if (agentId.length() > MAX_AGENT_ID_LENGTH) {
+            if (agentId.length() > MAX_ML_RESOURCE_ID_LENGTH) {
                 throw new IllegalArgumentException(
-                    String.format(Locale.ROOT, "agent_id exceeds maximum length of %d characters", MAX_AGENT_ID_LENGTH)
+                    String.format(Locale.ROOT, "agent_id exceeds maximum length of %d characters", MAX_ML_RESOURCE_ID_LENGTH)
                 );
             }
 
             // Validate agent ID format
-            if (!agentId.matches(AGENT_ID_PATTERN)) {
+            if (!agentId.matches(ML_RESOURCE_ID_PATTERN)) {
                 throw new IllegalArgumentException("agent_id must contain only alphanumeric characters, hyphens, and underscores");
             }
 
             String embeddingModelId = readOptionalStringProperty(TYPE, tag, config, EMBEDDING_MODEL_ID_FIELD);
 
-            // Validate embedding_model_id if provided - should not be empty or whitespace-only
-            if (embeddingModelId != null && embeddingModelId.trim().isEmpty()) {
-                throw new IllegalArgumentException(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only");
+            // Validate embedding_model_id if provided (optional parameter)
+            if (embeddingModelId != null) {
+                if (embeddingModelId.trim().isEmpty()) {
+                    throw new IllegalArgumentException(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only");
+                }
+
+                // Validate embedding_model_id length
+                if (embeddingModelId.length() > MAX_ML_RESOURCE_ID_LENGTH) {
+                    throw new IllegalArgumentException(
+                        String.format(
+                            Locale.ROOT,
+                            EMBEDDING_MODEL_ID_FIELD + " exceeds maximum length of %d characters",
+                            MAX_ML_RESOURCE_ID_LENGTH
+                        )
+                    );
+                }
+
+                // Validate embedding_model_id format
+                if (!embeddingModelId.matches(ML_RESOURCE_ID_PATTERN)) {
+                    throw new IllegalArgumentException(
+                        EMBEDDING_MODEL_ID_FIELD + " must contain only alphanumeric characters, hyphens, and underscores"
+                    );
+                }
             }
 
             return new AgenticQueryTranslatorProcessor(

@@ -511,6 +511,48 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertEquals(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only", exception.getMessage());
     }
 
+    public void testCreate_withTooLongEmbeddingModelId() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        // Create a string longer than 100 characters
+        config.put(EMBEDDING_MODEL_ID_FIELD, "a".repeat(101));
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertTrue(exception.getMessage().contains(EMBEDDING_MODEL_ID_FIELD + " exceeds maximum length of 100 characters"));
+    }
+
+    public void testCreate_withInvalidEmbeddingModelIdFormat() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "invalid@model#id");
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals(
+            EMBEDDING_MODEL_ID_FIELD + " must contain only alphanumeric characters, hyphens, and underscores",
+            exception.getMessage()
+        );
+    }
+
     public void testProcessRequestAsync_withAgenticQuery_andAggregations() {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         SearchRequest request = new SearchRequest("test-index");
