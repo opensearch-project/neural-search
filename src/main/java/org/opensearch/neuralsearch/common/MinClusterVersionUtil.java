@@ -31,6 +31,7 @@ public final class MinClusterVersionUtil {
     public static final Version MINIMAL_SUPPORTED_VERSION_STATS_CATEGORY_FILTERING = Version.V_3_1_0;
     public static final Version MINIMAL_SUPPORTED_VERSION_METRICS_STATS = Version.V_3_3_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER = Version.V_3_0_0;
+    private static final Version MINIMAL_SUPPORTED_VERSION_AGENTIC_EMBEDDING_MODEL_ID = Version.V_3_6_0;
 
     // Constant for neural_knn_query version check
     public static final String NEURAL_KNN_QUERY = "neural_knn_query";
@@ -100,5 +101,14 @@ public final class MinClusterVersionUtil {
      */
     public static boolean isClusterOnOrAfterMinReqVersionForNeuralKNNQueryBuilder() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER);
+    }
+
+    /**
+     * Checks if the cluster min version supports embedding_model_id parameter in agentic query translator
+     *
+     * @return true if the cluster version supports embedding_model_id parameter
+     */
+    public static boolean isClusterOnOrAfterMinReqVersionForAgenticEmbeddingModelId() {
+        return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_AGENTIC_EMBEDDING_MODEL_ID);
     }
 }
