@@ -36,6 +36,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.util.TestUtils;
 
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor.EMBEDDING_MODEL_ID_FIELD;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -339,7 +340,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
-        config.put("embedding_model_id", "test-embedding-model");
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
 
         AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
@@ -389,7 +390,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         );
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
-        config.put("embedding_model_id", "test-embedding-model-123");
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model-123");
         AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
@@ -470,6 +471,44 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         );
 
         assertEquals("agent_id is required for agentic_query_translator processor", exception.getMessage());
+    }
+
+    public void testCreate_withEmptyEmbeddingModelId() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "");
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only", exception.getMessage());
+    }
+
+    public void testCreate_withWhitespaceOnlyEmbeddingModelId() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "   ");
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only", exception.getMessage());
     }
 
     public void testProcessRequestAsync_withAgenticQuery_andAggregations() {
@@ -1106,7 +1145,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
-        config.put("embedding_model_id", "test-embedding-model");
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
 
         // This should now succeed even on unsupported versions
         AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
@@ -1128,7 +1167,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
             Map<String, Object> config = new HashMap<>();
             config.put("agent_id", AGENT_ID);
-            config.put("embedding_model_id", "test-embedding-model");
+            config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
 
             AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
@@ -1158,7 +1197,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         );
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
-        config.put("embedding_model_id", "test-embedding-model");
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
         AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
@@ -1175,7 +1214,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertTrue(
             exceptionCaptor.getValue()
                 .getMessage()
-                .contains("embedding_model_id parameter is not supported on cluster versions before 3.6.0")
+                .contains(EMBEDDING_MODEL_ID_FIELD + " parameter is not supported on cluster versions before 3.6.0")
         );
     }
 }

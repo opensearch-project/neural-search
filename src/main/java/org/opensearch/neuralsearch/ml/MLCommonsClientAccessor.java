@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.ml;
 
+import static org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor.EMBEDDING_MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
@@ -703,8 +704,8 @@ public class MLCommonsClientAccessor {
             parameters.put("query_fields", gson.toJson(agenticQuery.getQueryFields()));
         }
 
-        if (embeddingModelId != null && !embeddingModelId.trim().isEmpty()) {
-            parameters.put("embedding_model_id", embeddingModelId);
+        if (embeddingModelId != null) {
+            parameters.put(EMBEDDING_MODEL_ID_FIELD, embeddingModelId);
         }
 
         if (hasSystemPrompt == false && type != MLAgentType.FLOW) {

@@ -2389,4 +2389,89 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         assertEquals("products-index", result.getSelectedIndex());
         assertEquals("I'll search for products.", result.getAgentStepsSummary());
     }
+
+    public void testExecuteAgent_WithEmbeddingModelId() throws Exception {
+        final String agentId = "test-agent-id";
+        final String agentType = "conversational";
+        final String embeddingModelId = "test-embedding-model-id";
+        final boolean hasSystemPrompt = true;
+        final NamedXContentRegistry registry = mock(NamedXContentRegistry.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponse());
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, embeddingModelId, registry, listener);
+
+        ArgumentCaptor<AgentMLInput> inputCaptor = ArgumentCaptor.forClass(AgentMLInput.class);
+        verify(client).execute(any(), inputCaptor.capture(), any());
+
+        AgentMLInput capturedInput = inputCaptor.getValue();
+        RemoteInferenceInputDataSet dataset = (RemoteInferenceInputDataSet) capturedInput.getInputDataset();
+        Map<String, String> parameters = dataset.getParameters();
+
+        assertTrue("embedding_model_id should be in parameters", parameters.containsKey("embedding_model_id"));
+        assertEquals("embedding_model_id should match the provided value", embeddingModelId, parameters.get("embedding_model_id"));
+
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+    }
+
+    public void testExecuteAgent_WithNullEmbeddingModelId() throws Exception {
+        final String agentId = "test-agent-id";
+        final String agentType = "conversational";
+        final boolean hasSystemPrompt = true;
+        final NamedXContentRegistry registry = mock(NamedXContentRegistry.class);
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("test query");
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createConversationalAgentResponse());
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO(agentType, hasSystemPrompt, false, "bedrock/converse/claude");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, null, registry, listener);
+
+        ArgumentCaptor<AgentMLInput> inputCaptor = ArgumentCaptor.forClass(AgentMLInput.class);
+        verify(client).execute(any(), inputCaptor.capture(), any());
+
+        AgentMLInput capturedInput = inputCaptor.getValue();
+        RemoteInferenceInputDataSet dataset = (RemoteInferenceInputDataSet) capturedInput.getInputDataset();
+        Map<String, String> parameters = dataset.getParameters();
+
+        assertFalse("embedding_model_id should NOT be in parameters when null", parameters.containsKey("embedding_model_id"));
+
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match\":{\"field\":\"value\"}}}", result.getDslQuery());
+    }
+
 }

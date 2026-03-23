@@ -50,6 +50,7 @@ import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.D
 public class AgenticQueryTranslatorProcessor extends AbstractProcessor implements SearchRequestProcessor {
 
     public static final String TYPE = "agentic_query_translator";
+    public static final String EMBEDDING_MODEL_ID_FIELD = "embedding_model_id";
     private static final int MAX_AGENT_RESPONSE_SIZE = 10_000;
     private static final int MAX_AGENT_ID_LENGTH = 100;
     private static final String AGENT_ID_PATTERN = "^[a-zA-Z0-9_-]+$";
@@ -127,12 +128,10 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
         ActionListener<SearchRequest> requestListener
     ) {
         // Validate embedding_model_id is only used on supported cluster versions at runtime
-        if (embeddingModelId != null
-            && !embeddingModelId.trim().isEmpty()
-            && !MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForAgenticEmbeddingModelId()) {
+        if (embeddingModelId != null && !MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForAgenticEmbeddingModelId()) {
             String errorMessage = String.format(
                 Locale.ROOT,
-                "embedding_model_id parameter is not supported on cluster versions before 3.6.0 - Agent ID: [%s]",
+                EMBEDDING_MODEL_ID_FIELD + " parameter is not supported on cluster versions before 3.6.0 - Agent ID: [%s]",
                 agentId
             );
             agenticQuery.setAgentFailureReason(errorMessage);
@@ -292,7 +291,12 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                 throw new IllegalArgumentException("agent_id must contain only alphanumeric characters, hyphens, and underscores");
             }
 
-            String embeddingModelId = readOptionalStringProperty(TYPE, tag, config, "embedding_model_id");
+            String embeddingModelId = readOptionalStringProperty(TYPE, tag, config, EMBEDDING_MODEL_ID_FIELD);
+
+            // Validate embedding_model_id if provided - should not be empty or whitespace-only
+            if (embeddingModelId != null && embeddingModelId.trim().isEmpty()) {
+                throw new IllegalArgumentException(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only");
+            }
 
             return new AgenticQueryTranslatorProcessor(
                 tag,
