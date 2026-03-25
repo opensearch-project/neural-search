@@ -9,16 +9,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.core.xcontent.ObjectPath;
 import org.opensearch.search.SearchHit;
 
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
+
+import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -64,20 +66,26 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
         if (hit.getFields().containsKey(field)) {
             Object fieldValue = hit.field(field).getValue();
             return String.valueOf(fieldValue);
-        } else if (hit.hasSource() && hit.getSourceAsMap().containsKey(field)) {
-            Object sourceValue = ObjectPath.eval(field, hit.getSourceAsMap());
-            return String.valueOf(sourceValue);
-        } else {
-            log.warn(
-                String.format(
-                    Locale.ROOT,
-                    "Could not find field %s in document %s for reranking! Using the empty string instead.",
-                    field,
-                    hit.getId()
-                )
-            );
-            return "";
         }
+        if (hit.hasSource()) {
+            Optional<Object> value = ProcessorUtils.getValueFromSource(hit.getSourceAsMap(), field);
+            if (value.isPresent()) {
+                Object val = value.get();
+                if (val instanceof List) {
+                    return ((List<?>) val).stream().map(String::valueOf).collect(Collectors.joining(" "));
+                }
+                return String.valueOf(val);
+            }
+        }
+        log.warn(
+            String.format(
+                Locale.ROOT,
+                "Could not find field %s in document %s for reranking! Using the empty string instead.",
+                field,
+                hit.getId()
+            )
+        );
+        return "";
     }
 
     @Override
