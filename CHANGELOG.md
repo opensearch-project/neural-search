@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
+- Fix semantic highlighter crash on documents with missing highlighted fields ([#1810](https://github.com/opensearch-project/neural-search/pull/1810))
 - Fix rerank processor unable to extract text from nested and dot-notation fields in document_fields ([#1805](https://github.com/opensearch-project/neural-search/pull/1805))
 - [HYBRID]: Fix relevancy bugs in hybrid query collapse ([#1753](https://github.com/opensearch-project/neural-search/pull/1753))
 - [Neural] Fix issue where remote symmetric models are not supported ([#1767](https://github.com/opensearch-project/neural-search/pull/1767))
