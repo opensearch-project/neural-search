@@ -36,30 +36,26 @@ public class HighlightExtractorUtils {
      * Gets the field text from the document in FieldHighlightContext
      *
      * @param fieldContext The field highlight context
-     * @return The field text
-     * @throws IllegalArgumentException if field is not found or not a string
+     * @return The field text, or null if the field is not found, empty, or not a string
      */
     public static String getFieldText(FieldHighlightContext fieldContext) {
         if (fieldContext.hitContext == null || fieldContext.hitContext.sourceLookup() == null) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Field %s is not found in the hit", fieldContext.fieldName));
+            log.debug("Hit context or source lookup is null for field {}", fieldContext.fieldName);
+            return null;
         }
         Object fieldTextObject = fieldContext.hitContext.sourceLookup().extractValue(fieldContext.fieldName, null);
         if (fieldTextObject == null) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Field %s is not found in the document", fieldContext.fieldName));
+            log.debug("Field {} is not found in the document", fieldContext.fieldName);
+            return null;
         }
         if (fieldTextObject instanceof String == false) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "Field %s must be a string for highlighting, but was %s",
-                    fieldContext.fieldName,
-                    fieldTextObject.getClass().getSimpleName()
-                )
-            );
+            log.debug("Field {} must be a string for highlighting, but was {}", fieldContext.fieldName, fieldTextObject.getClass().getSimpleName());
+            return null;
         }
         String fieldTextString = (String) fieldTextObject;
         if (fieldTextString.isEmpty()) {
-            throw new IllegalArgumentException(String.format(Locale.ROOT, "Field %s is empty", fieldContext.fieldName));
+            log.debug("Field {} is empty", fieldContext.fieldName);
+            return null;
         }
         return fieldTextString;
     }
