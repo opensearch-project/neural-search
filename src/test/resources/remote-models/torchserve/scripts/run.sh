@@ -178,9 +178,19 @@ except:
 
     # Check if model is already loaded
     local model_status=$(curl -s http://localhost:${MANAGEMENT_PORT}/models 2>/dev/null || echo "[]")
-    if echo "$model_status" | grep -q "${model_name}"; then
+    if echo "$model_status" | grep -q "\"${model_name}\""; then
         log_info "Model '${model_name}' is already loaded"
-        return 0
+
+        # Check if force reload is requested (via environment variable)
+        if [ "${FORCE_RELOAD:-false}" = "true" ]; then
+            log_info "Force reload requested - unloading existing model..."
+            curl -X DELETE http://localhost:${MANAGEMENT_PORT}/models/${model_name} 2>/dev/null
+            sleep 2
+            log_info "Redeploying model with updated handler..."
+        else
+            log_info "To reload with updated handler, use: FORCE_RELOAD=true $0 setup-model ${model_name}"
+            return 0
+        fi
     fi
 
     # Deploy model
@@ -355,47 +365,62 @@ def handle(data, context):
 EOF
     fi
 
-    # Download model files from HuggingFace
-    log_info "Downloading model files from HuggingFace..."
-    local base_url="https://huggingface.co/opensearch-project/opensearch-semantic-highlighter-v1/resolve/main"
+    # Handle model files based on the handler type
+    if [[ "$model_name" == "symmetric_text_embedding" ]] || \
+       [[ "$model_name" == "asymmetric_text_embedding" ]] || \
+       [[ "$model_name" == "agentic_search" ]]; then
+        # These handlers download their own models during initialization
+        log_info "Handler '$model_name' will download its own model during initialization"
+        # Create a placeholder file so the MAR creation doesn't fail
+        touch model_files/placeholder.txt
+    else
+        # Download model files from HuggingFace (for semantic_highlighter and others)
+        log_info "Downloading model files from HuggingFace..."
+        local base_url="https://huggingface.co/opensearch-project/opensearch-semantic-highlighter-v1/resolve/main"
 
-    for file in config.json tokenizer_config.json vocab.txt; do
-        if ! curl -fsSL "$base_url/$file" -o "model_files/$file"; then
-            log_error "Failed to download $file"
+        for file in config.json tokenizer_config.json vocab.txt; do
+            if ! curl -fsSL "$base_url/$file" -o "model_files/$file"; then
+                log_error "Failed to download $file"
+                rm -rf ${work_dir}
+                exit 1
+            fi
+            echo "  ✓ Downloaded $file"
+        done
+
+        # Download model weights
+        log_info "Downloading model weights (this may take a moment)..."
+        if ! curl -L --progress-bar "$base_url/model.safetensors" -o "model_files/model.safetensors"; then
+            log_error "Failed to download model weights"
             rm -rf ${work_dir}
             exit 1
         fi
-        echo "  ✓ Downloaded $file"
-    done
-
-    # Download model weights
-    log_info "Downloading model weights (this may take a moment)..."
-    if ! curl -L --progress-bar "$base_url/model.safetensors" -o "model_files/model.safetensors"; then
-        log_error "Failed to download model weights"
-        rm -rf ${work_dir}
-        exit 1
-    fi
-    log_info "✓ Downloaded model weights"
-
-    # Install torch-model-archiver if needed
-    if ! command -v torch-model-archiver &> /dev/null; then
-        log_info "Installing torch-model-archiver..."
-        pip install -q torch-model-archiver --no-cache-dir
+        log_info "✓ Downloaded model weights"
     fi
 
-    # Create Model Archive
-    log_info "Creating model archive..."
-    torch-model-archiver \
-        --model-name "${model_name}" \
-        --version 1.0 \
-        --handler handler.py \
-        --extra-files model_files/ \
-        --export-path model_store \
-        --force
-
-    # Deploy to container
+    # Get container ID
     local container_id=$(docker ps --format "{{.ID}}" --filter "name=${CONTAINER_NAME}" | head -1)
-    docker cp "model_store/${model_name}.mar" "${container_id}:/home/model-server/model-store/"
+
+    # Copy handler and model files to container
+    docker exec ${container_id} mkdir -p /tmp/model_prep/model_files
+    docker cp handler.py "${container_id}:/tmp/model_prep/"
+    docker cp model_files/. "${container_id}:/tmp/model_prep/model_files/"
+
+    # Install torch-model-archiver in container if needed
+    docker exec ${container_id} bash -c "command -v torch-model-archiver &> /dev/null || pip install -q torch-model-archiver --no-cache-dir"
+
+    # Create Model Archive inside container
+    log_info "Creating model archive..."
+    docker exec ${container_id} bash -c "cd /tmp/model_prep && \
+        torch-model-archiver \
+            --model-name '${model_name}' \
+            --version 1.0 \
+            --handler handler.py \
+            --extra-files model_files/ \
+            --export-path /home/model-server/model-store \
+            --force"
+
+    # Clean up temp files in container
+    docker exec ${container_id} rm -rf /tmp/model_prep
 
     # Try to register model using Management API first (no restart needed)
     log_info "Registering model via Management API..."
@@ -537,29 +562,72 @@ test() {
         return 1
     fi
 
-    # Test semantic_highlighter model specifically
-    local model_name="semantic_highlighter"
+    # Test models based on what's available
+    # Check if symmetric_text_embedding is loaded
+    local loaded_models=$(curl -s http://localhost:${MANAGEMENT_PORT}/models 2>/dev/null || echo "[]")
 
-    # Log memory before inference
-    log_memory_checkpoint "Before single inference"
+    if echo "$loaded_models" | grep -q "symmetric_text_embedding"; then
+        log_info "Testing symmetric_text_embedding model..."
 
-    # Test single inference
-    local response=$(curl -s -X POST http://localhost:${INFERENCE_PORT}/predictions/${model_name} \
-        -H "Content-Type: application/json" \
-        -d '{
-            "question": "What is OpenSearch?",
-            "context": "OpenSearch is a distributed, community-driven, Apache 2.0-licensed, open-source search and analytics suite."
-        }' 2>/dev/null)
+        # Log memory before inference
+        log_memory_checkpoint "Before symmetric embedding inference"
 
-    if echo "$response" | grep -q "highlights"; then
-        log_info "✓ Single inference successful!"
-        echo "  Response: $response"
-        # Log memory after single inference
-        log_memory_checkpoint "After single inference"
-    else
-        log_error "Single inference failed"
-        echo "  Response: $response"
-        exit 1
+        # Test single text embedding
+        local response=$(curl -s -X POST http://localhost:${INFERENCE_PORT}/predictions/symmetric_text_embedding \
+            -H "Content-Type: application/json" \
+            -d '{"texts": ["OpenSearch is a distributed search and analytics engine"]}' 2>/dev/null)
+
+        if echo "$response" | grep -q '\['; then
+            log_info "✓ Symmetric text embedding successful!"
+            # Check if it returns 128-dimensional vectors
+            local vector_length=$(echo "$response" | python3 -c "import json, sys; data=json.load(sys.stdin); print(len(data[0]) if isinstance(data[0], list) else len(data))" 2>/dev/null || echo "0")
+            if [ "$vector_length" = "128" ]; then
+                log_info "  ✓ Correct embedding dimension: 128"
+            else
+                log_warning "  Unexpected embedding dimension: $vector_length"
+            fi
+            log_memory_checkpoint "After symmetric embedding inference"
+        else
+            log_error "Symmetric text embedding failed"
+            echo "  Response: $response"
+        fi
+
+        # Test batch embeddings
+        log_info "Testing batch embeddings..."
+        local batch_response=$(curl -s -X POST http://localhost:${INFERENCE_PORT}/predictions/symmetric_text_embedding \
+            -H "Content-Type: application/json" \
+            -d '{"texts": ["First text", "Second text", "Third text"]}' 2>/dev/null)
+
+        if echo "$batch_response" | grep -q '\[\['; then
+            log_info "✓ Batch embedding successful!"
+        fi
+    fi
+
+    # Test semantic_highlighter if available
+    if echo "$loaded_models" | grep -q "semantic_highlighter"; then
+        log_info "Testing semantic_highlighter model..."
+        local model_name="semantic_highlighter"
+
+        # Log memory before inference
+        log_memory_checkpoint "Before semantic highlighter inference"
+
+        # Test single inference
+        local response=$(curl -s -X POST http://localhost:${INFERENCE_PORT}/predictions/${model_name} \
+            -H "Content-Type: application/json" \
+            -d '{
+                "question": "What is OpenSearch?",
+                "context": "OpenSearch is a distributed, community-driven, Apache 2.0-licensed, open-source search and analytics suite."
+            }' 2>/dev/null)
+
+        if echo "$response" | grep -q "highlights"; then
+            log_info "✓ Semantic highlighting successful!"
+            echo "  Response: $response"
+            # Log memory after single inference
+            log_memory_checkpoint "After semantic highlighter inference"
+        else
+            log_error "Semantic highlighting failed"
+            echo "  Response: $response"
+        fi
     fi
 
     # Test batch inference
@@ -686,6 +754,16 @@ case "${1:-}" in
             exit 1
         fi
         ;;
+    reload-model)
+        if [ -n "$2" ]; then
+            log_info "Reloading model: $2"
+            FORCE_RELOAD=true setup_model "$2"
+        else
+            log_error "Please specify a model name: $0 reload-model <model_name>"
+            list_models
+            exit 1
+        fi
+        ;;
     setup-all-models)
         setup_all_models
         ;;
@@ -708,11 +786,12 @@ case "${1:-}" in
         lifecycle "${2:-}"
         ;;
     *)
-        echo "Usage: $0 {start|setup-model|setup-all-models|list-models|test|stop|remove|status|lifecycle [setup|teardown]}"
+        echo "Usage: $0 {start|setup-model|reload-model|setup-all-models|list-models|test|stop|remove|status|lifecycle [setup|teardown]}"
         echo ""
         echo "Commands:"
         echo "  start            - Start TorchServe container"
         echo "  setup-model      - Deploy specific model to running container"
+        echo "  reload-model     - Force reload model with updated handler"
         echo "  setup-all-models - Deploy all discovered models"
         echo "  list-models      - List all discovered models"
         echo "  test             - Test model inference"
