@@ -84,9 +84,9 @@ public class NeuralSearchMLInputBuilder {
     }
 
     /**
-     * Creates MLInput for local models with flexible dataset and function types.
+     * Creates MLInput with flexible dataset and function types.
      */
-    private static MLInput createLocalInput(FunctionName functionName, MLInputDataset inputDataset, MLAlgoParams mlAlgoParams) {
+    private static MLInput createMLInput(FunctionName functionName, MLInputDataset inputDataset, MLAlgoParams mlAlgoParams) {
         return new MLInput(functionName, mlAlgoParams, inputDataset);
     }
 
@@ -119,7 +119,7 @@ public class NeuralSearchMLInputBuilder {
      */
     public static MLInput createTextSimilarityInput(String query, List<String> inputText) {
         MLInputDataset inputDataset = new TextSimilarityInputDataSet(query, inputText);
-        return createLocalInput(FunctionName.TEXT_SIMILARITY, inputDataset, null);
+        return createMLInput(FunctionName.TEXT_SIMILARITY, inputDataset, null);
     }
 
     /**
@@ -127,7 +127,7 @@ public class NeuralSearchMLInputBuilder {
      */
     public static MLInput createQuestionAnsweringInput(String question, String context) {
         MLInputDataset inputDataset = new QuestionAnsweringInputDataSet(question, context);
-        return createLocalInput(FunctionName.QUESTION_ANSWERING, inputDataset, null);
+        return createMLInput(FunctionName.QUESTION_ANSWERING, inputDataset, null);
     }
 
     /**

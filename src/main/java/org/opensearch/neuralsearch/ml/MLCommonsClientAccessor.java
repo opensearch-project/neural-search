@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.ml;
 
+import static org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor.EMBEDDING_MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.DSL_QUERY_FIELD_NAME;
 import static org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder.MEMORY_ID_FIELD_NAME;
@@ -636,6 +637,7 @@ public class MLCommonsClientAccessor {
      * @param agenticQuery agentic query
      * @param agentId agent id
      * @param agentInfo agent info
+     * @param embeddingModelId embedding model id
      * @param xContentRegistry xContentRegistry
      * @param listener listener to be called with the agent execution result
      */
@@ -644,10 +646,11 @@ public class MLCommonsClientAccessor {
         @NonNull AgenticSearchQueryBuilder agenticQuery,
         @NonNull String agentId,
         @NonNull AgentInfoDTO agentInfo,
+        String embeddingModelId,
         @NonNull NamedXContentRegistry xContentRegistry,
         @NonNull ActionListener<AgentExecutionDTO> listener
     ) throws IOException {
-        retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, 0, listener);
+        retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, embeddingModelId, xContentRegistry, 0, listener);
     }
 
     /**
@@ -658,6 +661,7 @@ public class MLCommonsClientAccessor {
         AgenticSearchQueryBuilder agenticQuery,
         String agentId,
         AgentInfoDTO agentInfo,
+        String embeddingModelId,
         NamedXContentRegistry xContentRegistry,
         int retryTime,
         ActionListener<AgentExecutionDTO> listener
@@ -700,6 +704,10 @@ public class MLCommonsClientAccessor {
             parameters.put("query_fields", gson.toJson(agenticQuery.getQueryFields()));
         }
 
+        if (embeddingModelId != null) {
+            parameters.put(EMBEDDING_MODEL_ID_FIELD, embeddingModelId);
+        }
+
         if (hasSystemPrompt == false && type != MLAgentType.FLOW) {
             parameters.put("system_prompt", loadSystemPrompt());
         }
@@ -740,7 +748,16 @@ public class MLCommonsClientAccessor {
             listener.onResponse(new AgentExecutionDTO(removeTrailingDecimalZeros(dslQuery), agentStepsSummary, memoryId, selectedIndex));
         }, e -> RetryUtil.handleRetryOrFailure(e, retryTime, () -> {
             try {
-                retryableExecuteAgent(request, agenticQuery, agentId, agentInfo, xContentRegistry, retryTime + 1, listener);
+                retryableExecuteAgent(
+                    request,
+                    agenticQuery,
+                    agentId,
+                    agentInfo,
+                    embeddingModelId,
+                    xContentRegistry,
+                    retryTime + 1,
+                    listener
+                );
             } catch (IOException ex) {
                 throw new RuntimeException(ex);
             }

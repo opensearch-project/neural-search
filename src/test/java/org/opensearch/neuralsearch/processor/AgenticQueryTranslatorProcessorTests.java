@@ -16,6 +16,7 @@ import org.opensearch.neuralsearch.ml.dto.AgentInfoDTO;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -27,6 +28,7 @@ import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.node.DiscoveryNodes;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.compress.CompressedXContent;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
@@ -34,6 +36,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.util.TestUtils;
 
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor.EMBEDDING_MODEL_ID_FIELD;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -48,6 +51,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mockStatic;
 import org.mockito.ArgumentCaptor;
 import static org.mockito.Mockito.when;
 
@@ -77,8 +81,11 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ClusterService mockClusterService = mock(ClusterService.class);
         ClusterState mockClusterState = mock(ClusterState.class);
         Metadata mockMetadata = mock(Metadata.class);
+        DiscoveryNodes mockNodes = mock(DiscoveryNodes.class);
         when(mockClusterService.state()).thenReturn(mockClusterState);
         when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockClusterState.getNodes()).thenReturn(mockNodes);
+        when(mockNodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.V_2_0_0); // Mock older version by default
         when(mockMetadata.index(any(String.class))).thenReturn(null); // Return null to trigger the catch block
         NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
 
@@ -90,6 +97,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         );
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
+        // Don't add embedding_model_id here - let individual tests add it if needed
         processor = factory.create(null, "test-tag", "test-description", false, config, null);
     }
 
@@ -153,6 +161,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 eq(mockXContentRegistry),
                 any(ActionListener.class)
             );
@@ -166,6 +175,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
@@ -187,7 +197,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         doAnswer(invocation -> {
-            ActionListener<String> agentListener = invocation.getArgument(5);
+            ActionListener<String> agentListener = invocation.getArgument(6);
             agentListener.onFailure(new IllegalArgumentException("Agent failed"));
             return null;
         }).when(mockMLClient)
@@ -196,6 +206,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 eq(mockXContentRegistry),
                 any(ActionListener.class)
             );
@@ -208,6 +219,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
@@ -235,7 +247,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String invalidAgentResponse = "{invalid json}";
 
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(invalidAgentResponse, null, null, null));
             return null;
         }).when(mockMLClient)
@@ -244,6 +256,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 eq(mockXContentRegistry),
                 any(ActionListener.class)
             );
@@ -256,6 +269,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
@@ -306,6 +320,18 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testFactory_create() {
+        // Mock cluster service for V_3_6_0 to support embedding model ID
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        DiscoveryNodes mockNodes = mock(DiscoveryNodes.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockClusterState.getNodes()).thenReturn(mockNodes);
+        when(mockNodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.V_3_6_0);
+        when(mockMetadata.index(any(String.class))).thenReturn(null);
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
         AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
             mockMLClient,
             mockXContentRegistry,
@@ -314,11 +340,102 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         Map<String, Object> config = new HashMap<>();
         config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
 
         AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
 
         assertNotNull(createdProcessor);
         assertEquals("agentic_query_translator", createdProcessor.getType());
+    }
+
+    public void testFactory_create_withoutEmbeddingModelId() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        // No embedding_model_id provided - should still work (BWC support)
+
+        AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        assertNotNull(createdProcessor);
+        assertEquals("agentic_query_translator", createdProcessor.getType());
+    }
+
+    public void testProcessRequestAsync_withEmbeddingModelId() throws IOException {
+        // Mock cluster service for V_3_6_0 to support embedding model ID
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        DiscoveryNodes mockNodes = mock(DiscoveryNodes.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockClusterState.getNodes()).thenReturn(mockNodes);
+        when(mockNodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.V_3_6_0);
+        when(mockMetadata.index(any(String.class))).thenReturn(null);
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
+        // Create processor with embedding_model_id
+        List<NamedXContentRegistry.Entry> entries = new ArrayList<>();
+        entries.add(new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField("match_all"), MatchAllQueryBuilder::fromXContent));
+        NamedXContentRegistry registry = new NamedXContentRegistry(entries);
+
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            registry,
+            mockSettingsAccessor
+        );
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model-123");
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        // Mock getAgentDetails call
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
+        doAnswer(invocation -> {
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
+            agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
+            return null;
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                eq("test-embedding-model-123"),
+                any(NamedXContentRegistry.class),
+                any(ActionListener.class)
+            );
+
+        testProcessor.processRequestAsync(request, mockContext, listener);
+
+        verify(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+        verify(mockMLClient).executeAgent(
+            any(SearchRequest.class),
+            any(AgenticSearchQueryBuilder.class),
+            eq(AGENT_ID),
+            eq(agentInfo),
+            eq("test-embedding-model-123"),
+            any(NamedXContentRegistry.class),
+            any(ActionListener.class)
+        );
+        verify(listener).onResponse(request);
     }
 
     public void testFactory_create_missingAgentId() {
@@ -356,6 +473,86 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertEquals("agent_id is required for agentic_query_translator processor", exception.getMessage());
     }
 
+    public void testCreate_withEmptyEmbeddingModelId() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "");
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only", exception.getMessage());
+    }
+
+    public void testCreate_withWhitespaceOnlyEmbeddingModelId() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "   ");
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals(EMBEDDING_MODEL_ID_FIELD + " cannot be empty or whitespace-only", exception.getMessage());
+    }
+
+    public void testCreate_withTooLongEmbeddingModelId() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        // Create a string longer than 100 characters
+        config.put(EMBEDDING_MODEL_ID_FIELD, "a".repeat(101));
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertTrue(exception.getMessage().contains(EMBEDDING_MODEL_ID_FIELD + " exceeds maximum length of 100 characters"));
+    }
+
+    public void testCreate_withInvalidEmbeddingModelIdFormat() {
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "invalid@model#id");
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> factory.create(null, "test-tag", "test-description", false, config, null)
+        );
+
+        assertEquals(
+            EMBEDDING_MODEL_ID_FIELD + " must contain only alphanumeric characters, hyphens, and underscores",
+            exception.getMessage()
+        );
+    }
+
     public void testProcessRequestAsync_withAgenticQuery_andAggregations() {
         AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
         SearchRequest request = new SearchRequest("test-index");
@@ -391,15 +588,18 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
     }
 
     public void testProcessRequestAsync_withAgenticQuery_success() throws IOException {
-        // Mock cluster service components
+        // Ensure cluster version is set to older version for this test
         ClusterService mockClusterService = mock(ClusterService.class);
         ClusterState mockClusterState = mock(ClusterState.class);
         Metadata mockMetadata = mock(Metadata.class);
         IndexMetadata mockIndexMetadata = mock(IndexMetadata.class);
         MappingMetadata mockMappingMetadata = mock(MappingMetadata.class);
+        DiscoveryNodes mockNodes = mock(DiscoveryNodes.class);
 
         when(mockClusterService.state()).thenReturn(mockClusterState);
         when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockClusterState.getNodes()).thenReturn(mockNodes);
+        when(mockNodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.V_2_0_0);
         when(mockMetadata.index("test-index")).thenReturn(mockIndexMetadata);
         when(mockIndexMetadata.mapping()).thenReturn(mockMappingMetadata);
         when(mockMappingMetadata.source()).thenReturn(new CompressedXContent("{\"properties\":{}}"));
@@ -441,7 +641,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
 
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
@@ -449,7 +649,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(SearchRequest.class),
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
-                eq(agentInfo),
+                any(AgentInfoDTO.class),
+                eq((String) null),
                 any(NamedXContentRegistry.class),
                 any(ActionListener.class)
             );
@@ -461,7 +662,8 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(SearchRequest.class),
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
-            eq(agentInfo),
+            any(AgentInfoDTO.class),
+            eq((String) null),
             any(NamedXContentRegistry.class),
             any(ActionListener.class)
         );
@@ -489,7 +691,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String oversizedResponse = "x".repeat(10_001);
 
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(oversizedResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
@@ -498,6 +700,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 eq(mockXContentRegistry),
                 any(ActionListener.class)
             );
@@ -510,6 +713,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
@@ -536,7 +740,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
 
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(null, null, null, null));
             return null;
         }).when(mockMLClient)
@@ -545,6 +749,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 eq(mockXContentRegistry),
                 any(ActionListener.class)
             );
@@ -557,6 +762,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             eq(mockXContentRegistry),
             any(ActionListener.class)
         );
@@ -599,7 +805,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
 
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
@@ -608,6 +814,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 any(NamedXContentRegistry.class),
                 any(ActionListener.class)
             );
@@ -620,6 +827,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             any(NamedXContentRegistry.class),
             any(ActionListener.class)
         );
@@ -657,7 +865,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
@@ -666,6 +874,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 any(NamedXContentRegistry.class),
                 any(ActionListener.class)
             );
@@ -678,6 +887,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             any(NamedXContentRegistry.class),
             any(ActionListener.class)
         );
@@ -716,7 +926,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
@@ -725,6 +935,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 any(NamedXContentRegistry.class),
                 any(ActionListener.class)
             );
@@ -737,6 +948,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             any(NamedXContentRegistry.class),
             any(ActionListener.class)
         );
@@ -775,7 +987,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
 
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
@@ -784,6 +996,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 any(NamedXContentRegistry.class),
                 any(ActionListener.class)
             );
@@ -796,6 +1009,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
             any(AgenticSearchQueryBuilder.class),
             eq(AGENT_ID),
             eq(agentInfo),
+            eq((String) null),
             any(NamedXContentRegistry.class),
             any(ActionListener.class)
         );
@@ -875,7 +1089,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, "test-memory-id", null));
             return null;
         }).when(mockMLClient)
@@ -884,6 +1098,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 any(NamedXContentRegistry.class),
                 any(ActionListener.class)
             );
@@ -933,7 +1148,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
 
         String validAgentResponse = "{\"query\": {\"match_all\": {}}}";
         doAnswer(invocation -> {
-            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(5);
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
             agentListener.onResponse(new AgentExecutionDTO(validAgentResponse, null, null, null));
             return null;
         }).when(mockMLClient)
@@ -942,6 +1157,7 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
                 any(AgenticSearchQueryBuilder.class),
                 eq(AGENT_ID),
                 eq(agentInfo),
+                eq((String) null),
                 any(NamedXContentRegistry.class),
                 any(ActionListener.class)
             );
@@ -956,5 +1172,91 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         assertNotNull(modifiedRequest.source().fetchSource());
         assertArrayEquals(new String[] { "title", "description" }, modifiedRequest.source().fetchSource().includes());
         assertArrayEquals(new String[] { "internal_field" }, modifiedRequest.source().fetchSource().excludes());
+    }
+
+    public void testFactory_create_embeddingModelIdOnUnsupportedVersion() {
+        // This test is no longer valid since we moved the version validation to runtime
+        // The factory should now allow creating processors with embedding_model_id regardless of cluster version
+        // The validation happens at runtime when the processor is actually used
+
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
+
+        // This should now succeed even on unsupported versions
+        AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        assertNotNull(createdProcessor);
+        assertEquals("agentic_query_translator", createdProcessor.getType());
+    }
+
+    public void testFactory_create_embeddingModelIdOnSupportedVersion() {
+        // Mock version check to return true (supported version)
+        try (var mockedStatic = mockStatic(MinClusterVersionUtil.class)) {
+            mockedStatic.when(MinClusterVersionUtil::isClusterOnOrAfterMinReqVersionForAgenticEmbeddingModelId).thenReturn(true);
+
+            AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+                mockMLClient,
+                mockXContentRegistry,
+                mockSettingsAccessor
+            );
+
+            Map<String, Object> config = new HashMap<>();
+            config.put("agent_id", AGENT_ID);
+            config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
+
+            AgenticQueryTranslatorProcessor createdProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+            assertNotNull(createdProcessor);
+            assertEquals("agentic_query_translator", createdProcessor.getType());
+        }
+    }
+
+    public void testProcessRequestAsync_withEmbeddingModelIdOnUnsupportedVersion() throws IOException {
+        // Mock cluster service for older version that doesn't support embedding model ID
+        ClusterService mockClusterService = mock(ClusterService.class);
+        ClusterState mockClusterState = mock(ClusterState.class);
+        Metadata mockMetadata = mock(Metadata.class);
+        DiscoveryNodes mockNodes = mock(DiscoveryNodes.class);
+        when(mockClusterService.state()).thenReturn(mockClusterState);
+        when(mockClusterState.metadata()).thenReturn(mockMetadata);
+        when(mockClusterState.getNodes()).thenReturn(mockNodes);
+        when(mockNodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.V_2_0_0);
+        when(mockMetadata.index(any(String.class))).thenReturn(null);
+        NeuralSearchClusterUtil.instance().initialize(mockClusterService, null);
+
+        // Create processor with embedding_model_id
+        AgenticQueryTranslatorProcessor.Factory factory = new AgenticQueryTranslatorProcessor.Factory(
+            mockMLClient,
+            mockXContentRegistry,
+            mockSettingsAccessor
+        );
+        Map<String, Object> config = new HashMap<>();
+        config.put("agent_id", AGENT_ID);
+        config.put(EMBEDDING_MODEL_ID_FIELD, "test-embedding-model");
+        AgenticQueryTranslatorProcessor testProcessor = factory.create(null, "test-tag", "test-description", false, config, null);
+
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        testProcessor.processRequestAsync(request, mockContext, listener);
+
+        // Should fail with version error at runtime
+        ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(
+            exceptionCaptor.getValue()
+                .getMessage()
+                .contains(EMBEDDING_MODEL_ID_FIELD + " parameter is not supported on cluster versions before 3.6.0")
+        );
     }
 }
