@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
+- [Text Chunking] Fix text chunking processor ignoring index max_token_count setting when ingesting via alias ([#1803](https://github.com/opensearch-project/neural-search/pull/1803))
 - Fix rerank processor unable to extract text from nested and dot-notation fields in document_fields ([#1805](https://github.com/opensearch-project/neural-search/pull/1805))
 - [HYBRID]: Fix relevancy bugs in hybrid query collapse ([#1753](https://github.com/opensearch-project/neural-search/pull/1753))
 - [Neural] Fix issue where remote symmetric models are not supported ([#1767](https://github.com/opensearch-project/neural-search/pull/1767))
