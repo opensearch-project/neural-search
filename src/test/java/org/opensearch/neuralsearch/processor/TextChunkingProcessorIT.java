@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.processor;
 
 import lombok.SneakyThrows;
 import org.junit.Before;
+import org.opensearch.client.Request;
 
 import java.net.URL;
 import java.nio.file.Files;
@@ -130,6 +131,20 @@ public class TextChunkingProcessorIT extends BaseNeuralSearchIT {
         assert (exception.getMessage()
             .contains("The number of tokens produced by calling _analyze has exceeded the allowed maximum of [100]."));
         assertEquals(0, getDocCount(INDEX_NAME));
+    }
+
+    @SneakyThrows
+    public void testTextChunkingProcessor_withFixedTokenLengthAlgorithm_whenIngestViaAlias_thenSucceed() {
+        createPipelineProcessor(FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        createTextChunkingIndex(INDEX_NAME, FIXED_TOKEN_LENGTH_PIPELINE_WITH_STANDARD_TOKENIZER_NAME);
+        // create alias for the index
+        Request aliasRequest = new Request("POST", "/_aliases");
+        aliasRequest.setJsonEntity("{\"actions\":[{\"add\":{\"index\":\"" + INDEX_NAME + "\",\"alias\":\"" + INDEX_NAME + "_alias\"}}]}");
+        client().performRequest(aliasRequest);
+        // ingest via alias — should respect the index's max_token_count setting, not the cluster default
+        String document = getDocumentFromFilePath(TEST_DOCUMENT);
+        ingestDocument(INDEX_NAME + "_alias", document);
+        assertEquals(1, getDocCount(INDEX_NAME));
     }
 
     @SneakyThrows
