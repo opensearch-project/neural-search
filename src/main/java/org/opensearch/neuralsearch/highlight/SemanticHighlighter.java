@@ -82,8 +82,11 @@ public class SemanticHighlighter implements Highlighter {
 
         EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
 
-        // Extract field text
+        // Extract field text - returns null if field is missing, empty, or not a string
         String fieldText = HighlightExtractorUtils.getFieldText(fieldContext);
+        if (fieldText == null) {
+            return null;
+        }
 
         // Get model ID
         String modelId = HighlightExtractorUtils.getModelId(fieldContext.field.fieldOptions().options());

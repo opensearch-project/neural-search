@@ -195,6 +195,44 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         verify(semanticHighlighterEngine, times(1)).getHighlightedSentences(any(), any(), any(), any(), any());
     }
 
+    public void testSingleInferenceModeReturnsNullWhenFieldMissing() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+
+        // Simulate missing field extractValue returns null
+        when(sourceLookup.extractValue("test_field", null)).thenReturn(null);
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify should return null gracefully instead of throwing error
+        assertNull(result);
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
+    public void testSingleInferenceModeReturnsNullWhenFieldEmpty() throws Exception {
+        // Setup
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+
+        // Simulate empty field
+        when(sourceLookup.extractValue("test_field", null)).thenReturn("");
+
+        // Execute
+        HighlightField result = highlighter.highlight(fieldContext);
+
+        // Verify should return null gracefully instead of throwing error
+        assertNull(result);
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
     public void testSingleInferenceModeReturnsNullWhenNoQueryText() throws Exception {
         // Setup
         Map<String, Object> options = new HashMap<>();
