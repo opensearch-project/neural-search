@@ -393,10 +393,21 @@ integTest {
         systemProperty 'cluster.debug', isDebuggingCluster
         // Set number of nodes system property to be used in tests
         systemProperty 'cluster.number_of_nodes', "${_numNodes}"
-        // There seems to be an issue when running multi node run or integ tasks with unicast_hosts
-        // not being written, the waitForAllConditions ensures it's written
+
+        // Discover the actual gRPC port from the cluster log.
+        // The gRPC transport binds to the first available port in 9400-9500,
+        // which may differ from 9400 due to port conflicts or dual-stack binding.
         getClusters().forEach { cluster ->
             cluster.waitForAllConditions()
+            def logFile = new File(cluster.nodes.first().workingDir.toFile(), "logs/integTest.log")
+            if (logFile.exists()) {
+                def matcher = (logFile.text =~ /Netty4GrpcServerTransport.*publish_address \{([^}]+):(\d+)\}/)
+                if (matcher.find()) {
+                    def grpcPort = matcher.group(2)
+                    systemProperty 'tests.grpc.port', grpcPort
+                    logger.lifecycle("Discovered gRPC port: ${grpcPort}")
+                }
+            }
         }
     }
 
@@ -412,6 +423,8 @@ testClusters.integTest {
     // Enable gRPC transport for integration tests
     // This is required for gRPC integration tests to work
     setting("aux.transport.types", "[transport-grpc]")
+    // Bind gRPC to IPv4 loopback to avoid dual-stack port mismatch
+    setting("grpc.host", "127.0.0.1")
 
     // Optionally install security
     if (System.getProperty("security.enabled") != null && System.getProperty("security.enabled") == "true") {
