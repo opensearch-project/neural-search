@@ -10,6 +10,8 @@ import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createMatchAllQuer
 import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createMatchQueryContainer;
 import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createTermQueryContainer;
 
+import static com.carrotsearch.randomizedtesting.RandomizedTest.assumeTrue;
+
 import java.util.Locale;
 
 import org.apache.logging.log4j.LogManager;
@@ -61,6 +63,10 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     @Before
     public void setUp() throws Exception {
         super.setUp();
+        // Skip gRPC tests when gRPC transport is not available on the cluster
+        // (e.g., distribution integration tests via opensearch-build test.sh where
+        // the external cluster doesn't have aux.transport.types configured)
+        assumeTrue("gRPC transport is not available, skipping gRPC tests", GrpcTestHelper.isGrpcAvailable());
         updateClusterSettings();
 
         // Set up test index with diverse test data

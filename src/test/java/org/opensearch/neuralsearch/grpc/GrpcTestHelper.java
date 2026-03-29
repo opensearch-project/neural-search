@@ -44,6 +44,43 @@ public class GrpcTestHelper {
     public static final int DEFAULT_GRPC_PORT = 9400;
     public static final int DEFAULT_TIMEOUT_SECONDS = 30;
 
+    /**
+     * Check if gRPC transport is available on the target host and port.
+     * Uses a gRPC channel connectivity check rather than raw sockets.
+     * Use with {@code assumeTrue(GrpcTestHelper.isGrpcAvailable())} in test setUp
+     * to gracefully skip gRPC tests when the transport is not configured
+     * (e.g., distribution integration tests via opensearch-build test.sh).
+     */
+    public static boolean isGrpcAvailable() {
+        String host = getGrpcHost();
+        int port = getGrpcPort();
+        ManagedChannel channel = null;
+        try {
+            channel = ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
+            // Request connection and wait briefly for it to become ready
+            channel.getState(true);
+            boolean ready = channel.awaitTermination(0, TimeUnit.MILLISECONDS) == false;
+            // Try a lightweight connectivity check — if the port is not listening,
+            // the channel state will be TRANSIENT_FAILURE after a brief wait
+            Thread.sleep(500);
+            io.grpc.ConnectivityState state = channel.getState(false);
+            boolean available = state == io.grpc.ConnectivityState.READY || state == io.grpc.ConnectivityState.IDLE;
+            if (available) {
+                logger.info("gRPC transport is available at {}:{} (state: {})", host, port, state);
+            } else {
+                logger.info("gRPC transport is not available at {}:{} (state: {})", host, port, state);
+            }
+            return available;
+        } catch (Exception e) {
+            logger.info("gRPC transport is not available at {}:{} - {}", host, port, e.getMessage());
+            return false;
+        } finally {
+            if (channel != null) {
+                channel.shutdownNow();
+            }
+        }
+    }
+
     // ===========================================================================================
     // CHANNEL MANAGEMENT
     // ===========================================================================================
