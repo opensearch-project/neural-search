@@ -44,6 +44,37 @@ public class GrpcTestHelper {
     public static final int DEFAULT_GRPC_PORT = 9400;
     public static final int DEFAULT_TIMEOUT_SECONDS = 30;
 
+    /**
+     * Check if gRPC transport is expected to be available.
+     * Returns true when either:
+     * - tests.grpc.port is explicitly set (Gradle-managed cluster discovered the port), or
+     * - tests.rest.cluster is NOT set (local testClusters run where gRPC is configured in build.gradle)
+     *
+     * Returns false when tests.rest.cluster is set but tests.grpc.port is not,
+     * indicating an external cluster that likely doesn't have gRPC transport configured.
+     *
+     * Use with {@code assumeTrue(GrpcTestHelper.isGrpcTransportConfigured())} in test setUp
+     * to gracefully skip gRPC tests in distribution integration tests (opensearch-build test.sh).
+     */
+    public static boolean isGrpcTransportConfigured() {
+        boolean grpcPortExplicitlySet = System.getProperty("tests.grpc.port") != null;
+        boolean externalCluster = System.getProperty("tests.rest.cluster") != null;
+        if (grpcPortExplicitlySet) {
+            logger.info("gRPC port explicitly configured: {}", getGrpcPort());
+            return true;
+        }
+        if (externalCluster) {
+            logger.info(
+                "External cluster detected (tests.rest.cluster={}) without tests.grpc.port — gRPC tests will be skipped",
+                System.getProperty("tests.rest.cluster")
+            );
+            return false;
+        }
+        // Local testClusters run — gRPC is configured in build.gradle
+        logger.info("Local test cluster run — gRPC transport expected to be available");
+        return true;
+    }
+
     // ===========================================================================================
     // CHANNEL MANAGEMENT
     // ===========================================================================================
