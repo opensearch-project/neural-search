@@ -6,31 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
-- [Agentic Search]: Support embedding model id in agentic query translator processor for neural queries ([#1800](https://github.com/opensearch-project/neural-search/pull/1800))
 
 ### Enhancements
 
 ### Bug Fixes
-- Fix semantic highlighter crash on documents with missing highlighted fields ([#1810](https://github.com/opensearch-project/neural-search/pull/1810))
-- [Text Chunking] Fix text chunking processor ignoring index max_token_count setting when ingesting via alias ([#1803](https://github.com/opensearch-project/neural-search/pull/1803))
-- Fix rerank processor unable to extract text from nested and dot-notation fields in document_fields ([#1805](https://github.com/opensearch-project/neural-search/pull/1805))
-- [HYBRID]: Fix relevancy bugs in hybrid query collapse ([#1753](https://github.com/opensearch-project/neural-search/pull/1753))
-- [Neural] Fix issue where remote symmetric models are not supported ([#1767](https://github.com/opensearch-project/neural-search/pull/1767))
-- [HYBRID]: Fix profiler support for hybrid query by unwrapping ProfileScorer to access HybridSubQueryScorer ([#1754](https://github.com/opensearch-project/neural-search/pull/1754))
-- [HYBRID]: Fix missing results and ranking issue in hybrid query collapse([#1763](https://github.com/opensearch-project/neural-search/pull/1763))
-- [HYBRID]: Fix HybridQueryDocIdStream by adding intoArray overridden method from upstream ([#1780](https://github.com/opensearch-project/neural-search/pull/1780))
-- [HYBRID]: Block hybrid query nested inside compound queries like function_score, constant_score, and script_score ([#1791](https://github.com/opensearch-project/neural-search/pull/1791))
-- [HYBRID]: Replace per-group collection with flat queue in hybrid query collapse to fix score and totalHits inconsistencies ([#1787](https://github.com/opensearch-project/neural-search/pull/1787))
-- [HYBRID]: Fix empty results when using profiler with hybrid query sort, pagination, or collapse ([#1794](https://github.com/opensearch-project/neural-search/pull/1794))
+* Fix semantic highlighter crash on documents with missing highlighted fields ([#1810](https://github.com/opensearch-project/neural-search/pull/1810))
+* [Text Chunking] Fix text chunking processor ignoring index max_token_count setting when ingesting via alias ([#1803](https://github.com/opensearch-project/neural-search/pull/1803))
 
 ### Infrastructure
-- [GRPC] Add Integration test for Hybrid Query ([#1734](https://github.com/opensearch-project/neural-search/pull/1734))
-- [GRPC] Fix gRPC integration test port discovery for reliable local and CI execution ([#1814](https://github.com/opensearch-project/neural-search/pull/1814))
-- Fix integration test health check failures in remote clusters by dynamically discovering node count and using >= syntax for wait_for_nodes ([#1776](https://github.com/opensearch-project/neural-search/pull/1776))
 
 ### Documentation
 
 ### Maintenance
-- [HYBRID]: Clean up dead code and add missing test coverage for HybridQueryDocIdStream intoArray method ([#1786](https://github.com/opensearch-project/neural-search/pull/1786))
 
 ### Refactoring
