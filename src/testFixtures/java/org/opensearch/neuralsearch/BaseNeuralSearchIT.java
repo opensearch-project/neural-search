@@ -153,6 +153,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     private static final Set<String> DEPLOYED_MODEL_IDS = ConcurrentHashMap.newKeySet();
     private static final int MAX_ATTEMPTS = 30;
     private static final int WAIT_TIME_IN_SECONDS = 2;
+    private static final int MAX_DEPLOY_RETRIES = 3;
     private static final long TIMEOUT = 10000;
     protected String numOfNodes;
 
@@ -365,12 +366,24 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     protected void waitForModelToBeReady(String modelId) throws Exception {
+        int deployRetries = 0;
         for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            if (isModelReadyForInference(modelId)) {
+            MLModelState state = getModelState(modelId);
+            if (MLModelState.LOADED.equals(state) || MLModelState.DEPLOYED.equals(state)) {
                 logger.info("Model {} is ready for inference after {} attempts", modelId, attempt + 1);
                 return;
             }
-            logger.info("Waiting for model {} to be ready. Attempt {}/{}", modelId, attempt + 1, MAX_ATTEMPTS);
+            if (MLModelState.DEPLOY_FAILED.equals(state) && deployRetries < MAX_DEPLOY_RETRIES) {
+                deployRetries++;
+                logger.info(
+                    "Model {} deploy failed (likely circuit breaker), retrying deploy {}/{}",
+                    modelId,
+                    deployRetries,
+                    MAX_DEPLOY_RETRIES
+                );
+                loadModel(modelId);
+            }
+            logger.info("Waiting for model {} to be ready. Attempt {}/{}, state: {}", modelId, attempt + 1, MAX_ATTEMPTS, state);
             Thread.sleep(WAIT_TIME_IN_SECONDS * 1000);
         }
         throw new RuntimeException("Model " + modelId + " failed to be ready for inference after " + MAX_ATTEMPTS + " attempts");
