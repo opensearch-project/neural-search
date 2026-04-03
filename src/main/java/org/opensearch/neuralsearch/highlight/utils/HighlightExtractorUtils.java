@@ -49,7 +49,11 @@ public class HighlightExtractorUtils {
             return null;
         }
         if (fieldTextObject instanceof String == false) {
-            log.debug("Field {} must be a string for highlighting, but was {}", fieldContext.fieldName, fieldTextObject.getClass().getSimpleName());
+            log.debug(
+                "Field {} must be a string for highlighting, but was {}",
+                fieldContext.fieldName,
+                fieldTextObject.getClass().getSimpleName()
+            );
             return null;
         }
         String fieldTextString = (String) fieldTextObject;

@@ -225,7 +225,7 @@ public class MLCommonsClientAccessor {
         for (final ModelTensors tensors : tensorOutputList) {
             final List<ModelTensor> tensorsList = tensors.getMlModelTensors();
             for (final ModelTensor tensor : tensorsList) {
-                // Check if we have standard tensor data first
+                // Check if we have standard tensor data first (local models)
                 if (tensor.getData() != null) {
                     if (tensor.getData().length > 0) {
                         vector.add(Arrays.stream(tensor.getData()).map(value -> (T) value).collect(Collectors.toList()));
@@ -234,34 +234,76 @@ public class MLCommonsClientAccessor {
                         vector.add(new ArrayList<>());
                     }
                 } else {
-                    // Try to extract from asymmetric remote embedding model response
-                    List<List<T>> remoteVectors = extractVectorsFromAsymmetricRemoteEmbeddingResponse(tensor);
+                    // Remote model: extract from dataAsMap with "response" key
+                    List<List<T>> remoteVectors = extractVectorsFromRemoteEmbeddingResponse(tensor);
                     vector.addAll(remoteVectors);
                 }
             }
         }
+
         return vector;
     }
 
     /**
-     * Extracts vectors from asymmetric remote embedding model response format.
-     * Handles the simplified format used by asymmetric E5 remote embedding models: [[emb1], [emb2], [emb3]]
+     * Extracts embedding vectors from a remote model response tensor.
+     * Remote models (both symmetric and asymmetric) return embeddings via dataAsMap
+     * with a "response" key containing a list of float arrays: [[emb1], [emb2], ...]
+     * <p>
+     * If the response format is invalid, throws an {@link IllegalStateException} with
+     * an actionable message guiding the user to fix their connector's post_process_function.
      */
-    private <T extends Number> List<List<T>> extractVectorsFromAsymmetricRemoteEmbeddingResponse(ModelTensor tensor) {
-        final List<List<T>> vectors = new ArrayList<>();
+    private <T extends Number> List<List<T>> extractVectorsFromRemoteEmbeddingResponse(ModelTensor tensor) {
         Map<String, ?> dataMap = tensor.getDataAsMap();
 
-        if (dataMap != null && !dataMap.isEmpty()) {
-            Object responseData = dataMap.get(RESPONSE_FIELD);
-            if (responseData instanceof List) {
-                List<?> responseList = (List<?>) responseData;
-                // Handle simplified format from asymmetric E5 remote embedding models: [[emb1], [emb2], [emb3]]
-                for (Object embedding : responseList) {
-                    if (embedding instanceof List) {
-                        vectors.add(((List<?>) embedding).stream().map(v -> (T) v).collect(Collectors.toList()));
-                    }
-                }
+        if (dataMap == null) {
+            throw new IllegalStateException(
+                "The remote model returned no data. "
+                    + "Ensure the connector's post_process_function is configured to return: "
+                    + "{\"response\": [[float, float, ...], ...]}"
+            );
+        }
+
+        if (!dataMap.containsKey(RESPONSE_FIELD)) {
+            throw new IllegalStateException(
+                "The remote model response is missing the required 'response' key. "
+                    + "Ensure the connector's post_process_function returns: "
+                    + "{\"response\": [[float, float, ...], ...]}"
+            );
+        }
+
+        Object responseData = dataMap.get(RESPONSE_FIELD);
+
+        if (!(responseData instanceof List)) {
+            throw new IllegalStateException(
+                "The remote model 'response' field must be a list of float arrays, but got: "
+                    + (responseData == null ? "null" : responseData.getClass().getSimpleName())
+                    + ". Ensure the connector's post_process_function returns: "
+                    + "{\"response\": [[float, float, ...], ...]}"
+            );
+        }
+
+        final List<List<T>> vectors = new ArrayList<>();
+        for (Object embedding : (List<?>) responseData) {
+            if (!(embedding instanceof List)) {
+                throw new IllegalStateException(
+                    "Each element in the remote model 'response' must be a list of floats, but got: "
+                        + (embedding == null ? "null" : embedding.getClass().getSimpleName())
+                        + ". Ensure the connector's post_process_function returns: "
+                        + "{\"response\": [[float, float, ...], ...]}"
+                );
             }
+            List<?> embeddingList = (List<?>) embedding;
+            // Validate the first element only (O(1) per embedding) to avoid per-element overhead
+            // on the hot path while still catching misconfigured post_process_function responses.
+            if (!embeddingList.isEmpty() && !(embeddingList.get(0) instanceof Number)) {
+                throw new IllegalStateException(
+                    "Each value in a remote model embedding must be a number (float), but got: "
+                        + embeddingList.get(0).getClass().getSimpleName()
+                        + ". Ensure the connector's post_process_function returns: "
+                        + "{\"response\": [[float, float, ...], ...]}"
+                );
+            }
+            vectors.add(embeddingList.stream().map(v -> (T) v).collect(Collectors.toList()));
         }
         return vectors;
     }

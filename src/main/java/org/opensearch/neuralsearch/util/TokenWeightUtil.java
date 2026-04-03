@@ -51,10 +51,19 @@ public class TokenWeightUtil {
         List<Object> results = new ArrayList<>();
         for (Map<String, ?> map : mapResultList) {
             if (!map.containsKey(RESPONSE_KEY)) {
-                throw new IllegalArgumentException("The inference result should be associated with the field [" + RESPONSE_KEY + "].");
+                throw new IllegalArgumentException(
+                    "The model response is missing the required 'response' key. "
+                        + "Ensure the model returns: {\"response\": [{\"token\": weight, ...}, ...]}. "
+                        + "For remote models, check the connector's post_process_function."
+                );
             }
             if (!List.class.isAssignableFrom(map.get(RESPONSE_KEY).getClass())) {
-                throw new IllegalArgumentException("The data object associated with field [" + RESPONSE_KEY + "] should be a list.");
+                throw new IllegalArgumentException(
+                    "The model 'response' field must be a list of token-weight maps, but got: "
+                        + map.get(RESPONSE_KEY).getClass().getSimpleName()
+                        + ". Ensure the model returns: {\"response\": [{\"token\": weight, ...}, ...]}. "
+                        + "For remote models, check the connector's post_process_function."
+                );
             }
             results.addAll((List<?>) map.get("response"));
         }
@@ -63,12 +72,21 @@ public class TokenWeightUtil {
 
     private static Map<String, Float> buildTokenWeightMap(Object uncastedMap) {
         if (!Map.class.isAssignableFrom(uncastedMap.getClass())) {
-            throw new IllegalArgumentException("The expected inference result is a Map with String keys and Float values.");
+            throw new IllegalArgumentException(
+                "Each element in the model 'response' must be a token-weight map, but got: "
+                    + uncastedMap.getClass().getSimpleName()
+                    + ". Ensure the model returns: {\"response\": [{\"token\": weight, ...}, ...]}. "
+                    + "For remote models, check the connector's post_process_function."
+            );
         }
         Map<String, Float> result = new HashMap<>();
         for (Map.Entry<?, ?> entry : ((Map<?, ?>) uncastedMap).entrySet()) {
             if (!String.class.isAssignableFrom(entry.getKey().getClass()) || !Number.class.isAssignableFrom(entry.getValue().getClass())) {
-                throw new IllegalArgumentException("The expected inference result is a Map with String keys and Float values.");
+                throw new IllegalArgumentException(
+                    "The model token-weight map must have String keys and numeric values. "
+                        + "Ensure the model returns: {\"response\": [{\"token\": weight, ...}, ...]}. "
+                        + "For remote models, check the connector's post_process_function."
+                );
             }
             result.put((String) entry.getKey(), ((Number) entry.getValue()).floatValue());
         }
