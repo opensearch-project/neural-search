@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Text Chunking] Fix text chunking processor ignoring index max_token_count setting when ingesting via alias ([#1803](https://github.com/opensearch-project/neural-search/pull/1803))
 
 ### Infrastructure
+* [GRPC] Add gRPC integration tests for hybrid query with normalization pipeline, sort, and collapse ([#1827](https://github.com/opensearch-project/neural-search/pull/1827))
 
 ### Documentation
 

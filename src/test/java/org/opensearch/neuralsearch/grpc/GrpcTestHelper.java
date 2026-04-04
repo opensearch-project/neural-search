@@ -11,6 +11,9 @@ import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.opensearch.protobufs.BoolQuery;
+import org.opensearch.protobufs.FieldCollapse;
+import org.opensearch.protobufs.FieldSort;
+import org.opensearch.protobufs.FieldSortMap;
 import org.opensearch.protobufs.FieldValue;
 import org.opensearch.protobufs.KnnQuery;
 import org.opensearch.protobufs.MatchAllQuery;
@@ -19,6 +22,8 @@ import org.opensearch.protobufs.QueryContainer;
 import org.opensearch.protobufs.SearchRequest;
 import org.opensearch.protobufs.SearchRequestBody;
 import org.opensearch.protobufs.SearchResponse;
+import org.opensearch.protobufs.SortCombinations;
+import org.opensearch.protobufs.SortOrder;
 import org.opensearch.protobufs.TermQuery;
 import org.opensearch.protobufs.services.SearchServiceGrpc;
 
@@ -127,6 +132,44 @@ public class GrpcTestHelper {
         return SearchRequest.newBuilder()
             .addIndex(index)
             .setSearchRequestBody(SearchRequestBody.newBuilder().setQuery(query).setSize(size).build())
+            .build();
+    }
+
+    public static SearchRequest buildSearchRequestWithPipeline(String index, QueryContainer query, int size, String pipeline) {
+        return SearchRequest.newBuilder()
+            .addIndex(index)
+            .setSearchRequestBody(SearchRequestBody.newBuilder().setQuery(query).setSize(size).setSearchPipeline(pipeline).build())
+            .build();
+    }
+
+    public static SearchRequest buildSearchRequestWithSort(
+        String index,
+        QueryContainer query,
+        int size,
+        String sortField,
+        SortOrder sortOrder
+    ) {
+        SortCombinations sort = SortCombinations.newBuilder()
+            .setFieldWithOrder(
+                FieldSortMap.newBuilder().putFieldSortMap(sortField, FieldSort.newBuilder().setOrder(sortOrder).build()).build()
+            )
+            .build();
+        return SearchRequest.newBuilder()
+            .addIndex(index)
+            .setSearchRequestBody(SearchRequestBody.newBuilder().setQuery(query).setSize(size).addSort(sort).build())
+            .build();
+    }
+
+    public static SearchRequest buildSearchRequestWithCollapse(String index, QueryContainer query, int size, String collapseField) {
+        return SearchRequest.newBuilder()
+            .addIndex(index)
+            .setSearchRequestBody(
+                SearchRequestBody.newBuilder()
+                    .setQuery(query)
+                    .setSize(size)
+                    .setCollapse(FieldCollapse.newBuilder().setField(collapseField).build())
+                    .build()
+            )
             .build();
     }
 

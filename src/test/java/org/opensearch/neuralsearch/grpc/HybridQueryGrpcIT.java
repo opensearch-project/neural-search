@@ -5,6 +5,8 @@
 package org.opensearch.neuralsearch.grpc;
 
 import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.buildSearchRequest;
+import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.buildSearchRequestWithCollapse;
+import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.buildSearchRequestWithSort;
 import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createKnnQueryContainer;
 import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createMatchAllQueryContainer;
 import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createMatchQueryContainer;
@@ -12,7 +14,9 @@ import static org.opensearch.neuralsearch.grpc.GrpcTestHelper.createTermQueryCon
 
 import static com.carrotsearch.randomizedtesting.RandomizedTest.assumeTrue;
 
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,12 +24,14 @@ import org.junit.After;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.protobufs.BoolQuery;
 import org.opensearch.protobufs.HybridQuery;
 import org.opensearch.protobufs.QueryContainer;
 import org.opensearch.protobufs.SearchRequest;
 import org.opensearch.protobufs.SearchResponse;
+import org.opensearch.protobufs.SortOrder;
 
 import io.grpc.ManagedChannel;
 import io.grpc.StatusRuntimeException;
@@ -57,6 +63,8 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     private static final String TEST_CATEGORY_FIELD_NAME = "category";
     private static final String TEST_VECTOR_FIELD_NAME = "embedding";
     private static final int TEST_VECTOR_DIMENSION = 3;
+    private static final String NORMALIZATION_PIPELINE = "grpc-test-normalization-pipeline";
+    private static final String RRF_PIPELINE = "grpc-test-rrf-pipeline";
 
     private ManagedChannel grpcChannel;
 
@@ -459,6 +467,220 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
     }
 
     // ===========================================================================================
+    // NORMALIZATION PIPELINE TESTS
+    // ===========================================================================================
+
+    @SneakyThrows
+    public void testHybridQueryWithNormalizationPipeline() {
+        createSearchPipeline(NORMALIZATION_PIPELINE, "min_max", "arithmetic_mean", Map.of());
+        try {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.search.default_pipeline", NORMALIZATION_PIPELINE));
+
+            HybridQuery hybridQuery = HybridQuery.newBuilder()
+                .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "neural search"))
+                .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "vector database"))
+                .build();
+
+            SearchResponse response = executeHybridSearch(hybridQuery, 10);
+
+            assertNotNull("Search response should not be null", response);
+            assertTrue("Should return results", response.getHits().getHitsCount() > 0);
+            // min-max normalization produces scores in [0, 1] range
+            for (int i = 0; i < response.getHits().getHitsCount(); i++) {
+                double score = response.getHits().getHits(i).getXScore().getDouble();
+                assertTrue("Normalized score should be >= 0, got: " + score, score >= 0.0);
+                assertTrue("Normalized score should be <= 1, got: " + score, score <= 1.0);
+            }
+            logger.info("Normalization pipeline test returned {} hits", response.getHits().getHitsCount());
+        } finally {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().putNull("index.search.default_pipeline"));
+            deleteSearchPipeline(NORMALIZATION_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testHybridQueryWithRRFPipeline() {
+        createRRFSearchPipeline(RRF_PIPELINE, java.util.Arrays.asList(), false);
+        try {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.search.default_pipeline", RRF_PIPELINE));
+
+            HybridQuery hybridQuery = HybridQuery.newBuilder()
+                .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "neural search"))
+                .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "vector database"))
+                .build();
+
+            SearchResponse response = executeHybridSearch(hybridQuery, 10);
+
+            assertNotNull("Search response should not be null", response);
+            assertTrue("Should return results", response.getHits().getHitsCount() > 0);
+            // RRF scores are positive (1/(k+rank) based)
+            for (int i = 0; i < response.getHits().getHitsCount(); i++) {
+                double score = response.getHits().getHits(i).getXScore().getDouble();
+                assertTrue("RRF score should be > 0, got: " + score, score > 0.0);
+            }
+            // Verify descending score order
+            for (int i = 1; i < response.getHits().getHitsCount(); i++) {
+                double prevScore = response.getHits().getHits(i - 1).getXScore().getDouble();
+                double currScore = response.getHits().getHits(i).getXScore().getDouble();
+                assertTrue("Scores should be in descending order", prevScore >= currScore);
+            }
+            logger.info("RRF pipeline test returned {} hits", response.getHits().getHitsCount());
+        } finally {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().putNull("index.search.default_pipeline"));
+            deleteSearchPipeline(RRF_PIPELINE);
+        }
+    }
+
+    // ===========================================================================================
+    // SORT TESTS
+    // ===========================================================================================
+
+    @SneakyThrows
+    public void testHybridQueryWithFieldSort() {
+        createSearchPipeline(NORMALIZATION_PIPELINE, "min_max", "arithmetic_mean", Map.of());
+        try {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.search.default_pipeline", NORMALIZATION_PIPELINE));
+
+            HybridQuery hybridQuery = HybridQuery.newBuilder().addQueries(createMatchAllQueryContainer()).build();
+
+            QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
+            SearchRequest request = buildSearchRequestWithSort(
+                TEST_INDEX_NAME,
+                queryContainer,
+                10,
+                TEST_STATUS_FIELD_NAME,
+                SortOrder.SORT_ORDER_ASC
+            );
+            SearchResponse response = GrpcTestHelper.executeSearchWithRetry(grpcChannel, request);
+
+            assertNotNull("Search response should not be null", response);
+            assertTrue("Should return results", response.getHits().getHitsCount() > 0);
+            // Verify keyword sort order: "active" < "inactive" lexicographically
+            List<String> statusValues = new java.util.ArrayList<>();
+            for (int i = 0; i < response.getHits().getHitsCount(); i++) {
+                String source = response.getHits().getHits(i).getXSource().toStringUtf8();
+                if (source.contains("active") && !source.contains("inactive")) {
+                    statusValues.add("active");
+                } else if (source.contains("inactive")) {
+                    statusValues.add("inactive");
+                }
+            }
+            for (int i = 1; i < statusValues.size(); i++) {
+                assertTrue("Status values should be in ascending order", statusValues.get(i - 1).compareTo(statusValues.get(i)) <= 0);
+            }
+            logger.info("Sort test returned {} hits with ascending status order", response.getHits().getHitsCount());
+        } finally {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().putNull("index.search.default_pipeline"));
+            deleteSearchPipeline(NORMALIZATION_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testHybridQueryWithFieldSortDescending() {
+        createSearchPipeline(NORMALIZATION_PIPELINE, "min_max", "arithmetic_mean", Map.of());
+        try {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.search.default_pipeline", NORMALIZATION_PIPELINE));
+
+            HybridQuery hybridQuery = HybridQuery.newBuilder().addQueries(createMatchAllQueryContainer()).build();
+
+            QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
+            SearchRequest request = buildSearchRequestWithSort(
+                TEST_INDEX_NAME,
+                queryContainer,
+                10,
+                TEST_STATUS_FIELD_NAME,
+                SortOrder.SORT_ORDER_DESC
+            );
+            SearchResponse response = GrpcTestHelper.executeSearchWithRetry(grpcChannel, request);
+
+            assertNotNull("Search response should not be null", response);
+            assertTrue("Should return results", response.getHits().getHitsCount() > 0);
+            // Verify keyword sort order: "inactive" > "active" lexicographically (DESC)
+            List<String> statusValues = new java.util.ArrayList<>();
+            for (int i = 0; i < response.getHits().getHitsCount(); i++) {
+                String source = response.getHits().getHits(i).getXSource().toStringUtf8();
+                if (source.contains("inactive")) {
+                    statusValues.add("inactive");
+                } else if (source.contains("active")) {
+                    statusValues.add("active");
+                }
+            }
+            for (int i = 1; i < statusValues.size(); i++) {
+                assertTrue("Status values should be in descending order", statusValues.get(i - 1).compareTo(statusValues.get(i)) >= 0);
+            }
+            logger.info("Descending sort test returned {} hits", response.getHits().getHitsCount());
+        } finally {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().putNull("index.search.default_pipeline"));
+            deleteSearchPipeline(NORMALIZATION_PIPELINE);
+        }
+    }
+
+    // ===========================================================================================
+    // COLLAPSE TESTS
+    // ===========================================================================================
+
+    @SneakyThrows
+    public void testHybridQueryWithCollapse() {
+        createSearchPipeline(NORMALIZATION_PIPELINE, "min_max", "arithmetic_mean", Map.of());
+        try {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.search.default_pipeline", NORMALIZATION_PIPELINE));
+
+            HybridQuery hybridQuery = HybridQuery.newBuilder()
+                .addQueries(createMatchAllQueryContainer())
+                .addQueries(createMatchQueryContainer(TEST_TEXT_FIELD_NAME, "search"))
+                .build();
+
+            // Without collapse: should return all 4 docs
+            SearchResponse responseWithoutCollapse = executeHybridSearch(hybridQuery, 10);
+            int totalWithoutCollapse = responseWithoutCollapse.getHits().getHitsCount();
+
+            // With collapse on status field: should return at most 2 groups (active, inactive)
+            QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
+            SearchRequest collapseRequest = buildSearchRequestWithCollapse(TEST_INDEX_NAME, queryContainer, 10, TEST_STATUS_FIELD_NAME);
+            SearchResponse responseWithCollapse = GrpcTestHelper.executeSearchWithRetry(grpcChannel, collapseRequest);
+
+            assertNotNull("Collapse response should not be null", responseWithCollapse);
+            assertTrue("Should return results with collapse", responseWithCollapse.getHits().getHitsCount() > 0);
+            assertTrue(
+                "Collapsed results should be <= uncollapsed results",
+                responseWithCollapse.getHits().getHitsCount() <= totalWithoutCollapse
+            );
+            // status field has 2 unique values (active, inactive), so collapsed results should be exactly 2
+            assertEquals("Should return exactly 2 collapsed groups", 2, responseWithCollapse.getHits().getHitsCount());
+            logger.info(
+                "Collapse test: {} hits without collapse, {} hits with collapse on status",
+                totalWithoutCollapse,
+                responseWithCollapse.getHits().getHitsCount()
+            );
+        } finally {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().putNull("index.search.default_pipeline"));
+            deleteSearchPipeline(NORMALIZATION_PIPELINE);
+        }
+    }
+
+    @SneakyThrows
+    public void testHybridQueryWithCollapseOnCategory() {
+        createSearchPipeline(NORMALIZATION_PIPELINE, "min_max", "arithmetic_mean", Map.of());
+        try {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().put("index.search.default_pipeline", NORMALIZATION_PIPELINE));
+
+            HybridQuery hybridQuery = HybridQuery.newBuilder().addQueries(createMatchAllQueryContainer()).build();
+
+            QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
+            SearchRequest request = buildSearchRequestWithCollapse(TEST_INDEX_NAME, queryContainer, 10, TEST_CATEGORY_FIELD_NAME);
+            SearchResponse response = GrpcTestHelper.executeSearchWithRetry(grpcChannel, request);
+
+            assertNotNull("Collapse response should not be null", response);
+            // category field has 3 unique values (tech, science, education), so collapsed results should be 3
+            assertEquals("Should return exactly 3 collapsed groups", 3, response.getHits().getHitsCount());
+            logger.info("Category collapse test returned {} collapsed groups", response.getHits().getHitsCount());
+        } finally {
+            updateIndexSettings(TEST_INDEX_NAME, Settings.builder().putNull("index.search.default_pipeline"));
+            deleteSearchPipeline(NORMALIZATION_PIPELINE);
+        }
+    }
+
+    // ===========================================================================================
     // HELPER METHODS
     // ===========================================================================================
 
@@ -488,6 +710,17 @@ public class HybridQueryGrpcIT extends BaseNeuralSearchIT {
         QueryContainer queryContainer = QueryContainer.newBuilder().setHybrid(hybridQuery).build();
         SearchRequest request = GrpcTestHelper.buildSearchRequest(TEST_INDEX_NAME, queryContainer);
         return GrpcTestHelper.executeSearch(grpcChannel, request);
+    }
+
+    @SneakyThrows
+    private void createDefaultRRFSearchPipeline(String pipelineName) {
+        String body = "{"
+            + "\"description\":\"RRF pipeline for gRPC test\","
+            + "\"phase_results_processors\":[{\"score-ranker-processor\":{\"combination\":{\"technique\":\"rrf\"}}}]"
+            + "}";
+        Request request = new Request("PUT", "/_search/pipeline/" + pipelineName);
+        request.setJsonEntity(body);
+        client().performRequest(request);
     }
 
     // ===========================================================================================
