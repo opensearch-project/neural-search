@@ -52,6 +52,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run build
         run: |
@@ -83,6 +84,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run build
         run: |
@@ -115,6 +117,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run build
         run: |
@@ -135,6 +138,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
           distribution: temurin
       - name: Build and Run Tests
         run: |
@@ -156,6 +160,7 @@ jobs:
           with:
             java-version: ${{ matrix.java }}
             distribution: temurin
+            cache: 'gradle'
         - name: Build and Run Tests
           run: |
             ./gradlew integTest --parallel -PnumNodes=3 -PconfigureNodeRoles=${{ matrix.configureNodeRoles }}

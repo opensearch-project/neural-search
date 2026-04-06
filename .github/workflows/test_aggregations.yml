@@ -50,6 +50,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run tests
         run: |
@@ -74,6 +75,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run tests
         run: |

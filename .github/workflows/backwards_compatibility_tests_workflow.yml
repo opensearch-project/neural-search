@@ -51,6 +51,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - uses: ./.github/actions/clean-up-disk
 
@@ -92,6 +93,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - uses: ./.github/actions/clean-up-disk
 
