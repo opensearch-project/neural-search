@@ -86,7 +86,7 @@ jobs:
 
       - name: Run build
         run: |
-          ./gradlew check -x integTest
+          ./gradlew check --parallel -x integTest
 
   Precommit-neural-search-linux:
     needs: Get-CI-Image-Tag
@@ -138,7 +138,7 @@ jobs:
           distribution: temurin
       - name: Build and Run Tests
         run: |
-          ./gradlew integTest
+          ./gradlew integTest --parallel
 
   integMultiNodeTest:
       needs: Precommit-neural-search-linux
@@ -158,4 +158,4 @@ jobs:
             distribution: temurin
         - name: Build and Run Tests
           run: |
-            ./gradlew integTest -PnumNodes=3 -PconfigureNodeRoles=${{ matrix.configureNodeRoles }}
+            ./gradlew integTest --parallel -PnumNodes=3 -PconfigureNodeRoles=${{ matrix.configureNodeRoles }}

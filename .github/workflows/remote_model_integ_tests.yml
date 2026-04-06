@@ -36,7 +36,7 @@ jobs:
         env:
           CI: true
         run: |
-          ./gradlew remoteModelIntegTest --info
+          ./gradlew remoteModelIntegTest --parallel --info
 
   remote-model-multi-node-integration-tests:
     runs-on: ubuntu-latest
@@ -58,4 +58,4 @@ jobs:
         env:
           CI: true
         run: |
-          ./gradlew remoteModelIntegTest -PnumNodes=${{ matrix.nodes }} --info
+          ./gradlew remoteModelIntegTest --parallel -PnumNodes=${{ matrix.nodes }} --info
