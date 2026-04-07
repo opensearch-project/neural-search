@@ -60,7 +60,19 @@ public class TokenWeightUtilTests extends OpenSearchTestCase {
           }]
         */
         List<Map<String, ?>> inputData = List.of(Map.of("response", MOCK_DATA));
-        expectThrows(IllegalArgumentException.class, () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData));
+        IllegalArgumentException ex = expectThrows(
+            IllegalArgumentException.class,
+            () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData)
+        );
+        assertTrue(
+            "Error message should mention 'response' must be a list",
+            ex.getMessage().contains("'response' field must be a list of token-weight maps")
+        );
+        assertTrue("Error message should mention post_process_function", ex.getMessage().contains("post_process_function"));
+        assertTrue(
+            "Error message should include the actual type",
+            ex.getMessage().contains("HashMap") || ex.getMessage().contains("Map") || ex.getMessage().contains("ImmutableMap")
+        );
     }
 
     public void testFetchListOfTokenWeightMap_whenNotUseResponseKey_thenFail() {
@@ -70,7 +82,12 @@ public class TokenWeightUtilTests extends OpenSearchTestCase {
           }]
         */
         List<Map<String, ?>> inputData = List.of(Map.of("some_key", List.of(MOCK_DATA)));
-        expectThrows(IllegalArgumentException.class, () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData));
+        IllegalArgumentException ex = expectThrows(
+            IllegalArgumentException.class,
+            () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData)
+        );
+        assertTrue("Error message should mention missing 'response' key", ex.getMessage().contains("missing the required 'response' key"));
+        assertTrue("Error message should mention post_process_function", ex.getMessage().contains("post_process_function"));
     }
 
     public void testFetchListOfTokenWeightMap_whenInputObjectIsNotMap_thenFail() {
@@ -80,7 +97,15 @@ public class TokenWeightUtilTests extends OpenSearchTestCase {
           }]
         */
         List<Map<String, ?>> inputData = List.of(Map.of("response", List.of(List.of(MOCK_DATA))));
-        expectThrows(IllegalArgumentException.class, () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData));
+        IllegalArgumentException ex = expectThrows(
+            IllegalArgumentException.class,
+            () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData)
+        );
+        assertTrue(
+            "Error message should mention each element must be a token-weight map",
+            ex.getMessage().contains("must be a token-weight map")
+        );
+        assertTrue("Error message should mention post_process_function", ex.getMessage().contains("post_process_function"));
     }
 
     public void testFetchListOfTokenWeightMap_whenInputTokenMapWithNonStringKeys_thenFail() {
@@ -91,7 +116,15 @@ public class TokenWeightUtilTests extends OpenSearchTestCase {
         */
         Map<?, Float> mockData = Map.of("hello", 1.f, 2.3f, 2.f);
         List<Map<String, ?>> inputData = List.of(Map.of("response", List.of(mockData)));
-        expectThrows(IllegalArgumentException.class, () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData));
+        IllegalArgumentException ex = expectThrows(
+            IllegalArgumentException.class,
+            () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData)
+        );
+        assertTrue(
+            "Error message should mention String keys and numeric values",
+            ex.getMessage().contains("String keys and numeric values")
+        );
+        assertTrue("Error message should mention post_process_function", ex.getMessage().contains("post_process_function"));
     }
 
     public void testFetchListOfTokenWeightMap_whenInputTokenMapWithNonFloatValues_thenFail() {
@@ -102,6 +135,14 @@ public class TokenWeightUtilTests extends OpenSearchTestCase {
         */
         Map<String, ?> mockData = Map.of("hello", 1.f, "world", "world");
         List<Map<String, ?>> inputData = List.of(Map.of("response", List.of(mockData)));
-        expectThrows(IllegalArgumentException.class, () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData));
+        IllegalArgumentException ex = expectThrows(
+            IllegalArgumentException.class,
+            () -> TokenWeightUtil.fetchListOfTokenWeightMap(inputData)
+        );
+        assertTrue(
+            "Error message should mention String keys and numeric values",
+            ex.getMessage().contains("String keys and numeric values")
+        );
+        assertTrue("Error message should mention post_process_function", ex.getMessage().contains("post_process_function"));
     }
 }

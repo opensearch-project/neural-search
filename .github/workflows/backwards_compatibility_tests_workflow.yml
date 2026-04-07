@@ -9,6 +9,10 @@ on:
       - "*"
       - "feature/**"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   Get-CI-Image-Tag:
     uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
@@ -47,6 +51,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - uses: ./.github/actions/clean-up-disk
 
@@ -54,7 +59,7 @@ jobs:
         run: |
           chown -R 1000:1000 `pwd`
           echo "Running restart-upgrade backwards compatibility tests ..."
-          su `id -un 1000` -c "./gradlew :qa:restart-upgrade:testAgainstNewCluster -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          su `id -un 1000` -c "./gradlew :qa:restart-upgrade:testAgainstNewCluster --parallel -D'tests.bwc.version=${{ matrix.bwc_version }}'"
 
   Rolling-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
@@ -88,6 +93,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - uses: ./.github/actions/clean-up-disk
 
@@ -95,4 +101,4 @@ jobs:
         run: |
           chown -R 1000:1000 `pwd`
           echo "Running rolling-upgrade backwards compatibility tests ..."
-          su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:testRollingUpgrade -D'tests.bwc.version=${{ matrix.bwc_version }}'"
+          su `id -un 1000` -c "./gradlew :qa:rolling-upgrade:testRollingUpgrade --parallel -D'tests.bwc.version=${{ matrix.bwc_version }}'"

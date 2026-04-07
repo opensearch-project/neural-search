@@ -10,6 +10,11 @@ on:
     branches:
       - "*"
       - "feature/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   Get-CI-Image-Tag:
     uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
@@ -45,11 +50,12 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run tests
         run: |
           chown -R 1000:1000 `pwd`
-          su `id -un 1000` -c "./gradlew ':integTest' -Dtest_aggs=true --tests \"org.opensearch.neuralsearch.query.aggregation.*IT\""
+          su `id -un 1000` -c "./gradlew ':integTest' --parallel -Dtest_aggs=true --tests \"org.opensearch.neuralsearch.query.aggregation.*IT\""
 
   Check-neural-search-windows:
     strategy:
@@ -69,7 +75,8 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run tests
         run: |
-          ./gradlew ':integTest' -Dtest_aggs=true --tests "org.opensearch.neuralsearch.query.aggregation.*IT"
+          ./gradlew ':integTest' --parallel -Dtest_aggs=true --tests "org.opensearch.neuralsearch.query.aggregation.*IT"
