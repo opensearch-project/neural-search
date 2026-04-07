@@ -11,6 +11,10 @@ on:
       - "*"
       - "feature/**"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   Get-CI-Image-Tag:
     uses: opensearch-project/opensearch-build/.github/workflows/get-ci-image-tag.yml@main
@@ -48,6 +52,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run build
         run: |
@@ -79,10 +84,11 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run build
         run: |
-          ./gradlew check -x integTest
+          ./gradlew check --parallel -x integTest
 
   Precommit-neural-search-linux:
     needs: Get-CI-Image-Tag
@@ -111,6 +117,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run build
         run: |
@@ -131,10 +138,11 @@ jobs:
         uses: actions/setup-java@v4
         with:
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
           distribution: temurin
       - name: Build and Run Tests
         run: |
-          ./gradlew integTest
+          ./gradlew integTest --parallel
 
   integMultiNodeTest:
       needs: Precommit-neural-search-linux
@@ -152,6 +160,7 @@ jobs:
           with:
             java-version: ${{ matrix.java }}
             distribution: temurin
+            cache: 'gradle'
         - name: Build and Run Tests
           run: |
-            ./gradlew integTest -PnumNodes=3 -PconfigureNodeRoles=${{ matrix.configureNodeRoles }}
+            ./gradlew integTest --parallel -PnumNodes=3 -PconfigureNodeRoles=${{ matrix.configureNodeRoles }}

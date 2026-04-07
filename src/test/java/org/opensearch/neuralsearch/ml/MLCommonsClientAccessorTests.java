@@ -2320,6 +2320,358 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         Mockito.verifyNoMoreInteractions(listener);
     }
 
+    // -----------------------------------------------------------------------
+    // Tests for extractVectorsFromRemoteEmbeddingResponse and
+    // buildVectorFromResponse — happy paths and edge cases
+    // -----------------------------------------------------------------------
+
+    /**
+     * Remote model returns a valid response with multiple embeddings.
+     * Verifies that all embeddings are correctly extracted and returned in order.
+     */
+    public void testInferenceSentences_whenRemoteResponseIsValidWithMultipleEmbeddings_thenSuccess() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // Two embeddings: [0.1, 0.2, 0.3] and [0.4, 0.5, 0.6]
+        final Map<String, Object> dataAsMap = new HashMap<>();
+        dataAsMap.put("response", List.of(List.of(0.1, 0.2, 0.3), List.of(0.4, 0.5, 0.6)));
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataAsMap);
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<List<List<Number>>> captor = ArgumentCaptor.forClass(List.class);
+        verify(resultListener).onResponse(captor.capture());
+        List<List<Number>> result = captor.getValue();
+        assertEquals("Should return 2 embeddings", 2, result.size());
+        assertEquals("First embedding should have 3 values", 3, result.get(0).size());
+        assertEquals("Second embedding should have 3 values", 3, result.get(1).size());
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Remote model returns a valid response with an empty "response" list.
+     * This is a legitimate case (e.g., all inputs were filtered) — no exception should be thrown.
+     */
+    public void testInferenceSentences_whenRemoteResponseHasEmptyResponseList_thenReturnsEmptyVector() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // "response": [] — valid but empty
+        final Map<String, Object> dataAsMap = new HashMap<>();
+        dataAsMap.put("response", Collections.emptyList());
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataAsMap);
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<List<List<Number>>> captor = ArgumentCaptor.forClass(List.class);
+        verify(resultListener).onResponse(captor.capture());
+        assertTrue("Should return empty vector list for empty response", captor.getValue().isEmpty());
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Remote model returns a valid response with one embedding that has zero dimensions.
+     * Verifies that an empty inner list is returned without error.
+     */
+    public void testInferenceSentences_whenRemoteResponseHasEmptyInnerList_thenReturnsEmptyEmbedding() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // "response": [[]] — one embedding with zero dimensions
+        final Map<String, Object> dataAsMap = new HashMap<>();
+        dataAsMap.put("response", List.of(Collections.emptyList()));
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataAsMap);
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<List<List<Number>>> captor = ArgumentCaptor.forClass(List.class);
+        verify(resultListener).onResponse(captor.capture());
+        List<List<Number>> result = captor.getValue();
+        assertEquals("Should return 1 embedding", 1, result.size());
+        assertTrue("The single embedding should be empty", result.get(0).isEmpty());
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * buildVectorFromResponse: when the tensor output list is empty, returns an empty vector list.
+     */
+    public void testInferenceSentences_whenEmptyTensorOutputList_thenReturnsEmptyVector() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // Empty tensor output list
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(Collections.emptyList());
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<List<List<Number>>> captor = ArgumentCaptor.forClass(List.class);
+        verify(resultListener).onResponse(captor.capture());
+        assertTrue("Should return empty vector list when tensor output list is empty", captor.getValue().isEmpty());
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * buildVectorFromResponse: local model tensor with getData() returning an empty array (length == 0).
+     * Verifies the empty-array branch adds an empty list to the result.
+     */
+    public void testInferenceSentences_whenLocalModelTensorHasEmptyDataArray_thenReturnsEmptyEmbedding() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // Local model tensor with empty data array (getData().length == 0)
+        final ModelTensorOutput modelTensorOutput = createModelTensorOutput(new Float[] {});
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<List<List<Number>>> captor = ArgumentCaptor.forClass(List.class);
+        verify(resultListener).onResponse(captor.capture());
+        List<List<Number>> result = captor.getValue();
+        assertEquals("Should return 1 embedding entry for empty data array", 1, result.size());
+        assertTrue("The single embedding should be empty", result.get(0).isEmpty());
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests for remote model response validation in buildVectorFromResponse /
+    // extractVectorsFromRemoteEmbeddingResponse
+    // -----------------------------------------------------------------------
+
+    /**
+     * Remote model returns a tensor where getData() == null and getDataAsMap() == null.
+     * Expects IllegalStateException with a message about null data and post_process_function.
+     */
+    public void testInferenceSentences_whenRemoteTensorHasNullDataAndNullDataAsMap_thenIllegalStateException() {
+        // Mock getModel to return a symmetric (remote) model
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // Build a tensor with getData() == null and getDataAsMap() == null
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, null);
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<Exception> captor = ArgumentCaptor.forClass(Exception.class);
+        verify(resultListener).onFailure(captor.capture());
+        assertTrue(captor.getValue() instanceof IllegalStateException);
+        assertTrue("Error message should mention null data", captor.getValue().getMessage().contains("The remote model returned no data"));
+        assertTrue("Error message should mention post_process_function", captor.getValue().getMessage().contains("post_process_function"));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Remote model returns a tensor where getData() == null and getDataAsMap() is non-null
+     * but missing the "response" key.
+     * Expects IllegalStateException with a message about the missing "response" key.
+     */
+    public void testInferenceSentences_whenRemoteTensorMissingResponseKey_thenIllegalStateException() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // dataAsMap has a key, but not "response"
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, Map.of("wrong_key", "some_value"));
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<Exception> captor = ArgumentCaptor.forClass(Exception.class);
+        verify(resultListener).onFailure(captor.capture());
+        assertTrue(captor.getValue() instanceof IllegalStateException);
+        assertTrue(
+            "Error message should mention missing 'response' key",
+            captor.getValue().getMessage().contains("missing the required 'response' key")
+        );
+        assertTrue("Error message should mention post_process_function", captor.getValue().getMessage().contains("post_process_function"));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Remote model returns a tensor where getData() == null and getDataAsMap()["response"]
+     * is a String (not a List).
+     * Expects IllegalStateException with a message about the wrong type for "response".
+     */
+    public void testInferenceSentences_whenRemoteResponseIsNotList_thenIllegalStateException() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // "response" is a String, not a List
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, Map.of("response", "not_a_list"));
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<Exception> captor = ArgumentCaptor.forClass(Exception.class);
+        verify(resultListener).onFailure(captor.capture());
+        assertTrue(captor.getValue() instanceof IllegalStateException);
+        assertTrue(
+            "Error message should mention 'response' must be a list",
+            captor.getValue().getMessage().contains("'response' field must be a list of float arrays")
+        );
+        assertTrue("Error message should mention the actual type", captor.getValue().getMessage().contains("String"));
+        assertTrue("Error message should mention post_process_function", captor.getValue().getMessage().contains("post_process_function"));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Remote model returns a tensor where getData() == null and getDataAsMap()["response"]
+     * is a List but its elements are Strings (not Lists of floats).
+     * Expects IllegalStateException with a message about elements not being lists.
+     */
+    public void testInferenceSentences_whenRemoteResponseElementsAreNotLists_thenIllegalStateException() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // "response" is a List, but elements are Strings instead of Lists of floats
+        final Map<String, Object> dataAsMap = new HashMap<>();
+        dataAsMap.put("response", List.of("embedding1", "embedding2"));
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataAsMap);
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<Exception> captor = ArgumentCaptor.forClass(Exception.class);
+        verify(resultListener).onFailure(captor.capture());
+        assertTrue(captor.getValue() instanceof IllegalStateException);
+        assertTrue(
+            "Error message should mention each element must be a list of floats",
+            captor.getValue().getMessage().contains("must be a list of floats")
+        );
+        assertTrue("Error message should mention the actual type", captor.getValue().getMessage().contains("String"));
+        assertTrue("Error message should mention post_process_function", captor.getValue().getMessage().contains("post_process_function"));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
+    /**
+     * Remote model returns a tensor where getData() == null and getDataAsMap()["response"]
+     * is a List of Lists, but the inner list elements are Strings (not Numbers).
+     * Expects IllegalStateException with a message about values not being numbers.
+     */
+    public void testInferenceSentences_whenRemoteEmbeddingValuesAreNotNumbers_thenIllegalStateException() {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createSymmetricModel());
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
+
+        // "response" is a List of Lists, but inner values are Strings instead of Numbers
+        final Map<String, Object> dataAsMap = new HashMap<>();
+        dataAsMap.put("response", List.of(List.of("not_a_float", "also_not_a_float")));
+        final ModelTensor tensor = new ModelTensor("response", null, null, null, null, null, dataAsMap);
+        final ModelTensors modelTensors = new ModelTensors(List.of(tensor));
+        final ModelTensorOutput modelTensorOutput = new ModelTensorOutput(List.of(modelTensors));
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(modelTensorOutput);
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSentences(TestCommonConstants.TEXT_INFERENCE_REQUEST, resultListener);
+
+        ArgumentCaptor<Exception> captor = ArgumentCaptor.forClass(Exception.class);
+        verify(resultListener).onFailure(captor.capture());
+        assertTrue(captor.getValue() instanceof IllegalStateException);
+        assertTrue(
+            "Error message should mention values must be numbers",
+            captor.getValue().getMessage().contains("must be a number (float)")
+        );
+        assertTrue("Error message should mention the actual type", captor.getValue().getMessage().contains("String"));
+        assertTrue("Error message should mention post_process_function", captor.getValue().getMessage().contains("post_process_function"));
+        Mockito.verifyNoMoreInteractions(resultListener);
+    }
+
     public void testExtractClaudeAgentSteps_WithIndexName() throws Exception {
         final String agentId = "test-agent-id";
         final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
