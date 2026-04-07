@@ -12,6 +12,10 @@ on:
       - "*"
       - "feature/**"
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   remote-model-single-node-integration-tests:
     runs-on: ubuntu-latest
@@ -27,12 +31,13 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run single-node remote model tests
         env:
           CI: true
         run: |
-          ./gradlew remoteModelIntegTest --info
+          ./gradlew remoteModelIntegTest --parallel --info
 
   remote-model-multi-node-integration-tests:
     runs-on: ubuntu-latest
@@ -49,9 +54,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'gradle'
 
       - name: Run multi-node remote model tests
         env:
           CI: true
         run: |
-          ./gradlew remoteModelIntegTest -PnumNodes=${{ matrix.nodes }} --info
+          ./gradlew remoteModelIntegTest --parallel -PnumNodes=${{ matrix.nodes }} --info
