@@ -381,7 +381,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
                     deployRetries,
                     MAX_DEPLOY_RETRIES
                 );
-                loadModel(modelId);
+                try {
+                    loadModel(modelId);
+                } catch (Exception e) {
+                    logger.warn("Model {} deploy retry {} failed: {}", modelId, deployRetries, e.getMessage());
+                }
             }
             logger.info("Waiting for model {} to be ready. Attempt {}/{}, state: {}", modelId, attempt + 1, MAX_ATTEMPTS, state);
             Thread.sleep(WAIT_TIME_IN_SECONDS * 1000);
