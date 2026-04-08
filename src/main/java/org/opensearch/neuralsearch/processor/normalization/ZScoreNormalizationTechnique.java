@@ -216,7 +216,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         }
         // Case when sd is 0
         if (Floats.compare(standardDeviation, 0.0f) == 0) {
-            return minScore;
+            return 0.0f;
         }
         float normalizedScore = (score - mean) / standardDeviation;
 
