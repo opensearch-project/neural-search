@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Text Chunking] Fix text chunking processor ignoring index max_token_count setting when ingesting via alias ([#1803](https://github.com/opensearch-project/neural-search/pull/1803))
 
 ### Infrastructure
+* Fix flaky integration test failure caused by ML memory circuit breaker during model deployment in distribution pipeline ([#1824](https://github.com/opensearch-project/neural-search/pull/1824))
 * [GRPC] Add gRPC integration tests for hybrid query with normalization pipeline, sort, and collapse ([#1827](https://github.com/opensearch-project/neural-search/pull/1827))
 * Improve CI performance with concurrency groups and parallel builds ([#1828](https://github.com/opensearch-project/neural-search/pull/1828))
 
