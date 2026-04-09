@@ -125,6 +125,13 @@ public class HybridBulkScorer extends BulkScorer {
             if (Objects.isNull(scorers[subQueryIndex]) || docIds[subQueryIndex] >= max) {
                 continue;
             }
+            // Propagate competitive score threshold to sub-query scorer so that its ImpactsDISI
+            // can skip posting list blocks where maxScore < threshold (WAND/block-max optimization).
+            // minScores[] is updated by the collector's priority queue overflow feedback loop.
+            float minScore = hybridSubQueryScorer.getMinScores()[subQueryIndex];
+            if (minScore > 0) {
+                scorers[subQueryIndex].setMinCompetitiveScore(minScore);
+            }
             DocIdSetIterator it = scorers[subQueryIndex].iterator();
             int doc = docIds[subQueryIndex];
             if (doc < windowMin) {
