@@ -1230,7 +1230,9 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             + "\" } },\n"
             + "        { \"knn\": { \""
             + TEST_KNN_VECTOR_FIELD_NAME_1
-            + "\": { \"vector\": [1.0, 1.0, 1.0, 1.0], \"k\": 5 } } }\n"
+            + "\": { \"vector\": "
+            + Floats.asList(testVector1).toString()
+            + ", \"k\": 5 } } }\n"
             + "      ]\n"
             + "    }\n"
             + "  },\n"
