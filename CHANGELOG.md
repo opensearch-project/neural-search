@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Enhancements
 * Improve error messages for misconfigured remote model connectors to provide actionable guidance on post_process_function configuration ([#1825](https://github.com/opensearch-project/neural-search/pull/1825))
+* [Hybrid Query] Propagate setMinCompetitiveScore to sub-query scorers in HybridBulkScorer to enable WAND block-level skipping ([#1831](https://github.com/opensearch-project/neural-search/pull/1831))
 
 ### Bug Fixes
 * Fix semantic highlighter crash on documents with missing highlighted fields ([#1810](https://github.com/opensearch-project/neural-search/pull/1810))

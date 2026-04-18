@@ -16,7 +16,10 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class HybridBulkScorerTests extends OpenSearchTestCase {
@@ -208,6 +211,100 @@ public class HybridBulkScorerTests extends OpenSearchTestCase {
 
         // Should return NO_MORE_DOCS when all scorers are exhausted
         assertEquals("Should return NO_MORE_DOCS when all scorers exhausted", DocIdSetIterator.NO_MORE_DOCS, result);
+    }
+
+    /**
+     * Test that setMinCompetitiveScore is propagated to sub-query scorers when minScores > 0.
+     * This enables Lucene's ImpactsDISI to skip posting list blocks where maxScore < threshold.
+     */
+    public void testSetMinCompetitiveScorePropagatedToSubScorers() throws IOException {
+        List<Scorer> scorers = Arrays.asList(mockScorer1, mockScorer2);
+        HybridBulkScorer bulkScorer = new HybridBulkScorer(scorers, true, MAX_DOC);
+
+        // Set competitive threshold via hybridSubQueryScorer's minScores array
+        bulkScorer.getHybridSubQueryScorer().getMinScores()[0] = 0.5f;
+        bulkScorer.getHybridSubQueryScorer().getMinScores()[1] = 0.3f;
+
+        LeafCollector mockLeafCollector = mock(LeafCollector.class);
+
+        // Setup iterators: each has one doc, then exhausted
+        when(mockIterator1.docID()).thenReturn(-1);
+        when(mockIterator1.advance(0)).thenReturn(10);
+        when(mockIterator1.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockIterator2.docID()).thenReturn(-1);
+        when(mockIterator2.advance(0)).thenReturn(20);
+        when(mockIterator2.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockScorer1.score()).thenReturn(1.0f);
+        when(mockScorer2.score()).thenReturn(0.8f);
+
+        bulkScorer.score(mockLeafCollector, null, 0, MAX_DOC);
+
+        // Verify setMinCompetitiveScore was called on each sub-scorer
+        verify(mockScorer1).setMinCompetitiveScore(0.5f);
+        verify(mockScorer2).setMinCompetitiveScore(0.3f);
+    }
+
+    /**
+     * Test that setMinCompetitiveScore is propagated per sub-query: only sub-scorers whose
+     * minScores[i] > 0 receive the call. Locks in the targeted (not global) propagation semantics.
+     */
+    public void testSetMinCompetitiveScore_onlyPropagatedToSubScorerWithPositiveThreshold() throws IOException {
+        List<Scorer> scorers = Arrays.asList(mockScorer1, mockScorer2);
+        HybridBulkScorer bulkScorer = new HybridBulkScorer(scorers, true, MAX_DOC);
+
+        // Only sub-query 0 has a competitive threshold; sub-query 1 stays at 0 (cold-start)
+        bulkScorer.getHybridSubQueryScorer().getMinScores()[0] = 0.5f;
+
+        LeafCollector mockLeafCollector = mock(LeafCollector.class);
+
+        when(mockIterator1.docID()).thenReturn(-1);
+        when(mockIterator1.advance(0)).thenReturn(10);
+        when(mockIterator1.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockIterator2.docID()).thenReturn(-1);
+        when(mockIterator2.advance(0)).thenReturn(20);
+        when(mockIterator2.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockScorer1.score()).thenReturn(1.0f);
+        when(mockScorer2.score()).thenReturn(0.8f);
+
+        bulkScorer.score(mockLeafCollector, null, 0, MAX_DOC);
+
+        // scorer1 receives its own threshold; scorer2 receives nothing
+        verify(mockScorer1).setMinCompetitiveScore(0.5f);
+        verify(mockScorer2, never()).setMinCompetitiveScore(anyFloat());
+    }
+
+    /**
+     * Test that setMinCompetitiveScore is NOT propagated when minScores = 0 (default).
+     * Before the priority queue overflows, minScores stays at 0 and propagation should be skipped.
+     */
+    public void testSetMinCompetitiveScoreNotPropagatedWhenZero() throws IOException {
+        List<Scorer> scorers = Arrays.asList(mockScorer1, mockScorer2);
+        HybridBulkScorer bulkScorer = new HybridBulkScorer(scorers, true, MAX_DOC);
+
+        // minScores defaults to 0 — don't set anything
+
+        LeafCollector mockLeafCollector = mock(LeafCollector.class);
+
+        when(mockIterator1.docID()).thenReturn(-1);
+        when(mockIterator1.advance(0)).thenReturn(10);
+        when(mockIterator1.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockIterator2.docID()).thenReturn(-1);
+        when(mockIterator2.advance(0)).thenReturn(20);
+        when(mockIterator2.nextDoc()).thenReturn(DocIdSetIterator.NO_MORE_DOCS);
+
+        when(mockScorer1.score()).thenReturn(1.0f);
+        when(mockScorer2.score()).thenReturn(0.8f);
+
+        bulkScorer.score(mockLeafCollector, null, 0, MAX_DOC);
+
+        // Verify setMinCompetitiveScore was never called
+        verify(mockScorer1, never()).setMinCompetitiveScore(anyFloat());
+        verify(mockScorer2, never()).setMinCompetitiveScore(anyFloat());
     }
 
     /**

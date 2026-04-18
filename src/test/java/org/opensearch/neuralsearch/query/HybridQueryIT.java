@@ -1209,6 +1209,73 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * Tests that hybrid query with a mix of text and kNN sub-queries executes correctly with
+     * profiler enabled. Exercises the BulkScorer path where setMinCompetitiveScore is propagated
+     * to sub-query scorers. Asserts ranking is stable across invocations and profile data is
+     * well-formed (no regression from the WAND propagation fix in #1831).
+     */
+    @SneakyThrows
+    public void testProfile_whenHybridQueryWithTextAndKnnSubQueries_thenConsistentRanking() {
+        initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
+        createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
+
+        String query = "{\n"
+            + "  \"query\": {\n"
+            + "    \"hybrid\": {\n"
+            + "      \"queries\": [\n"
+            + "        { \"term\": { \""
+            + TEST_TEXT_FIELD_NAME_1
+            + "\": \""
+            + TEST_QUERY_TEXT3
+            + "\" } },\n"
+            + "        { \"knn\": { \""
+            + TEST_KNN_VECTOR_FIELD_NAME_1
+            + "\": { \"vector\": "
+            + Floats.asList(testVector1).toString()
+            + ", \"k\": 5 } } }\n"
+            + "      ]\n"
+            + "    }\n"
+            + "  },\n"
+            + "  \"profile\": true\n"
+            + "}";
+
+        // Run twice and verify identical ranking — catches any non-determinism introduced by WAND
+        Map<String, Object> first = searchWithRawQuery(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, query, 10, SEARCH_PIPELINE);
+        Map<String, Object> second = searchWithRawQuery(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, query, 10, SEARCH_PIPELINE);
+
+        int firstHits = getHitCount(first);
+        assertEquals("hit count must be stable across invocations", firstHits, getHitCount(second));
+        assertTrue("expected at least one hit", firstHits >= 1);
+
+        List<Map<String, Object>> hits1 = getNestedHits(first);
+        List<Map<String, Object>> hits2 = getNestedHits(second);
+        for (int i = 0; i < hits1.size(); i++) {
+            assertEquals("doc id order must match", hits1.get(i).get("_id"), hits2.get(i).get("_id"));
+            double score = (double) hits1.get(i).get("_score");
+            assertFalse("score must not be NaN", Double.isNaN(score));
+            assertTrue("score must be positive", score > 0);
+        }
+
+        // Profile structure sanity — breakdown must include the set_min_competitive_score_count key
+        assertNotNull("profile data must be present", first.get("profile"));
+        Map<String, Object> profile = (Map<String, Object>) first.get("profile");
+        List<Map<String, Object>> shards = (List<Map<String, Object>>) profile.get("shards");
+        assertFalse("profile shards must not be empty", shards.isEmpty());
+        boolean foundBreakdownKey = false;
+        for (Map<String, Object> shard : shards) {
+            for (Map<String, Object> searchProfile : (List<Map<String, Object>>) shard.get("searches")) {
+                for (Map<String, Object> queryProfile : (List<Map<String, Object>>) searchProfile.get("query")) {
+                    Map<String, Object> breakdown = (Map<String, Object>) queryProfile.get("breakdown");
+                    if (breakdown != null && breakdown.containsKey("set_min_competitive_score_count")) {
+                        foundBreakdownKey = true;
+                    }
+                }
+            }
+        }
+        assertTrue("profile breakdown must expose set_min_competitive_score_count key", foundBreakdownKey);
+    }
+
+    /**
      * Tests that hybrid query with multiple shards works with profiler enabled.
      * This tests the distributed profiling scenario.
      */
