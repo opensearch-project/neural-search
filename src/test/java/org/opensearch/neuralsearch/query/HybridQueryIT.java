@@ -1209,17 +1209,29 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Tests that hybrid query with a mix of text and kNN sub-queries executes correctly with
-     * profiler enabled. Exercises the BulkScorer path where setMinCompetitiveScore is propagated
-     * to sub-query scorers. Asserts ranking is stable across invocations and profile data is
-     * well-formed (no regression from the WAND propagation fix in #1831).
+     * Tests that the BulkScorer path (where PR #1831 propagates setMinCompetitiveScore for WAND
+     * pruning) produces results consistent with the Scorer path. Since HybridBulkScorer and
+     * HybridQueryScorer are independently implemented, matching output across the two paths is a
+     * direct correctness regression guard for the WAND optimization introduced in #1831: if WAND
+     * ever drops a document that the Scorer path kept, this test fails.
+     *
+     * Path selection:
+     *  - profile=false → QueryPhase uses Weight.bulkScorer(ctx) → HybridScorerSupplier.bulkScorer()
+     *    → HybridBulkScorer (the path PR #1831 modifies).
+     *  - profile=true  → ProfileWeight.bulkScorer() falls back to the default Scorer-wrapped
+     *    BulkScorer (ProfileWeight.java intentionally avoids specialized BulkScorers so per-op
+     *    timings can be measured), so this path goes through HybridQueryScorer and is unaffected
+     *    by the PR. This is why the profiler's set_min_competitive_score_count cannot be used to
+     *    directly prove WAND fires — the profile path bypasses HybridBulkScorer entirely. The
+     *    BulkScorer-level verification for the PR is covered by unit tests in
+     *    HybridBulkScorerTests and HybridScorerSupplierTests.
      */
     @SneakyThrows
-    public void testProfile_whenHybridQueryWithTextAndKnnSubQueries_thenConsistentRanking() {
+    public void testHybridQueryWithTextAndKnn_whenBulkScorerAndScorerPaths_thenProduceConsistentResults() {
         initializeIndexIfNotExist(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME);
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
-        String query = "{\n"
+        String baseQuery = "{\n"
             + "  \"query\": {\n"
             + "    \"hybrid\": {\n"
             + "      \"queries\": [\n"
@@ -1235,30 +1247,57 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
             + ", \"k\": 5 } } }\n"
             + "      ]\n"
             + "    }\n"
-            + "  },\n"
-            + "  \"profile\": true\n"
-            + "}";
+            + "  }";
+        String bulkScorerQuery = baseQuery + "\n}";
+        String profiledQuery = baseQuery + ",\n  \"profile\": true\n}";
 
-        // Run twice and verify identical ranking — catches any non-determinism introduced by WAND
-        Map<String, Object> first = searchWithRawQuery(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, query, 10, SEARCH_PIPELINE);
-        Map<String, Object> second = searchWithRawQuery(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, query, 10, SEARCH_PIPELINE);
+        // Path that the PR actually modifies (WAND propagation active)
+        Map<String, Object> bulkResponse = searchWithRawQuery(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, bulkScorerQuery, 10, SEARCH_PIPELINE);
+        // Reference path (HybridQueryScorer, not modified by PR)
+        Map<String, Object> profiledResponse = searchWithRawQuery(
+            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
+            profiledQuery,
+            10,
+            SEARCH_PIPELINE
+        );
 
-        int firstHits = getHitCount(first);
-        assertEquals("hit count must be stable across invocations", firstHits, getHitCount(second));
-        assertTrue("expected at least one hit", firstHits >= 1);
+        int bulkHits = getHitCount(bulkResponse);
+        int profiledHits = getHitCount(profiledResponse);
+        assertTrue("expected at least one hit", bulkHits >= 1);
+        assertEquals("BulkScorer path (with WAND) and Scorer path (reference) must return the same number of hits", profiledHits, bulkHits);
 
-        List<Map<String, Object>> hits1 = getNestedHits(first);
-        List<Map<String, Object>> hits2 = getNestedHits(second);
-        for (int i = 0; i < hits1.size(); i++) {
-            assertEquals("doc id order must match", hits1.get(i).get("_id"), hits2.get(i).get("_id"));
-            double score = (double) hits1.get(i).get("_score");
-            assertFalse("score must not be NaN", Double.isNaN(score));
-            assertTrue("score must be positive", score > 0);
+        // Strongest correctness guard: WAND pruning on the BulkScorer path must not drop any
+        // document that the Scorer path returns. Hit IDs and rank order must match exactly; scores
+        // must be finite and positive on both sides. Floating-point score deltas are bounded by the
+        // standard Lucene intra-run variance threshold (0.002) used elsewhere in this codebase.
+        List<Map<String, Object>> bulkHitsList = getNestedHits(bulkResponse);
+        List<Map<String, Object>> profiledHitsList = getNestedHits(profiledResponse);
+        assertEquals("hit list sizes must match", profiledHitsList.size(), bulkHitsList.size());
+        for (int i = 0; i < bulkHitsList.size(); i++) {
+            assertEquals(
+                "doc id at rank " + i + " must match across BulkScorer and Scorer paths",
+                profiledHitsList.get(i).get("_id"),
+                bulkHitsList.get(i).get("_id")
+            );
+            double bulkScore = ((Number) bulkHitsList.get(i).get("_score")).doubleValue();
+            double profiledScore = ((Number) profiledHitsList.get(i).get("_score")).doubleValue();
+            assertFalse("BulkScorer score must not be NaN", Double.isNaN(bulkScore));
+            assertFalse("Scorer path score must not be NaN", Double.isNaN(profiledScore));
+            assertTrue("BulkScorer score must be positive", bulkScore > 0);
+            assertTrue("Scorer path score must be positive", profiledScore > 0);
+            assertEquals(
+                "scores at rank " + i + " must match across paths within Lucene floating-point tolerance",
+                profiledScore,
+                bulkScore,
+                0.002
+            );
         }
 
-        // Profile structure sanity — breakdown must include the set_min_competitive_score_count key
-        assertNotNull("profile data must be present", first.get("profile"));
-        Map<String, Object> profile = (Map<String, Object>) first.get("profile");
+        // Secondary: profile output structure is not regressed (query remained executable with
+        // profile: true and produced a breakdown with the WAND-related counter key). Non-blocking
+        // — the fix itself is verified by the cross-path comparison above.
+        assertNotNull("profile data must be present", profiledResponse.get("profile"));
+        Map<String, Object> profile = (Map<String, Object>) profiledResponse.get("profile");
         List<Map<String, Object>> shards = (List<Map<String, Object>>) profile.get("shards");
         assertFalse("profile shards must not be empty", shards.isEmpty());
         boolean foundBreakdownKey = false;
