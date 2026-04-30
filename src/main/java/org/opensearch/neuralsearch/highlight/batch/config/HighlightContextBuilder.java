@@ -9,6 +9,7 @@ import org.opensearch.action.search.SearchResponse;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,18 +37,22 @@ public class HighlightContextBuilder {
             return createEmptyContext(config, response, startTime);
         }
 
-        for (SearchHit hit : response.getHits().getHits()) {
-            String fieldText = extractFieldText(hit, config.getFieldName());
+        if (config.isInnerHitsScoped()) {
+            collectFromInnerHits(config, response, requests, validHits);
+        } else {
+            for (SearchHit hit : response.getHits().getHits()) {
+                String fieldText = extractFieldText(hit, config.getFieldName());
 
-            if (fieldText != null && !fieldText.isEmpty()) {
-                SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
-                    .modelId(config.getModelId())
-                    .question(config.getQueryText())
-                    .context(fieldText)
-                    .build();
+                if (fieldText != null && !fieldText.isEmpty()) {
+                    SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
+                        .modelId(config.getModelId())
+                        .question(config.getQueryText())
+                        .context(fieldText)
+                        .build();
 
-                requests.add(request);
-                validHits.add(hit);
+                    requests.add(request);
+                    validHits.add(hit);
+                }
             }
         }
 
@@ -62,6 +67,61 @@ public class HighlightContextBuilder {
             .modelId(config.getModelId())
             .modelType(config.getModelType())
             .build();
+    }
+
+    /**
+     * Collect highlighting requests and valid hits from the inner_hits of top-level hits
+     * @param config the inner_hits-scoped highlight configuration
+     * @param response the search response
+     * @param requests the list to populate with highlighting requests
+     * @param validHits the list to populate with inner hits that carry non-empty text
+     */
+    private void collectFromInnerHits(
+        HighlightConfig config,
+        SearchResponse response,
+        List<SentenceHighlightingRequest> requests,
+        List<SearchHit> validHits
+    ) {
+        String innerHitName = config.getInnerHitName();
+        String sourceLookupField = stripNestedPrefix(config);
+
+        for (SearchHit topHit : response.getHits().getHits()) {
+            Map<String, SearchHits> innerHitsMap = topHit.getInnerHits();
+            if (innerHitsMap == null) {
+                continue;
+            }
+            SearchHits innerHits = innerHitsMap.get(innerHitName);
+            if (innerHits == null || innerHits.getHits().length == 0) {
+                continue;
+            }
+            for (SearchHit innerHit : innerHits.getHits()) {
+                String fieldText = extractFieldText(innerHit, sourceLookupField);
+                if (fieldText != null && !fieldText.isEmpty()) {
+                    SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
+                        .modelId(config.getModelId())
+                        .question(config.getQueryText())
+                        .context(fieldText)
+                        .build();
+
+                    requests.add(request);
+                    validHits.add(innerHit);
+                }
+            }
+        }
+    }
+
+    /**
+     * Strip the nested path prefix from the field name for source lookup inside an inner hit
+     * @param config the highlight configuration
+     * @return the leaf field name (e.g. "text") in inner_hits mode, or the original field name otherwise
+     */
+    private String stripNestedPrefix(HighlightConfig config) {
+        String fieldName = config.getFieldName();
+        String nestedPath = config.getNestedPath();
+        if (nestedPath != null && fieldName != null && fieldName.startsWith(nestedPath + ".")) {
+            return fieldName.substring(nestedPath.length() + 1);
+        }
+        return fieldName;
     }
 
     /**

@@ -43,6 +43,18 @@ public class HighlightConfig {
     @With
     private final FunctionName modelType;
 
+    private final String innerHitName;
+
+    private final String nestedPath;
+
+    /**
+     * Check if this configuration targets inner_hits instead of top-level hits
+     * @return true if the configuration was discovered on a nested query's inner_hits
+     */
+    public boolean isInnerHitsScoped() {
+        return innerHitName != null;
+    }
+
     /**
      * Check if the configuration is valid
      * @return true if no validation error exists and all required fields are present

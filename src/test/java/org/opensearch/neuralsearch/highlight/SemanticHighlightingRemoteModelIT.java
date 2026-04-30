@@ -392,4 +392,90 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         // Use helper method - verifies highlights exist with expected terms
         assertSemanticHighlighting(responseMap, TEST_FIELD, "treatments");
     }
+
+    /**
+     * Test batch semantic highlighting on nested field retrieved via inner_hits with remote model
+     */
+    public void testSemanticHighlightingOnInnerHitsWithBatchEnabledWithRemoteModel() throws Exception {
+        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
+
+        String nestedIndex = "test-semantic-highlight-nested-index";
+
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("mappings")
+            .startObject("properties")
+            .startObject("chunks")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("text")
+            .field("type", "text")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request createIndex = new Request("PUT", "/" + nestedIndex);
+        createIndex.setJsonEntity(mapping.toString());
+        client().performRequest(createIndex);
+
+        String doc = "{\"chunks\":["
+            + "{\"text\":\"Treatments for neurodegenerative diseases like Parkinson disease include various therapeutic approaches.\"},"
+            + "{\"text\":\"Ransomware attacks on healthcare systems tripled in 2025.\"}"
+            + "]}";
+        Request indexDoc = new Request("PUT", "/" + nestedIndex + "/_doc/1?refresh=true");
+        indexDoc.setJsonEntity(doc);
+        client().performRequest(indexDoc);
+
+        XContentBuilder searchBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("query")
+            .startObject("nested")
+            .field("path", "chunks")
+            .startObject("query")
+            .startObject("match")
+            .field("chunks.text", "treatments for neurodegenerative diseases")
+            .endObject()
+            .endObject()
+            .startObject("inner_hits")
+            .field("size", 2)
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject("chunks.text")
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request request = new Request("POST", "/" + nestedIndex + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+        List<Map<String, Object>> topHits = (List<Map<String, Object>>) ((Map<String, Object>) responseMap.get("hits")).get("hits");
+        assertFalse("Expected at least one matching document", topHits.isEmpty());
+
+        Map<String, Object> innerHitsBlock = (Map<String, Object>) topHits.get(0).get("inner_hits");
+        Map<String, Object> nestedBlock = (Map<String, Object>) innerHitsBlock.get("chunks");
+        List<Map<String, Object>> innerHits = (List<Map<String, Object>>) ((Map<String, Object>) nestedBlock.get("hits")).get("hits");
+        assertFalse("Expected at least one inner hit", innerHits.isEmpty());
+
+        Map<String, Object> highlight = (Map<String, Object>) innerHits.get(0).get("highlight");
+        assertNotNull("Inner hit should carry a highlight field", highlight);
+        List<String> fragments = (List<String>) highlight.get("chunks.text");
+        assertNotNull("Highlight key should be 'chunks.text'", fragments);
+        assertFalse("Highlight fragments should not be empty", fragments.isEmpty());
+        assertTrue("Fragment should contain <em> tag: " + fragments.get(0), fragments.get(0).contains("<em>"));
+    }
 }

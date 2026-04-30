@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.highlight.batch.processor;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.neuralsearch.highlight.utils.HighlightExtractorUtils;
+import org.opensearch.neuralsearch.highlight.utils.InnerHitsHighlightLocator;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
@@ -41,13 +42,16 @@ public class SemanticHighlightingFactory implements SystemGeneratedProcessor.Sys
         SearchSourceBuilder source = request.source();
         HighlightBuilder highlightBuilder = source.highlighter();
 
-        if (highlightBuilder == null || highlightBuilder.fields() == null) {
-            return false;
+        // Top-level semantic highlight is the common case
+        if (highlightBuilder != null && highlightBuilder.fields() != null) {
+            String semanticField = HighlightExtractorUtils.extractSemanticField(highlightBuilder);
+            if (semanticField != null) {
+                return true;
+            }
         }
 
-        // Use utility method to check for semantic highlighting field
-        String semanticField = HighlightExtractorUtils.extractSemanticField(highlightBuilder);
-        return semanticField != null;
+        // Fall back to scanning the query tree for a nested.inner_hits.highlight
+        return InnerHitsHighlightLocator.find(source.query()) != null;
     }
 
     @Override

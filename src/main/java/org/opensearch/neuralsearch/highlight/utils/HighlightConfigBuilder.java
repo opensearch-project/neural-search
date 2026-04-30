@@ -30,6 +30,16 @@ public class HighlightConfigBuilder {
             }
 
             HighlightBuilder highlighter = request.source().highlighter();
+            InnerHitsHighlightLocator.Location innerHitsLocation = null;
+
+            // If no top-level semantic highlight, look inside nested.inner_hits for one.
+            if (highlighter == null || HighlightExtractorUtils.extractSemanticField(highlighter) == null) {
+                innerHitsLocation = InnerHitsHighlightLocator.find(request.source().query());
+                if (innerHitsLocation != null) {
+                    highlighter = innerHitsLocation.getHighlightBuilder();
+                }
+            }
+
             if (highlighter == null) {
                 return HighlightConfig.empty();
             }
@@ -50,6 +60,8 @@ public class HighlightConfigBuilder {
                 .postTag(HighlightExtractorUtils.extractPostTag(highlighter))
                 .batchInference(batchInference)
                 .maxBatchSize(maxBatchSize)
+                .innerHitName(innerHitsLocation != null ? innerHitsLocation.getInnerHitName() : null)
+                .nestedPath(innerHitsLocation != null ? innerHitsLocation.getNestedPath() : null)
                 .build();
 
             // Validate the configuration

@@ -144,7 +144,14 @@ public class HighlightResultApplier {
             return;
         }
 
+        // Inner hit sources are keyed by the leaf field name, not by the full nested path
         String text = (String) source.get(fieldName);
+        if (text == null) {
+            int dot = fieldName.lastIndexOf('.');
+            if (dot >= 0) {
+                text = (String) source.get(fieldName.substring(dot + 1));
+            }
+        }
         if (text == null || text.isEmpty()) {
             return;
         }
