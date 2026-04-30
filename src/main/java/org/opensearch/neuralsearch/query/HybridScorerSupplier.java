@@ -11,7 +11,6 @@ import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.ScorerSupplier;
-import org.apache.lucene.search.Weight;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -72,9 +71,12 @@ public class HybridScorerSupplier extends ScorerSupplier {
     @Override
     public BulkScorer bulkScorer() throws IOException {
         List<Scorer> scorers = new ArrayList<>();
-        for (Weight weight : weight.getWeights()) {
-            Scorer scorer = weight.scorer(context);
-            scorers.add(scorer);
+        for (ScorerSupplier ss : scorerSuppliers) {
+            if (Objects.nonNull(ss)) {
+                scorers.add(ss.get(Long.MAX_VALUE));
+            } else {
+                scorers.add(null);
+            }
         }
         return new HybridBulkScorer(scorers, scoreMode.needsScores(), context.reader().maxDoc());
     }

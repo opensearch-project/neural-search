@@ -26,9 +26,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
+import org.apache.lucene.search.BulkScorer;
+
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilderTests.TEXT_FIELD_NAME;
 
@@ -125,6 +128,35 @@ public class HybridScorerSupplierTests extends OpenSearchQueryTestCase {
         HybridScorerSupplier hybridScorerSupplier = new HybridScorerSupplier(scorerSuppliers, weight, scoreMode, context);
 
         assertEquals(100L, hybridScorerSupplier.cost());
+    }
+
+    public void testBulkScorerUsesExistingScorerSuppliers() throws IOException {
+        ScorerSupplier ss1 = createMockScorerSupplier(100L);
+        ScorerSupplier ss2 = createMockScorerSupplier(200L);
+        List<ScorerSupplier> scorerSuppliers = Arrays.asList(ss1, ss2);
+
+        HybridScorerSupplier hybridScorerSupplier = new HybridScorerSupplier(scorerSuppliers, weight, scoreMode, context);
+
+        BulkScorer bulkScorer = hybridScorerSupplier.bulkScorer();
+
+        assertNotNull(bulkScorer);
+        assertTrue(bulkScorer instanceof HybridBulkScorer);
+        // Verify get() was called on each ScorerSupplier with Long.MAX_VALUE
+        verify(ss1).get(eq(Long.MAX_VALUE));
+        verify(ss2).get(eq(Long.MAX_VALUE));
+    }
+
+    public void testBulkScorerHandlesNullScorerSupplier() throws IOException {
+        ScorerSupplier ss1 = createMockScorerSupplier(100L);
+        List<ScorerSupplier> scorerSuppliers = Arrays.asList(null, ss1);
+
+        HybridScorerSupplier hybridScorerSupplier = new HybridScorerSupplier(scorerSuppliers, weight, scoreMode, context);
+
+        BulkScorer bulkScorer = hybridScorerSupplier.bulkScorer();
+
+        assertNotNull(bulkScorer);
+        assertTrue(bulkScorer instanceof HybridBulkScorer);
+        verify(ss1).get(eq(Long.MAX_VALUE));
     }
 
     private ScorerSupplier createMockScorerSupplier() throws IOException {
