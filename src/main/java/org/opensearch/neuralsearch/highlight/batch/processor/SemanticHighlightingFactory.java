@@ -51,7 +51,7 @@ public class SemanticHighlightingFactory implements SystemGeneratedProcessor.Sys
         }
 
         // Fall back to scanning the query tree for a nested.inner_hits.highlight
-        return InnerHitsHighlightLocator.find(source.query()) != null;
+        return !InnerHitsHighlightLocator.findAll(source.query()).isEmpty();
     }
 
     @Override

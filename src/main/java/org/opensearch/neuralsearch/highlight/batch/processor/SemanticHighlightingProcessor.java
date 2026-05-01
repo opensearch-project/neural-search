@@ -153,6 +153,7 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
                         context.getValidHits(),
                         batchResults,
                         context.getFieldName(),
+                        context.getFieldNames(),
                         context.getPreTag(),
                         context.getPostTag()
                     );
@@ -257,6 +258,7 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
                             startIdx,
                             endIdx,
                             context.getFieldName(),
+                            context.getFieldNames(),
                             context.getPreTag(),
                             context.getPostTag()
                         );

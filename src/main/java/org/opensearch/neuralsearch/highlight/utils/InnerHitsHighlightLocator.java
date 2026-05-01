@@ -14,12 +14,16 @@ import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Locates a semantic highlight configuration attached to a nested query's
- * {@code inner_hits}. Supports unwrapping bool and hybrid queries so the nested
- * clause can be found several levels deep.
+ * Locates semantic highlight configurations attached to nested queries' {@code inner_hits}.
+ * Supports unwrapping bool and hybrid queries so nested clauses several levels deep are found.
  */
 public final class InnerHitsHighlightLocator {
+
+    private static final int MAX_DEPTH = 20;
 
     private InnerHitsHighlightLocator() {}
 
@@ -32,45 +36,39 @@ public final class InnerHitsHighlightLocator {
     }
 
     /**
-     * Find a semantic highlight configuration attached to a nested query's inner_hits
+     * Find all semantic highlight configurations attached to nested queries' inner_hits
      * @param query the root query to search, may be null
-     * @return the first semantic-highlight inner_hits location found, or null if none
+     * @return every semantic-highlight inner_hits location found in the query tree, in traversal order,
+     *         or an empty list if none are found
      */
-    public static Location find(QueryBuilder query) {
-        if (query == null) {
-            return null;
+    public static List<Location> findAll(QueryBuilder query) {
+        List<Location> results = new ArrayList<>();
+        collect(query, results, 0);
+        return results;
+    }
+
+    private static void collect(QueryBuilder query, List<Location> out, int depth) {
+        if (query == null || depth > MAX_DEPTH) {
+            return;
         }
         if (query instanceof NestedQueryBuilder nested) {
             Location fromThis = fromNested(nested);
             if (fromThis != null) {
-                return fromThis;
+                out.add(fromThis);
             }
-            return find(nested.query());
+            collect(nested.query(), out, depth + 1);
+            return;
         }
         if (query instanceof BoolQueryBuilder bool) {
-            Location located = findFirst(bool.must());
-            if (located != null) return located;
-            located = findFirst(bool.should());
-            if (located != null) return located;
-            located = findFirst(bool.filter());
-            if (located != null) return located;
-            return findFirst(bool.mustNot());
+            bool.must().forEach(q -> collect(q, out, depth + 1));
+            bool.should().forEach(q -> collect(q, out, depth + 1));
+            bool.filter().forEach(q -> collect(q, out, depth + 1));
+            bool.mustNot().forEach(q -> collect(q, out, depth + 1));
+            return;
         }
         if (query instanceof HybridQueryBuilder hybrid) {
-            return findFirst(hybrid.queries());
+            hybrid.queries().forEach(q -> collect(q, out, depth + 1));
         }
-        return null;
-    }
-
-    private static Location findFirst(Iterable<QueryBuilder> queries) {
-        if (queries == null) return null;
-        for (QueryBuilder qb : queries) {
-            Location located = find(qb);
-            if (located != null) {
-                return located;
-            }
-        }
-        return null;
     }
 
     private static Location fromNested(NestedQueryBuilder nested) {

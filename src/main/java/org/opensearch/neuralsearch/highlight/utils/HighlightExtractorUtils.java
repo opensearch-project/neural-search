@@ -240,6 +240,19 @@ public class HighlightExtractorUtils {
     }
 
     /**
+     * Strip the nested path prefix from a field name to get the leaf key used inside inner hit sources
+     * @param fieldName the field name with nested path prefix (e.g. "chunks.text")
+     * @param nestedPath the nested path (e.g. "chunks"), may be null
+     * @return the leaf field name (e.g. "text"), or the original field name when the prefix is absent
+     */
+    public static String stripNestedPrefix(String fieldName, String nestedPath) {
+        if (nestedPath != null && fieldName != null && fieldName.startsWith(nestedPath + ".")) {
+            return fieldName.substring(nestedPath.length() + 1);
+        }
+        return fieldName;
+    }
+
+    /**
      * Generic method to extract highlight option (global or field-specific)
      * @param highlighter the highlighter configuration
      * @param optionKey the option key to extract

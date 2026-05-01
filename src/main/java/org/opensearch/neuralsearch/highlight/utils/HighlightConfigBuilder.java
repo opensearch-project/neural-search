@@ -10,6 +10,9 @@ import org.opensearch.action.search.SearchResponse;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * Unified configuration builder for semantic highlighting.
  * Provides configuration building for both single and batch semantic highlighting modes.
@@ -30,41 +33,39 @@ public class HighlightConfigBuilder {
             }
 
             HighlightBuilder highlighter = request.source().highlighter();
-            InnerHitsHighlightLocator.Location innerHitsLocation = null;
+            String topLevelField = (highlighter != null) ? HighlightExtractorUtils.extractSemanticField(highlighter) : null;
 
-            // If no top-level semantic highlight, look inside nested.inner_hits for one.
-            if (highlighter == null || HighlightExtractorUtils.extractSemanticField(highlighter) == null) {
-                innerHitsLocation = InnerHitsHighlightLocator.find(request.source().query());
-                if (innerHitsLocation != null) {
-                    highlighter = innerHitsLocation.getHighlightBuilder();
+            // Collect every semantic inner_hits target declared on nested queries.
+            // A request may carry both a top-level semantic field and inner_hits
+            // targets; both contribute to the final configuration.
+            List<HighlightConfig.InnerHitsTarget> innerHitsTargets = new ArrayList<>();
+            List<InnerHitsHighlightLocator.Location> locations = InnerHitsHighlightLocator.findAll(request.source().query());
+            for (InnerHitsHighlightLocator.Location loc : locations) {
+                String field = HighlightExtractorUtils.extractSemanticField(loc.getHighlightBuilder());
+                if (field != null) {
+                    innerHitsTargets.add(new HighlightConfig.InnerHitsTarget(loc.getInnerHitName(), loc.getNestedPath(), field));
                 }
             }
 
-            if (highlighter == null) {
+            if (topLevelField == null && innerHitsTargets.isEmpty()) {
                 return HighlightConfig.empty();
             }
 
-            String fieldName = HighlightExtractorUtils.extractSemanticField(highlighter);
-            String modelId = HighlightExtractorUtils.extractModelId(highlighter);
-            String queryText = HighlightExtractorUtils.extractQueryText(request);
-
-            // Extract batch inference settings from options
-            boolean batchInference = HighlightExtractorUtils.extractBatchInference(highlighter);
-            int maxBatchSize = HighlightExtractorUtils.extractMaxBatchSize(highlighter);
+            // Source global settings (model_id, tags, batch_inference) from the top-level
+            // highlighter when present, otherwise from the first inner_hits highlighter.
+            HighlightBuilder settingsSource = (topLevelField != null) ? highlighter : locations.get(0).getHighlightBuilder();
 
             HighlightConfig config = HighlightConfig.builder()
-                .fieldName(fieldName)
-                .modelId(modelId)
-                .queryText(queryText)
-                .preTag(HighlightExtractorUtils.extractPreTag(highlighter))
-                .postTag(HighlightExtractorUtils.extractPostTag(highlighter))
-                .batchInference(batchInference)
-                .maxBatchSize(maxBatchSize)
-                .innerHitName(innerHitsLocation != null ? innerHitsLocation.getInnerHitName() : null)
-                .nestedPath(innerHitsLocation != null ? innerHitsLocation.getNestedPath() : null)
+                .fieldName(topLevelField)
+                .modelId(HighlightExtractorUtils.extractModelId(settingsSource))
+                .queryText(HighlightExtractorUtils.extractQueryText(request))
+                .preTag(HighlightExtractorUtils.extractPreTag(settingsSource))
+                .postTag(HighlightExtractorUtils.extractPostTag(settingsSource))
+                .batchInference(HighlightExtractorUtils.extractBatchInference(settingsSource))
+                .maxBatchSize(HighlightExtractorUtils.extractMaxBatchSize(settingsSource))
+                .innerHitsTargets(innerHitsTargets.isEmpty() ? null : innerHitsTargets)
                 .build();
 
-            // Validate the configuration
             return HighlightValidator.validate(config, response);
 
         } catch (Exception e) {

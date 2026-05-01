@@ -478,4 +478,263 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         assertFalse("Highlight fragments should not be empty", fragments.isEmpty());
         assertTrue("Fragment should contain <em> tag: " + fragments.get(0), fragments.get(0).contains("<em>"));
     }
+
+    /**
+     * Test batch semantic highlighting when a bool query contains two nested clauses,
+     * each with its own inner_hits semantic highlight on a different field
+     */
+    public void testSemanticHighlightingOnMultipleInnerHitsWithBatchEnabledWithRemoteModel() throws Exception {
+        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
+
+        String multiNestedIndex = "test-semantic-highlight-multi-nested-index";
+
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("mappings")
+            .startObject("properties")
+            .startObject("reviews")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("text")
+            .field("type", "text")
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject("qa")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("answer")
+            .field("type", "text")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request createIndex = new Request("PUT", "/" + multiNestedIndex);
+        createIndex.setJsonEntity(mapping.toString());
+        client().performRequest(createIndex);
+
+        String doc = "{"
+            + "\"reviews\":[{\"text\":\"Treatments for neurodegenerative diseases like Parkinson improved battery life\"}],"
+            + "\"qa\":[{\"answer\":\"Treatments for neurodegenerative diseases are IP68 water resistant\"}]"
+            + "}";
+        Request indexDoc = new Request("PUT", "/" + multiNestedIndex + "/_doc/1?refresh=true");
+        indexDoc.setJsonEntity(doc);
+        client().performRequest(indexDoc);
+
+        XContentBuilder searchBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("query")
+            .startObject("bool")
+            .startArray("must")
+            .startObject()
+            .startObject("nested")
+            .field("path", "reviews")
+            .startObject("query")
+            .startObject("match")
+            .field("reviews.text", "treatments for neurodegenerative diseases")
+            .endObject()
+            .endObject()
+            .startObject("inner_hits")
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject("reviews.text")
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject("nested")
+            .field("path", "qa")
+            .startObject("query")
+            .startObject("match")
+            .field("qa.answer", "treatments for neurodegenerative diseases")
+            .endObject()
+            .endObject()
+            .startObject("inner_hits")
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject("qa.answer")
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request request = new Request("POST", "/" + multiNestedIndex + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+        List<Map<String, Object>> topHits = (List<Map<String, Object>>) ((Map<String, Object>) responseMap.get("hits")).get("hits");
+        assertFalse("Expected at least one matching document", topHits.isEmpty());
+
+        Map<String, Object> innerHitsBlock = (Map<String, Object>) topHits.get(0).get("inner_hits");
+        assertNotNull("inner_hits block must exist", innerHitsBlock);
+
+        // Both nested buckets should carry highlighted inner hits
+        for (String bucket : new String[] { "reviews", "qa" }) {
+            Map<String, Object> bucketBlock = (Map<String, Object>) innerHitsBlock.get(bucket);
+            assertNotNull("inner_hits bucket for '" + bucket + "' must exist", bucketBlock);
+            List<Map<String, Object>> innerHits = (List<Map<String, Object>>) ((Map<String, Object>) bucketBlock.get("hits")).get("hits");
+            assertFalse("inner hits for '" + bucket + "' should not be empty", innerHits.isEmpty());
+
+            Map<String, Object> highlight = (Map<String, Object>) innerHits.get(0).get("highlight");
+            assertNotNull("Inner hit in '" + bucket + "' should carry a highlight field", highlight);
+            String fieldKey = bucket.equals("reviews") ? "reviews.text" : "qa.answer";
+            List<String> fragments = (List<String>) highlight.get(fieldKey);
+            assertNotNull("Highlight key should be '" + fieldKey + "'", fragments);
+            assertFalse("Highlight fragments for '" + fieldKey + "' should not be empty", fragments.isEmpty());
+            assertTrue("Fragment should contain <em> tag: " + fragments.get(0), fragments.get(0).contains("<em>"));
+        }
+    }
+
+    /**
+     * Test batch semantic highlighting when a request declares both a top-level
+     * semantic highlight and a nested inner_hits semantic highlight. Both the
+     * top-level hit and the inner hits should carry highlighted fragments under
+     * their respective field names.
+     */
+    public void testSemanticHighlightingOnTopLevelAndInnerHitsWithBatchEnabledWithRemoteModel() throws Exception {
+        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
+
+        String mixedIndex = "test-semantic-highlight-top-and-inner-index";
+
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("mappings")
+            .startObject("properties")
+            .startObject("title")
+            .field("type", "text")
+            .endObject()
+            .startObject("chunks")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("text")
+            .field("type", "text")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request createIndex = new Request("PUT", "/" + mixedIndex);
+        createIndex.setJsonEntity(mapping.toString());
+        client().performRequest(createIndex);
+
+        String doc = "{"
+            + "\"title\":\"Treatments for neurodegenerative diseases are expanding rapidly.\","
+            + "\"chunks\":["
+            + "{\"text\":\"Treatments for neurodegenerative diseases like Parkinson disease include various therapeutic approaches.\"},"
+            + "{\"text\":\"Ransomware attacks on healthcare systems tripled in 2025.\"}"
+            + "]}";
+        Request indexDoc = new Request("PUT", "/" + mixedIndex + "/_doc/1?refresh=true");
+        indexDoc.setJsonEntity(doc);
+        client().performRequest(indexDoc);
+
+        XContentBuilder searchBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("query")
+            .startObject("bool")
+            .startArray("must")
+            .startObject()
+            .startObject("match")
+            .field("title", "treatments for neurodegenerative diseases")
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject("nested")
+            .field("path", "chunks")
+            .startObject("query")
+            .startObject("match")
+            .field("chunks.text", "treatments for neurodegenerative diseases")
+            .endObject()
+            .endObject()
+            .startObject("inner_hits")
+            .field("size", 2)
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject("chunks.text")
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject()
+            .endObject()
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject("title")
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request request = new Request("POST", "/" + mixedIndex + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+        List<Map<String, Object>> topHits = (List<Map<String, Object>>) ((Map<String, Object>) responseMap.get("hits")).get("hits");
+        assertFalse("Expected at least one matching document", topHits.isEmpty());
+
+        Map<String, Object> topHit = topHits.get(0);
+
+        // Top-level highlight on "title" must exist
+        Map<String, Object> topHighlight = (Map<String, Object>) topHit.get("highlight");
+        assertNotNull("Top-level highlight block should exist", topHighlight);
+        List<String> titleFragments = (List<String>) topHighlight.get("title");
+        assertNotNull("Top-level highlight key should be 'title'", titleFragments);
+        assertFalse("Top-level highlight fragments should not be empty", titleFragments.isEmpty());
+        assertTrue("Top-level fragment should contain <em> tag: " + titleFragments.get(0), titleFragments.get(0).contains("<em>"));
+
+        // Inner_hits highlight on "chunks.text" must also exist
+        Map<String, Object> innerHitsBlock = (Map<String, Object>) topHit.get("inner_hits");
+        assertNotNull("inner_hits block must exist", innerHitsBlock);
+        Map<String, Object> chunksBlock = (Map<String, Object>) innerHitsBlock.get("chunks");
+        assertNotNull("inner_hits bucket for 'chunks' must exist", chunksBlock);
+        List<Map<String, Object>> innerHits = (List<Map<String, Object>>) ((Map<String, Object>) chunksBlock.get("hits")).get("hits");
+        assertFalse("Expected at least one inner hit", innerHits.isEmpty());
+
+        Map<String, Object> innerHighlight = (Map<String, Object>) innerHits.get(0).get("highlight");
+        assertNotNull("Inner hit should carry a highlight field", innerHighlight);
+        List<String> chunkFragments = (List<String>) innerHighlight.get("chunks.text");
+        assertNotNull("Inner hit highlight key should be 'chunks.text'", chunkFragments);
+        assertFalse("Inner hit highlight fragments should not be empty", chunkFragments.isEmpty());
+        assertTrue("Inner hit fragment should contain <em> tag: " + chunkFragments.get(0), chunkFragments.get(0).contains("<em>"));
+    }
 }

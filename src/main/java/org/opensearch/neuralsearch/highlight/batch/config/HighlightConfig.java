@@ -4,8 +4,10 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.config;
 
+import java.util.List;
 import java.util.Locale;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.With;
@@ -43,16 +45,18 @@ public class HighlightConfig {
     @With
     private final FunctionName modelType;
 
-    private final String innerHitName;
+    private final List<InnerHitsTarget> innerHitsTargets;
 
-    private final String nestedPath;
+    @Getter
+    @AllArgsConstructor
+    public static class InnerHitsTarget {
+        private final String innerHitName;
+        private final String nestedPath;
+        private final String fieldName;
+    }
 
-    /**
-     * Check if this configuration targets inner_hits instead of top-level hits
-     * @return true if the configuration was discovered on a nested query's inner_hits
-     */
-    public boolean isInnerHitsScoped() {
-        return innerHitName != null;
+    public boolean hasInnerHitsTargets() {
+        return innerHitsTargets != null && !innerHitsTargets.isEmpty();
     }
 
     /**
@@ -60,15 +64,16 @@ public class HighlightConfig {
      * @return true if no validation error exists and all required fields are present
      */
     public boolean isValid() {
-        return validationError == null && fieldName != null && modelId != null && queryText != null && validateBatchInference() == null;
+        return validationError == null && hasRequiredFields() && validateBatchInference() == null;
     }
 
     /**
-     * Check if configuration has required fields (before model type enrichment)
+     * Check if configuration has required fields (before model type enrichment).
+     * At least one of top-level field or inner_hits targets must be present.
      * @return true if required fields are present
      */
     public boolean hasRequiredFields() {
-        return fieldName != null && modelId != null && queryText != null;
+        return (fieldName != null || hasInnerHitsTargets()) && modelId != null && queryText != null;
     }
 
     /**
