@@ -296,7 +296,7 @@ dependencies {
     }
     runtimeOnly group: 'net.minidev', name:'json-smart', version: "${versions.json_smart}"
     implementation("com.fasterxml.jackson.core:jackson-annotations:${versions.jackson_annotations}")
-    implementation("com.fasterxml.jackson.core:jackson-databind:${versions.jackson_databind}")
+    implementation("tools.jackson.core:jackson-databind:${versions.jackson3_databind}")
     testFixturesImplementation "org.opensearch:common-utils:${version}"
     testFixturesImplementation group: 'org.apache.commons', name: 'commons-lang3', version: "${versions.commonslang}"
     testFixturesCompileOnly (group: 'com.google.guava', name: 'guava', version:"${versions.guava}") {
