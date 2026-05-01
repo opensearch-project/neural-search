@@ -545,8 +545,142 @@ task updateVersion {
     doLast {
         ext.newVersion = System.getProperty('newVersion')
         println "Setting version to ${newVersion}."
-        // String tokenization to support -SNAPSHOT
-        ant.replaceregexp(file:'build.gradle', match: '"opensearch.version", "\\d.*"', replace: '"opensearch.version", "' + newVersion.tokenize('-')[0] + '-SNAPSHOT"', flags:'g', byline:true)
+
+        // Parse version strings
+        ext.newVersionWithoutSnapshot = newVersion.tokenize('-')[0]
+        ext.currentVersionWithoutSnapshot = opensearch_version.tokenize('-')[0]
+
+        // Step 1: Update build.gradle with new OpenSearch version
+        ant.replaceregexp(
+            file: 'build.gradle',
+            match: '"opensearch.version", "\\d.*"',
+            replace: "\"opensearch.version\", \"${newVersionWithoutSnapshot}-SNAPSHOT\"",
+            flags: 'g',
+            byline: true
+        )
+
+        // Step 2: Read current BWC versions from gradle.properties to determine what to update
+        def gradlePropsFile = file('gradle.properties')
+        def currentBwcVersion = null
+        def currentBwcBundleVersion = null
+
+        gradlePropsFile.eachLine { line ->
+            if (line.startsWith('systemProp.bwc.version=')) {
+                currentBwcVersion = line.split('=')[1].trim().tokenize('-')[0]
+            }
+            if (line.startsWith('systemProp.bwc.bundle.version=')) {
+                currentBwcBundleVersion = line.split('=')[1].trim()
+            }
+        }
+
+        if (currentBwcVersion == null || currentBwcBundleVersion == null) {
+            throw new GradleException("Could not read BWC versions from gradle.properties")
+        }
+
+        println "Current BWC version: ${currentBwcVersion}"
+        println "Current BWC bundle version: ${currentBwcBundleVersion}"
+        println "New OpenSearch version: ${newVersionWithoutSnapshot}"
+        println "Previous OpenSearch version: ${currentVersionWithoutSnapshot}"
+
+        // Step 3: Update gradle.properties - systemProp.bwc.version
+        ant.replaceregexp(
+            file: 'gradle.properties',
+            match: "systemProp.bwc.version=${currentBwcVersion}(-SNAPSHOT)?",
+            replace: "systemProp.bwc.version=${newVersionWithoutSnapshot}-SNAPSHOT",
+            flags: 'g',
+            byline: true
+        )
+
+        // Step 4: Update gradle.properties - systemProp.bwc.bundle.version
+        ant.replaceregexp(
+            file: 'gradle.properties',
+            match: "systemProp.bwc.bundle.version=${currentBwcBundleVersion}",
+            replace: "systemProp.bwc.bundle.version=${currentVersionWithoutSnapshot}",
+            flags: 'g',
+            byline: true
+        )
+
+        // Step 5: Update backwards_compatibility_tests_workflow.yml - opensearch_version
+        ant.replaceregexp(
+            file: '.github/workflows/backwards_compatibility_tests_workflow.yml',
+            match: "opensearch_version\\s*:\\s*\\[\\s*\"${currentVersionWithoutSnapshot}-SNAPSHOT\"\\s*\\]",
+            replace: "opensearch_version : [\"${newVersionWithoutSnapshot}-SNAPSHOT\"]",
+            flags: 'g',
+            byline: true
+        )
+
+        // Step 6: Update backwards_compatibility_tests_workflow.yml - bwc_version arrays
+        // Add the current version to the BWC version list if not already present
+        def workflowFile = file('.github/workflows/backwards_compatibility_tests_workflow.yml')
+        def workflowContent = workflowFile.text
+
+        if (!workflowContent.contains("\"${currentVersionWithoutSnapshot}\"")) {
+            // Read the workflow file and update it manually for more precise control
+            def updatedContent = workflowContent
+
+            // Helper closure to check if current version is later than the last version in a list
+            def isCurrentVersionNewer = { String lastVersion ->
+                def lastVersionParts = lastVersion.tokenize('.')
+                def lastMajor = lastVersionParts[0] as Integer
+                def lastMinor = lastVersionParts[1] as Integer
+                def lastPatch = lastVersionParts.size() > 2 ? lastVersionParts[2] as Integer : 0
+
+                def currentVersionParts = currentVersionWithoutSnapshot.tokenize('.')
+                def currentMajor = currentVersionParts[0] as Integer
+                def currentMinor = currentVersionParts[1] as Integer
+                def currentPatch = currentVersionParts.size() > 2 ? currentVersionParts[2] as Integer : 0
+
+                return (currentMajor > lastMajor) ||
+                       (currentMajor == lastMajor && currentMinor > lastMinor) ||
+                       (currentMajor == lastMajor && currentMinor == lastMinor && currentPatch > lastPatch)
+            }
+
+            // Helper closure to extract versions from bwc_version array
+            def extractVersions = { String content ->
+                def matcher = content =~ /bwc_version\s*:\s*\[([^\]]+)\]/
+                if (matcher.find()) {
+                    def versionListStr = matcher.group(1)
+                    return versionListStr.findAll(/"([^"]+)"/).collect { it.replaceAll('"', '').trim() }
+                }
+                return []
+            }
+
+            // For Restart-Upgrade-BWCTests-NeuralSearch job
+            def restartStart = updatedContent.indexOf('Restart-Upgrade-BWCTests-NeuralSearch:')
+            def rollingStart = updatedContent.indexOf('Rolling-Upgrade-BWCTests-NeuralSearch:')
+
+            if (restartStart != -1 && rollingStart != -1) {
+                // Extract and update Restart-Upgrade section
+                def restartSection = updatedContent.substring(restartStart, rollingStart)
+                def restartVersions = extractVersions(restartSection)
+                if (!restartVersions.isEmpty() && isCurrentVersionNewer(restartVersions.last())) {
+                    def updatedRestartSection = restartSection.replaceFirst(
+                        /(?m)(^\s*bwc_version\s*:\s*\[([^\]]+))\]/,
+                        "\$1, \"${currentVersionWithoutSnapshot}\"]"
+                    )
+                    updatedContent = updatedContent.substring(0, restartStart) + updatedRestartSection + updatedContent.substring(rollingStart)
+                    println "Added ${currentVersionWithoutSnapshot} to Restart-Upgrade BWC version list"
+                }
+
+                // Extract and update Rolling-Upgrade section
+                def rollingSection = updatedContent.substring(rollingStart)
+                def rollingVersions = extractVersions(rollingSection)
+                if (!rollingVersions.isEmpty() && isCurrentVersionNewer(rollingVersions.last())) {
+                    def updatedRollingSection = rollingSection.replaceFirst(
+                        /(?m)(^\s*bwc_version:\s*\[([^\]]+))\]/,
+                        "\$1, \"${currentVersionWithoutSnapshot}\"]"
+                    )
+                    // Need to recalculate rollingStart in case the restart section changed
+                    def newRollingStart = updatedContent.indexOf('Rolling-Upgrade-BWCTests-NeuralSearch:')
+                    updatedContent = updatedContent.substring(0, newRollingStart) + updatedRollingSection
+                    println "Added ${currentVersionWithoutSnapshot} to Rolling-Upgrade BWC version list"
+                }
+            }
+
+            workflowFile.text = updatedContent
+        } else {
+            println "Version ${currentVersionWithoutSnapshot} already exists in BWC version list"
+        }
     }
 }
 
