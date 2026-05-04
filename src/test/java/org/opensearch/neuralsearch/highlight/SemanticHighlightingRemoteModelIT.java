@@ -394,7 +394,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
     }
 
     /**
-     * Test batch semantic highlighting on nested field retrieved via inner_hits with remote model
+     * Test batch semantic highlighting on nested field retrieved via inner_hits with remote model.
+     * The top-level highlight declares {@code chunks.text} and uses the {@code nested_paths}
+     * option so the processor knows to pull text from the {@code chunks} inner_hits bucket.
      */
     public void testSemanticHighlightingOnInnerHitsWithBatchEnabledWithRemoteModel() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
@@ -441,6 +443,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .startObject("inner_hits")
             .field("size", 2)
+            .endObject()
+            .endObject()
+            .endObject()
             .startObject("highlight")
             .startObject("fields")
             .startObject("chunks.text")
@@ -450,9 +455,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
             .field("batch_inference", true)
-            .endObject()
-            .endObject()
-            .endObject()
+            .startArray("nested_paths")
+            .value("chunks")
+            .endArray()
             .endObject()
             .endObject()
             .endObject();
@@ -480,8 +485,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
     }
 
     /**
-     * Test batch semantic highlighting when a bool query contains two nested clauses,
-     * each with its own inner_hits semantic highlight on a different field
+     * Test batch semantic highlighting when a bool query contains two nested clauses;
+     * the top-level highlighter declares both inner_hits fields and uses
+     * {@code nested_paths} to point the processor at the two inner_hits buckets.
      */
     public void testSemanticHighlightingOnMultipleInnerHitsWithBatchEnabledWithRemoteModel() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
@@ -538,17 +544,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .endObject()
             .startObject("inner_hits")
-            .startObject("highlight")
-            .startObject("fields")
-            .startObject("reviews.text")
-            .field("type", "semantic")
-            .endObject()
-            .endObject()
-            .startObject("options")
-            .field("model_id", remoteHighlightModelId)
-            .field("batch_inference", true)
-            .endObject()
-            .endObject()
             .endObject()
             .endObject()
             .endObject()
@@ -561,8 +556,17 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .endObject()
             .startObject("inner_hits")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject()
+            .endObject()
             .startObject("highlight")
             .startObject("fields")
+            .startObject("reviews.text")
+            .field("type", "semantic")
+            .endObject()
             .startObject("qa.answer")
             .field("type", "semantic")
             .endObject()
@@ -570,11 +574,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
             .field("batch_inference", true)
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
-            .endObject()
+            .startArray("nested_paths")
+            .value("reviews")
+            .value("qa")
             .endArray()
             .endObject()
             .endObject()
@@ -610,8 +612,8 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
     }
 
     /**
-     * Test batch semantic highlighting when a request declares both a top-level
-     * semantic highlight and a nested inner_hits semantic highlight. Both the
+     * Test batch semantic highlighting when the top-level highlighter declares both a
+     * non-nested field and a field that is under a declared nested path. Both the
      * top-level hit and the inner hits should carry highlighted fragments under
      * their respective field names.
      */
@@ -673,17 +675,6 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .endObject()
             .startObject("inner_hits")
             .field("size", 2)
-            .startObject("highlight")
-            .startObject("fields")
-            .startObject("chunks.text")
-            .field("type", "semantic")
-            .endObject()
-            .endObject()
-            .startObject("options")
-            .field("model_id", remoteHighlightModelId)
-            .field("batch_inference", true)
-            .endObject()
-            .endObject()
             .endObject()
             .endObject()
             .endObject()
@@ -695,10 +686,16 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             .startObject("title")
             .field("type", "semantic")
             .endObject()
+            .startObject("chunks.text")
+            .field("type", "semantic")
+            .endObject()
             .endObject()
             .startObject("options")
             .field("model_id", remoteHighlightModelId)
             .field("batch_inference", true)
+            .startArray("nested_paths")
+            .value("chunks")
+            .endArray()
             .endObject()
             .endObject()
             .endObject();
@@ -736,5 +733,104 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         assertNotNull("Inner hit highlight key should be 'chunks.text'", chunkFragments);
         assertFalse("Inner hit highlight fragments should not be empty", chunkFragments.isEmpty());
         assertTrue("Inner hit fragment should contain <em> tag: " + chunkFragments.get(0), chunkFragments.get(0).contains("<em>"));
+    }
+
+    /**
+     * Test batch semantic highlighting when the query assigns a custom
+     * {@code inner_hits.name} to a nested clause. The top-level highlighter uses
+     * {@code inner_hits_names} to tell the processor the custom bucket name so it
+     * still locates the inner hits and produces highlights.
+     */
+    public void testSemanticHighlightingWithCustomInnerHitsNameWithRemoteModel() throws Exception {
+        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
+
+        String customNameIndex = "test-semantic-highlight-custom-inner-hits-name-index";
+
+        XContentBuilder mapping = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("mappings")
+            .startObject("properties")
+            .startObject("chunks")
+            .field("type", "nested")
+            .startObject("properties")
+            .startObject("text")
+            .field("type", "text")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request createIndex = new Request("PUT", "/" + customNameIndex);
+        createIndex.setJsonEntity(mapping.toString());
+        client().performRequest(createIndex);
+
+        String doc = "{\"chunks\":["
+            + "{\"text\":\"Treatments for neurodegenerative diseases like Parkinson disease include various therapeutic approaches.\"},"
+            + "{\"text\":\"Ransomware attacks on healthcare systems tripled in 2025.\"}"
+            + "]}";
+        Request indexDoc = new Request("PUT", "/" + customNameIndex + "/_doc/1?refresh=true");
+        indexDoc.setJsonEntity(doc);
+        client().performRequest(indexDoc);
+
+        // Query uses a custom inner_hits.name; options.inner_hits_names tells the processor about it.
+        XContentBuilder searchBody = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("query")
+            .startObject("nested")
+            .field("path", "chunks")
+            .startObject("query")
+            .startObject("match")
+            .field("chunks.text", "treatments for neurodegenerative diseases")
+            .endObject()
+            .endObject()
+            .startObject("inner_hits")
+            .field("name", "relevant_chunks")
+            .field("size", 2)
+            .endObject()
+            .endObject()
+            .endObject()
+            .startObject("highlight")
+            .startObject("fields")
+            .startObject("chunks.text")
+            .field("type", "semantic")
+            .endObject()
+            .endObject()
+            .startObject("options")
+            .field("model_id", remoteHighlightModelId)
+            .field("batch_inference", true)
+            .startArray("nested_paths")
+            .value("chunks")
+            .endArray()
+            .startArray("inner_hits_names")
+            .value("relevant_chunks")
+            .endArray()
+            .endObject()
+            .endObject()
+            .endObject();
+
+        Request request = new Request("POST", "/" + customNameIndex + "/_search");
+        request.setJsonEntity(searchBody.toString());
+        Response response = client().performRequest(request);
+        String responseBody = EntityUtils.toString(response.getEntity());
+        Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+        List<Map<String, Object>> topHits = (List<Map<String, Object>>) ((Map<String, Object>) responseMap.get("hits")).get("hits");
+        assertFalse("Expected at least one matching document", topHits.isEmpty());
+
+        Map<String, Object> innerHitsBlock = (Map<String, Object>) topHits.get(0).get("inner_hits");
+        // Bucket name is the custom "relevant_chunks", not the default "chunks"
+        Map<String, Object> nestedBlock = (Map<String, Object>) innerHitsBlock.get("relevant_chunks");
+        assertNotNull("Custom inner_hits bucket 'relevant_chunks' must exist", nestedBlock);
+        List<Map<String, Object>> innerHits = (List<Map<String, Object>>) ((Map<String, Object>) nestedBlock.get("hits")).get("hits");
+        assertFalse("Expected at least one inner hit", innerHits.isEmpty());
+
+        Map<String, Object> highlight = (Map<String, Object>) innerHits.get(0).get("highlight");
+        assertNotNull("Inner hit should carry a highlight field", highlight);
+        List<String> fragments = (List<String>) highlight.get("chunks.text");
+        assertNotNull("Highlight key should be 'chunks.text'", fragments);
+        assertFalse("Highlight fragments should not be empty", fragments.isEmpty());
+        assertTrue("Fragment should contain <em> tag: " + fragments.get(0), fragments.get(0).contains("<em>"));
     }
 }

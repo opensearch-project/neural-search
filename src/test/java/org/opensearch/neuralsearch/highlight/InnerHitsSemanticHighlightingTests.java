@@ -4,20 +4,14 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
-import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.common.bytes.BytesArray;
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
-import org.opensearch.index.query.NestedQueryBuilder;
-import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightContextBuilder;
 import org.opensearch.neuralsearch.highlight.utils.HighlightConfigBuilder;
-import org.opensearch.neuralsearch.highlight.utils.InnerHitsHighlightLocator;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -26,6 +20,7 @@ import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.opensearch.search.internal.InternalSearchResponse;
 import org.opensearch.test.OpenSearchTestCase;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -33,7 +28,7 @@ import java.util.Map;
 
 /**
  * Unit tests for batch semantic highlighting on nested fields retrieved through
- * {@code inner_hits}.
+ * {@code inner_hits}, driven by the top-level {@code nested_paths} option.
  */
 public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
 
@@ -43,19 +38,18 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
     private static final String QUERY_TEXT = "company earnings";
 
     /**
-     * HighlightConfigBuilder must discover a semantic highlight attached to inner_hits
-     * when no top-level highlighter is present
+     * With a top-level semantic highlight whose field name is under a declared nested path,
+     * HighlightConfigBuilder must classify it as an inner_hits target.
      */
-    public void testConfigBuilderDiscoversHighlightOnInnerHits() {
-        SearchRequest request = buildInnerHitsRequest(NESTED_PATH, SEMANTIC_FIELD);
+    public void testConfigBuilderClassifiesFieldUnderDeclaredNestedPathAsInnerHits() {
+        SearchRequest request = buildTopLevelRequest(Collections.singletonList(SEMANTIC_FIELD), Collections.singletonList(NESTED_PATH));
         SearchResponse response = buildResponseWithInnerHits(List.of(List.of("Apple revenue hit 90 billion dollars this quarter.")));
 
         HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, response);
 
         assertNull("config should not have a validation error", config.getValidationError());
-        assertNull("top-level field must be null when only inner_hits declare semantic", config.getFieldName());
+        assertNull("no top-level field is declared", config.getFieldName());
         assertEquals(MODEL_ID, config.getModelId());
-        assertEquals(QUERY_TEXT, config.getQueryText());
         assertTrue("batch_inference option should be carried over", config.isBatchInference());
         assertTrue("config must carry inner_hits targets", config.hasInnerHitsTargets());
 
@@ -67,22 +61,14 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
     }
 
     /**
-     * Multiple nested clauses under a bool query should each contribute a target so
-     * all of them receive semantic highlighting.
+     * When nested_paths declares multiple paths and multiple fields belong to them,
+     * each field becomes its own inner_hits target.
      */
-    public void testConfigBuilderCollectsAllInnerHitsTargetsFromBoolQuery() {
-        NestedQueryBuilder reviewsNested = buildNestedWithSemanticInnerHits("reviews", "reviews.text");
-        NestedQueryBuilder qaNested = buildNestedWithSemanticInnerHits("qa", "qa.answer");
-
-        BoolQueryBuilder boolQuery = QueryBuilders.boolQuery().must(reviewsNested).must(qaNested);
-
-        SearchRequest request = new SearchRequest();
-        request.source(new SearchSourceBuilder().query(boolQuery));
-
-        List<InnerHitsHighlightLocator.Location> locations = InnerHitsHighlightLocator.findAll(boolQuery);
-        assertEquals("both nested inner_hits highlights should be discovered", 2, locations.size());
+    public void testConfigBuilderSupportsMultipleNestedPaths() {
+        SearchRequest request = buildTopLevelRequest(Arrays.asList("reviews.text", "qa.answer"), Arrays.asList("reviews", "qa"));
 
         HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
+
         assertTrue(config.hasInnerHitsTargets());
         assertNull(config.getFieldName());
         assertEquals(2, config.getInnerHitsTargets().size());
@@ -93,19 +79,38 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
     }
 
     /**
-     * The locator must not claim inner_hits that carry a non-semantic highlighter
+     * Without nested_paths, every semantic highlight field is treated as a top-level
+     * field -- the existing semantic highlighter behaviour is unchanged.
      */
-    public void testLocatorSkipsInnerHitsWithNonSemanticHighlight() {
-        HighlightBuilder plainHighlighter = new HighlightBuilder().field(new HighlightBuilder.Field(SEMANTIC_FIELD));
-        NestedQueryBuilder nested = QueryBuilders.nestedQuery(NESTED_PATH, new MatchQueryBuilder(SEMANTIC_FIELD, QUERY_TEXT), ScoreMode.Avg)
-            .innerHit(new InnerHitBuilder().setHighlightBuilder(plainHighlighter));
+    public void testConfigBuilderIgnoresNestedPathsWhenNotDeclared() {
+        SearchRequest request = buildTopLevelRequest(Collections.singletonList("text"), Collections.emptyList());
 
-        assertTrue("non-semantic inner_hits highlight should be ignored", InnerHitsHighlightLocator.findAll(nested).isEmpty());
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
+
+        assertEquals("text", config.getFieldName());
+        assertFalse(config.hasInnerHitsTargets());
+    }
+
+    /**
+     * A request that declares both a top-level field (outside any nested_paths prefix)
+     * and an inner_hits field (under a declared nested path) must produce a config
+     * carrying both.
+     */
+    public void testConfigBuilderKeepsBothTopLevelAndInnerHitsTargets() {
+        SearchRequest request = buildTopLevelRequest(Arrays.asList("title", SEMANTIC_FIELD), Collections.singletonList(NESTED_PATH));
+
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
+
+        assertNull(config.getValidationError());
+        assertEquals("top-level field must be captured", "title", config.getFieldName());
+        assertTrue("inner_hits targets must also be captured", config.hasInnerHitsTargets());
+        assertEquals(1, config.getInnerHitsTargets().size());
+        assertEquals(SEMANTIC_FIELD, config.getInnerHitsTargets().get(0).getFieldName());
     }
 
     /**
      * HighlightContextBuilder must collect text from inner hits and store the inner
-     * hits themselves as validHits
+     * hits themselves as validHits.
      */
     public void testContextBuilderCollectsTextAndInnerHits() {
         HighlightConfig config = innerHitsConfig(NESTED_PATH, SEMANTIC_FIELD);
@@ -119,7 +124,6 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
         HighlightContext context = new HighlightContextBuilder().build(config, response, 0L);
 
         assertEquals("one request per inner hit across all articles", 3, context.size());
-        assertEquals("field name on context keeps the full nested path", SEMANTIC_FIELD, context.getFieldName());
 
         List<SentenceHighlightingRequest> requests = context.getRequests();
         assertEquals("Apple revenue hit 90 billion dollars.", requests.get(0).getContext());
@@ -139,7 +143,6 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
      */
     public void testContextBuilderMultiTargetRecordsPerHitFieldName() {
         HighlightConfig config = HighlightConfig.builder()
-            .fieldName("reviews.text")
             .modelId(MODEL_ID)
             .queryText(QUERY_TEXT)
             .batchInference(true)
@@ -160,33 +163,6 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
         assertEquals(2, context.getFieldNames().size());
         assertEquals("reviews.text", context.getFieldNames().get(0));
         assertEquals("qa.answer", context.getFieldNames().get(1));
-    }
-
-    /**
-     * A request that declares both a top-level semantic highlight <i>and</i> a
-     * nested inner_hits semantic highlight should produce a config carrying both.
-     */
-    public void testConfigBuilderKeepsBothTopLevelAndInnerHitsTargets() {
-        NestedQueryBuilder nested = buildNestedWithSemanticInnerHits(NESTED_PATH, SEMANTIC_FIELD);
-
-        HighlightBuilder.Field topLevelField = new HighlightBuilder.Field("title").highlighterType(
-            SemanticHighlightingConstants.HIGHLIGHTER_TYPE
-        );
-        Map<String, Object> topOptions = new HashMap<>();
-        topOptions.put(SemanticHighlightingConstants.MODEL_ID, MODEL_ID);
-        topOptions.put(SemanticHighlightingConstants.BATCH_INFERENCE, true);
-        HighlightBuilder topHighlighter = new HighlightBuilder().field(topLevelField).options(topOptions);
-
-        SearchRequest request = new SearchRequest();
-        request.source(new SearchSourceBuilder().query(nested).highlighter(topHighlighter));
-
-        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
-
-        assertNull(config.getValidationError());
-        assertEquals("top-level field must be captured", "title", config.getFieldName());
-        assertTrue("inner_hits targets must also be captured", config.hasInnerHitsTargets());
-        assertEquals(1, config.getInnerHitsTargets().size());
-        assertEquals(SEMANTIC_FIELD, config.getInnerHitsTargets().get(0).getFieldName());
     }
 
     /**
@@ -222,11 +198,73 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
         assertTrue(context.getValidHits().get(2).getSourceAsMap().containsKey("text"));
     }
 
+    /**
+     * If no highlighter is specified on the request, the config must be empty so the
+     * processor does nothing.
+     */
+    public void testConfigBuilderReturnsEmptyWhenNoHighlighter() {
+        SearchRequest request = new SearchRequest();
+        request.source(new SearchSourceBuilder().query(new MatchQueryBuilder("x", QUERY_TEXT)));
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
+        assertNotNull("empty config is returned with a validation marker", config.getValidationError());
+    }
+
+    /**
+     * A highlighter that declares no semantic field must still produce an empty config
+     * so the processor short-circuits.
+     */
+    public void testConfigBuilderReturnsEmptyWhenNoSemanticField() {
+        HighlightBuilder highlighter = new HighlightBuilder();
+        highlighter.field(new HighlightBuilder.Field("text").highlighterType("unified"));
+        SearchRequest request = new SearchRequest();
+        request.source(new SearchSourceBuilder().query(new MatchQueryBuilder("text", QUERY_TEXT)).highlighter(highlighter));
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
+        assertNotNull("no semantic highlight => empty config", config.getValidationError());
+    }
+
+    /**
+     * If two top-level semantic fields are declared without nested_paths, only the first
+     * is used (current design limitation, preserving existing behaviour).
+     */
+    public void testConfigBuilderKeepsFirstOfMultipleTopLevelSemanticFields() {
+        SearchRequest request = buildTopLevelRequest(Arrays.asList("title", "body"), Collections.emptyList());
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
+        assertEquals("title", config.getFieldName());
+        assertFalse(config.hasInnerHitsTargets());
+    }
+
+    /**
+     * When {@code inner_hits_names} is declared, each target's inner_hit bucket name
+     * must use the user-supplied name rather than defaulting to the nested path. This
+     * covers the case where users set a custom {@code inner_hits.name} on the query.
+     */
+    public void testConfigBuilderHonorsCustomInnerHitsNames() {
+        HighlightBuilder highlighter = new HighlightBuilder();
+        highlighter.field(new HighlightBuilder.Field("reviews.text").highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE));
+        highlighter.field(new HighlightBuilder.Field("qa.answer").highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE));
+        Map<String, Object> options = new HashMap<>();
+        options.put(SemanticHighlightingConstants.MODEL_ID, MODEL_ID);
+        options.put(SemanticHighlightingConstants.BATCH_INFERENCE, true);
+        options.put(SemanticHighlightingConstants.NESTED_PATHS, Arrays.asList("reviews", "qa"));
+        options.put(SemanticHighlightingConstants.INNER_HITS_NAMES, Arrays.asList("recent_reviews", "top_qa"));
+        highlighter.options(options);
+
+        SearchRequest request = new SearchRequest();
+        request.source(new SearchSourceBuilder().query(new MatchQueryBuilder("reviews.text", QUERY_TEXT)).highlighter(highlighter));
+
+        HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, buildEmptyResponseWithOneHit());
+
+        assertEquals(2, config.getInnerHitsTargets().size());
+        assertEquals("recent_reviews", config.getInnerHitsTargets().get(0).getInnerHitName());
+        assertEquals("reviews", config.getInnerHitsTargets().get(0).getNestedPath());
+        assertEquals("top_qa", config.getInnerHitsTargets().get(1).getInnerHitName());
+        assertEquals("qa", config.getInnerHitsTargets().get(1).getNestedPath());
+    }
+
     // ------------------------- helpers -------------------------
 
     private HighlightConfig innerHitsConfig(String path, String field) {
         return HighlightConfig.builder()
-            .fieldName(field)
             .modelId(MODEL_ID)
             .queryText(QUERY_TEXT)
             .batchInference(true)
@@ -234,22 +272,28 @@ public class InnerHitsSemanticHighlightingTests extends OpenSearchTestCase {
             .build();
     }
 
-    private SearchRequest buildInnerHitsRequest(String path, String field) {
-        NestedQueryBuilder nested = buildNestedWithSemanticInnerHits(path, field);
-        SearchRequest request = new SearchRequest();
-        request.source(new SearchSourceBuilder().query(nested));
-        return request;
-    }
-
-    private NestedQueryBuilder buildNestedWithSemanticInnerHits(String path, String field) {
-        HighlightBuilder.Field hlField = new HighlightBuilder.Field(field).highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
+    /**
+     * Build a search request with a top-level semantic highlighter declaring the given
+     * fields and (optionally) a list of nested_paths in options. The request also
+     * includes a simple match query so {@link HighlightConfigBuilder} can extract the
+     * query text.
+     */
+    private SearchRequest buildTopLevelRequest(List<String> semanticFields, List<String> nestedPaths) {
+        HighlightBuilder highlighter = new HighlightBuilder();
+        for (String field : semanticFields) {
+            highlighter.field(new HighlightBuilder.Field(field).highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE));
+        }
         Map<String, Object> options = new HashMap<>();
         options.put(SemanticHighlightingConstants.MODEL_ID, MODEL_ID);
         options.put(SemanticHighlightingConstants.BATCH_INFERENCE, true);
-        HighlightBuilder innerHighlight = new HighlightBuilder().field(hlField).options(options);
+        if (!nestedPaths.isEmpty()) {
+            options.put(SemanticHighlightingConstants.NESTED_PATHS, nestedPaths);
+        }
+        highlighter.options(options);
 
-        return QueryBuilders.nestedQuery(path, new MatchQueryBuilder(field, QUERY_TEXT), ScoreMode.Avg)
-            .innerHit(new InnerHitBuilder().setHighlightBuilder(innerHighlight));
+        SearchRequest request = new SearchRequest();
+        request.source(new SearchSourceBuilder().query(new MatchQueryBuilder(semanticFields.get(0), QUERY_TEXT)).highlighter(highlighter));
+        return request;
     }
 
     /**
