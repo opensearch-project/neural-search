@@ -40,14 +40,11 @@ public class SemanticHighlightingFactory implements SystemGeneratedProcessor.Sys
 
         SearchSourceBuilder source = request.source();
         HighlightBuilder highlightBuilder = source.highlighter();
-
         if (highlightBuilder == null || highlightBuilder.fields() == null) {
             return false;
         }
 
-        // Use utility method to check for semantic highlighting field
-        String semanticField = HighlightExtractorUtils.extractSemanticField(highlightBuilder);
-        return semanticField != null;
+        return HighlightExtractorUtils.extractSemanticField(highlightBuilder) != null;
     }
 
     @Override

@@ -6,9 +6,11 @@ package org.opensearch.neuralsearch.highlight.batch.config;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.neuralsearch.highlight.utils.HighlightExtractorUtils;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,30 +33,39 @@ public class HighlightContextBuilder {
     public HighlightContext build(HighlightConfig config, SearchResponse response, long startTime) {
         List<SentenceHighlightingRequest> requests = new ArrayList<>();
         List<SearchHit> validHits = new ArrayList<>();
+        List<String> fieldNames = new ArrayList<>();
 
         if (response.getHits() == null || response.getHits().getHits().length == 0) {
             return createEmptyContext(config, response, startTime);
         }
 
-        for (SearchHit hit : response.getHits().getHits()) {
-            String fieldText = extractFieldText(hit, config.getFieldName());
+        if (config.getFieldName() != null) {
+            for (SearchHit hit : response.getHits().getHits()) {
+                String fieldText = extractFieldText(hit, config.getFieldName());
 
-            if (fieldText != null && !fieldText.isEmpty()) {
-                SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
-                    .modelId(config.getModelId())
-                    .question(config.getQueryText())
-                    .context(fieldText)
-                    .build();
+                if (fieldText != null && !fieldText.isEmpty()) {
+                    SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
+                        .modelId(config.getModelId())
+                        .question(config.getQueryText())
+                        .context(fieldText)
+                        .build();
 
-                requests.add(request);
-                validHits.add(hit);
+                    requests.add(request);
+                    validHits.add(hit);
+                    fieldNames.add(config.getFieldName());
+                }
             }
+        }
+
+        if (config.hasInnerHitsTargets()) {
+            collectFromInnerHits(config, response, requests, validHits, fieldNames);
         }
 
         return HighlightContext.builder()
             .requests(requests)
             .validHits(validHits)
             .fieldName(config.getFieldName())
+            .fieldNames(fieldNames.isEmpty() ? null : fieldNames)
             .originalResponse(response)
             .startTime(startTime)
             .preTag(config.getPreTag())
@@ -62,6 +73,53 @@ public class HighlightContextBuilder {
             .modelId(config.getModelId())
             .modelType(config.getModelType())
             .build();
+    }
+
+    /**
+     * Collect highlighting requests and valid hits for each inner_hits target declared on nested queries
+     * @param config the highlight configuration (must have at least one inner_hits target)
+     * @param response the search response
+     * @param requests the list to populate with highlighting requests
+     * @param validHits the list to populate with inner hits that carry non-empty text
+     * @param fieldNames the list (parallel to validHits) to populate with the field name each hit belongs to
+     */
+    private void collectFromInnerHits(
+        HighlightConfig config,
+        SearchResponse response,
+        List<SentenceHighlightingRequest> requests,
+        List<SearchHit> validHits,
+        List<String> fieldNames
+    ) {
+        for (HighlightConfig.InnerHitsTarget target : config.getInnerHitsTargets()) {
+            String innerHitName = target.getInnerHitName();
+            String fieldName = target.getFieldName();
+            String sourceLookupField = HighlightExtractorUtils.stripNestedPrefix(fieldName, target.getNestedPath());
+
+            for (SearchHit topHit : response.getHits().getHits()) {
+                Map<String, SearchHits> innerHitsMap = topHit.getInnerHits();
+                if (innerHitsMap == null) {
+                    continue;
+                }
+                SearchHits innerHits = innerHitsMap.get(innerHitName);
+                if (innerHits == null || innerHits.getHits().length == 0) {
+                    continue;
+                }
+                for (SearchHit innerHit : innerHits.getHits()) {
+                    String fieldText = extractFieldText(innerHit, sourceLookupField);
+                    if (fieldText != null && !fieldText.isEmpty()) {
+                        SentenceHighlightingRequest request = SentenceHighlightingRequest.builder()
+                            .modelId(config.getModelId())
+                            .question(config.getQueryText())
+                            .context(fieldText)
+                            .build();
+
+                        requests.add(request);
+                        validHits.add(innerHit);
+                        fieldNames.add(fieldName);
+                    }
+                }
+            }
+        }
     }
 
     /**

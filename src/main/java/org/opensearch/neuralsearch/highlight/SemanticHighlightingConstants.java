@@ -23,6 +23,8 @@ public final class SemanticHighlightingConstants {
     public static final String MAX_INFERENCE_BATCH_SIZE = "max_inference_batch_size";
     public static final String PRE_TAG = "pre_tag";
     public static final String POST_TAG = "post_tag";
+    public static final String NESTED_PATHS = "nested_paths";
+    public static final String INNER_HITS_NAMES = "inner_hits_names";
 
     // Connector parameter keys for batch configuration
     public static final String CONNECTOR_SUPPORTS_BATCH_INFERENCE = "supports_batch_inference";

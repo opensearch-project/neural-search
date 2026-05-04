@@ -14,6 +14,7 @@ import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.subphase.highlight.FieldHighlightContext;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -237,6 +238,103 @@ public class HighlightExtractorUtils {
         }
 
         return SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE;
+    }
+
+    /**
+     * Extract the declared nested paths from highlighter options. Each entry tells the
+     * processor to treat any semantic highlight field prefixed by that path as an
+     * inner_hits target rather than a top-level one.
+     * @param highlighter the highlighter configuration
+     * @return the list of nested paths (empty if none declared)
+     */
+    public static List<String> extractNestedPaths(HighlightBuilder highlighter) {
+        return extractStringList(highlighter, SemanticHighlightingConstants.NESTED_PATHS);
+    }
+
+    /**
+     * Extract the inner_hits bucket names that correspond, position by position, to
+     * {@link #extractNestedPaths(HighlightBuilder)}. When omitted, callers should
+     * default each bucket name to its nested path (OpenSearch's default behaviour
+     * when {@code inner_hits.name} is not explicitly set).
+     * @param highlighter the highlighter configuration
+     * @return the list of inner_hits names (empty if none declared)
+     */
+    public static List<String> extractInnerHitsNames(HighlightBuilder highlighter) {
+        return extractStringList(highlighter, SemanticHighlightingConstants.INNER_HITS_NAMES);
+    }
+
+    private static List<String> extractStringList(HighlightBuilder highlighter, String optionKey) {
+        Map<String, Object> options = highlighter.options();
+        if (options == null || !options.containsKey(optionKey)) {
+            return Collections.emptyList();
+        }
+        Object raw = options.get(optionKey);
+        if (raw instanceof List) {
+            List<String> out = new ArrayList<>();
+            for (Object item : (List<?>) raw) {
+                if (item instanceof String && !((String) item).isEmpty()) {
+                    out.add((String) item);
+                }
+            }
+            return out;
+        }
+        if (raw instanceof String && !((String) raw).isEmpty()) {
+            return Collections.singletonList((String) raw);
+        }
+        log.warn("Invalid {} value: {}, expected list of strings", optionKey, raw);
+        return Collections.emptyList();
+    }
+
+    /**
+     * Find the nested path that is a prefix of the given field name, if any.
+     * For example, {@code "chunks"} is the matching path for {@code "chunks.text"}.
+     * When multiple paths could match, the longest matching path is returned so a
+     * more specific declaration wins.
+     *
+     * @param fieldName the semantic highlight field name (e.g. "chunks.text")
+     * @param nestedPaths declared nested paths
+     * @return the matching nested path, or null if the field name does not belong to any
+     */
+    public static String matchNestedPath(String fieldName, List<String> nestedPaths) {
+        int index = matchNestedPathIndex(fieldName, nestedPaths);
+        return index < 0 ? null : nestedPaths.get(index);
+    }
+
+    /**
+     * Same as {@link #matchNestedPath(String, List)} but returns the index of the matched
+     * path (-1 if none match). The index lets callers look up a parallel list such as
+     * {@code inner_hits_names}.
+     */
+    public static int matchNestedPathIndex(String fieldName, List<String> nestedPaths) {
+        if (fieldName == null || nestedPaths == null || nestedPaths.isEmpty()) {
+            return -1;
+        }
+        int matchIdx = -1;
+        int matchLen = -1;
+        for (int i = 0; i < nestedPaths.size(); i++) {
+            String path = nestedPaths.get(i);
+            if (path == null || path.isEmpty()) {
+                continue;
+            }
+            if (fieldName.startsWith(path + ".") && path.length() > matchLen) {
+                matchIdx = i;
+                matchLen = path.length();
+            }
+        }
+        return matchIdx;
+    }
+
+    /**
+     * Strip the nested path prefix from a field name to get the leaf key used inside inner hit sources
+     * @param fieldName the field name with nested path prefix (e.g. "chunks.text")
+     * @param nestedPath the nested path (e.g. "chunks"), may be null
+     * @return the leaf field name (e.g. "text"), or the original field name when the prefix is absent
+     */
+    public static String stripNestedPrefix(String fieldName, String nestedPath) {
+        if (nestedPath != null && fieldName != null && fieldName.startsWith(nestedPath + ".")) {
+            return fieldName.substring(nestedPath.length() + 1);
+        }
+        return fieldName;
     }
 
     /**
