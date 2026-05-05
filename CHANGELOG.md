@@ -23,5 +23,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Documentation
 
 ### Maintenance
+* Upgrade gradle wrapper to 9.4.1 ([#1849](https://github.com/opensearch-project/neural-search/pull/1849))
 
 ### Refactoring
