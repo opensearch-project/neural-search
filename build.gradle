@@ -582,6 +582,25 @@ task updateVersion {
         println "New OpenSearch version: ${newVersionWithoutSnapshot}"
         println "Previous OpenSearch version: ${currentVersionWithoutSnapshot}"
 
+        // Check version bump type
+        def currentVersionParts = currentVersionWithoutSnapshot.tokenize('.')
+        def newVersionParts = newVersionWithoutSnapshot.tokenize('.')
+        def currentMajor = currentVersionParts[0] as Integer
+        def currentMinor = currentVersionParts[1] as Integer
+        def newMajor = newVersionParts[0] as Integer
+        def newMinor = newVersionParts[1] as Integer
+        def isPatchVersionBump = (currentMajor == newMajor && currentMinor == newMinor)
+        def isMinorVersionBump = (currentMajor == newMajor && currentMinor != newMinor)
+        def isMajorVersionBump = (currentMajor != newMajor)
+
+        if (isPatchVersionBump) {
+            println "Detected patch version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot}), will skip adding to BWC version arrays"
+        } else if (isMinorVersionBump) {
+            println "Detected minor version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot}), will skip updating bwc.bundle.version"
+        } else if (isMajorVersionBump) {
+            println "Detected major version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot})"
+        }
+
         // Step 3: Update gradle.properties - systemProp.bwc.version
         ant.replaceregexp(
             file: 'gradle.properties',
@@ -592,13 +611,19 @@ task updateVersion {
         )
 
         // Step 4: Update gradle.properties - systemProp.bwc.bundle.version
-        ant.replaceregexp(
-            file: 'gradle.properties',
-            match: "systemProp.bwc.bundle.version=${currentBwcBundleVersion}",
-            replace: "systemProp.bwc.bundle.version=${currentVersionWithoutSnapshot}",
-            flags: 'g',
-            byline: true
-        )
+        // Only update for major version bumps
+        if (isMajorVersionBump) {
+            ant.replaceregexp(
+                file: 'gradle.properties',
+                match: "systemProp.bwc.bundle.version=${currentBwcBundleVersion}",
+                replace: "systemProp.bwc.bundle.version=${currentVersionWithoutSnapshot}",
+                flags: 'g',
+                byline: true
+            )
+            println "Updated systemProp.bwc.bundle.version to ${currentVersionWithoutSnapshot}"
+        } else {
+            println "Skipped updating systemProp.bwc.bundle.version (only updated for major version bumps)"
+        }
 
         // Step 5: Update backwards_compatibility_tests_workflow.yml - opensearch_version
         ant.replaceregexp(
@@ -611,10 +636,11 @@ task updateVersion {
 
         // Step 6: Update backwards_compatibility_tests_workflow.yml - bwc_version arrays
         // Add the current version to the BWC version list if not already present
+        // Skip this step for patch version bumps (e.g., 3.7.0 -> 3.7.1)
         def workflowFile = file('.github/workflows/backwards_compatibility_tests_workflow.yml')
         def workflowContent = workflowFile.text
 
-        if (!workflowContent.contains("\"${currentVersionWithoutSnapshot}\"")) {
+        if (!isPatchVersionBump && !workflowContent.contains("\"${currentVersionWithoutSnapshot}\"")) {
             // Read the workflow file and update it manually for more precise control
             def updatedContent = workflowContent
 
@@ -625,14 +651,14 @@ task updateVersion {
                 def lastMinor = lastVersionParts[1] as Integer
                 def lastPatch = lastVersionParts.size() > 2 ? lastVersionParts[2] as Integer : 0
 
-                def currentVersionParts = currentVersionWithoutSnapshot.tokenize('.')
-                def currentMajor = currentVersionParts[0] as Integer
-                def currentMinor = currentVersionParts[1] as Integer
-                def currentPatch = currentVersionParts.size() > 2 ? currentVersionParts[2] as Integer : 0
+                def currVersionParts = currentVersionWithoutSnapshot.tokenize('.')
+                def currMajor = currVersionParts[0] as Integer
+                def currMinor = currVersionParts[1] as Integer
+                def currPatch = currVersionParts.size() > 2 ? currVersionParts[2] as Integer : 0
 
-                return (currentMajor > lastMajor) ||
-                       (currentMajor == lastMajor && currentMinor > lastMinor) ||
-                       (currentMajor == lastMajor && currentMinor == lastMinor && currentPatch > lastPatch)
+                return (currMajor > lastMajor) ||
+                       (currMajor == lastMajor && currMinor > lastMinor) ||
+                       (currMajor == lastMajor && currMinor == lastMinor && currPatch > lastPatch)
             }
 
             // Helper closure to extract versions from bwc_version array
@@ -678,6 +704,8 @@ task updateVersion {
             }
 
             workflowFile.text = updatedContent
+        } else if (isPatchVersionBump) {
+            println "Skipped adding ${currentVersionWithoutSnapshot} to BWC version list (patch version bump)"
         } else {
             println "Version ${currentVersionWithoutSnapshot} already exists in BWC version list"
         }
