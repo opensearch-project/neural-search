@@ -582,6 +582,19 @@ task updateVersion {
         println "New OpenSearch version: ${newVersionWithoutSnapshot}"
         println "Previous OpenSearch version: ${currentVersionWithoutSnapshot}"
 
+        // Check if this is a patch version bump (only patch number changes, major and minor stay the same)
+        def currentVersionParts = currentVersionWithoutSnapshot.tokenize('.')
+        def newVersionParts = newVersionWithoutSnapshot.tokenize('.')
+        def currentMajor = currentVersionParts[0] as Integer
+        def currentMinor = currentVersionParts[1] as Integer
+        def newMajor = newVersionParts[0] as Integer
+        def newMinor = newVersionParts[1] as Integer
+        def isPatchVersionBump = (currentMajor == newMajor && currentMinor == newMinor)
+
+        if (isPatchVersionBump) {
+            println "Detected patch version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot}), will skip adding to BWC version arrays"
+        }
+
         // Step 3: Update gradle.properties - systemProp.bwc.version
         ant.replaceregexp(
             file: 'gradle.properties',
@@ -611,10 +624,11 @@ task updateVersion {
 
         // Step 6: Update backwards_compatibility_tests_workflow.yml - bwc_version arrays
         // Add the current version to the BWC version list if not already present
+        // Skip this step for patch version bumps (e.g., 3.7.0 -> 3.7.1)
         def workflowFile = file('.github/workflows/backwards_compatibility_tests_workflow.yml')
         def workflowContent = workflowFile.text
 
-        if (!workflowContent.contains("\"${currentVersionWithoutSnapshot}\"")) {
+        if (!isPatchVersionBump && !workflowContent.contains("\"${currentVersionWithoutSnapshot}\"")) {
             // Read the workflow file and update it manually for more precise control
             def updatedContent = workflowContent
 
@@ -678,6 +692,8 @@ task updateVersion {
             }
 
             workflowFile.text = updatedContent
+        } else if (isPatchVersionBump) {
+            println "Skipped adding ${currentVersionWithoutSnapshot} to BWC version list (patch version bump)"
         } else {
             println "Version ${currentVersionWithoutSnapshot} already exists in BWC version list"
         }
