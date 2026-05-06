@@ -42,6 +42,17 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         super.setUp();
     }
 
+    /**
+     * Disable timeout for sparse neural search queries. When timeout is enabled, OpenSearch wraps
+     * PostingsEnum in ExitablePostingsEnum for cancellation support. However, SparsePostingsEnum
+     * has custom methods (e.g., clusterIterator()) that are not accessible through the wrapper,
+     * causing IllegalStateException during query execution.
+     */
+    @Override
+    protected String getSearchTimeout() {
+        return "";  // No timeout for sparse searches to avoid ExitablePostingsEnum wrapping
+    }
+
     protected void createSparseIndex(
         String indexName,
         String fieldName,

@@ -743,6 +743,16 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     }
 
     /**
+     * Returns the search timeout query parameter. Override this method in subclasses to disable timeout
+     * for queries that are incompatible with ExitablePostingsEnum wrapping (e.g., sparse neural search).
+     *
+     * @return timeout query parameter string (e.g., "?timeout=1000s") or empty string to disable timeout
+     */
+    protected String getSearchTimeout() {
+        return "?timeout=1000s";
+    }
+
+    /**
      * Execute a search request initialized from a neural query builder
      *
      * @param index Index to search against
@@ -1033,7 +1043,10 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
         builder.endObject();
 
-        Request request = new Request("GET", "/" + index + "/_search?timeout=1000s");
+        // Note: timeout parameter may cause issues with custom PostingsEnum implementations (e.g., SparsePostingsEnum)
+        // that require access to custom methods. When timeout is set, OpenSearch wraps PostingsEnum in ExitablePostingsEnum
+        // which prevents access to those custom methods. Override this in subclasses if needed.
+        Request request = new Request("GET", "/" + index + "/_search" + getSearchTimeout());
         request.addParameter("allow_partial_search_results", "false");
         request.addParameter("size", Integer.toString(resultSize));
         if (preferenceShards != null && !preferenceShards.isEmpty()) {
