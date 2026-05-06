@@ -25,6 +25,7 @@ import org.opensearch.neuralsearch.sparse.data.DocumentCluster;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -71,6 +72,48 @@ public abstract class SeismicBaseScorer extends Scorer {
         initialize(leafReader);
     }
 
+    /**
+     * Unwraps a PostingsEnum that may be wrapped by ExitableDirectoryReader or other wrappers.
+     * When search timeouts are enabled, OpenSearch wraps PostingsEnum in ExitablePostingsEnum
+     * for cancellation support. This method uses reflection to access the underlying delegate.
+     *
+     * @param postingsEnum the potentially wrapped PostingsEnum
+     * @return the unwrapped SparsePostingsEnum, or the original if already unwrapped or unwrapping fails
+     */
+    private static PostingsEnum unwrapPostingsEnum(PostingsEnum postingsEnum) {
+        if (postingsEnum == null) {
+            return null;
+        }
+
+        // If already the expected type, return as-is
+        if (postingsEnum instanceof SparsePostingsEnum) {
+            return postingsEnum;
+        }
+
+        // Try to unwrap if it's wrapped (e.g., by ExitableDirectoryReader)
+        try {
+            // Look for a delegate/in field that holds the wrapped PostingsEnum
+            Class<?> clazz = postingsEnum.getClass();
+            while (clazz != null && clazz != PostingsEnum.class && clazz != Object.class) {
+                for (Field field : clazz.getDeclaredFields()) {
+                    if (PostingsEnum.class.isAssignableFrom(field.getType())) {
+                        field.setAccessible(true);
+                        PostingsEnum unwrapped = (PostingsEnum) field.get(postingsEnum);
+                        if (unwrapped != null && unwrapped != postingsEnum) {
+                            // Recursively unwrap in case of multiple layers
+                            return unwrapPostingsEnum(unwrapped);
+                        }
+                    }
+                }
+                clazz = clazz.getSuperclass();
+            }
+        } catch (IllegalAccessException | SecurityException e) {
+            log.warn("Failed to unwrap PostingsEnum of type {}: {}", postingsEnum.getClass().getName(), e.getMessage());
+        }
+
+        return postingsEnum;
+    }
+
     protected void initialize(LeafReader leafReader) throws IOException {
         Terms terms = Terms.getTerms(leafReader, fieldName);
         for (String token : sparseQueryContext.getTokens()) {
@@ -80,11 +123,14 @@ public abstract class SeismicBaseScorer extends Scorer {
                 continue;
             }
             PostingsEnum postingsEnum = termsEnum.postings(null, PostingsEnum.FREQS);
-            if (!(postingsEnum instanceof SparsePostingsEnum sparsePostingsEnum)) {
+            PostingsEnum unwrapped = unwrapPostingsEnum(postingsEnum);
+
+            if (!(unwrapped instanceof SparsePostingsEnum sparsePostingsEnum)) {
                 throw new IllegalStateException(
                     String.format(
                         Locale.ROOT,
-                        "posting enum is not SparsePostingsEnum, actual type: %s",
+                        "posting enum is not SparsePostingsEnum after unwrapping, actual type: %s (original: %s)",
+                        unwrapped == null ? null : unwrapped.getClass().getName(),
                         postingsEnum == null ? null : postingsEnum.getClass().getName()
                     )
                 );
