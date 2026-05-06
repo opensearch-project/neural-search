@@ -5,8 +5,10 @@
 package org.opensearch.neuralsearch.processor;
 
 import org.opensearch.OpenSearchParseException;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.core.ParseField;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -226,6 +228,43 @@ public class AgenticQueryTranslatorProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<IllegalArgumentException> exceptionCaptor = ArgumentCaptor.forClass(IllegalArgumentException.class);
         verify(listener).onFailure(exceptionCaptor.capture());
         assertTrue(exceptionCaptor.getValue().getMessage().contains("Agentic search failed - Agent execution error"));
+    }
+
+    public void testProcessRequestAsync_withAgenticQuery_agentThrottled_forwardsStatus() throws IOException {
+        AgenticSearchQueryBuilder agenticQuery = new AgenticSearchQueryBuilder().queryText(QUERY_TEXT);
+        SearchRequest request = new SearchRequest("test-index");
+        request.source(new SearchSourceBuilder().query(agenticQuery));
+
+        ActionListener<SearchRequest> listener = mock(ActionListener.class);
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "bedrock/converse/claude");
+        doAnswer(invocation -> {
+            ActionListener<AgentInfoDTO> agentInfoListener = invocation.getArgument(1);
+            agentInfoListener.onResponse(agentInfo);
+            return null;
+        }).when(mockMLClient).getAgentDetails(eq(AGENT_ID), any(ActionListener.class));
+
+        doAnswer(invocation -> {
+            ActionListener<AgentExecutionDTO> agentListener = invocation.getArgument(6);
+            agentListener.onFailure(new OpenSearchStatusException("Too many requests", RestStatus.TOO_MANY_REQUESTS));
+            return null;
+        }).when(mockMLClient)
+            .executeAgent(
+                any(SearchRequest.class),
+                any(AgenticSearchQueryBuilder.class),
+                eq(AGENT_ID),
+                eq(agentInfo),
+                eq((String) null),
+                eq(mockXContentRegistry),
+                any(ActionListener.class)
+            );
+
+        processor.processRequestAsync(request, mockContext, listener);
+
+        ArgumentCaptor<Exception> captor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(captor.capture());
+        assertTrue(captor.getValue() instanceof OpenSearchStatusException);
+        assertEquals(RestStatus.TOO_MANY_REQUESTS, ((OpenSearchStatusException) captor.getValue()).status());
     }
 
     public void testProcessRequestAsync_withAgenticQuery_parseFailure() throws IOException {

@@ -24,6 +24,7 @@ import org.opensearch.search.pipeline.AbstractProcessor;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.core.action.ActionListener;
 
 import java.io.IOException;
@@ -225,7 +226,11 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                         e.getMessage()
                     );
                     agenticQuery.setAgentFailureReason(errorMessage);
-                    requestListener.onFailure(new IllegalArgumentException("Agentic search failed - " + errorMessage, e));
+                    if (e instanceof OpenSearchStatusException) {
+                        requestListener.onFailure(e);
+                    } else {
+                        requestListener.onFailure(new IllegalArgumentException("Agentic search failed - " + errorMessage, e));
+                    }
                 })
             );
         }, e -> {
@@ -236,7 +241,11 @@ public class AgenticQueryTranslatorProcessor extends AbstractProcessor implement
                 e.getMessage()
             );
             agenticQuery.setAgentFailureReason(errorMessage);
-            requestListener.onFailure(new IllegalArgumentException("Agentic search failed - " + errorMessage, e));
+            if (e instanceof OpenSearchStatusException) {
+                requestListener.onFailure(e);
+            } else {
+                requestListener.onFailure(new IllegalArgumentException("Agentic search failed - " + errorMessage, e));
+            }
         }));
     }
 
