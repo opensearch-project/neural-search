@@ -379,6 +379,7 @@ public class HybridLeafCollectorTests extends HybridCollectorTestCase {
         // Set profiler-mode fields
         hybridLeafCollector.hybridQueryScorer = mockHybridScorer;
         hybridLeafCollector.compoundQueryScorer = new HybridSubQueryScorer(1);
+        hybridLeafCollector.minScoreThresholds = new float[] { Float.MIN_VALUE };
 
         // Call collect() which should internally call populateScoresFromHybridQueryScorer()
         leafCollector.collect(0);
