@@ -43,15 +43,9 @@ public class ProcessorUtilsQueryTextTests extends OpenSearchTestCase {
         boolQuery.must(new MatchQueryBuilder("field1", "must text"));
         boolQuery.should(new MatchQueryBuilder("field2", "should text"));
 
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> ProcessorUtils.extractQueryTextFromBuilder(boolQuery)
-        );
-
-        assertEquals(
-            String.format(Locale.ROOT, "Query type %s not supported for semantic highlighting.", "BoolQueryBuilder"),
-            exception.getMessage()
-        );
+        // Bool queries concatenate extractable clause texts so multi-nested inner_hits
+        // highlighting can derive a reasonable query string.
+        assertEquals("must text should text", ProcessorUtils.extractQueryTextFromBuilder(boolQuery));
     }
 
     public void testExtractQueryTextFromBuilder_EmptyBoolQuery() {
@@ -62,10 +56,7 @@ public class ProcessorUtilsQueryTextTests extends OpenSearchTestCase {
             () -> ProcessorUtils.extractQueryTextFromBuilder(boolQuery)
         );
 
-        assertEquals(
-            String.format(Locale.ROOT, "Query type %s not supported for semantic highlighting.", "BoolQueryBuilder"),
-            exception.getMessage()
-        );
+        assertEquals("Bool query contains no clauses with extractable query text.", exception.getMessage());
     }
 
     public void testExtractQueryTextFromBuilder_HybridQuery() {

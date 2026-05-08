@@ -22,6 +22,7 @@ public class HighlightContext {
     private final List<SentenceHighlightingRequest> requests;
     private final List<SearchHit> validHits;
     private final String fieldName;
+    private final List<String> fieldNames;
     private final SearchResponse originalResponse;
     private final long startTime;
     private final String preTag;

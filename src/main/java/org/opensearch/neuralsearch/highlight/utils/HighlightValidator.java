@@ -27,8 +27,9 @@ public class HighlightValidator {
             return config;
         }
 
-        // Validate required fields
-        if (config.getFieldName() == null || config.getFieldName().isEmpty()) {
+        // Validate required fields: must have at least a top-level field or
+        // one or more inner_hits targets.
+        if (config.getFieldName() == null && !config.hasInnerHitsTargets()) {
             return config.toBuilder().validationError("No semantic highlight field specified").build();
         }
 
@@ -66,8 +67,9 @@ public class HighlightValidator {
             return config;
         }
 
-        // Validate required fields
-        if (config.getFieldName() == null || config.getFieldName().isEmpty()) {
+        // Validate required fields: must have at least a top-level field or
+        // one or more inner_hits targets.
+        if (config.getFieldName() == null && !config.hasInnerHitsTargets()) {
             return config.toBuilder().validationError("No semantic highlight field specified").build();
         }
 

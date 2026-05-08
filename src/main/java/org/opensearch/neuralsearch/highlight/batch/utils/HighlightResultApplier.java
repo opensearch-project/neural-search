@@ -37,6 +37,21 @@ public class HighlightResultApplier {
         String preTag,
         String postTag
     ) {
+        applyBatchResults(validHits, batchResults, fieldName, null, preTag, postTag);
+    }
+
+    /**
+     * Apply batch highlighting results to valid hits. When perHitFieldNames is non-null
+     * each hit uses its corresponding field name; otherwise the global fieldName is used.
+     */
+    public void applyBatchResults(
+        List<SearchHit> validHits,
+        List<List<Map<String, Object>>> batchResults,
+        String fieldName,
+        List<String> perHitFieldNames,
+        String preTag,
+        String postTag
+    ) {
         if (batchResults.size() != validHits.size()) {
             log.error("Batch results size ({}) doesn't match valid hits size ({})", batchResults.size(), validHits.size());
             throw new IllegalStateException("Batch results size mismatch");
@@ -47,7 +62,8 @@ public class HighlightResultApplier {
             if (highlights == null) {
                 highlights = new ArrayList<>();
             }
-            applyHighlightsToHit(validHits.get(i), highlights, fieldName, preTag, postTag);
+            String hitFieldName = perHitFieldNames != null ? perHitFieldNames.get(i) : fieldName;
+            applyHighlightsToHit(validHits.get(i), highlights, hitFieldName, preTag, postTag);
         }
     }
 
@@ -65,6 +81,22 @@ public class HighlightResultApplier {
         int startIndex,
         int endIndex,
         String fieldName,
+        String preTag,
+        String postTag
+    ) {
+        applyBatchResultsWithIndices(allValidHits, batchResults, startIndex, endIndex, fieldName, null, preTag, postTag);
+    }
+
+    /**
+     * Apply batch results with specific indices, using per-hit field names when available.
+     */
+    public void applyBatchResultsWithIndices(
+        List<SearchHit> allValidHits,
+        List<List<Map<String, Object>>> batchResults,
+        int startIndex,
+        int endIndex,
+        String fieldName,
+        List<String> perHitFieldNames,
         String preTag,
         String postTag
     ) {
@@ -86,7 +118,8 @@ public class HighlightResultApplier {
             if (highlights == null) {
                 highlights = new ArrayList<>();
             }
-            applyHighlightsToHit(allValidHits.get(i), highlights, fieldName, preTag, postTag);
+            String hitFieldName = perHitFieldNames != null ? perHitFieldNames.get(i) : fieldName;
+            applyHighlightsToHit(allValidHits.get(i), highlights, hitFieldName, preTag, postTag);
         }
     }
 
@@ -144,7 +177,9 @@ public class HighlightResultApplier {
             return;
         }
 
-        String text = (String) source.get(fieldName);
+        // Inner hit sources are keyed by the leaf field name, not the full nested path
+        int dot = fieldName.lastIndexOf('.');
+        String text = (String) source.getOrDefault(fieldName, dot >= 0 ? source.get(fieldName.substring(dot + 1)) : null);
         if (text == null || text.isEmpty()) {
             return;
         }

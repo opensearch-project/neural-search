@@ -13,6 +13,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.collect.Tuple;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -466,6 +467,28 @@ public class ProcessorUtils {
             }
             case NestedQueryBuilder nestedQuery -> {
                 return extractQueryTextFromBuilder(nestedQuery.query());
+            }
+            case BoolQueryBuilder boolQuery -> {
+                StringBuilder text = new StringBuilder();
+                java.util.List<QueryBuilder> clauses = new java.util.ArrayList<>();
+                clauses.addAll(boolQuery.must());
+                clauses.addAll(boolQuery.should());
+                clauses.addAll(boolQuery.filter());
+                for (QueryBuilder clause : clauses) {
+                    try {
+                        String subText = extractQueryTextFromBuilder(clause);
+                        if (!subText.isEmpty()) {
+                            if (!text.isEmpty()) text.append(" ");
+                            text.append(subText);
+                        }
+                    } catch (IllegalArgumentException ignored) {
+                        // Skip clauses that don't carry extractable query text
+                    }
+                }
+                if (text.isEmpty()) {
+                    throw new IllegalArgumentException("Bool query contains no clauses with extractable query text.");
+                }
+                return text.toString();
             }
             default -> {
             }
