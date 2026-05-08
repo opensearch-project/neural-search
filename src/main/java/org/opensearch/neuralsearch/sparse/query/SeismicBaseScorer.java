@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.lucene.index.FilterLeafReader;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.Terms;
@@ -72,7 +73,11 @@ public abstract class SeismicBaseScorer extends Scorer {
     }
 
     protected void initialize(LeafReader leafReader) throws IOException {
-        Terms terms = Terms.getTerms(leafReader, fieldName);
+        // Unwrap FilterLeafReader (e.g. ExitableFilterAtomicReader) to get direct access to
+        // SparsePostingsEnum without ExitablePostingsEnum wrapping. This is safe because
+        // SEISMIC uses cluster-based iteration via clusterIterator(), not PostingsEnum.nextDoc().
+        LeafReader unwrapped = FilterLeafReader.unwrap(leafReader);
+        Terms terms = Terms.getTerms(unwrapped, fieldName);
         for (String token : sparseQueryContext.getTokens()) {
             TermsEnum termsEnum = terms.iterator();
             BytesRef term = new BytesRef(token);
