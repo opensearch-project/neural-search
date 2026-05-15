@@ -8,7 +8,10 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.env.Environment;
 import org.opensearch.ingest.AbstractBatchingProcessor;
+import org.opensearch.ingest.ConfigurationUtils;
+import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.InferenceProcessor;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.processor.optimization.TextEmbeddingInferenceFilter;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -23,6 +26,8 @@ import static org.opensearch.ingest.ConfigurationUtils.readDoubleProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readMap;
 import static org.opensearch.ingest.ConfigurationUtils.readOptionalStringProperty;
 import static org.opensearch.ingest.ConfigurationUtils.readStringProperty;
+import static org.opensearch.neuralsearch.processor.InferenceProcessor.BATCH_SIZE_BYTES_FIELD;
+import static org.opensearch.neuralsearch.processor.InferenceProcessor.DEFAULT_BATCH_SIZE_BYTES;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.DEFAULT_SKIP_EXISTING;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.SKIP_EXISTING;
 import static org.opensearch.neuralsearch.processor.SparseEncodingProcessor.TYPE;
@@ -39,6 +44,16 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
     private final Environment environment;
     private final ClusterService clusterService;
 
+    /**
+     * Holds whether the user explicitly set batch_size in the pipeline config for the current
+     * create() call. This is needed because AbstractBatchingProcessor.Factory.create() removes
+     * batch_size from the config map (via ConfigurationUtils.readIntProperty) before calling
+     * newProcessor(), making it impossible to detect user intent inside newProcessor() directly.
+     * ThreadLocal ensures thread safety since factory instances are shared across concurrent
+     * pipeline creation calls.
+     */
+    private final ThreadLocal<Boolean> userSetBatchSize = new ThreadLocal<>();
+
     public SparseEncodingProcessorFactory(
         OpenSearchClient openSearchClient,
         MLCommonsClientAccessor clientAccessor,
@@ -53,10 +68,34 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
     }
 
     @Override
+    public AbstractBatchingProcessor create(
+        Map<String, Processor.Factory> processorFactories,
+        String tag,
+        String description,
+        Map<String, Object> config
+    ) throws Exception {
+        // Peek before super.create() removes batch_size from the config map
+        userSetBatchSize.set(config.containsKey(AbstractBatchingProcessor.BATCH_SIZE_FIELD));
+        try {
+            return super.create(processorFactories, tag, description, config);
+        } finally {
+            userSetBatchSize.remove();
+        }
+    }
+
+    @Override
     protected AbstractBatchingProcessor newProcessor(String tag, String description, int batchSize, Map<String, Object> config) {
         String modelId = readStringProperty(TYPE, tag, config, MODEL_ID_FIELD);
         Map<String, Object> fieldMap = readMap(TYPE, tag, config, FIELD_MAP_FIELD);
         boolean skipExisting = readBooleanProperty(TYPE, tag, config, SKIP_EXISTING, DEFAULT_SKIP_EXISTING);
+        int batchSizeBytes = ConfigurationUtils.readIntProperty(TYPE, tag, config, BATCH_SIZE_BYTES_FIELD, DEFAULT_BATCH_SIZE_BYTES);
+        batchSize = InferenceProcessor.validateBatchSizeBytesAndResolveEffectiveBatchSize(
+            TYPE,
+            tag,
+            batchSizeBytes,
+            batchSize,
+            Boolean.TRUE.equals(userSetBatchSize.get())
+        );
         // if the field is miss, will return PruneType.None
         PruneType pruneType = PruneType.fromString(readOptionalStringProperty(TYPE, tag, config, PruneUtils.PRUNE_TYPE_FIELD));
         float pruneRatio = 0;
@@ -84,6 +123,7 @@ public class SparseEncodingProcessorFactory extends AbstractBatchingProcessor.Fa
             tag,
             description,
             batchSize,
+            batchSizeBytes,
             modelId,
             fieldMap,
             skipExisting,
