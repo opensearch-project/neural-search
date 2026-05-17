@@ -549,4 +549,76 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         disableStats();
     }
 
+    public void testTextEmbeddingProcessor_withBatchSizeBytes() throws Exception {
+        String modelId = uploadTextEmbeddingModel();
+        loadAndWaitForModelToBeReady(modelId);
+        // Use a large batch_size_bytes (100KB) so all docs fit in one byte-based batch
+        URL pipelineURLPath = classLoader.getResource("processor/PipelineConfigurationWithBatchSizeBytes.json");
+        Objects.requireNonNull(pipelineURLPath);
+        String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
+        createPipelineProcessor(requestBody, PIPELINE_NAME, modelId, 102400);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        int docCount = 5;
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            docCount,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
+        assertEquals(docCount, getDocCount(INDEX_NAME));
+
+        // Verify results match single-doc ingestion
+        for (int i = 0; i < docCount; ++i) {
+            String template = List.of(INGEST_DOC1, INGEST_DOC2).get(i % 2);
+            String payload = String.format(LOCALE, template, "success");
+            ingestDocument(INDEX_NAME, payload, String.valueOf(i + 1));
+        }
+
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(
+                getDocById(INDEX_NAME, String.valueOf(i + 1)).get("_source"),
+                getDocById(INDEX_NAME, "batch_" + (i + 1)).get("_source")
+            );
+        }
+    }
+
+    public void testTextEmbeddingProcessor_withSmallBatchSizeBytes() throws Exception {
+        String modelId = uploadTextEmbeddingModel();
+        loadAndWaitForModelToBeReady(modelId);
+        // Use a very small batch_size_bytes (50 bytes) to force multiple sub-batches
+        URL pipelineURLPath = classLoader.getResource("processor/PipelineConfigurationWithBatchSizeBytes.json");
+        Objects.requireNonNull(pipelineURLPath);
+        String requestBody = Files.readString(Path.of(pipelineURLPath.toURI()));
+        createPipelineProcessor(requestBody, PIPELINE_NAME, modelId, 50);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappings.json", PIPELINE_NAME);
+        int docCount = 4;
+        ingestBatchDocumentWithBulk(
+            INDEX_NAME,
+            "batch_",
+            docCount,
+            Collections.emptySet(),
+            Collections.emptySet(),
+            List.of(INGEST_DOC1, INGEST_DOC2),
+            BULK_ITEM_TEMPLATE
+        );
+        assertEquals(docCount, getDocCount(INDEX_NAME));
+
+        // Verify results match single-doc ingestion even with tiny byte batches
+        for (int i = 0; i < docCount; ++i) {
+            String template = List.of(INGEST_DOC1, INGEST_DOC2).get(i % 2);
+            String payload = String.format(LOCALE, template, "success");
+            ingestDocument(INDEX_NAME, payload, String.valueOf(i + 1));
+        }
+
+        for (int i = 0; i < docCount; ++i) {
+            assertEquals(
+                getDocById(INDEX_NAME, String.valueOf(i + 1)).get("_source"),
+                getDocById(INDEX_NAME, "batch_" + (i + 1)).get("_source")
+            );
+        }
+    }
+
 }

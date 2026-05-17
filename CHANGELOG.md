@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+- Add size-based (byte-aware) batching for neural search ingest processors ([#1762](https://github.com/opensearch-project/neural-search/pull/1762))
 
 ### Enhancements
 * Improve error messages for misconfigured remote model connectors to provide actionable guidance on post_process_function configuration ([#1825](https://github.com/opensearch-project/neural-search/pull/1825))
@@ -14,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Bug Fixes
 * Fix semantic highlighter crash on documents with missing highlighted fields ([#1810](https://github.com/opensearch-project/neural-search/pull/1810))
 * [Text Chunking] Fix text chunking processor ignoring index max_token_count setting when ingesting via alias ([#1803](https://github.com/opensearch-project/neural-search/pull/1803))
-* Fix sparse ANN search failure due to a core change ([#1855](https://github.com/opensearch-project/neural-search/pull/1855)) 
+* Fix sparse ANN search failure due to a core change ([#1855](https://github.com/opensearch-project/neural-search/pull/1855))
 
 ### Infrastructure
 * Fix flaky integration test failure caused by ML memory circuit breaker during model deployment in distribution pipeline ([#1824](https://github.com/opensearch-project/neural-search/pull/1824))

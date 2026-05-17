@@ -44,6 +44,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
@@ -66,6 +68,26 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     public static final String FIELD_MAP_FIELD = "field_map";
     public static final String SKIP_EXISTING = "skip_existing";
     public static final boolean DEFAULT_SKIP_EXISTING = false;
+    public static final String BATCH_SIZE_BYTES_FIELD = "batch_size_bytes";
+    public static final int DEFAULT_BATCH_SIZE_BYTES = -1;
+    /**
+     * Maximum allowed value for batch_size_bytes. Set to 100MB to match OpenSearch's default
+     * http.max_content_length, beyond which the request would be rejected by the HTTP layer anyway.
+     */
+    public static final int MAX_BATCH_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
+    /**
+     * When batch_size_bytes is configured but batch_size is not explicitly set by the user,
+     * we auto-elevate batch_size to this value so that the byte-based limit becomes the primary
+     * effective batching constraint. 1000 is the maximum batch size supported by OpenSearch's
+     * ingest pipeline batching framework (AbstractBatchingProcessor), so this effectively makes
+     * batch_size_bytes the sole constraint for typical workloads.
+     *
+     * <p>For models that enforce both a payload size limit AND a per-request document-count limit
+     * (e.g. Cohere Embed supports at most 96 texts per request), users should set batch_size
+     * explicitly alongside batch_size_bytes. The processor will then respect whichever limit is
+     * hit first.
+     */
+    public static final int AUTO_BATCH_SIZE_FOR_BYTE_BATCHING = 1000;
     private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {
         if (v1 instanceof Collection && v2 instanceof Collection) {
             ((Collection) v1).addAll((Collection) v2);
@@ -92,11 +114,46 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     private final Environment environment;
     private final ClusterService clusterService;
+    private final int batchSizeBytes;
+
+    /** Returns the effective batch_size configured for this processor. Exposed for testing. */
+    @VisibleForTesting
+    public int getBatchSize() {
+        return batchSize;
+    }
 
     public InferenceProcessor(
         String tag,
         String description,
         int batchSize,
+        String type,
+        String listTypeNestedMapKey,
+        String modelId,
+        Map<String, Object> fieldMap,
+        MLCommonsClientAccessor clientAccessor,
+        Environment environment,
+        ClusterService clusterService
+    ) {
+        this(
+            tag,
+            description,
+            batchSize,
+            DEFAULT_BATCH_SIZE_BYTES,
+            type,
+            listTypeNestedMapKey,
+            modelId,
+            fieldMap,
+            clientAccessor,
+            environment,
+            clusterService
+        );
+    }
+
+    public InferenceProcessor(
+        String tag,
+        String description,
+        int batchSize,
+        int batchSizeBytes,
         String type,
         String listTypeNestedMapKey,
         String modelId,
@@ -115,6 +172,84 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         this.mlCommonsClientAccessor = clientAccessor;
         this.environment = environment;
         this.clusterService = clusterService;
+        this.batchSizeBytes = batchSizeBytes;
+    }
+
+    /**
+     * Validates the batch_size_bytes configuration value and resolves the effective batch_size
+     * to use when constructing a processor. This shared helper is intended to be called from
+     * processor factory implementations to avoid duplicating validation logic.
+     *
+     * <p>Validation rules:
+     * <ul>
+     *   <li>If batch_size_bytes is the sentinel value ({@link #DEFAULT_BATCH_SIZE_BYTES}), it is
+     *       disabled and no validation is performed.</li>
+     *   <li>If batch_size_bytes is set, it must be a positive integer.</li>
+     *   <li>If batch_size_bytes is set, it must not exceed {@link #MAX_BATCH_SIZE_BYTES} (100MB).</li>
+     * </ul>
+     *
+     * <p><b>Batch size resolution:</b>
+     * <ul>
+     *   <li>If the user did not explicitly set batch_size ({@code userSetBatchSize} is false),
+     *       batch_size is auto-elevated to {@link #AUTO_BATCH_SIZE_FOR_BYTE_BATCHING}
+     *       ({@code Integer.MAX_VALUE}), making the byte limit the sole effective constraint.
+     *       This is the correct behavior for models with only a payload size limit (e.g. Amazon
+     *       Bedrock, Claude, most OpenAI-compatible endpoints).</li>
+     *   <li>If the user explicitly set batch_size, it is preserved as-is. The processor will
+     *       then dispatch a batch when either the document-count limit or the byte limit is
+     *       reached first. This is the correct configuration for models that enforce both limits
+     *       (e.g. Cohere Embed: max 96 texts per request and a payload size limit).</li>
+     * </ul>
+     *
+     * <p><b>Why {@code userSetBatchSize} is needed:</b>
+     * {@code AbstractBatchingProcessor.Factory.create()} removes {@code batch_size} from the
+     * config map via {@code ConfigurationUtils.readIntProperty} before calling
+     * {@code newProcessor()}, so it is impossible to detect user intent inside
+     * {@code newProcessor()} directly. Factories must override {@code create()} to peek at the
+     * config map before calling {@code super.create()} and pass the result here.
+     *
+     * @param processorType    the processor type string, used in error messages
+     * @param tag              the processor tag, used in error messages
+     * @param batchSizeBytes   the raw batch_size_bytes value read from config
+     * @param batchSize        the batch_size value resolved by AbstractBatchingProcessor
+     * @param userSetBatchSize true if the user explicitly included batch_size in the pipeline config
+     * @return the effective batch_size to pass to the processor constructor
+     * @throws IllegalArgumentException if batch_size_bytes is invalid
+     */
+    public static int validateBatchSizeBytesAndResolveEffectiveBatchSize(
+        String processorType,
+        String tag,
+        int batchSizeBytes,
+        int batchSize,
+        boolean userSetBatchSize
+    ) {
+        if (batchSizeBytes == DEFAULT_BATCH_SIZE_BYTES) {
+            return batchSize;
+        }
+        if (batchSizeBytes <= 0) {
+            throw new IllegalArgumentException(
+                "[" + processorType + "] [" + tag + "] [" + BATCH_SIZE_BYTES_FIELD + "] must be a positive integer when specified"
+            );
+        }
+        if (batchSizeBytes > MAX_BATCH_SIZE_BYTES) {
+            throw new IllegalArgumentException(
+                "["
+                    + processorType
+                    + "] ["
+                    + tag
+                    + "] ["
+                    + BATCH_SIZE_BYTES_FIELD
+                    + "] must not exceed "
+                    + MAX_BATCH_SIZE_BYTES
+                    + " bytes (100MB)"
+            );
+        }
+        // batch_size_bytes is enabled. If the user did not explicitly set batch_size, auto-elevate
+        // it so the byte limit is the sole effective constraint.
+        if (!userSetBatchSize) {
+            return AUTO_BATCH_SIZE_FOR_BYTE_BATCHING;
+        }
+        return batchSize;
     }
 
     private void validateEmbeddingConfiguration(Map<String, Object> fieldMap) {
@@ -208,9 +343,23 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
 
     /**
      * This is a helper function for subBatchExecute, which invokes doBatchExecute for given inference list.
+     * When batch_size_bytes is configured, the inference list is further split into sub-batches based on
+     * cumulative byte size of the texts. Each sub-batch is sent to doBatchExecute independently and results
+     * are stitched back together before being passed to batchExecuteHandler.
+     *
+     * <p><b>Failure semantics:</b> When batch_size_bytes is enabled, multiple sub-batches are dispatched
+     * in parallel. If any sub-batch fails, the entire set of ingestDocumentWrappers is failed via
+     * {@code updateWithExceptions}. This is consistent with the existing behavior when batch_size_bytes
+     * is disabled (a single doBatchExecute failure fails all documents in the batch). However, users
+     * should be aware that with auto-elevated batch_size (when only batch_size_bytes is set and
+     * batch_size is not explicitly configured), a larger number of documents may be grouped into a
+     * single internal batch, so a single inference failure will affect more documents than it would
+     * with a small explicit batch_size.
+     *
      * @param ingestDocumentWrappers a list of IngestDocuments in a batch.
      * @param inferenceList a list of String for inference.
      * @param dataForInferences a list of data for inference, which includes ingestDocumentWrapper, processMap, inferenceList.
+     * @param handler a callback handler to handle inference results.
      */
     protected void doSubBatchExecute(
         List<IngestDocumentWrapper> ingestDocumentWrappers,
@@ -221,10 +370,132 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
         Tuple<List<String>, Map<Integer, Integer>> sortedResult = sortByLengthAndReturnOriginalOrder(inferenceList);
         inferenceList = sortedResult.v1();
         Map<Integer, Integer> originalOrder = sortedResult.v2();
-        doBatchExecute(inferenceList, results -> {
-            batchExecuteHandler(results, dataForInferences, originalOrder);
-            handler.accept(ingestDocumentWrappers);
-        }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+
+        if (batchSizeBytes <= 0) {
+            // No byte-based batching — send the entire inference list in one call (existing behavior)
+            doBatchExecute(inferenceList, results -> {
+                batchExecuteHandler(results, dataForInferences, originalOrder);
+                handler.accept(ingestDocumentWrappers);
+            }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+            return;
+        }
+
+        // Split inference list into sub-batches based on cumulative byte size
+        List<List<String>> subBatches = splitInferenceListByBytes(inferenceList, batchSizeBytes);
+
+        if (subBatches.size() == 1) {
+            // Only one sub-batch, no need for stitching logic
+            doBatchExecute(subBatches.get(0), results -> {
+                batchExecuteHandler(results, dataForInferences, originalOrder);
+                handler.accept(ingestDocumentWrappers);
+            }, exception -> { updateWithExceptions(ingestDocumentWrappers, handler, exception); });
+            return;
+        }
+
+        // Multiple sub-batches: execute in parallel and stitch results in order
+        int numBatches = subBatches.size();
+        List<?>[] orderedResults = new List<?>[numBatches];
+        AtomicInteger completedCount = new AtomicInteger(0);
+        AtomicReference<Exception> firstException = new AtomicReference<>();
+
+        for (int i = 0; i < numBatches; i++) {
+            final int batchIdx = i;
+            doBatchExecute(subBatches.get(batchIdx), results -> {
+                orderedResults[batchIdx] = results;
+                if (completedCount.incrementAndGet() == numBatches) {
+                    // All sub-batches done — stitch results in original order
+                    List<Object> allResults = new ArrayList<>();
+                    for (List<?> batchResult : orderedResults) {
+                        allResults.addAll(batchResult);
+                    }
+                    batchExecuteHandler(allResults, dataForInferences, originalOrder);
+                    handler.accept(ingestDocumentWrappers);
+                }
+            }, exception -> {
+                if (firstException.compareAndSet(null, exception)) {
+                    updateWithExceptions(ingestDocumentWrappers, handler, exception);
+                }
+            });
+        }
+    }
+
+    /**
+     * Splits an inference list into sub-batches where each sub-batch's cumulative UTF-8 byte size
+     * does not exceed maxBytes. A single text that exceeds maxBytes is always placed in its own
+     * sub-batch (floor of 1 item per batch) — it is never rejected. This means the actual payload
+     * sent to ML Commons for a single oversized text may exceed the configured batch_size_bytes
+     * limit. Users whose models enforce strict payload size limits should pre-chunk their text
+     * fields (e.g. using the chunking ingest processor) to ensure no single text exceeds the limit.
+     *
+     * <p>UTF-8 byte length is computed without allocating a byte array, by iterating the string's
+     * characters directly. This avoids the GC pressure of {@code String.getBytes(UTF_8)} when
+     * called for every text in a large inference list.
+     *
+     * @param inferenceList the list of inference texts to split
+     * @param maxBytes the maximum cumulative byte size per sub-batch
+     * @return a list of sub-batches
+     */
+    @VisibleForTesting
+    static List<List<String>> splitInferenceListByBytes(List<String> inferenceList, int maxBytes) {
+        List<List<String>> subBatches = new ArrayList<>();
+        List<String> currentBatch = new ArrayList<>();
+        long currentBatchBytes = 0;
+
+        for (String text : inferenceList) {
+            long textBytes = utf8ByteLength(text);
+
+            if (!currentBatch.isEmpty() && currentBatchBytes + textBytes > maxBytes) {
+                // Adding this text would exceed the limit — flush current batch
+                subBatches.add(currentBatch);
+                currentBatch = new ArrayList<>();
+                currentBatchBytes = 0;
+            }
+
+            currentBatch.add(text);
+            currentBatchBytes += textBytes;
+        }
+
+        if (!currentBatch.isEmpty()) {
+            subBatches.add(currentBatch);
+        }
+
+        return subBatches;
+    }
+
+    /**
+     * Computes the UTF-8 encoded byte length of a string without allocating a byte array.
+     * This is equivalent to {@code text.getBytes(StandardCharsets.UTF_8).length} but avoids
+     * the allocation and copy overhead, which matters when called for every text in a large
+     * inference list.
+     *
+     * <p>UTF-8 encoding rules by codepoint range:
+     * <ul>
+     *   <li>U+0000–U+007F (ASCII): 1 byte</li>
+     *   <li>U+0080–U+07FF: 2 bytes</li>
+     *   <li>U+0800–U+FFFF (BMP, excluding surrogates): 3 bytes</li>
+     *   <li>U+10000–U+10FFFF (supplementary, encoded as surrogate pairs in Java): 4 bytes</li>
+     * </ul>
+     *
+     * @param text the string to measure
+     * @return the number of bytes required to encode the string in UTF-8
+     */
+    @VisibleForTesting
+    static long utf8ByteLength(String text) {
+        long bytes = 0;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c <= 0x7F) {
+                bytes++;
+            } else if (c <= 0x7FF) {
+                bytes += 2;
+            } else if (Character.isHighSurrogate(c)) {
+                bytes += 4; // supplementary character encoded as surrogate pair = 4 UTF-8 bytes
+                i++;        // skip the paired low surrogate
+            } else {
+                bytes += 3;
+            }
+        }
+        return bytes;
     }
 
     protected void batchExecuteHandler(List<?> results, List<DataForInference> dataForInferences, Map<Integer, Integer> originalOrder) {
