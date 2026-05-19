@@ -236,4 +236,93 @@ public class HighlightContextBuilderTests extends OpenSearchTestCase {
         SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 1);
         return new SearchResponse(sections, null, 1, 1, 0, 1, null, SearchResponse.Clusters.EMPTY);
     }
+
+    public void testMaxBatchSizeFromOptions() {
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("body")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1", SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE, 50))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchResponse response = mockResponse(new SearchHit[] { hitWithSource("1", Map.of("body", "text")) });
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(50, ctx.getMaxBatchSize());
+    }
+
+    public void testMaxBatchSizeFromStringOption() {
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("body")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1", SemanticHighlightingConstants.MAX_INFERENCE_BATCH_SIZE, "25"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchResponse response = mockResponse(new SearchHit[] { hitWithSource("1", Map.of("body", "text")) });
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(25, ctx.getMaxBatchSize());
+    }
+
+    public void testDefaultMaxBatchSizeWhenNotSpecified() {
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("body")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchResponse response = mockResponse(new SearchHit[] { hitWithSource("1", Map.of("body", "text")) });
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE, ctx.getMaxBatchSize());
+    }
+
+    public void testNestedTargetWithEmptyInnerHitsText() {
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("chunks.text")
+            .nestedPath("chunks")
+            .innerHitsBucketName("chunks")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchHit innerHit = hitWithSource("1", Map.of("text", ""));
+        SearchHits innerHits = new SearchHits(new SearchHit[] { innerHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+
+        SearchHit topHit = hitWithSource("1", Map.of("title", "paper"));
+        topHit.setInnerHits(Map.of("chunks", innerHits));
+
+        SearchResponse response = mockResponse(new SearchHit[] { topHit });
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(0, ctx.size());
+    }
+
+    public void testNoMatchSizeAndEncoderFromOptions() {
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("body")
+            .options(
+                Map.of(
+                    SemanticHighlightingConstants.MODEL_ID,
+                    "m1",
+                    SemanticHighlightingConstants.NO_MATCH_SIZE,
+                    10,
+                    SemanticHighlightingConstants.ENCODER,
+                    "html"
+                )
+            )
+            .preTag("<b>")
+            .postTag("</b>")
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchResponse response = mockResponse(new SearchHit[] { hitWithSource("1", Map.of("body", "text")) });
+        HighlightContext ctx = builder.build(config, response, 0L);
+
+        assertEquals(1, ctx.size());
+        assertEquals(Integer.valueOf(10), ctx.getNoMatchSizes().get(0));
+        assertEquals("html", ctx.getEncoders().get(0));
+        assertEquals("<b>", ctx.getPreTags().get(0));
+        assertEquals("</b>", ctx.getPostTags().get(0));
+    }
 }

@@ -229,4 +229,100 @@ public class HighlightConfigResolverTests extends OpenSearchTestCase {
         request.source(src);
         return HighlightConfigResolver.resolve(request);
     }
+
+    public void testResolvesInnerHitsInsideBoolShould() {
+        BoolQueryBuilder bool = new BoolQueryBuilder().should(buildNestedWithInnerHit("chunks"));
+        HighlightConfig config = resolveWithQuery(bool);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+    }
+
+    public void testResolvesInnerHitsInsideBoolFilter() {
+        BoolQueryBuilder bool = new BoolQueryBuilder().filter(buildNestedWithInnerHit("chunks"));
+        HighlightConfig config = resolveWithQuery(bool);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+    }
+
+    public void testResolvesInnerHitsInsideBoolMustNot() {
+        BoolQueryBuilder bool = new BoolQueryBuilder().mustNot(buildNestedWithInnerHit("chunks"));
+        HighlightConfig config = resolveWithQuery(bool);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+    }
+
+    public void testInnerHitsNonSemanticFieldIgnored() {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+
+        HighlightBuilder innerHl = new HighlightBuilder();
+        HighlightBuilder.Field f = new HighlightBuilder.Field("chunks.text");
+        f.highlighterType("unified"); // not semantic
+        innerHl.field(f);
+
+        InnerHitBuilder inner = new InnerHitBuilder();
+        inner.setHighlightBuilder(innerHl);
+
+        NestedQueryBuilder nested = new NestedQueryBuilder("chunks", new MatchQueryBuilder("chunks.text", "x"), ScoreMode.Avg).innerHit(
+            inner
+        );
+        src.query(nested);
+        request.source(src);
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertFalse(config.hasTargets());
+    }
+
+    public void testHighlightQueryUsedForQueryText() {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        HighlightBuilder hl = new HighlightBuilder();
+        HighlightBuilder.Field f = new HighlightBuilder.Field("body");
+        f.highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
+        hl.field(f);
+        hl.highlightQuery(new MatchQueryBuilder("body", "highlight query text"));
+        src.highlighter(hl);
+        src.query(new MatchQueryBuilder("body", "main query text"));
+        request.source(src);
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        // highlight_query takes priority over main query
+        assertEquals("highlight query text", config.getQueryText());
+    }
+
+    public void testGlobalOptionsAreMergedWithFieldOptions() {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        HighlightBuilder hl = new HighlightBuilder();
+        hl.options(java.util.Map.of("model_id", "global_model", "encoder", "html"));
+        HighlightBuilder.Field f = new HighlightBuilder.Field("body");
+        f.highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
+        f.options(java.util.Map.of("model_id", "field_model")); // overrides global
+        hl.field(f);
+        src.highlighter(hl);
+        src.query(new MatchQueryBuilder("body", "x"));
+        request.source(src);
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        SemanticHighlightTarget target = config.getTargetsOrEmpty().get(0);
+        // field-level overrides global
+        assertEquals("field_model", target.getOptions().get("model_id"));
+        // global flows through when not overridden
+        assertEquals("html", target.getOptions().get("encoder"));
+    }
+
+    public void testQueryTextExtractionFailsGracefully() {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        HighlightBuilder hl = new HighlightBuilder();
+        HighlightBuilder.Field f = new HighlightBuilder.Field("body");
+        f.highlighterType(SemanticHighlightingConstants.HIGHLIGHTER_TYPE);
+        hl.field(f);
+        src.highlighter(hl);
+        // Use a query type that extractQueryTextFromBuilder doesn't support
+        src.query(new org.opensearch.index.query.MatchAllQueryBuilder());
+        request.source(src);
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertTrue(config.hasTargets());
+        // queryText is null because MatchAllQuery can't be extracted
+        assertNull(config.getQueryText());
+    }
 }
