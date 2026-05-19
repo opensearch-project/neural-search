@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.processor;
 
+import java.util.List;
+
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -12,40 +14,45 @@ import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
+import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfigResolver;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightContextBuilder;
 import org.opensearch.neuralsearch.highlight.batch.utils.HighlightResultApplier;
-import org.opensearch.neuralsearch.highlight.utils.HighlightConfigBuilder;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
-import org.opensearch.search.SearchHit;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 
-import java.util.List;
-
 /**
- * System-generated processor that handles batch semantic highlighting.
- * This processor only handles batch inference mode since non-batch is handled by SemanticHighlighter directly.
+ * System-generated search response processor for batch semantic highlighting.
+ * Walks the request's highlight DSL — including {@code inner_hits} — to collect
+ * every {@code type: semantic} field, executes batch inference (paginated when
+ * the row count exceeds {@code max_inference_batch_size}), and writes the model
+ * output back into each hit's highlight fields.
  */
 @Log4j2
 public class SemanticHighlightingProcessor implements SearchResponseProcessor, SystemGeneratedProcessor {
 
     private final boolean ignoreFailure;
-    private final MLCommonsClientAccessor mlClientAccessor;
+    private final MLCommonsClientAccessor mlCommonsClientAccessor;
     private final HighlightContextBuilder contextBuilder;
     private final String tag;
     private final String description;
 
-    public SemanticHighlightingProcessor(boolean ignoreFailure, MLCommonsClientAccessor mlClientAccessor) {
+    public SemanticHighlightingProcessor(boolean ignoreFailure, MLCommonsClientAccessor mlCommonsClientAccessor) {
         this.ignoreFailure = ignoreFailure;
-        this.mlClientAccessor = mlClientAccessor;
+        this.mlCommonsClientAccessor = mlCommonsClientAccessor;
         this.contextBuilder = new HighlightContextBuilder();
         this.tag = SemanticHighlightingConstants.DEFAULT_PROCESSOR_TAG;
         this.description = SemanticHighlightingConstants.DEFAULT_PROCESSOR_DESCRIPTION;
+    }
+
+    @Override
+    public SearchResponse processResponse(SearchRequest request, SearchResponse response) {
+        throw new UnsupportedOperationException("Semantic highlighting processor requires async processing");
     }
 
     @Override
@@ -56,123 +63,80 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
         ActionListener<SearchResponse> responseListener
     ) {
         long startTime = System.currentTimeMillis();
-        // Increment batch stat
-        EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT);
 
         try {
-            // Use unified config builder that includes extraction and validation
-            HighlightConfig config = HighlightConfigBuilder.buildFromSearchRequest(request, response);
+            HighlightConfig config = HighlightConfigResolver.resolve(request);
 
-            if (config.getValidationError() != null) {
-                log.debug("Configuration extraction/validation failed: {}", config.getValidationError());
+            if (!config.hasTargets()) {
                 responseListener.onResponse(response);
                 return;
             }
 
-            // Check if basic fields are present
-            if (!config.hasRequiredFields()) {
-                log.debug("Missing required fields for semantic highlighting");
+            if (config.getQueryText() == null) {
+                log.debug("Skipping semantic highlighting: could not extract query text");
                 responseListener.onResponse(response);
                 return;
             }
 
-            // This processor only handles batch inference
-            if (!config.isBatchInference()) {
-                log.debug("Non-batch inference should be handled by SemanticHighlighter directly");
+            EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT);
+
+            HighlightContext context = contextBuilder.build(config, response, startTime);
+            if (context.isEmpty()) {
+                log.debug("No valid hits/inner hits with text to highlight");
                 responseListener.onResponse(response);
                 return;
             }
 
-            // For batch inference, always use REMOTE model type
-            HighlightConfig enrichedConfig = config.withModelType(FunctionName.REMOTE);
-
-            // Validate batch inference
-            String batchValidationError = enrichedConfig.validateBatchInference();
-            if (batchValidationError != null) {
-                responseListener.onFailure(new IllegalArgumentException(batchValidationError));
+            if (context.getModelId() == null) {
+                responseListener.onFailure(
+                    new IllegalArgumentException(
+                        "options.model_id is required on a semantic highlight field when batch inference is enabled"
+                    )
+                );
                 return;
             }
 
-            if (!enrichedConfig.isValid()) {
-                responseListener.onFailure(new IllegalArgumentException(enrichedConfig.getValidationError()));
-                return;
+            HighlightResultApplier applier = new HighlightResultApplier();
+
+            if (context.getRequests().size() <= context.getMaxBatchSize()) {
+                processSingleBatch(context, applier, responseListener);
+            } else {
+                new BatchExecutor(context, applier, responseListener).execute();
             }
-
-            // Build context and execute batch highlighting
-            executeBatchHighlighting(enrichedConfig, response, startTime, responseListener);
-
         } catch (Exception e) {
             log.error("Error in semantic highlighting processor", e);
             handleError(e, response, responseListener);
         }
     }
 
-    private void executeBatchHighlighting(
-        HighlightConfig config,
-        SearchResponse response,
-        long startTime,
-        ActionListener<SearchResponse> responseListener
-    ) {
-        HighlightContext context = contextBuilder.build(config, response, startTime);
-        if (context.isEmpty()) {
-            log.debug("No valid documents to highlight");
-            responseListener.onResponse(response);
-            return;
-        }
-
-        HighlightResultApplier resultApplier = new HighlightResultApplier(config.getPreTag(), config.getPostTag());
-
-        if (context.getRequests().size() <= config.getMaxBatchSize()) {
-            processSingleBatch(context, config, resultApplier, responseListener);
-        } else {
-            processMultipleBatches(context, config, resultApplier, responseListener);
-        }
-    }
-
     private void processSingleBatch(
         HighlightContext context,
-        HighlightConfig config,
-        HighlightResultApplier resultApplier,
+        HighlightResultApplier applier,
         ActionListener<SearchResponse> responseListener
     ) {
         long batchStartTime = System.currentTimeMillis();
-
-        mlClientAccessor.batchInferenceSentenceHighlighting(
-            config.getModelId(),
+        mlCommonsClientAccessor.batchInferenceSentenceHighlighting(
+            context.getModelId(),
             context.getRequests(),
-            context.getModelType(),
+            FunctionName.REMOTE,
             ActionListener.wrap(batchResults -> {
                 try {
-                    log.debug(
-                        "Single batch inference completed: {} documents in {}ms",
-                        context.size(),
-                        System.currentTimeMillis() - batchStartTime
-                    );
-
-                    resultApplier.applyBatchResults(
+                    log.debug("Single batch completed: {} docs in {}ms", context.size(), System.currentTimeMillis() - batchStartTime);
+                    applier.applyBatchResults(
                         context.getValidHits(),
                         batchResults,
-                        context.getFieldName(),
-                        context.getPreTag(),
-                        context.getPostTag()
+                        context.getFieldNames(),
+                        context.getPreTags(),
+                        context.getPostTags(),
+                        context.getNoMatchSizes(),
+                        context.getEncoders()
                     );
-
                     completeProcessing(context, responseListener);
                 } catch (Exception e) {
                     handleError(e, context.getOriginalResponse(), responseListener);
                 }
-            }, error -> handleError(error, context.getOriginalResponse(), responseListener))
+            }, err -> handleError(err, context.getOriginalResponse(), responseListener))
         );
-    }
-
-    private void processMultipleBatches(
-        HighlightContext context,
-        HighlightConfig config,
-        HighlightResultApplier resultApplier,
-        ActionListener<SearchResponse> responseListener
-    ) {
-        BatchExecutor executor = new BatchExecutor(context, config, resultApplier, responseListener);
-        executor.execute();
     }
 
     private void completeProcessing(HighlightContext context, ActionListener<SearchResponse> responseListener) {
@@ -181,99 +145,15 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
         responseListener.onResponse(finalResponse);
     }
 
-    private void handleError(Exception e, SearchResponse response, ActionListener<SearchResponse> responseListener) {
+    private void handleError(Throwable e, SearchResponse response, ActionListener<SearchResponse> responseListener) {
         if (ignoreFailure) {
-            log.warn("Semantic highlighting failed, returning original response", e);
+            log.warn("Semantic highlighting failed; returning original response", e);
             responseListener.onResponse(response);
+        } else if (e instanceof Exception) {
+            responseListener.onFailure((Exception) e);
         } else {
-            responseListener.onFailure(e);
+            responseListener.onFailure(new RuntimeException(e));
         }
-    }
-
-    /**
-     * Inner class to handle multi-batch execution
-     */
-    private class BatchExecutor {
-        private final HighlightContext context;
-        private final HighlightConfig config;
-        private final HighlightResultApplier resultApplier;
-        private final ActionListener<SearchResponse> responseListener;
-        private final List<SentenceHighlightingRequest> allRequests;
-        private final List<SearchHit> allValidHits;
-        private int currentIndex = 0;
-
-        BatchExecutor(
-            HighlightContext context,
-            HighlightConfig config,
-            HighlightResultApplier resultApplier,
-            ActionListener<SearchResponse> responseListener
-        ) {
-            this.context = context;
-            this.config = config;
-            this.resultApplier = resultApplier;
-            this.responseListener = responseListener;
-            this.allRequests = context.getRequests();
-            this.allValidHits = context.getValidHits();
-        }
-
-        void execute() {
-            processNextBatch();
-        }
-
-        private void processNextBatch() {
-            if (currentIndex >= allRequests.size()) {
-                completeProcessing(context, responseListener);
-                return;
-            }
-
-            int startIdx = currentIndex;
-            int endIdx = Math.min(startIdx + config.getMaxBatchSize(), allRequests.size());
-            int batchNumber = (startIdx / config.getMaxBatchSize()) + 1;
-            int totalBatches = (allRequests.size() + config.getMaxBatchSize() - 1) / config.getMaxBatchSize();
-
-            List<SentenceHighlightingRequest> batchRequests = allRequests.subList(startIdx, endIdx);
-
-            log.debug("Processing batch {}/{}: documents {}-{}", batchNumber, totalBatches, startIdx + 1, endIdx);
-
-            long batchStartTime = System.currentTimeMillis();
-
-            mlClientAccessor.batchInferenceSentenceHighlighting(
-                config.getModelId(),
-                batchRequests,
-                context.getModelType(),
-                ActionListener.wrap(batchResults -> {
-                    try {
-                        log.debug(
-                            "Batch {}/{} completed: {} documents in {}ms",
-                            batchNumber,
-                            totalBatches,
-                            batchRequests.size(),
-                            System.currentTimeMillis() - batchStartTime
-                        );
-
-                        resultApplier.applyBatchResultsWithIndices(
-                            allValidHits,
-                            batchResults,
-                            startIdx,
-                            endIdx,
-                            context.getFieldName(),
-                            context.getPreTag(),
-                            context.getPostTag()
-                        );
-
-                        currentIndex = endIdx;
-                        processNextBatch();
-                    } catch (Exception e) {
-                        handleError(e, context.getOriginalResponse(), responseListener);
-                    }
-                }, error -> handleError(error, context.getOriginalResponse(), responseListener))
-            );
-        }
-    }
-
-    @Override
-    public SearchResponse processResponse(SearchRequest request, SearchResponse response) {
-        throw new UnsupportedOperationException("Semantic highlighting processor requires async processing");
     }
 
     @Override
@@ -298,7 +178,65 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
 
     @Override
     public SystemGeneratedProcessor.ExecutionStage getExecutionStage() {
-        // Execute after user-defined processors to allow them to modify the response first
+        // Run after user-defined processors so users can shape the response first.
         return ExecutionStage.POST_USER_DEFINED;
+    }
+
+    /** Serial pagination for context sizes that exceed {@code max_inference_batch_size}. */
+    private class BatchExecutor {
+        private final HighlightContext context;
+        private final HighlightResultApplier applier;
+        private final ActionListener<SearchResponse> responseListener;
+        private final List<SentenceHighlightingRequest> allRequests;
+        private int currentIndex = 0;
+
+        BatchExecutor(HighlightContext context, HighlightResultApplier applier, ActionListener<SearchResponse> responseListener) {
+            this.context = context;
+            this.applier = applier;
+            this.responseListener = responseListener;
+            this.allRequests = context.getRequests();
+        }
+
+        void execute() {
+            processNextBatch();
+        }
+
+        private void processNextBatch() {
+            if (currentIndex >= allRequests.size()) {
+                completeProcessing(context, responseListener);
+                return;
+            }
+            int startIdx = currentIndex;
+            int endIdx = Math.min(startIdx + context.getMaxBatchSize(), allRequests.size());
+
+            List<SentenceHighlightingRequest> slice = allRequests.subList(startIdx, endIdx);
+            long batchStart = System.currentTimeMillis();
+
+            mlCommonsClientAccessor.batchInferenceSentenceHighlighting(
+                context.getModelId(),
+                slice,
+                FunctionName.REMOTE,
+                ActionListener.wrap(batchResults -> {
+                    try {
+                        log.debug("Batch [{}, {}) completed in {}ms", startIdx, endIdx, System.currentTimeMillis() - batchStart);
+                        applier.applyBatchResultsWithIndices(
+                            context.getValidHits(),
+                            batchResults,
+                            startIdx,
+                            endIdx,
+                            context.getFieldNames(),
+                            context.getPreTags(),
+                            context.getPostTags(),
+                            context.getNoMatchSizes(),
+                            context.getEncoders()
+                        );
+                        currentIndex = endIdx;
+                        processNextBatch();
+                    } catch (Exception e) {
+                        handleError(e, context.getOriginalResponse(), responseListener);
+                    }
+                }, err -> handleError(err, context.getOriginalResponse(), responseListener))
+            );
+        }
     }
 }

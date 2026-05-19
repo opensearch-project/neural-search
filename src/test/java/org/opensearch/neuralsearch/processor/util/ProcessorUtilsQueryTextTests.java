@@ -5,12 +5,18 @@
 package org.opensearch.neuralsearch.processor.util;
 
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.BoostingQueryBuilder;
+import org.opensearch.index.query.ConstantScoreQueryBuilder;
+import org.opensearch.index.query.DisMaxQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
+import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
+import org.opensearch.script.Script;
 import org.opensearch.test.OpenSearchTestCase;
 import org.apache.lucene.search.join.ScoreMode;
 
@@ -43,15 +49,8 @@ public class ProcessorUtilsQueryTextTests extends OpenSearchTestCase {
         boolQuery.must(new MatchQueryBuilder("field1", "must text"));
         boolQuery.should(new MatchQueryBuilder("field2", "should text"));
 
-        IllegalArgumentException exception = expectThrows(
-            IllegalArgumentException.class,
-            () -> ProcessorUtils.extractQueryTextFromBuilder(boolQuery)
-        );
-
-        assertEquals(
-            String.format(Locale.ROOT, "Query type %s not supported for semantic highlighting.", "BoolQueryBuilder"),
-            exception.getMessage()
-        );
+        String result = ProcessorUtils.extractQueryTextFromBuilder(boolQuery);
+        assertEquals("must text should text", result);
     }
 
     public void testExtractQueryTextFromBuilder_EmptyBoolQuery() {
@@ -62,10 +61,7 @@ public class ProcessorUtilsQueryTextTests extends OpenSearchTestCase {
             () -> ProcessorUtils.extractQueryTextFromBuilder(boolQuery)
         );
 
-        assertEquals(
-            String.format(Locale.ROOT, "Query type %s not supported for semantic highlighting.", "BoolQueryBuilder"),
-            exception.getMessage()
-        );
+        assertTrue(exception.getMessage().contains("bool query has no extractable clause"));
     }
 
     public void testExtractQueryTextFromBuilder_HybridQuery() {
@@ -125,5 +121,38 @@ public class ProcessorUtilsQueryTextTests extends OpenSearchTestCase {
 
         String result = ProcessorUtils.extractQueryTextFromBuilder(neuralKnnQuery);
         assertNull(result);
+    }
+
+    public void testExtractQueryTextFromBuilder_ConstantScoreUnwrapsInner() {
+        ConstantScoreQueryBuilder query = new ConstantScoreQueryBuilder(new MatchQueryBuilder("body", "constant text"));
+        assertEquals("constant text", ProcessorUtils.extractQueryTextFromBuilder(query));
+    }
+
+    public void testExtractQueryTextFromBuilder_FunctionScoreUnwrapsInner() {
+        FunctionScoreQueryBuilder query = new FunctionScoreQueryBuilder(new MatchQueryBuilder("body", "boosted text"));
+        assertEquals("boosted text", ProcessorUtils.extractQueryTextFromBuilder(query));
+    }
+
+    public void testExtractQueryTextFromBuilder_ScriptScoreUnwrapsInner() {
+        ScriptScoreQueryBuilder query = new ScriptScoreQueryBuilder(
+            new MatchQueryBuilder("body", "scored text"),
+            new Script("doc['x'].value")
+        );
+        assertEquals("scored text", ProcessorUtils.extractQueryTextFromBuilder(query));
+    }
+
+    public void testExtractQueryTextFromBuilder_BoostingUsesPositiveOnly() {
+        BoostingQueryBuilder query = new BoostingQueryBuilder(
+            new MatchQueryBuilder("body", "positive text"),
+            new MatchQueryBuilder("body", "negative text")
+        );
+        assertEquals("positive text", ProcessorUtils.extractQueryTextFromBuilder(query));
+    }
+
+    public void testExtractQueryTextFromBuilder_DisMax() {
+        DisMaxQueryBuilder query = new DisMaxQueryBuilder();
+        query.add(new MatchQueryBuilder("a", "alpha"));
+        query.add(new MatchQueryBuilder("b", "beta"));
+        assertEquals("alpha beta", ProcessorUtils.extractQueryTextFromBuilder(query));
     }
 }
