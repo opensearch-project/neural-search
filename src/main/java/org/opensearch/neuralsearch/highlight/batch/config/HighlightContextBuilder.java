@@ -10,7 +10,6 @@ import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchResponse;
-import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
@@ -68,7 +67,6 @@ public class HighlightContextBuilder {
             .originalResponse(response)
             .startTime(startTime)
             .modelId(resolveModelId(config))
-            .modelType(FunctionName.REMOTE)
             .maxBatchSize(resolveMaxBatchSize(config))
             .build();
     }

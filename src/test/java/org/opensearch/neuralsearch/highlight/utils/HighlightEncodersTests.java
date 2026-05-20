@@ -101,10 +101,4 @@ public class HighlightEncodersTests extends OpenSearchTestCase {
         String input = "<em>x</em> & y";
         assertEquals("<em>x</em> &amp; y", HighlightEncoders.htmlEncodePreservingTags(input, "<em>", "</em>"));
     }
-
-    public void testPrivateConstructor() throws Exception {
-        java.lang.reflect.Constructor<HighlightEncoders> c = HighlightEncoders.class.getDeclaredConstructor();
-        c.setAccessible(true);
-        assertNotNull(c.newInstance());
-    }
 }

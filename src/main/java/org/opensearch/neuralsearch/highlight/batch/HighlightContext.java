@@ -21,7 +21,7 @@ import org.opensearch.search.SearchHit;
  * {@code encoders[i]}."
  */
 @Getter
-@Builder
+@Builder(toBuilder = true)
 public class HighlightContext {
 
     private final List<SentenceHighlightingRequest> requests;

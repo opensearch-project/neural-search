@@ -10,6 +10,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
@@ -87,7 +88,29 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
                 return;
             }
 
-            new BatchExecutor(context, new HighlightResultApplier(), responseListener).execute();
+            // Resolve the model's actual function type before dispatching, so a local model
+            // configured for batch surfaces a clear error instead of an opaque cast failure
+            // from inside ml-commons.
+            mlCommonsClientAccessor.getModel(context.getModelId(), ActionListener.wrap(mlModel -> {
+                FunctionName modelType = mlModel.getAlgorithm();
+                if (modelType != FunctionName.REMOTE) {
+                    responseListener.onFailure(
+                        new IllegalArgumentException(
+                            String.format(
+                                java.util.Locale.ROOT,
+                                "Model [%s] with type [%s] does not support batch inference. "
+                                    + "Batch inference is only supported for REMOTE models. "
+                                    + "Please set 'batch_inference' to false or use a remote model.",
+                                context.getModelId(),
+                                modelType
+                            )
+                        )
+                    );
+                    return;
+                }
+                HighlightContext typed = context.toBuilder().modelType(modelType).build();
+                new BatchExecutor(typed, new HighlightResultApplier(), responseListener).execute();
+            }, err -> handleError(err, response, responseListener)));
         } catch (Exception e) {
             log.error("Error in semantic highlighting processor", e);
             handleError(e, response, responseListener);

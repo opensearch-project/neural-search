@@ -53,6 +53,9 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
             log.warn("Failed to prepare local highlighting model: {}", e.getMessage());
         }
 
+        // Enable the semantic-highlighter system factory so batch-inference tests can run.
+        updateClusterSettings("cluster.search.enabled_system_generated_factories", Collections.singletonList("semantic-highlighter"));
+
         // Create index for tests (supports both text and neural searches)
         prepareHighlightingIndex(TEST_INDEX);
         indexTestDocuments(TEST_INDEX);
@@ -349,15 +352,15 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
     }
 
     /**
-     * Verifies graceful degradation when the system-generated factory is disabled.
-     * With batch_inference=true but no system factory, the fetch-phase highlighter
-     * logs a WARN and returns null. The response succeeds (200 OK, no shard failures)
-     * with no highlight on the field. Single inference mode continues to work.
+     * Verifies that when batch semantic highlighting is requested but the system-generated
+     * factory is disabled in cluster settings, the request surfaces a clear error to the
+     * customer instead of silently producing no highlights. Single inference mode (no opt-in
+     * to batch) continues to work without the factory.
      */
     public void testSemanticHighlightingDisabledWhenFactoryNotEnabled() throws Exception {
         updateClusterSettings("cluster.search.enabled_system_generated_factories", Collections.emptyList());
         try {
-            // Test 1: Batch mode without system factory → request fails so the customer notices.
+            // Test 1: Batch mode without system factory → request must surface the misconfiguration.
             XContentBuilder batchSearchBody = XContentFactory.jsonBuilder()
                 .startObject()
                 .field("size", 1)
@@ -382,17 +385,21 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
             Request batchRequest = new Request("POST", "/" + TEST_INDEX + "/_search");
             batchRequest.setJsonEntity(batchSearchBody.toString());
 
-            org.opensearch.client.ResponseException ex = expectThrows(
-                org.opensearch.client.ResponseException.class,
-                () -> client().performRequest(batchRequest)
-            );
-            String body = EntityUtils.toString(ex.getResponse().getEntity());
+            // The misconfiguration surfaces as either a top-level ResponseException or a 200 OK
+            // with the error captured in _shards.failures (shard exceptions don't always escalate).
+            String body;
+            try {
+                Response response = client().performRequest(batchRequest);
+                body = EntityUtils.toString(response.getEntity());
+            } catch (org.opensearch.client.ResponseException ex) {
+                body = EntityUtils.toString(ex.getResponse().getEntity());
+            }
             assertTrue(
-                "error must mention the missing system-generated processor: " + body,
+                "response must surface the missing system-generated processor: " + body,
                 body.contains("system-generated processor is not enabled")
             );
 
-            // Test 2: Single inference mode should work without system factory
+            // Test 2: Single inference mode continues to work without the system factory.
             XContentBuilder singleSearchBody = XContentFactory.jsonBuilder()
                 .startObject()
                 .field("size", 1)
@@ -422,15 +429,17 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
 
             assertSemanticHighlighting(singleSearchResponse, TEST_FIELD, "treatments");
         } finally {
-            updateClusterSettings("cluster.search.enabled_system_generated_factories", null);
+            // Restore the system factory for the rest of the test methods in this class.
+            updateClusterSettings("cluster.search.enabled_system_generated_factories", Collections.singletonList("semantic-highlighter"));
         }
     }
 
     /**
-     * Customer-bug shape on a local model: nested query with inner_hits highlighting.
-     * Activates batch semantic highlighting via {@code ext.semantic_highlighting_batch: true}.
-     * The system processor walks the query tree, discovers the inner_hits target, and
-     * produces highlights for every inner hit.
+     * Local-model variant: nested query with {@code type: semantic} declared inside the
+     * {@code inner_hits.highlight} block, opted into batch semantic highlighting via the
+     * request-level {@code ext.semantic_highlighting_batch: true}. Batch inference is only
+     * supported for REMOTE models, so the request must surface a clear error rather than
+     * silently producing no highlights.
      */
     public void testBatchSemanticHighlightingWithExtBlockOnNestedInnerHitsLocalModel() throws Exception {
         final String nestedIndex = "test-semantic-highlight-nested-local-index";
@@ -445,11 +454,20 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
             );
             Request searchRequest = new Request("POST", "/" + nestedIndex + "/_search");
             searchRequest.setJsonEntity(queryBody);
-            Response searchResponse = client().performRequest(searchRequest);
-            String responseBody = EntityUtils.toString(searchResponse.getEntity());
-            Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
 
-            assertInnerHitsHaveSemanticHighlight(responseMap, "chunks", "chunks.text", "treatments");
+            // The unsupported combination surfaces either as a top-level ResponseException or
+            // as a 200 OK whose body captures the error in _shards.failures.
+            String body;
+            try {
+                Response response = client().performRequest(searchRequest);
+                body = EntityUtils.toString(response.getEntity());
+            } catch (org.opensearch.client.ResponseException ex) {
+                body = EntityUtils.toString(ex.getResponse().getEntity());
+            }
+            assertTrue(
+                "response must surface that batch inference is REMOTE-only: " + body,
+                body.contains("only supported for REMOTE models")
+            );
         } finally {
             try {
                 deleteIndex(nestedIndex);

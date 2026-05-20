@@ -319,17 +319,23 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             Request batchRequest = new Request("POST", "/" + TEST_INDEX + "/_search");
             batchRequest.setJsonEntity(batchSearchBody.toString());
 
-            org.opensearch.client.ResponseException ex = expectThrows(
-                org.opensearch.client.ResponseException.class,
-                () -> client().performRequest(batchRequest)
-            );
-            String body = EntityUtils.toString(ex.getResponse().getEntity());
+            String body;
+            try {
+                Response response = client().performRequest(batchRequest);
+                body = EntityUtils.toString(response.getEntity());
+            } catch (org.opensearch.client.ResponseException ex) {
+                body = EntityUtils.toString(ex.getResponse().getEntity());
+            }
             assertTrue(
-                "error must mention the missing system-generated processor: " + body,
+                "response must surface the missing system-generated processor: " + body,
                 body.contains("system-generated processor is not enabled")
             );
         } finally {
-            updateClusterSettings("cluster.search.enabled_system_generated_factories", null);
+            // Restore the system factory for the rest of the test methods in this class.
+            updateClusterSettings(
+                "cluster.search.enabled_system_generated_factories",
+                java.util.Collections.singletonList("semantic-highlighter")
+            );
         }
     }
 
@@ -385,10 +391,10 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
     private static final String NESTED_TEST_INDEX = "test-semantic-highlight-nested-index";
 
     /**
-     * Customer-bug shape using the new {@code ext.semantic_highlighting_batch}
-     * boolean opt-in. Before the fix this returned an empty highlights block;
-     * after the fix the system processor walks the query tree, discovers the
-     * inner_hits target, and produces highlights for every inner hit.
+     * Nested query with {@code type: semantic} declared inside the {@code inner_hits.highlight}
+     * block, opted into batch semantic highlighting via the request-level
+     * {@code ext.semantic_highlighting_batch: true}. The system processor walks the query tree,
+     * discovers the inner_hits target, and produces highlights for every inner hit.
      */
     public void testBatchSemanticHighlightingWithExtBlockOnNestedInnerHits() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
@@ -420,7 +426,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         }
     }
 
-    @lombok.SneakyThrows
+    @SneakyThrows
     private void createNestedHighlightingIndex(String indexName) {
         String mapping = "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 },"
             + "  \"mappings\": { \"properties\": {"
@@ -433,7 +439,7 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
         assertEquals(200, resp.getStatusLine().getStatusCode());
     }
 
-    @lombok.SneakyThrows
+    @SneakyThrows
     private void indexNestedTestDocuments(String indexName) {
         String bulk = "{\"index\":{\"_id\":\"1\"}}\n"
             + "{\"title\":\"Parkinson Therapies Overview\",\"chunks\":[{\"text\":\"Treatments for neurodegenerative diseases like Parkinson "

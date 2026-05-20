@@ -11,12 +11,12 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfigResolver;
+import org.opensearch.neuralsearch.highlight.batch.config.SemanticHighlightTarget;
 import org.opensearch.neuralsearch.highlight.utils.HighlightExtractorUtils;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder;
 import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
-import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.ProcessorGenerationContext;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
@@ -25,17 +25,16 @@ import org.opensearch.search.pipeline.SystemGeneratedProcessor;
 /**
  * Factory for the system-generated semantic highlighting processor.
  *
- * <p>The factory uses cheap top-level checks to decide whether the request is
- * a candidate for batch semantic highlighting before walking the query tree.
- * The full walk only happens when one of the following is true:
+ * <p>The factory only generates a processor when the request opts into batch
+ * semantic highlighting via one of:
  * <ul>
- *   <li>the request carries the {@code ext.semantic_highlighting_batch: true} block, or</li>
- *   <li>the top-level highlight block declares any {@code type: semantic} field
- *       (legacy path — already covers requests that use {@code batch_inference: true}
- *       on a top-level field).</li>
+ *   <li>the request-level {@code ext.semantic_highlighting_batch: true} block, or</li>
+ *   <li>any {@code type: semantic} field that declares {@code batch_inference: true}
+ *       (legacy field-level signal).</li>
  * </ul>
- * Requests with neither signal short-circuit on the very first check, keeping
- * the gate cheap for every search that does not use semantic highlighting.
+ * Requests that declare {@code type: semantic} without either signal continue to
+ * be handled synchronously by {@code SemanticHighlighter} during the fetch phase,
+ * so this gate stays symmetric with the fetch-phase yield condition.
  */
 @Log4j2
 public class SemanticHighlightingFactory implements SystemGeneratedProcessor.SystemGeneratedFactory<SearchResponseProcessor> {
@@ -54,18 +53,27 @@ public class SemanticHighlightingFactory implements SystemGeneratedProcessor.Sys
         }
         SearchSourceBuilder source = request.source();
 
-        // Cheap candidate check: ext opt-in OR a top-level type: semantic field.
-        // If neither is present, we must not pay the cost of walking the query tree.
+        // Short-circuit: if the ext opt-in is absent and the top-level highlight
+        // does not declare any type: semantic field, no batch path applies. We must
+        // not walk the full query tree on every search.
         boolean extOptedIn = isExtBatchEnabled(source.ext());
-        boolean topLevelSemanticPresent = hasTopLevelSemanticField(source.highlighter());
+        boolean topLevelSemanticPresent = source.highlighter() != null
+            && HighlightExtractorUtils.extractSemanticField(source.highlighter()) != null;
         if (!extOptedIn && !topLevelSemanticPresent) {
             return false;
         }
 
-        // The request is a candidate. Resolve all targets — including those declared
-        // inside inner_hits anywhere in the query tree.
+        // Resolve all targets — including those declared inside inner_hits anywhere
+        // in the query tree — and only fire when the request actually opts in.
         HighlightConfig config = HighlightConfigResolver.resolve(request);
-        return config.hasTargets();
+        if (!config.hasTargets()) {
+            return false;
+        }
+
+        // Symmetric with SemanticHighlighter's fetch-phase yield: take over only
+        // when the request explicitly opts into batch via ext, or when any target
+        // declares the legacy field-level batch_inference flag.
+        return extOptedIn || anyTargetRequestsBatch(config.getTargetsOrEmpty());
     }
 
     @Override
@@ -92,10 +100,15 @@ public class SemanticHighlightingFactory implements SystemGeneratedProcessor.Sys
         return false;
     }
 
-    private static boolean hasTopLevelSemanticField(HighlightBuilder highlighter) {
-        if (highlighter == null) {
+    private static boolean anyTargetRequestsBatch(List<SemanticHighlightTarget> targets) {
+        if (targets == null || targets.isEmpty()) {
             return false;
         }
-        return HighlightExtractorUtils.extractSemanticField(highlighter) != null;
+        for (SemanticHighlightTarget target : targets) {
+            if (HighlightExtractorUtils.extractBatchInferenceFromOptions(target.getOptions())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -22,6 +22,7 @@ import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.ml.common.FunctionName;
+import org.opensearch.ml.common.MLModel;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.TestUtils;
@@ -40,6 +41,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
 
@@ -54,6 +56,19 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         MockitoAnnotations.openMocks(this);
         TestUtils.initializeEventStatsManager();
         processor = new SemanticHighlightingProcessor(false, mlClientAccessor);
+        // By default the processor sees a REMOTE-typed model so existing tests exercise
+        // the success path. Tests that verify the local-model rejection override this.
+        stubModelTypeAs(FunctionName.REMOTE);
+    }
+
+    private void stubModelTypeAs(FunctionName algorithm) {
+        MLModel model = mock(MLModel.class);
+        when(model.getAlgorithm()).thenReturn(algorithm);
+        doAnswer(invocation -> {
+            ActionListener<MLModel> listener = invocation.getArgument(1);
+            listener.onResponse(model);
+            return null;
+        }).when(mlClientAccessor).getModel(anyString(), any());
     }
 
     public void testProcessResponseThrowsUnsupported() {
@@ -138,6 +153,39 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         assertTrue(latch.await(5, TimeUnit.SECONDS));
         assertNotNull(error.get());
         assertTrue(error.get().getMessage(), error.get().getMessage().contains("model_id is required"));
+        verify(mlClientAccessor, never()).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
+    }
+
+    /** Local-typed model + batch path → processor rejects up-front with a clear error. */
+    public void testFailsWhenModelTypeIsNotRemote() throws Exception {
+        stubModelTypeAs(FunctionName.QUESTION_ANSWERING);
+
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder source = new SearchSourceBuilder();
+        source.query(new MatchQueryBuilder("body", "treatments"));
+        HighlightBuilder hl = new HighlightBuilder();
+        hl.field(new HighlightBuilder.Field("body").highlighterType("semantic"));
+        hl.options(Map.of("model_id", "m1"));
+        source.highlighter(hl);
+        request.source(source);
+
+        SearchHit hit = hitWithSource("1", Map.of("body", "alpha beta gamma"));
+        SearchResponse response = mockResponse(new SearchHit[] { hit });
+
+        AtomicReference<Exception> error = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        processor.processResponseAsync(request, response, mock(PipelineProcessingContext.class), ActionListener.wrap(r -> {
+            fail("expected failure when model is local-typed");
+            latch.countDown();
+        }, e -> {
+            error.set(e);
+            latch.countDown();
+        }));
+
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertNotNull(error.get());
+        assertTrue(error.get().getMessage(), error.get().getMessage().contains("only supported for REMOTE models"));
         verify(mlClientAccessor, never()).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
     }
 
