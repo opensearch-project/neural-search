@@ -162,6 +162,11 @@ public final class HighlightConfigResolver {
         return tryExtract(mainQuery);
     }
 
+    /**
+     * Best-effort query-text extraction used when building the per-request config.
+     * Returns null when the query cannot be unwrapped — callers (the processor) are
+     * responsible for surfacing this to the customer at execution time.
+     */
     private static String tryExtract(QueryBuilder query) {
         try {
             return ProcessorUtils.extractQueryTextFromBuilder(query);

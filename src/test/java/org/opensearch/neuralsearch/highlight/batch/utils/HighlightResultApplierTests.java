@@ -154,6 +154,139 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         assertEquals("alpha <em>beta</em> gamma", highlightedValue(hitB, "body"));
     }
 
+    public void testNullSourceIsSkipped() {
+        // Hit with no source — applier returns early without throwing
+        SearchHit hit = new SearchHit(0, "_id", new HashMap<>(), new HashMap<>());
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(List.of(Map.of("start", 0, "end", 5))),
+            List.of("body"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        assertTrue(hit.getHighlightFields().isEmpty());
+    }
+
+    public void testEmptySourceFieldIsSkipped() {
+        // Hit has source but the requested field is missing entirely
+        SearchHit hit = hitWithSource(Map.of("title", "no body field here"));
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(List.of(Map.of("start", 0, "end", 5))),
+            List.of("body"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        assertTrue(hit.getHighlightFields().isEmpty());
+    }
+
+    public void testHtmlEncoderWithNoMatchSizeEscapesSnippet() {
+        SearchHit hit = hitWithSource(Map.of("body", "<b>bold</b> text"));
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(List.of()),
+            List.of("body"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(6),
+            List.of("html")
+        );
+        // first 6 chars of "<b>bold</b> text" is "<b>bol" which becomes "&lt;b&gt;bol"
+        String value = highlightedValue(hit, "body");
+        assertTrue(value, value.contains("&lt;"));
+        assertTrue(value, value.contains("&gt;"));
+    }
+
+    public void testApplyBatchResultsPreservesExistingHighlightFields() {
+        // Hit already has another highlight; applying should add ours without losing existing
+        SearchHit hit = hitWithSource(Map.of("body", "alpha beta"));
+        Map<String, HighlightField> existing = new HashMap<>();
+        existing.put(
+            "title",
+            new HighlightField(
+                "title",
+                new org.opensearch.core.common.text.Text[] { new org.opensearch.core.common.text.Text("<em>title</em>") }
+            )
+        );
+        hit.highlightFields(existing);
+
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(List.of(Map.of("start", 0, "end", 5))),
+            List.of("body"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        assertNotNull(hit.getHighlightFields().get("title"));
+        assertEquals("<em>title</em>", hit.getHighlightFields().get("title").fragments()[0].string());
+        assertEquals("<em>alpha</em> beta", highlightedValue(hit, "body"));
+    }
+
+    public void testNullHighlightsListIsSkipped() {
+        // batchResults entry is null instead of empty list
+        SearchHit hit = hitWithSource(Map.of("body", "alpha"));
+        java.util.ArrayList<List<Map<String, Object>>> results = new java.util.ArrayList<>();
+        results.add(null);
+        applier.applyBatchResults(
+            List.of(hit),
+            results,
+            List.of("body"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        // Null highlights → no spans → no_match_size=0 → no field written
+        assertTrue(hit.getHighlightFields().isEmpty());
+    }
+
+    public void testInvalidSpanRangesAreSkipped() {
+        // start >= end (invalid) and start beyond text length: those spans are skipped
+        SearchHit hit = hitWithSource(Map.of("body", "alpha beta"));
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(
+                List.of(
+                    Map.of("start", 5, "end", 5),    // empty range
+                    Map.of("start", 100, "end", 200), // out of bounds
+                    Map.of("start", 0, "end", 5)      // valid
+                )
+            ),
+            List.of("body"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        assertEquals("<em>alpha</em> beta", highlightedValue(hit, "body"));
+    }
+
+    public void testApplyWithIndicesSliceSizeMismatchThrows() {
+        SearchHit a = hitWithSource(Map.of("body", "alpha"));
+        SearchHit b = hitWithSource(Map.of("body", "beta"));
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> applier.applyBatchResultsWithIndices(
+                List.of(a, b),
+                List.of(List.of()),  // 1 result for slice of size 2
+                0,
+                2,
+                List.of("body", "body"),
+                List.of("<em>", "<em>"),
+                List.of("</em>", "</em>"),
+                List.of(0, 0),
+                List.of("default", "default")
+            )
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("Batch results size"));
+    }
+
     private static SearchHit hitWithSource(Map<String, Object> source) {
         SearchHit hit = new SearchHit(0, "_id", new HashMap<>(), new HashMap<>());
         StringBuilder sb = new StringBuilder("{");

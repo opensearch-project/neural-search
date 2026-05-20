@@ -97,19 +97,20 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         request.source(source);
 
         SearchResponse response = mockResponse(new SearchHit[] { hitWithSource("1", Map.of("body", "text")) });
-        AtomicReference<SearchResponse> result = new AtomicReference<>();
+        AtomicReference<Exception> error = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
 
         processor.processResponseAsync(request, response, mock(PipelineProcessingContext.class), ActionListener.wrap(r -> {
-            result.set(r);
+            fail("expected failure when query text cannot be extracted");
             latch.countDown();
         }, e -> {
-            fail("unexpected failure: " + e.getMessage());
+            error.set(e);
             latch.countDown();
         }));
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
-        assertSame(response, result.get());
+        assertNotNull(error.get());
+        assertTrue(error.get().getMessage(), error.get().getMessage().contains("Could not extract query text"));
     }
 
     public void testFailsWhenModelIdMissing() throws Exception {
@@ -118,25 +119,25 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         source.query(new MatchQueryBuilder("body", "treatments"));
         HighlightBuilder hl = new HighlightBuilder();
         hl.field(new HighlightBuilder.Field("body").highlighterType("semantic"));
-        // No model_id in options — context builder skips the target, so processor passes through
+        // No model_id in options — context builder throws so the customer notices.
         source.highlighter(hl);
         request.source(source);
 
         SearchResponse response = mockResponse(new SearchHit[] { hitWithSource("1", Map.of("body", "text")) });
-        AtomicReference<SearchResponse> result = new AtomicReference<>();
+        AtomicReference<Exception> error = new AtomicReference<>();
         CountDownLatch latch = new CountDownLatch(1);
 
         processor.processResponseAsync(request, response, mock(PipelineProcessingContext.class), ActionListener.wrap(r -> {
-            result.set(r);
+            fail("expected failure when model_id is missing");
             latch.countDown();
         }, e -> {
-            fail("unexpected failure: " + e.getMessage());
+            error.set(e);
             latch.countDown();
         }));
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
-        // No model_id means target is skipped → empty context → pass through
-        assertSame(response, result.get());
+        assertNotNull(error.get());
+        assertTrue(error.get().getMessage(), error.get().getMessage().contains("model_id is required"));
         verify(mlClientAccessor, never()).batchInferenceSentenceHighlighting(anyString(), anyList(), any(), any());
     }
 
@@ -300,6 +301,149 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
     public void testIsIgnoreFailureReturnsTrue() {
         SemanticHighlightingProcessor ignoreProcessor = new SemanticHighlightingProcessor(true, mlClientAccessor);
         assertTrue(ignoreProcessor.isIgnoreFailure());
+    }
+
+    public void testGetExecutionStageReturnsPostUserDefined() {
+        assertEquals(
+            org.opensearch.search.pipeline.SystemGeneratedProcessor.ExecutionStage.POST_USER_DEFINED,
+            processor.getExecutionStage()
+        );
+    }
+
+    public void testGetDescriptionReturnsDefault() {
+        assertEquals(SemanticHighlightingConstants.DEFAULT_PROCESSOR_DESCRIPTION, processor.getDescription());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testPaginatedBatchProcessesAllSlices() throws Exception {
+        // 3 hits with maxBatchSize=2 should trigger 2 batches: [0,2) and [2,3)
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder source = new SearchSourceBuilder();
+        source.query(new MatchQueryBuilder("body", "treatments"));
+        HighlightBuilder hl = new HighlightBuilder();
+        HighlightBuilder.Field field = new HighlightBuilder.Field("body");
+        field.highlighterType("semantic");
+        hl.field(field);
+        hl.options(Map.of("model_id", "m1", "max_inference_batch_size", 2));
+        source.highlighter(hl);
+        request.source(source);
+
+        SearchHit hit1 = hitWithSource("1", Map.of("body", "alpha beta gamma"));
+        SearchHit hit2 = hitWithSource("2", Map.of("body", "delta epsilon zeta"));
+        SearchHit hit3 = hitWithSource("3", Map.of("body", "eta theta iota"));
+        SearchResponse response = mockResponse(new SearchHit[] { hit1, hit2, hit3 });
+
+        // Track invocations and respond with span at offset 6-10 each time
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            calls.incrementAndGet();
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
+            List<org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest> slice = invocation.getArgument(1);
+            // Return the same number of result rows as the slice size
+            List<List<Map<String, Object>>> results = new java.util.ArrayList<>();
+            for (int i = 0; i < slice.size(); i++) {
+                results.add(List.of(Map.of("start", 6, "end", 10)));
+            }
+            listener.onResponse(results);
+            return null;
+        }).when(mlClientAccessor).batchInferenceSentenceHighlighting(eq("m1"), anyList(), any(FunctionName.class), any());
+
+        AtomicReference<SearchResponse> result = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        processor.processResponseAsync(request, response, mock(PipelineProcessingContext.class), ActionListener.wrap(r -> {
+            result.set(r);
+            latch.countDown();
+        }, e -> {
+            fail("unexpected failure: " + e.getMessage());
+            latch.countDown();
+        }));
+
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertNotNull(result.get());
+        assertEquals("ML must be called twice for 3 hits with maxBatchSize=2", 2, calls.get());
+        // Every hit got its highlight
+        assertNotNull(result.get().getHits().getHits()[0].getHighlightFields().get("body"));
+        assertNotNull(result.get().getHits().getHits()[1].getHighlightFields().get("body"));
+        assertNotNull(result.get().getHits().getHits()[2].getHighlightFields().get("body"));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testApplyTimeExceptionRoutesThroughHandleError() throws Exception {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder source = new SearchSourceBuilder();
+        source.query(new MatchQueryBuilder("body", "treatments"));
+        HighlightBuilder hl = new HighlightBuilder();
+        HighlightBuilder.Field field = new HighlightBuilder.Field("body");
+        field.highlighterType("semantic");
+        hl.field(field);
+        hl.options(Map.of("model_id", "m1"));
+        source.highlighter(hl);
+        request.source(source);
+
+        SearchHit hit = hitWithSource("1", Map.of("body", "alpha"));
+        SearchResponse response = mockResponse(new SearchHit[] { hit });
+
+        // ML returns more rows than expected → applier throws batch-size mismatch
+        doAnswer(invocation -> {
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
+            listener.onResponse(List.of(List.of(), List.of()));
+            return null;
+        }).when(mlClientAccessor).batchInferenceSentenceHighlighting(eq("m1"), anyList(), any(FunctionName.class), any());
+
+        AtomicReference<Exception> error = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        processor.processResponseAsync(request, response, mock(PipelineProcessingContext.class), ActionListener.wrap(r -> {
+            fail("expected failure");
+            latch.countDown();
+        }, e -> {
+            error.set(e);
+            latch.countDown();
+        }));
+
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertNotNull(error.get());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testIgnoreFailureWithMLErrorReturnsOriginalResponse() throws Exception {
+        SemanticHighlightingProcessor ignoreProcessor = new SemanticHighlightingProcessor(true, mlClientAccessor);
+
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder source = new SearchSourceBuilder();
+        source.query(new MatchQueryBuilder("body", "treatments"));
+        HighlightBuilder hl = new HighlightBuilder();
+        HighlightBuilder.Field field = new HighlightBuilder.Field("body");
+        field.highlighterType("semantic");
+        hl.field(field);
+        hl.options(Map.of("model_id", "m1"));
+        source.highlighter(hl);
+        request.source(source);
+
+        SearchHit hit = hitWithSource("1", Map.of("body", "alpha beta gamma"));
+        SearchResponse response = mockResponse(new SearchHit[] { hit });
+
+        // Throwable (not Exception) — exercises the new RuntimeException wrap branch
+        doAnswer(invocation -> {
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
+            listener.onFailure(new RuntimeException("ML model unavailable"));
+            return null;
+        }).when(mlClientAccessor).batchInferenceSentenceHighlighting(eq("m1"), anyList(), any(FunctionName.class), any());
+
+        AtomicReference<SearchResponse> result = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        ignoreProcessor.processResponseAsync(request, response, mock(PipelineProcessingContext.class), ActionListener.wrap(r -> {
+            result.set(r);
+            latch.countDown();
+        }, e -> {
+            fail("should not fail with ignoreFailure=true");
+            latch.countDown();
+        }));
+
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertSame(response, result.get());
     }
 
     private static SearchHit hitWithSource(String id, Map<String, Object> source) {

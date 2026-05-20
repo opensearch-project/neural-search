@@ -41,14 +41,14 @@ public class HighlightContextBuilderTests extends OpenSearchTestCase {
         assertEquals("m1", ctx.getModelId());
     }
 
-    public void testTargetWithoutModelIdIsSkipped() {
+    public void testTargetWithoutModelIdThrows() {
         HighlightContextBuilder builder = new HighlightContextBuilder();
         SemanticHighlightTarget noModel = SemanticHighlightTarget.builder().fieldName("body").options(Map.of()).build();
         HighlightConfig config = HighlightConfig.builder().targets(List.of(noModel)).queryText("treatments").build();
 
         SearchResponse response = mockResponse(new SearchHit[] { hitWithSource("1", Map.of("body", "alpha")) });
-        HighlightContext ctx = builder.build(config, response, 0L);
-        assertEquals(0, ctx.size());
+        IllegalArgumentException ex = expectThrows(IllegalArgumentException.class, () -> builder.build(config, response, 0L));
+        assertTrue(ex.getMessage(), ex.getMessage().contains("model_id is required"));
     }
 
     public void testHitWithMissingFieldIsSkipped() {
@@ -324,5 +324,117 @@ public class HighlightContextBuilderTests extends OpenSearchTestCase {
         assertEquals("html", ctx.getEncoders().get(0));
         assertEquals("<b>", ctx.getPreTags().get(0));
         assertEquals("</b>", ctx.getPostTags().get(0));
+    }
+
+    public void testEmptyInnerHitsBucketIsSkipped() {
+        // Inner hits map present but bucket has zero hits — exercise the empty-bucket log+continue branch
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("chunks.text")
+            .nestedPath("chunks")
+            .innerHitsBucketName("chunks")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchHits emptyInner = new SearchHits(new SearchHit[0], new TotalHits(0, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchHit topHit = hitWithSource("1", Map.of("title", "paper"));
+        topHit.setInnerHits(Map.of("chunks", emptyInner));
+
+        SearchResponse response = mockResponse(new SearchHit[] { topHit });
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(0, ctx.size());
+    }
+
+    public void testWrongBucketNameInInnerHitsIsSkipped() {
+        // Inner hits map present but no bucket with the expected name
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("chunks.text")
+            .nestedPath("chunks")
+            .innerHitsBucketName("chunks")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchHit innerHit = hitWithSource("1", Map.of("text", "irrelevant"));
+        SearchHits innerHits = new SearchHits(new SearchHit[] { innerHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+
+        SearchHit topHit = hitWithSource("1", Map.of("title", "paper"));
+        topHit.setInnerHits(Map.of("other_bucket", innerHits));
+
+        SearchResponse response = mockResponse(new SearchHit[] { topHit });
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(0, ctx.size());
+    }
+
+    public void testListSourceValueIsJoinedIntoSingleString() {
+        // Source value is a List — exercises the List handling branch in extractSourceText
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("body")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchHit hit = hitWithListSource("1", "body", List.of("alpha", "beta", "gamma"));
+        SearchResponse response = mockResponse(new SearchHit[] { hit });
+
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(1, ctx.size());
+        assertEquals("alpha beta gamma", ctx.getRequests().get(0).getContext());
+    }
+
+    public void testListSourceValueWithNullsAreSkipped() {
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("body")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        java.util.ArrayList<Object> values = new java.util.ArrayList<>();
+        values.add("alpha");
+        values.add(null);
+        values.add("gamma");
+        SearchHit hit = hitWithListSource("1", "body", values);
+        SearchResponse response = mockResponse(new SearchHit[] { hit });
+
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(1, ctx.size());
+        assertEquals("alpha gamma", ctx.getRequests().get(0).getContext());
+    }
+
+    public void testNonStringNonListSourceFallsBackToToString() {
+        // Source value is a non-string non-list (Number) — exercises the toString fallback
+        HighlightContextBuilder builder = new HighlightContextBuilder();
+        SemanticHighlightTarget target = SemanticHighlightTarget.builder()
+            .fieldName("count")
+            .options(Map.of(SemanticHighlightingConstants.MODEL_ID, "m1"))
+            .build();
+        HighlightConfig config = HighlightConfig.builder().targets(List.of(target)).queryText("treatments").build();
+
+        SearchHit hit = new SearchHit(0, "1", new HashMap<>(), null);
+        hit.sourceRef(new BytesArray("{\"count\":42}"));
+        SearchResponse response = mockResponse(new SearchHit[] { hit });
+
+        HighlightContext ctx = builder.build(config, response, 0L);
+        assertEquals(1, ctx.size());
+        assertEquals("42", ctx.getRequests().get(0).getContext());
+    }
+
+    private static SearchHit hitWithListSource(String id, String fieldName, List<?> values) {
+        SearchHit hit = new SearchHit(0, id, new HashMap<>(), null);
+        StringBuilder sb = new StringBuilder("{\"").append(fieldName).append("\":[");
+        boolean first = true;
+        for (Object v : values) {
+            if (!first) sb.append(',');
+            first = false;
+            if (v == null) sb.append("null");
+            else sb.append('"').append(v).append('"');
+        }
+        sb.append("]}");
+        hit.sourceRef(new BytesArray(sb.toString()));
+        return hit;
     }
 }

@@ -286,9 +286,9 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
     }
 
     /**
-     * Verifies graceful degradation when the system-generated factory is disabled.
-     * With batch_inference=true but no system factory, the response succeeds with no
-     * shard failures and no highlight on the field.
+     * Verifies that when batch semantic highlighting is requested but the system-generated
+     * factory is disabled in cluster settings, the request fails with a clear error so the
+     * customer notices the misconfiguration instead of silently getting no highlights.
      */
     public void testSemanticHighlightingBatchModeWithoutSystemProcessor() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
@@ -319,30 +319,15 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
             Request batchRequest = new Request("POST", "/" + TEST_INDEX + "/_search");
             batchRequest.setJsonEntity(batchSearchBody.toString());
 
-            Response response = client().performRequest(batchRequest);
-            String responseBody = EntityUtils.toString(response.getEntity());
-            Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
-
-            // Must succeed without shard failures
-            Map<String, Object> shardsInfo = (Map<String, Object>) responseMap.get("_shards");
-            assertNotNull("response must include _shards section", shardsInfo);
-            Object failures = shardsInfo.get("failures");
-            assertTrue(
-                "no shard failures expected when batch_inference=true without processor",
-                failures == null || (failures instanceof List && ((List<?>) failures).isEmpty())
+            org.opensearch.client.ResponseException ex = expectThrows(
+                org.opensearch.client.ResponseException.class,
+                () -> client().performRequest(batchRequest)
             );
-
-            // Hits must exist but have no highlight (graceful degradation)
-            Map<String, Object> hitsSection = (Map<String, Object>) responseMap.get("hits");
-            List<Map<String, Object>> hits = (List<Map<String, Object>>) hitsSection.get("hits");
-            assertNotNull("hits list missing", hits);
-            assertFalse("query should still match documents", hits.isEmpty());
-            for (Map<String, Object> hit : hits) {
-                assertFalse(
-                    "no highlight may be returned when batch_inference=true and no processor is available",
-                    hit.containsKey("highlight")
-                );
-            }
+            String body = EntityUtils.toString(ex.getResponse().getEntity());
+            assertTrue(
+                "error must mention the missing system-generated processor: " + body,
+                body.contains("system-generated processor is not enabled")
+            );
         } finally {
             updateClusterSettings("cluster.search.enabled_system_generated_factories", null);
         }
@@ -400,46 +385,10 @@ public class SemanticHighlightingRemoteModelIT extends BaseSemanticHighlightingI
     private static final String NESTED_TEST_INDEX = "test-semantic-highlight-nested-index";
 
     /**
-     * Customer bug reproduction: nested query with inner_hits highlighting on
-     * {@code chunks.text} in batch mode. Before the fix the system processor only
-     * inspected the top-level highlight block and silently produced no highlights.
-     * After the fix the system processor walks the query tree, discovers the
-     * inner_hits target, and returns proper highlights for every inner hit.
-     */
-    public void testBatchSemanticHighlightingWithNestedInnerHits() throws Exception {
-        Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);
-
-        createNestedHighlightingIndex(NESTED_TEST_INDEX);
-        try {
-            indexNestedTestDocuments(NESTED_TEST_INDEX);
-            String queryBody = nestedInnerHitsQuery(
-                "chunks",
-                "chunks.text",
-                "treatments for neurodegenerative diseases",
-                remoteHighlightModelId,
-                true,
-                false
-            );
-            Request searchRequest = new Request("POST", "/" + NESTED_TEST_INDEX + "/_search");
-            searchRequest.setJsonEntity(queryBody);
-            Response searchResponse = client().performRequest(searchRequest);
-            String responseBody = EntityUtils.toString(searchResponse.getEntity());
-            Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
-
-            assertInnerHitsHaveSemanticHighlight(responseMap, "chunks", "chunks.text", "treatments");
-        } finally {
-            try {
-                deleteIndex(NESTED_TEST_INDEX);
-            } catch (Exception e) {
-                log.debug("Failed to delete nested index: {}", e.getMessage());
-            }
-        }
-    }
-
-    /**
-     * Same customer scenario but using the new {@code ext.semantic_highlighting_batch}
-     * boolean opt-in instead of {@code batch_inference: true}. The system
-     * processor must produce the same highlights.
+     * Customer-bug shape using the new {@code ext.semantic_highlighting_batch}
+     * boolean opt-in. Before the fix this returned an empty highlights block;
+     * after the fix the system processor walks the query tree, discovers the
+     * inner_hits target, and produces highlights for every inner hit.
      */
     public void testBatchSemanticHighlightingWithExtBlockOnNestedInnerHits() throws Exception {
         Assume.assumeTrue("TorchServe is not available, skipping test", isTorchServeAvailable);

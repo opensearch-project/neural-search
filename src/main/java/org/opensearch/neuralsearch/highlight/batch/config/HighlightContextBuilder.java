@@ -10,6 +10,7 @@ import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchResponse;
+import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
@@ -40,8 +41,13 @@ public class HighlightContextBuilder {
             for (SemanticHighlightTarget target : config.getTargetsOrEmpty()) {
                 String modelId = stringOption(target, SemanticHighlightingConstants.MODEL_ID, null);
                 if (modelId == null) {
-                    log.debug("Target [{}] skipped: options.model_id is required", target.getFieldName());
-                    continue;
+                    throw new IllegalArgumentException(
+                        String.format(
+                            java.util.Locale.ROOT,
+                            "options.model_id is required on the [%s] semantic highlight field",
+                            target.getFieldName()
+                        )
+                    );
                 }
                 if (target.isNested()) {
                     expandNestedTarget(target, topHits, config.getQueryText(), modelId, rows);
@@ -62,6 +68,7 @@ public class HighlightContextBuilder {
             .originalResponse(response)
             .startTime(startTime)
             .modelId(resolveModelId(config))
+            .modelType(FunctionName.REMOTE)
             .maxBatchSize(resolveMaxBatchSize(config))
             .build();
     }

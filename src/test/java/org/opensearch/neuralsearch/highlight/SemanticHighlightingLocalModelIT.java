@@ -18,7 +18,6 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.util.AggregationsTestUtils;
 
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
@@ -358,7 +357,7 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
     public void testSemanticHighlightingDisabledWhenFactoryNotEnabled() throws Exception {
         updateClusterSettings("cluster.search.enabled_system_generated_factories", Collections.emptyList());
         try {
-            // Test 1: Batch mode without system factory → graceful degradation (no highlight, no error)
+            // Test 1: Batch mode without system factory → request fails so the customer notices.
             XContentBuilder batchSearchBody = XContentFactory.jsonBuilder()
                 .startObject()
                 .field("size", 1)
@@ -383,27 +382,15 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
             Request batchRequest = new Request("POST", "/" + TEST_INDEX + "/_search");
             batchRequest.setJsonEntity(batchSearchBody.toString());
 
-            Response batchResponse = client().performRequest(batchRequest);
-            String batchResponseBody = EntityUtils.toString(batchResponse.getEntity());
-            Map<String, Object> batchResponseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), batchResponseBody, false);
-
-            Map<String, Object> shardsInfo = (Map<String, Object>) batchResponseMap.get("_shards");
-            assertNotNull("response must include _shards section", shardsInfo);
-            Object failures = shardsInfo.get("failures");
-            assertTrue(
-                "no shard failures expected when batch_inference=true without processor",
-                failures == null || (failures instanceof List && ((List<?>) failures).isEmpty())
+            org.opensearch.client.ResponseException ex = expectThrows(
+                org.opensearch.client.ResponseException.class,
+                () -> client().performRequest(batchRequest)
             );
-
-            List<Map<String, Object>> hits = AggregationsTestUtils.getNestedHits(batchResponseMap);
-            assertNotNull("hits list missing", hits);
-            assertFalse("query should still match documents", hits.isEmpty());
-            for (Map<String, Object> hit : hits) {
-                assertFalse(
-                    "no highlight may be returned when batch_inference=true and no processor is available",
-                    hit.containsKey("highlight")
-                );
-            }
+            String body = EntityUtils.toString(ex.getResponse().getEntity());
+            assertTrue(
+                "error must mention the missing system-generated processor: " + body,
+                body.contains("system-generated processor is not enabled")
+            );
 
             // Test 2: Single inference mode should work without system factory
             XContentBuilder singleSearchBody = XContentFactory.jsonBuilder()
@@ -437,5 +424,123 @@ public class SemanticHighlightingLocalModelIT extends BaseSemanticHighlightingIT
         } finally {
             updateClusterSettings("cluster.search.enabled_system_generated_factories", null);
         }
+    }
+
+    /**
+     * Customer-bug shape on a local model: nested query with inner_hits highlighting.
+     * Activates batch semantic highlighting via {@code ext.semantic_highlighting_batch: true}.
+     * The system processor walks the query tree, discovers the inner_hits target, and
+     * produces highlights for every inner hit.
+     */
+    public void testBatchSemanticHighlightingWithExtBlockOnNestedInnerHitsLocalModel() throws Exception {
+        final String nestedIndex = "test-semantic-highlight-nested-local-index";
+        createNestedHighlightingIndex(nestedIndex);
+        try {
+            indexNestedTestDocuments(nestedIndex);
+            String queryBody = nestedInnerHitsQueryWithExt(
+                "chunks",
+                "chunks.text",
+                "treatments for neurodegenerative diseases",
+                localHighlightModelId
+            );
+            Request searchRequest = new Request("POST", "/" + nestedIndex + "/_search");
+            searchRequest.setJsonEntity(queryBody);
+            Response searchResponse = client().performRequest(searchRequest);
+            String responseBody = EntityUtils.toString(searchResponse.getEntity());
+            Map<String, Object> responseMap = XContentHelper.convertToMap(XContentType.JSON.xContent(), responseBody, false);
+
+            assertInnerHitsHaveSemanticHighlight(responseMap, "chunks", "chunks.text", "treatments");
+        } finally {
+            try {
+                deleteIndex(nestedIndex);
+            } catch (Exception e) {
+                log.debug("Failed to delete nested index: {}", e.getMessage());
+            }
+        }
+    }
+
+    @SneakyThrows
+    private void createNestedHighlightingIndex(String indexName) {
+        String mapping = "{ \"settings\": { \"number_of_shards\": 1, \"number_of_replicas\": 0 },"
+            + "  \"mappings\": { \"properties\": {"
+            + "    \"title\": { \"type\": \"text\" },"
+            + "    \"chunks\": { \"type\": \"nested\", \"properties\": { \"text\": { \"type\": \"text\" } } }"
+            + "  } } }";
+        Request createIdx = new Request("PUT", "/" + indexName);
+        createIdx.setJsonEntity(mapping);
+        Response resp = client().performRequest(createIdx);
+        assertEquals(200, resp.getStatusLine().getStatusCode());
+    }
+
+    @SneakyThrows
+    private void indexNestedTestDocuments(String indexName) {
+        String bulk = "{\"index\":{\"_id\":\"1\"}}\n"
+            + "{\"title\":\"Parkinson Therapies Overview\",\"chunks\":[{\"text\":\"Treatments for neurodegenerative diseases like Parkinson "
+            + "disease include cholinesterase inhibitors and clinical trials of disease-modifying agents.\"}]}\n"
+            + "{\"index\":{\"_id\":\"2\"}}\n"
+            + "{\"title\":\"ALS Research Update\",\"chunks\":[{\"text\":\"Treatments for neurodegenerative diseases like ALS are advancing "
+            + "rapidly thanks to new biomarker research and targeted molecular interventions that slow motor neuron loss.\"}]}\n";
+        Request req = new Request("POST", "/" + indexName + "/_bulk?refresh=true");
+        req.setJsonEntity(bulk);
+        Response resp = client().performRequest(req);
+        assertEquals(200, resp.getStatusLine().getStatusCode());
+    }
+
+    private static String nestedInnerHitsQueryWithExt(String nestedPath, String nestedField, String queryText, String modelId) {
+        return "{"
+            + "\"query\":{\"nested\":{\"path\":\""
+            + nestedPath
+            + "\","
+            + "\"query\":{\"match\":{\""
+            + nestedField
+            + "\":\""
+            + queryText
+            + "\"}},"
+            + "\"inner_hits\":{\"size\":5,\"highlight\":{\"fields\":{\""
+            + nestedField
+            + "\":{\"type\":\"semantic\"}},\"options\":{\"model_id\":\""
+            + modelId
+            + "\"}}}}},"
+            + "\"ext\":{\"semantic_highlighting_batch\":true}"
+            + "}";
+    }
+
+    @SuppressWarnings("unchecked")
+    private void assertInnerHitsHaveSemanticHighlight(
+        Map<String, Object> responseMap,
+        String bucketName,
+        String fieldName,
+        String expectedSubstring
+    ) {
+        assertNotNull("response must not be null", responseMap);
+        Map<String, Object> hitsSection = (Map<String, Object>) responseMap.get("hits");
+        assertNotNull("hits section missing", hitsSection);
+        List<Map<String, Object>> hits = (List<Map<String, Object>>) hitsSection.get("hits");
+        assertNotNull("hits list missing", hits);
+        assertFalse("nested query should match at least one doc", hits.isEmpty());
+
+        boolean foundHighlight = false;
+        for (Map<String, Object> hit : hits) {
+            Map<String, Object> innerHitsMap = (Map<String, Object>) hit.get("inner_hits");
+            if (innerHitsMap == null) continue;
+            Map<String, Object> bucket = (Map<String, Object>) innerHitsMap.get(bucketName);
+            if (bucket == null) continue;
+            Map<String, Object> innerHitsHits = (Map<String, Object>) bucket.get("hits");
+            List<Map<String, Object>> innerList = (List<Map<String, Object>>) innerHitsHits.get("hits");
+            for (Map<String, Object> ih : innerList) {
+                Map<String, Object> hl = (Map<String, Object>) ih.get("highlight");
+                if (hl == null) continue;
+                List<String> fragments = (List<String>) hl.get(fieldName);
+                if (fragments == null) continue;
+                for (String frag : fragments) {
+                    assertTrue("fragment must contain <em>: " + frag, frag.contains("<em>") && frag.contains("</em>"));
+                    String plain = frag.replaceAll("<[^>]*>", "");
+                    if (plain.toLowerCase(java.util.Locale.ROOT).contains(expectedSubstring.toLowerCase(java.util.Locale.ROOT))) {
+                        foundHighlight = true;
+                    }
+                }
+            }
+        }
+        assertTrue("expected at least one inner_hit highlight containing '" + expectedSubstring + "'", foundHighlight);
     }
 }

@@ -225,6 +225,26 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         List<SearchExtSpec<?>> searchExts = plugin.getSearchExts();
 
         assertEquals(3, searchExts.size());
+
+        // Confirm semantic_highlighting_batch is registered with a working reader.
+        // Iterate readers; round-trip a builder; the matching reader instantiates the right type.
+        boolean found = false;
+        for (SearchExtSpec<?> spec : searchExts) {
+            try {
+                org.opensearch.common.io.stream.BytesStreamOutput out = new org.opensearch.common.io.stream.BytesStreamOutput();
+                new org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder(true).writeTo(out);
+                org.opensearch.core.common.io.stream.StreamInput in = out.bytes().streamInput();
+                org.opensearch.search.SearchExtBuilder rebuilt = spec.getReader().read(in);
+                if (rebuilt instanceof org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder) {
+                    assertTrue(((org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder) rebuilt).isEnabled());
+                    found = true;
+                    break;
+                }
+            } catch (Exception ignored) {
+                // wrong reader for this stream, move on
+            }
+        }
+        assertTrue("semantic_highlighting_batch ext not registered with a working reader", found);
     }
 
     public void testExecutionBuilders() {

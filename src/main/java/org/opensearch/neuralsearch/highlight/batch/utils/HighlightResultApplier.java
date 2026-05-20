@@ -12,6 +12,7 @@ import java.util.Map;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.core.common.text.Text;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
+import org.opensearch.neuralsearch.highlight.utils.HighlightEncoders;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.fetch.subphase.highlight.HighlightField;
@@ -116,7 +117,7 @@ public class HighlightResultApplier {
             if (noMatchSize > 0) {
                 String snippet = text.length() <= noMatchSize ? text : text.substring(0, noMatchSize);
                 if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
-                    snippet = htmlEscape(snippet);
+                    snippet = HighlightEncoders.htmlEscape(snippet);
                 }
                 writeHighlightField(hit, fieldName, snippet);
             }
@@ -125,7 +126,7 @@ public class HighlightResultApplier {
 
         String highlighted = applyPositionHighlights(text, highlights, preTag, postTag);
         if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
-            highlighted = htmlEncodePreservingTags(highlighted, preTag, postTag);
+            highlighted = HighlightEncoders.htmlEncodePreservingTags(highlighted, preTag, postTag);
         }
         writeHighlightField(hit, fieldName, highlighted);
     }
@@ -188,47 +189,6 @@ public class HighlightResultApplier {
                 result.insert(end, postTag);
                 result.insert(start, preTag);
             }
-        }
-        return result.toString();
-    }
-
-    private static String htmlEscape(String text) {
-        StringBuilder sb = new StringBuilder(text.length());
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            switch (c) {
-                case '&' -> sb.append("&amp;");
-                case '<' -> sb.append("&lt;");
-                case '>' -> sb.append("&gt;");
-                case '"' -> sb.append("&quot;");
-                case '\'' -> sb.append("&#39;");
-                default -> sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-
-    /** HTML-escape the text portions of a highlighted response while preserving the highlight tags. */
-    private static String htmlEncodePreservingTags(String highlighted, String preTag, String postTag) {
-        StringBuilder result = new StringBuilder(highlighted.length());
-        int cursor = 0;
-        while (cursor < highlighted.length()) {
-            int preIdx = highlighted.indexOf(preTag, cursor);
-            if (preIdx < 0) {
-                result.append(htmlEscape(highlighted.substring(cursor)));
-                break;
-            }
-            result.append(htmlEscape(highlighted.substring(cursor, preIdx)));
-            result.append(preTag);
-            int afterPre = preIdx + preTag.length();
-            int postIdx = highlighted.indexOf(postTag, afterPre);
-            if (postIdx < 0) {
-                result.append(htmlEscape(highlighted.substring(afterPre)));
-                break;
-            }
-            result.append(htmlEscape(highlighted.substring(afterPre, postIdx)));
-            result.append(postTag);
-            cursor = postIdx + postTag.length();
         }
         return result.toString();
     }

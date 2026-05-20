@@ -10,6 +10,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.core.common.text.Text;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.highlight.single.SemanticHighlighterEngine;
+import org.opensearch.neuralsearch.highlight.utils.HighlightEncoders;
 import org.opensearch.neuralsearch.highlight.utils.HighlightExtractorUtils;
 import org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
@@ -58,12 +59,15 @@ public class SemanticHighlighter implements Highlighter {
         // request-level ext block (set to true), or the legacy field-level batch_inference flag.
         if (isExtBatchEnabled(fieldContext) || extractBatchInference(options)) {
             if (!isSystemProcessorEnabled()) {
-                log.warn(
-                    "[SEMANTIC_HIGHLIGHT] Field [{}] is configured for batch semantic highlighting but the system-generated "
-                        + "processor is not enabled. Add '{}' to the cluster setting "
-                        + "'cluster.search.enabled_system_generated_factories' to enable batch highlighting.",
-                    fieldContext.fieldName,
-                    SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE
+                throw new IllegalStateException(
+                    String.format(
+                        java.util.Locale.ROOT,
+                        "Field [%s] is configured for batch semantic highlighting but the system-generated processor "
+                            + "is not enabled. Add '%s' to the cluster setting "
+                            + "'cluster.search.enabled_system_generated_factories' to enable batch highlighting.",
+                        fieldContext.fieldName,
+                        SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE
+                    )
                 );
             }
             return null;
@@ -109,7 +113,7 @@ public class SemanticHighlighter implements Highlighter {
             if (noMatchSize > 0 && !fieldText.isEmpty()) {
                 String snippet = fieldText.length() <= noMatchSize ? fieldText : fieldText.substring(0, noMatchSize);
                 if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(extractEncoder(options))) {
-                    snippet = htmlEscape(snippet);
+                    snippet = HighlightEncoders.htmlEscape(snippet);
                 }
                 return new HighlightField(fieldContext.fieldName, new Text[] { new Text(snippet) });
             }
@@ -118,7 +122,7 @@ public class SemanticHighlighter implements Highlighter {
         }
 
         if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(extractEncoder(options))) {
-            highlightedResponse = htmlEncodePreservingTags(highlightedResponse, preTag, postTag);
+            highlightedResponse = HighlightEncoders.htmlEncodePreservingTags(highlightedResponse, preTag, postTag);
         }
 
         return new HighlightField(fieldContext.fieldName, new Text[] { new Text(highlightedResponse) });
@@ -155,46 +159,5 @@ public class SemanticHighlighter implements Highlighter {
         Object v = options.get(SemanticHighlightingConstants.ENCODER);
         if (v instanceof String) return (String) v;
         return SemanticHighlightingConstants.DEFAULT_ENCODER;
-    }
-
-    private static String htmlEscape(String text) {
-        StringBuilder sb = new StringBuilder(text.length());
-        for (int i = 0; i < text.length(); i++) {
-            char c = text.charAt(i);
-            switch (c) {
-                case '&' -> sb.append("&amp;");
-                case '<' -> sb.append("&lt;");
-                case '>' -> sb.append("&gt;");
-                case '"' -> sb.append("&quot;");
-                case '\'' -> sb.append("&#39;");
-                default -> sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-
-    /** HTML-escape the text portions of a highlighted response while preserving the highlight tags. */
-    private static String htmlEncodePreservingTags(String highlighted, String preTag, String postTag) {
-        StringBuilder result = new StringBuilder(highlighted.length());
-        int cursor = 0;
-        while (cursor < highlighted.length()) {
-            int preIdx = highlighted.indexOf(preTag, cursor);
-            if (preIdx < 0) {
-                result.append(htmlEscape(highlighted.substring(cursor)));
-                break;
-            }
-            result.append(htmlEscape(highlighted.substring(cursor, preIdx)));
-            result.append(preTag);
-            int afterPre = preIdx + preTag.length();
-            int postIdx = highlighted.indexOf(postTag, afterPre);
-            if (postIdx < 0) {
-                result.append(htmlEscape(highlighted.substring(afterPre)));
-                break;
-            }
-            result.append(htmlEscape(highlighted.substring(afterPre, postIdx)));
-            result.append(postTag);
-            cursor = postIdx + postTag.length();
-        }
-        return result.toString();
     }
 }

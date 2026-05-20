@@ -297,9 +297,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         // Mock system processor disabled
         when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(false);
 
-        // Execute - the highlighter yields by returning null, logs a WARN, and does not call the model.
-        HighlightField result = highlighter.highlight(fieldContext);
-        assertNull(result);
+        // Execute - the highlighter throws so the customer sees the misconfiguration.
+        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> highlighter.highlight(fieldContext));
+        assertTrue(ex.getMessage(), ex.getMessage().contains("system-generated processor is not enabled"));
         verify(semanticHighlighterEngine, never()).getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
@@ -449,9 +449,9 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         // Mock system processor with only other factories (no semantic-highlighter, no wildcard)
         when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(false);
 
-        // Execute - the highlighter yields by returning null and does not call the model.
-        HighlightField result = highlighter.highlight(fieldContext);
-        assertNull(result);
+        // Execute - the highlighter throws an IllegalStateException so the customer notices.
+        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> highlighter.highlight(fieldContext));
+        assertTrue(ex.getMessage(), ex.getMessage().contains("system-generated processor is not enabled"));
         verify(semanticHighlighterEngine, never()).getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString());
     }
 

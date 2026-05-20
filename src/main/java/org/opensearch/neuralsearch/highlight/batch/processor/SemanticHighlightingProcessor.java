@@ -10,7 +10,6 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.core.action.ActionListener;
-import org.opensearch.ml.common.FunctionName;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
 import org.opensearch.neuralsearch.highlight.batch.config.HighlightConfig;
@@ -73,8 +72,9 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
             }
 
             if (config.getQueryText() == null) {
-                log.debug("Skipping semantic highlighting: could not extract query text");
-                responseListener.onResponse(response);
+                responseListener.onFailure(
+                    new IllegalArgumentException("Could not extract query text for semantic highlighting from the request's main query")
+                );
                 return;
             }
 
@@ -87,56 +87,11 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
                 return;
             }
 
-            if (context.getModelId() == null) {
-                responseListener.onFailure(
-                    new IllegalArgumentException(
-                        "options.model_id is required on a semantic highlight field when batch inference is enabled"
-                    )
-                );
-                return;
-            }
-
-            HighlightResultApplier applier = new HighlightResultApplier();
-
-            if (context.getRequests().size() <= context.getMaxBatchSize()) {
-                processSingleBatch(context, applier, responseListener);
-            } else {
-                new BatchExecutor(context, applier, responseListener).execute();
-            }
+            new BatchExecutor(context, new HighlightResultApplier(), responseListener).execute();
         } catch (Exception e) {
             log.error("Error in semantic highlighting processor", e);
             handleError(e, response, responseListener);
         }
-    }
-
-    private void processSingleBatch(
-        HighlightContext context,
-        HighlightResultApplier applier,
-        ActionListener<SearchResponse> responseListener
-    ) {
-        long batchStartTime = System.currentTimeMillis();
-        mlCommonsClientAccessor.batchInferenceSentenceHighlighting(
-            context.getModelId(),
-            context.getRequests(),
-            FunctionName.REMOTE,
-            ActionListener.wrap(batchResults -> {
-                try {
-                    log.debug("Single batch completed: {} docs in {}ms", context.size(), System.currentTimeMillis() - batchStartTime);
-                    applier.applyBatchResults(
-                        context.getValidHits(),
-                        batchResults,
-                        context.getFieldNames(),
-                        context.getPreTags(),
-                        context.getPostTags(),
-                        context.getNoMatchSizes(),
-                        context.getEncoders()
-                    );
-                    completeProcessing(context, responseListener);
-                } catch (Exception e) {
-                    handleError(e, context.getOriginalResponse(), responseListener);
-                }
-            }, err -> handleError(err, context.getOriginalResponse(), responseListener))
-        );
     }
 
     private void completeProcessing(HighlightContext context, ActionListener<SearchResponse> responseListener) {
@@ -182,7 +137,7 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
         return ExecutionStage.POST_USER_DEFINED;
     }
 
-    /** Serial pagination for context sizes that exceed {@code max_inference_batch_size}. */
+    /** Serial pagination — processes the context one slice at a time, up to {@code max_inference_batch_size} per slice. */
     private class BatchExecutor {
         private final HighlightContext context;
         private final HighlightResultApplier applier;
@@ -215,7 +170,7 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
             mlCommonsClientAccessor.batchInferenceSentenceHighlighting(
                 context.getModelId(),
                 slice,
-                FunctionName.REMOTE,
+                context.getModelType(),
                 ActionListener.wrap(batchResults -> {
                     try {
                         log.debug("Batch [{}, {}) completed in {}ms", startIdx, endIdx, System.currentTimeMillis() - batchStart);
