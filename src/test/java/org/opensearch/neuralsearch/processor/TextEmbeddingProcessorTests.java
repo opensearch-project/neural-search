@@ -2689,4 +2689,154 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         verify(resultHandler).accept(resultCaptor.capture());
         assertEquals(docCount, resultCaptor.getValue().size());
     }
+
+    @SneakyThrows
+    public void testFactory_withBatchSizeBytes_successful() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        config.put(AbstractBatchingProcessor.BATCH_SIZE_FIELD, 10);
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, 102400);
+        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+        assertNotNull(processor);
+    }
+
+    /**
+     * Verifies that when batch_size_bytes is set and batch_size is NOT explicitly set by the user,
+     * the factory auto-elevates batch_size to Integer.MAX_VALUE so the byte limit is the sole
+     * effective constraint. Also confirms that batch_size IS removed from config before
+     * newProcessor() is called (proving the ThreadLocal approach is necessary).
+     */
+    @SneakyThrows
+    public void testFactory_batchSizeRemovedFromConfigBeforeNewProcessor() {
+        final boolean[] batchSizePresentInNewProcessor = { false };
+
+        // Use an anonymous subclass of AbstractBatchingProcessor.Factory to intercept newProcessor()
+        // and inspect the config map state at that point (TextEmbeddingProcessorFactory is final).
+        AbstractBatchingProcessor.Factory probeFactory = new AbstractBatchingProcessor.Factory("text_embedding") {
+            @Override
+            protected AbstractBatchingProcessor newProcessor(String tag, String description, int batchSize, Map<String, Object> config) {
+                batchSizePresentInNewProcessor[0] = config.containsKey(AbstractBatchingProcessor.BATCH_SIZE_FIELD);
+                return mock(AbstractBatchingProcessor.class);
+            }
+        };
+
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(AbstractBatchingProcessor.BATCH_SIZE_FIELD, 10);
+
+        probeFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config);
+
+        // Confirms batch_size is removed before newProcessor() — the ThreadLocal approach is necessary
+        assertFalse(
+            "batch_size is removed from config by AbstractBatchingProcessor.Factory.create() before "
+                + "newProcessor() is called — config.containsKey(BATCH_SIZE_FIELD) is not viable inside newProcessor()",
+            batchSizePresentInNewProcessor[0]
+        );
+    }
+
+    /**
+     * When batch_size_bytes is set but batch_size is NOT explicitly configured, batch_size should
+     * be auto-elevated to Integer.MAX_VALUE so the byte limit is the sole effective constraint.
+     */
+    @SneakyThrows
+    public void testFactory_withBatchSizeBytesOnly_autoElevatesBatchSize() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        // batch_size_bytes set, batch_size NOT set
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, 102400);
+        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+        assertNotNull(processor);
+        assertEquals(InferenceProcessor.AUTO_BATCH_SIZE_FOR_BYTE_BATCHING, processor.getBatchSize());
+    }
+
+    /**
+     * When both batch_size and batch_size_bytes are set, the user's explicit batch_size must be
+     * preserved — it should NOT be overridden by auto-elevation.
+     */
+    @SneakyThrows
+    public void testFactory_withBatchSizeAndBatchSizeBytes_respectsExplicitBatchSize() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        config.put(AbstractBatchingProcessor.BATCH_SIZE_FIELD, 50);
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, 102400);
+        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+        assertNotNull(processor);
+        assertEquals(50, processor.getBatchSize());
+    }
+
+    @SneakyThrows
+    public void testFactory_withoutBatchSizeBytes_successful() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        // No batch_size_bytes — should use default (-1, disabled)
+        TextEmbeddingProcessor processor = (TextEmbeddingProcessor) textEmbeddingProcessorFactory.create(
+            registry,
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            config
+        );
+        assertNotNull(processor);
+    }
+
+    public void testFactory_withInvalidBatchSizeBytes_throwsException() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, 0);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertTrue(exception.getMessage().contains("must be a positive integer"));
+    }
+
+    public void testFactory_withNegativeBatchSizeBytes_throwsException() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, -5);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertTrue(exception.getMessage().contains("must be a positive integer"));
+    }
+
+    public void testFactory_withBatchSizeBytesExceedingMax_throwsException() {
+        Map<String, Processor.Factory> registry = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(TextEmbeddingProcessor.MODEL_ID_FIELD, "mockModelId");
+        config.put(TextEmbeddingProcessor.FIELD_MAP_FIELD, ImmutableMap.of("key1", "key1_knn"));
+        config.put(InferenceProcessor.BATCH_SIZE_BYTES_FIELD, InferenceProcessor.MAX_BATCH_SIZE_BYTES + 1);
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> textEmbeddingProcessorFactory.create(registry, PROCESSOR_TAG, DESCRIPTION, config)
+        );
+        assertTrue(exception.getMessage().contains("must not exceed"));
+    }
 }
