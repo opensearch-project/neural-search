@@ -23,6 +23,13 @@ public final class SemanticHighlightingConstants {
     public static final String MAX_INFERENCE_BATCH_SIZE = "max_inference_batch_size";
     public static final String PRE_TAG = "pre_tag";
     public static final String POST_TAG = "post_tag";
+    public static final String ENCODER = "encoder";
+    public static final String NO_MATCH_SIZE = "no_match_size";
+
+    // Search request ext block name. Setting this ext to {@code true} signals that
+    // semantic highlighting should run via the system-generated batch processor —
+    // an alternative to declaring {@code batch_inference: true} on every field.
+    public static final String EXT_NAME = "semantic_highlighting_batch";
 
     // Connector parameter keys for batch configuration
     public static final String CONNECTOR_SUPPORTS_BATCH_INFERENCE = "supports_batch_inference";
@@ -33,6 +40,9 @@ public final class SemanticHighlightingConstants {
     public static final String DEFAULT_POST_TAG = "</em>";
     public static final int DEFAULT_MAX_INFERENCE_BATCH_SIZE = 100;
     public static final Boolean DEFAULT_BATCH_INFERENCE = false;
+    public static final String DEFAULT_ENCODER = "default";
+    public static final String ENCODER_HTML = "html";
+    public static final int DEFAULT_NO_MATCH_SIZE = 0;
 
     // ML inference keys
     public static final String HIGHLIGHTS_KEY = "highlights";

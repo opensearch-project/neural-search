@@ -4,203 +4,192 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.utils;
 
-import lombok.RequiredArgsConstructor;
-import lombok.extern.log4j.Log4j2;
-import org.opensearch.core.common.text.Text;
-import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
-import org.opensearch.search.SearchHit;
-import org.opensearch.search.fetch.subphase.highlight.HighlightField;
-import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import lombok.extern.log4j.Log4j2;
+import org.opensearch.core.common.text.Text;
+import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
+import org.opensearch.neuralsearch.highlight.utils.HighlightEncoders;
+import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.fetch.subphase.highlight.HighlightField;
+
 /**
- * Applies highlighting results to search hits
+ * Applies model output to {@link SearchHit#getHighlightFields()}. Each row has its
+ * own field name, tag pair, encoder and no_match_size, supplied through aligned
+ * parallel lists from {@link org.opensearch.neuralsearch.highlight.batch.HighlightContext}.
  */
 @Log4j2
-@RequiredArgsConstructor
 public class HighlightResultApplier {
 
-    private final String preTag;
-    private final String postTag;
-
-    /**
-     * Apply batch highlighting results to valid hits
-     */
+    /** Apply a full batch — one row per (target, hit) pair. */
     public void applyBatchResults(
         List<SearchHit> validHits,
         List<List<Map<String, Object>>> batchResults,
-        String fieldName,
-        String preTag,
-        String postTag
+        List<String> fieldNames,
+        List<String> preTags,
+        List<String> postTags,
+        List<Integer> noMatchSizes,
+        List<String> encoders
     ) {
         if (batchResults.size() != validHits.size()) {
-            log.error("Batch results size ({}) doesn't match valid hits size ({})", batchResults.size(), validHits.size());
+            log.error("Batch results size ({}) does not match valid hits size ({})", batchResults.size(), validHits.size());
             throw new IllegalStateException("Batch results size mismatch");
         }
-
         for (int i = 0; i < validHits.size(); i++) {
-            List<Map<String, Object>> highlights = batchResults.get(i);
-            if (highlights == null) {
-                highlights = new ArrayList<>();
-            }
-            applyHighlightsToHit(validHits.get(i), highlights, fieldName, preTag, postTag);
+            applyRow(
+                validHits.get(i),
+                batchResults.get(i),
+                fieldNames.get(i),
+                preTags.get(i),
+                postTags.get(i),
+                noMatchSizes.get(i),
+                encoders.get(i)
+            );
         }
     }
 
-    // Backward compatible method using pipeline-level tags
-    public void applyBatchResults(List<SearchHit> validHits, List<List<Map<String, Object>>> batchResults, String fieldName) {
-        applyBatchResults(validHits, batchResults, fieldName, this.preTag, this.postTag);
-    }
-
-    /**
-     * Apply batch results with specific indices
-     */
+    /** Apply a slice [startIndex, endIndex) of a paginated execution. */
     public void applyBatchResultsWithIndices(
         List<SearchHit> allValidHits,
-        List<List<Map<String, Object>>> batchResults,
+        List<List<Map<String, Object>>> sliceResults,
         int startIndex,
         int endIndex,
-        String fieldName,
-        String preTag,
-        String postTag
+        List<String> fieldNames,
+        List<String> preTags,
+        List<String> postTags,
+        List<Integer> noMatchSizes,
+        List<String> encoders
     ) {
-        int expectedBatchSize = endIndex - startIndex;
-        if (batchResults.size() != expectedBatchSize) {
+        int expected = endIndex - startIndex;
+        if (sliceResults.size() != expected) {
             log.error(
-                "Batch results size ({}) doesn't match expected batch size ({}) for indices [{}, {})",
-                batchResults.size(),
-                expectedBatchSize,
+                "Slice results size ({}) does not match expected size ({}) for [{}, {})",
+                sliceResults.size(),
+                expected,
                 startIndex,
                 endIndex
             );
             throw new IllegalStateException("Batch results size mismatch");
         }
-
-        int batchIndex = 0;
-        for (int i = startIndex; i < endIndex && batchIndex < batchResults.size(); i++, batchIndex++) {
-            List<Map<String, Object>> highlights = batchResults.get(batchIndex);
-            if (highlights == null) {
-                highlights = new ArrayList<>();
-            }
-            applyHighlightsToHit(allValidHits.get(i), highlights, fieldName, preTag, postTag);
+        int sliceIdx = 0;
+        for (int i = startIndex; i < endIndex && sliceIdx < sliceResults.size(); i++, sliceIdx++) {
+            applyRow(
+                allValidHits.get(i),
+                sliceResults.get(sliceIdx),
+                fieldNames.get(i),
+                preTags.get(i),
+                postTags.get(i),
+                noMatchSizes.get(i),
+                encoders.get(i)
+            );
         }
     }
 
-    /**
-     * Apply single highlighting result to a hit (backward compatible)
-     */
-    public void applySingleResult(SearchHit hit, List<Map<String, Object>> highlightResults, String fieldName) {
-        applySingleResult(hit, highlightResults, fieldName, this.preTag, this.postTag);
-    }
-
-    /**
-     * Apply single highlighting result to a hit
-     */
-    public void applySingleResult(
-        SearchHit hit,
-        List<Map<String, Object>> highlightResults,
-        String fieldName,
-        String preTag,
-        String postTag
-    ) {
-        if (highlightResults == null || highlightResults.isEmpty()) {
-            applyHighlightsToHit(hit, new ArrayList<>(), fieldName, preTag, postTag);
-            return;
-        }
-
-        Map<String, Object> mlResponse = highlightResults.get(0);
-        if (mlResponse == null || !mlResponse.containsKey(SemanticHighlightingConstants.HIGHLIGHTS_KEY)) {
-            applyHighlightsToHit(hit, new ArrayList<>(), fieldName, preTag, postTag);
-            return;
-        }
-
-        Object highlightsObj = mlResponse.get(SemanticHighlightingConstants.HIGHLIGHTS_KEY);
-        if (!(highlightsObj instanceof List)) {
-            log.error("Invalid highlights type for hit: {}", hit.getId());
-            throw new IllegalStateException("Expected highlights to be a List");
-        }
-
-        @SuppressWarnings("unchecked")
-        List<Map<String, Object>> highlights = (List<Map<String, Object>>) highlightsObj;
-        applyHighlightsToHit(hit, highlights, fieldName, preTag, postTag);
-    }
-
-    /**
-     * Apply highlights to a specific search hit
-     */
-    private void applyHighlightsToHit(
+    private void applyRow(
         SearchHit hit,
         List<Map<String, Object>> highlights,
         String fieldName,
         String preTag,
-        String postTag
+        String postTag,
+        int noMatchSize,
+        String encoder
     ) {
         Map<String, Object> source = hit.getSourceAsMap();
-        if (source == null) {
+        if (source == null) return;
+
+        // Inner hit _source is keyed by leaf name (e.g. "text"), not the fully qualified
+        // dotted name (e.g. "chunks.text"). Fall back to the leaf when the dotted path
+        // is absent.
+        String text = readString(source, fieldName);
+        if (text == null) {
+            int dot = fieldName.lastIndexOf('.');
+            if (dot >= 0) text = readString(source, fieldName.substring(dot + 1));
+        }
+        if (text == null || text.isEmpty()) return;
+
+        boolean hasValidSpans = hasValidSpans(highlights);
+        if (!hasValidSpans) {
+            // No spans returned. Emit a no_match snippet when configured.
+            if (noMatchSize > 0) {
+                String snippet = text.length() <= noMatchSize ? text : text.substring(0, noMatchSize);
+                if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
+                    snippet = HighlightEncoders.htmlEscape(snippet);
+                }
+                writeHighlightField(hit, fieldName, snippet);
+            }
             return;
         }
 
-        String text = (String) source.get(fieldName);
-        if (text == null || text.isEmpty()) {
-            return;
+        String highlighted = applyPositionHighlights(text, highlights, preTag, postTag);
+        if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
+            highlighted = HighlightEncoders.htmlEncodePreservingTags(highlighted, preTag, postTag);
         }
+        writeHighlightField(hit, fieldName, highlighted);
+    }
 
-        String highlightedText = applyPositionHighlights(text, highlights, preTag, postTag);
+    private static boolean hasValidSpans(List<Map<String, Object>> highlights) {
+        if (highlights == null) return false;
+        for (Map<String, Object> highlight : highlights) {
+            Object start = highlight.get(SemanticHighlightingConstants.START_KEY);
+            Object end = highlight.get(SemanticHighlightingConstants.END_KEY);
+            if (ProcessorUtils.isNumeric(start) && ProcessorUtils.isNumeric(end)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
+    private static String readString(Map<String, Object> source, String key) {
+        Object v = source.get(key);
+        if (v instanceof String) return (String) v;
+        return null;
+    }
+
+    private static void writeHighlightField(SearchHit hit, String fieldName, String value) {
         Map<String, HighlightField> highlightFields = hit.getHighlightFields();
         if (highlightFields == null) {
             highlightFields = new HashMap<>();
         } else if (!(highlightFields instanceof HashMap)) {
             highlightFields = new HashMap<>(highlightFields);
         }
-
-        HighlightField highlightField = new HighlightField(fieldName, new Text[] { new Text(highlightedText) });
-        highlightFields.put(fieldName, highlightField);
-
+        highlightFields.put(fieldName, new HighlightField(fieldName, new Text[] { new Text(value) }));
         hit.highlightFields(highlightFields);
     }
 
     /**
-     * Apply position-based highlights to text
+     * Walks the validated span list and inserts the pre/post tags into the source text.
+     * Assumes the caller has already confirmed at least one valid span exists.
      */
-    private String applyPositionHighlights(String text, List<Map<String, Object>> highlights, String preTag, String postTag) {
-        List<Map<String, Object>> validHighlights = new ArrayList<>();
-
+    private static String applyPositionHighlights(String text, List<Map<String, Object>> highlights, String preTag, String postTag) {
+        List<Map<String, Object>> valid = new ArrayList<>();
         for (Map<String, Object> highlight : highlights) {
-            Object startObj = highlight.get(SemanticHighlightingConstants.START_KEY);
-            Object endObj = highlight.get(SemanticHighlightingConstants.END_KEY);
-
-            if (ProcessorUtils.isNumeric(startObj) && ProcessorUtils.isNumeric(endObj)) {
-                validHighlights.add(highlight);
+            Object start = highlight.get(SemanticHighlightingConstants.START_KEY);
+            Object end = highlight.get(SemanticHighlightingConstants.END_KEY);
+            if (ProcessorUtils.isNumeric(start) && ProcessorUtils.isNumeric(end)) {
+                valid.add(highlight);
             }
         }
 
-        if (validHighlights.isEmpty()) {
-            return text;
-        }
-
-        // Sort highlights by start position in descending order to apply from end to beginning
-        validHighlights.sort((a, b) -> {
-            int startA = ((Number) a.get(SemanticHighlightingConstants.START_KEY)).intValue();
-            int startB = ((Number) b.get(SemanticHighlightingConstants.START_KEY)).intValue();
-            return Integer.compare(startB, startA);
+        // Apply spans from the end of the string so earlier offsets remain valid.
+        valid.sort((a, b) -> {
+            int sa = ((Number) a.get(SemanticHighlightingConstants.START_KEY)).intValue();
+            int sb = ((Number) b.get(SemanticHighlightingConstants.START_KEY)).intValue();
+            return Integer.compare(sb, sa);
         });
 
         StringBuilder result = new StringBuilder(text);
-        for (Map<String, Object> highlight : validHighlights) {
+        for (Map<String, Object> highlight : valid) {
             int start = ((Number) highlight.get(SemanticHighlightingConstants.START_KEY)).intValue();
             int end = ((Number) highlight.get(SemanticHighlightingConstants.END_KEY)).intValue();
-
             if (start >= 0 && end <= text.length() && start < end) {
                 result.insert(end, postTag);
                 result.insert(start, preTag);
             }
         }
-
         return result.toString();
     }
 }

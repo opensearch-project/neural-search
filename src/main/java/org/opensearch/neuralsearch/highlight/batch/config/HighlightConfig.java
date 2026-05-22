@@ -4,109 +4,37 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.config;
 
-import java.util.Locale;
+import java.util.Collections;
+import java.util.List;
 
 import lombok.Builder;
 import lombok.Getter;
-import lombok.With;
-import org.opensearch.ml.common.FunctionName;
-import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 
 /**
- * Immutable configuration for semantic highlighting extracted and validated from search request options.
+ * Per-request semantic highlighting configuration produced by {@link HighlightConfigResolver}.
+ * Holds the list of semantic targets (top-level fields plus inner_hits fields) and the
+ * query text extracted from the request's main query.
  */
 @Getter
 @Builder(toBuilder = true)
 public class HighlightConfig {
 
-    private final String fieldName;
-
-    private final String modelId;
+    private final List<SemanticHighlightTarget> targets;
 
     private final String queryText;
 
-    @Builder.Default
-    private final String preTag = SemanticHighlightingConstants.DEFAULT_PRE_TAG;
-
-    @Builder.Default
-    private final String postTag = SemanticHighlightingConstants.DEFAULT_POST_TAG;
-
-    @Builder.Default
-    private final boolean batchInference = false;
-
-    @Builder.Default
-    private final int maxBatchSize = SemanticHighlightingConstants.DEFAULT_MAX_INFERENCE_BATCH_SIZE;
-
-    @With
-    private final String validationError;
-
-    @With
-    private final FunctionName modelType;
-
-    /**
-     * Check if the configuration is valid
-     * @return true if no validation error exists and all required fields are present
-     */
-    public boolean isValid() {
-        return validationError == null && fieldName != null && modelId != null && queryText != null && validateBatchInference() == null;
+    /** True when at least one semantic target was found. */
+    public boolean hasTargets() {
+        return targets != null && !targets.isEmpty();
     }
 
-    /**
-     * Check if configuration has required fields (before model type enrichment)
-     * @return true if required fields are present
-     */
-    public boolean hasRequiredFields() {
-        return fieldName != null && modelId != null && queryText != null;
+    /** Returns the targets list, or empty list when null. */
+    public List<SemanticHighlightTarget> getTargetsOrEmpty() {
+        return targets == null ? Collections.emptyList() : targets;
     }
 
-    /**
-     * Check if the model supports batch inference
-     * @return true if the model type is REMOTE, false otherwise
-     */
-    public boolean modelSupportsBatchInference() {
-        return modelType == FunctionName.REMOTE;
-    }
-
-    /**
-     * Validate batch inference configuration against model capabilities
-     * @return validation error message if invalid, null if valid
-     */
-    public String validateBatchInference() {
-        if (batchInference && modelType != null && !modelSupportsBatchInference()) {
-            return String.format(
-                Locale.ROOT,
-                "Model [%s] with type [%s] does not support batch inference. "
-                    + "Batch inference is only supported for REMOTE models. "
-                    + "Please set 'batch_inference' to false or use a remote model.",
-                modelId,
-                modelType
-            );
-        }
-        return null;
-    }
-
-    /**
-     * Check if the configuration is invalid
-     * @return true if validation error exists
-     */
-    public boolean isInvalid() {
-        return validationError != null;
-    }
-
-    /**
-     * Create an invalid configuration with an error message
-     * @param errorMessage the validation error message
-     * @return invalid configuration
-     */
-    public static HighlightConfig invalid(String errorMessage) {
-        return HighlightConfig.builder().validationError(errorMessage).build();
-    }
-
-    /**
-     * Create an empty configuration (when no semantic field found)
-     * @return empty configuration
-     */
+    /** Empty config when the request declares no semantic highlight. */
     public static HighlightConfig empty() {
-        return HighlightConfig.builder().validationError("No semantic highlight field found").build();
+        return HighlightConfig.builder().targets(Collections.emptyList()).queryText(null).build();
     }
 }

@@ -53,9 +53,6 @@ import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFacto
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.search.query.QueryCollectorContextSpecFactory;
 import org.opensearch.search.query.QueryPhaseSearcher;
-import org.opensearch.transport.client.Client;
-import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
-import org.opensearch.neuralsearch.highlight.batch.processor.SemanticHighlightingFactory;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
@@ -128,6 +125,7 @@ import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder;
+import org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
@@ -429,7 +427,12 @@ public class NeuralSearch extends Plugin
             ),
             new SearchExtSpec<>(AgentStepsSearchExtBuilder.AGENT_STEPS_FIELD_NAME, in -> new AgentStepsSearchExtBuilder(in), parser -> {
                 throw new UnsupportedOperationException("AgentStepsSearchExtBuilder should not be parsed from request");
-            })
+            }),
+            new SearchExtSpec<>(
+                SemanticHighlighterExtBuilder.NAME,
+                in -> new SemanticHighlighterExtBuilder(in),
+                parser -> SemanticHighlighterExtBuilder.parse(parser)
+            )
         );
     }
 

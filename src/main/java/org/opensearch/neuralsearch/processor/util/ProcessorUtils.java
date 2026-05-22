@@ -17,6 +17,12 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.BoostingQueryBuilder;
+import org.opensearch.index.query.ConstantScoreQueryBuilder;
+import org.opensearch.index.query.DisMaxQueryBuilder;
+import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
+import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.IndexFieldMapper;
@@ -434,7 +440,17 @@ public class ProcessorUtils {
     }
 
     /**
-     * Extract query text from QueryBuilder for highlighting purposes
+     * Extracts a query text suitable for semantic highlighting from a {@link QueryBuilder}.
+     *
+     * <p>Recognizes leaf clauses ({@code match}, {@code term}, {@code neural}, {@code neural_knn}),
+     * the {@code hybrid} composite, and unwraps containers that compose other clauses without
+     * altering their text intent: {@code nested}, {@code bool} (must/should/filter), {@code dis_max},
+     * {@code constant_score}, {@code boosting} (positive only), {@code function_score}, and
+     * {@code script_score}. Unsupported types throw {@link IllegalArgumentException}.
+     *
+     * @param queryBuilder the query to extract text from
+     * @return the extracted query text
+     * @throws IllegalArgumentException when the query is null or its type cannot be unwrapped
      */
     public static String extractQueryTextFromBuilder(QueryBuilder queryBuilder) {
         switch (queryBuilder) {
@@ -467,6 +483,32 @@ public class ProcessorUtils {
             case NestedQueryBuilder nestedQuery -> {
                 return extractQueryTextFromBuilder(nestedQuery.query());
             }
+            case BoolQueryBuilder boolQuery -> {
+                StringBuilder text = new StringBuilder();
+                appendIfNonEmpty(text, joinClauses(boolQuery.must()));
+                appendIfNonEmpty(text, joinClauses(boolQuery.should()));
+                appendIfNonEmpty(text, joinClauses(boolQuery.filter()));
+                if (text.length() == 0) {
+                    throw new IllegalArgumentException("bool query has no extractable clause for semantic highlighting");
+                }
+                return text.toString();
+            }
+            case DisMaxQueryBuilder disMaxQuery -> {
+                return joinClauses(disMaxQuery.innerQueries());
+            }
+            case ConstantScoreQueryBuilder constantScoreQuery -> {
+                return extractQueryTextFromBuilder(constantScoreQuery.innerQuery());
+            }
+            case BoostingQueryBuilder boostingQuery -> {
+                // Only positive clause matches; negative is a demotion clause.
+                return extractQueryTextFromBuilder(boostingQuery.positiveQuery());
+            }
+            case FunctionScoreQueryBuilder functionScoreQuery -> {
+                return extractQueryTextFromBuilder(functionScoreQuery.query());
+            }
+            case ScriptScoreQueryBuilder scriptScoreQuery -> {
+                return extractQueryTextFromBuilder(scriptScoreQuery.query());
+            }
             default -> {
             }
         }
@@ -474,6 +516,26 @@ public class ProcessorUtils {
         throw new IllegalArgumentException(
             String.format(Locale.ROOT, "Query type %s not supported for semantic highlighting.", queryBuilder.getClass().getSimpleName())
         );
+    }
+
+    private static String joinClauses(List<QueryBuilder> clauses) {
+        if (clauses == null || clauses.isEmpty()) return "";
+        StringBuilder text = new StringBuilder();
+        for (QueryBuilder clause : clauses) {
+            try {
+                String sub = extractQueryTextFromBuilder(clause);
+                appendIfNonEmpty(text, sub);
+            } catch (IllegalArgumentException ignored) {
+                // unsupported sub-clause is skipped; if all fail the caller still returns ""
+            }
+        }
+        return text.toString();
+    }
+
+    private static void appendIfNonEmpty(StringBuilder text, String fragment) {
+        if (fragment == null || fragment.isEmpty()) return;
+        if (text.length() > 0) text.append(' ');
+        text.append(fragment);
     }
 
     /**

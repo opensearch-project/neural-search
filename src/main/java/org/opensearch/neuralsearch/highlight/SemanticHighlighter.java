@@ -4,27 +4,37 @@
  */
 package org.opensearch.neuralsearch.highlight;
 
+import java.util.Map;
+
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.core.common.text.Text;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.highlight.single.SemanticHighlighterEngine;
+import org.opensearch.neuralsearch.highlight.utils.HighlightEncoders;
 import org.opensearch.neuralsearch.highlight.utils.HighlightExtractorUtils;
+import org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.search.SearchExtBuilder;
 import org.opensearch.search.fetch.subphase.highlight.FieldHighlightContext;
 import org.opensearch.search.fetch.subphase.highlight.HighlightField;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
-import org.opensearch.search.pipeline.SearchPipelineService;
-
-import java.util.Locale;
-import java.util.Map;
 
 /**
- * Semantic highlighter that uses ML models to identify relevant text spans for highlighting
+ * Semantic highlighter that uses ML models to identify relevant text spans.
+ *
+ * <p>The fetch-phase highlighter yields (returns null) so the response processor
+ * can perform highlighting when either of the following is true:
+ * <ul>
+ *   <li>The request carries the {@code ext.semantic_highlighting_batch: true} block.</li>
+ *   <li>The field options declare {@code batch_inference: true} (legacy signal).</li>
+ * </ul>
+ * Otherwise, it performs a single inference per field synchronously.
  */
 @Log4j2
 public class SemanticHighlighter implements Highlighter {
+
     private SemanticHighlighterEngine semanticHighlighterEngine;
 
     public void initialize(SemanticHighlighterEngine semanticHighlighterEngine) {
@@ -41,38 +51,28 @@ public class SemanticHighlighter implements Highlighter {
         return true;
     }
 
-    /**
-     * Highlights a field using semantic highlighting
-     *
-     * @param fieldContext The field context containing the query and field information
-     * @return The highlighted field or null if highlighting is not possible
-     */
     @Override
     public HighlightField highlight(FieldHighlightContext fieldContext) {
-        // Extract batch_inference option from field options
         Map<String, Object> options = fieldContext.field.fieldOptions().options();
-        boolean batchInference = extractBatchInference(options);
 
-        if (batchInference) {
-            // Check if system processor is enabled
+        // Yield if the request opts into the response processor path: either the
+        // request-level ext block (set to true), or the legacy field-level batch_inference flag.
+        if (isExtBatchEnabled(fieldContext) || extractBatchInference(options)) {
             if (!isSystemProcessorEnabled()) {
-                // When batch mode is requested but system processor is not enabled, throw an exception
-                String errorMessage = String.format(
-                    Locale.ROOT,
-                    "Batch inference for semantic highlighting is disabled. Enable it by adding '%s' to the '%s' cluster setting.",
-                    SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE,
-                    SearchPipelineService.ENABLED_SYSTEM_GENERATED_FACTORIES_SETTING.getKey()
+                throw new IllegalStateException(
+                    String.format(
+                        java.util.Locale.ROOT,
+                        "Field [%s] is configured for batch semantic highlighting but the system-generated processor "
+                            + "is not enabled. Add '%s' to the cluster setting "
+                            + "'cluster.search.enabled_system_generated_factories' to enable batch highlighting.",
+                        fieldContext.fieldName,
+                        SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE
+                    )
                 );
-                log.error("[SEMANTIC_HIGHLIGHT] BATCH MODE ERROR - {}", errorMessage);
-                throw new IllegalArgumentException(errorMessage);
             }
-
-            // Return null - actual highlighting will be done by SemanticHighlightingProcessor
-            // This highlighter only serves to validate the system processor is enabled for batch mode
             return null;
         }
 
-        // Below is the EXACT code from main branch without any changes
         if (semanticHighlighterEngine == null) {
             throw new IllegalStateException(
                 "SemanticHighlighter has not been initialized. This can happen when the neural-search plugin "
@@ -82,51 +82,82 @@ public class SemanticHighlighter implements Highlighter {
 
         EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
 
-        // Extract field text - returns null if field is missing, empty, or not a string
         String fieldText = HighlightExtractorUtils.getFieldText(fieldContext);
         if (fieldText == null) {
             return null;
         }
 
-        // Get model ID
         String modelId = HighlightExtractorUtils.getModelId(fieldContext.field.fieldOptions().options());
-
-        // Try to extract query text
         String originalQueryText = semanticHighlighterEngine.extractOriginalQuery(fieldContext.query, fieldContext.fieldName);
-
         if (originalQueryText == null || originalQueryText.isEmpty()) {
             log.warn("No query text found for field {}", fieldContext.fieldName);
             return null;
         }
 
-        // The pre- and post- tags are provided by the user or defaulted to <em> and </em>
         String[] preTags = fieldContext.field.fieldOptions().preTags();
         String[] postTags = fieldContext.field.fieldOptions().postTags();
+        String preTag = preTags[0];
+        String postTag = postTags[0];
 
-        // Get highlighted text - allow any exceptions from this call to propagate
         String highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
             modelId,
             originalQueryText,
             fieldText,
-            preTags[0],
-            postTags[0]
+            preTag,
+            postTag
         );
 
         if (highlightedResponse == null || highlightedResponse.isEmpty()) {
+            // no_match_size: emit first N chars when model returns no spans.
+            int noMatchSize = extractNoMatchSize(options);
+            if (noMatchSize > 0 && !fieldText.isEmpty()) {
+                String snippet = fieldText.length() <= noMatchSize ? fieldText : fieldText.substring(0, noMatchSize);
+                if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(extractEncoder(options))) {
+                    snippet = HighlightEncoders.htmlEscape(snippet);
+                }
+                return new HighlightField(fieldContext.fieldName, new Text[] { new Text(snippet) });
+            }
             log.warn("No highlighted text returned for field: {}, returning null", fieldContext.fieldName);
             return null;
         }
 
-        // Create highlight field
-        Text[] fragments = new Text[] { new Text(highlightedResponse) };
-        return new HighlightField(fieldContext.fieldName, fragments);
+        if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(extractEncoder(options))) {
+            highlightedResponse = HighlightEncoders.htmlEncodePreservingTags(highlightedResponse, preTag, postTag);
+        }
+
+        return new HighlightField(fieldContext.fieldName, new Text[] { new Text(highlightedResponse) });
     }
 
-    private boolean extractBatchInference(Map<String, Object> options) {
+    private static boolean isExtBatchEnabled(FieldHighlightContext fieldContext) {
+        if (fieldContext == null || fieldContext.context == null) return false;
+        SearchExtBuilder builder = fieldContext.context.getSearchExt(SemanticHighlightingConstants.EXT_NAME);
+        return builder instanceof SemanticHighlighterExtBuilder && ((SemanticHighlighterExtBuilder) builder).isEnabled();
+    }
+
+    private static boolean extractBatchInference(Map<String, Object> options) {
         return HighlightExtractorUtils.extractBatchInferenceFromOptions(options);
     }
 
     private boolean isSystemProcessorEnabled() {
         return NeuralSearchClusterUtil.instance().isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE);
+    }
+
+    private static int extractNoMatchSize(Map<String, Object> options) {
+        if (options == null) return SemanticHighlightingConstants.DEFAULT_NO_MATCH_SIZE;
+        Object v = options.get(SemanticHighlightingConstants.NO_MATCH_SIZE);
+        if (v instanceof Number) return ((Number) v).intValue();
+        if (v instanceof String) {
+            try {
+                return Integer.parseInt((String) v);
+            } catch (NumberFormatException ignored) {}
+        }
+        return SemanticHighlightingConstants.DEFAULT_NO_MATCH_SIZE;
+    }
+
+    private static String extractEncoder(Map<String, Object> options) {
+        if (options == null) return SemanticHighlightingConstants.DEFAULT_ENCODER;
+        Object v = options.get(SemanticHighlightingConstants.ENCODER);
+        if (v instanceof String) return (String) v;
+        return SemanticHighlightingConstants.DEFAULT_ENCODER;
     }
 }

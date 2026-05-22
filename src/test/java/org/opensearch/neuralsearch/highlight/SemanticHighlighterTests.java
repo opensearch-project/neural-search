@@ -285,7 +285,7 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
     }
 
-    public void testBatchInferenceModeThrowsExceptionWhenSystemProcessorDisabled() {
+    public void testBatchInferenceModeYieldsWhenSystemProcessorDisabled() {
         // Setup
         Map<String, Object> options = new HashMap<>();
         options.put("model_id", "test_model");
@@ -297,14 +297,10 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         // Mock system processor disabled
         when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(false);
 
-        // Execute & Verify
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> highlighter.highlight(fieldContext));
-
-        // Updated assertions to match new error message
-        assertTrue(exception.getMessage().contains("Batch inference for semantic highlighting is disabled"));
-        assertTrue(exception.getMessage().contains("Enable it by adding"));
-        assertTrue(exception.getMessage().contains("semantic-highlighter"));
-        assertTrue(exception.getMessage().contains("cluster.search.enabled_system_generated_factories"));
+        // Execute - the highlighter throws so the customer sees the misconfiguration.
+        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> highlighter.highlight(fieldContext));
+        assertTrue(ex.getMessage(), ex.getMessage().contains("system-generated processor is not enabled"));
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
     public void testBatchInferenceModeWithStringValue() throws Exception {
@@ -453,10 +449,165 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         // Mock system processor with only other factories (no semantic-highlighter, no wildcard)
         when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(false);
 
-        // Execute & Verify - should throw exception
-        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> highlighter.highlight(fieldContext));
+        // Execute - the highlighter throws an IllegalStateException so the customer notices.
+        IllegalStateException ex = expectThrows(IllegalStateException.class, () -> highlighter.highlight(fieldContext));
+        assertTrue(ex.getMessage(), ex.getMessage().contains("system-generated processor is not enabled"));
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString());
+    }
 
-        assertTrue(exception.getMessage().contains("Batch inference for semantic highlighting is disabled"));
-        assertTrue(exception.getMessage().contains("Enable it by adding"));
+    // ============= Tests for no_match_size =============
+
+    public void testNoMatchSizeEmitsSnippetWhenModelReturnsEmpty() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("no_match_size", 10);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            ""
+        );
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNotNull(result);
+        assertEquals(1, result.fragments().length);
+        assertEquals("test field", result.fragments()[0].string()); // first 10 chars of "test field content"
+    }
+
+    public void testNoMatchSizeZeroReturnsNull() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("no_match_size", 0);
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            null
+        );
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNull(result);
+    }
+
+    public void testNoMatchSizeWithHtmlEncoder() throws Exception {
+        // Setup source with HTML-sensitive content
+        when(sourceLookup.extractValue("test_field", null)).thenReturn("<b>bold</b> text");
+
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("no_match_size", 6);
+        options.put("encoder", "html");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString()))
+            .thenReturn("");
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNotNull(result);
+        // first 6 chars of "<b>bold</b> text" is "<b>bol", HTML-escaped to "&lt;b&gt;bol"
+        assertTrue(result.fragments()[0].string().contains("&lt;"));
+    }
+
+    // ============= Tests for encoder: html =============
+
+    public void testHtmlEncoderEscapesNonTagText() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("encoder", "html");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            "x <em>&</em> y"
+        );
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNotNull(result);
+        String text = result.fragments()[0].string();
+        // The & inside <em> tags should be escaped, tags preserved
+        assertTrue(text, text.contains("<em>"));
+        assertTrue(text, text.contains("</em>"));
+        assertTrue(text, text.contains("&amp;"));
+    }
+
+    public void testDefaultEncoderDoesNotEscape() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            "x <em>&</em> y"
+        );
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNotNull(result);
+        // default encoder: no escaping
+        assertEquals("x <em>&</em> y", result.fragments()[0].string());
+    }
+
+    // ============= Tests for ext-based yield =============
+
+    public void testExtBatchEnabledYieldsWithoutBatchInference() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        // No batch_inference in options
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+
+        // Mock ext block present and enabled
+        org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder extBuilder =
+            new org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder(true);
+        when(fetchContext.getSearchExt(SemanticHighlightingConstants.EXT_NAME)).thenReturn(extBuilder);
+        when(searchPipelineService.isSystemGeneratedFactoryEnabled(SemanticHighlightingConstants.SYSTEM_FACTORY_TYPE)).thenReturn(true);
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNull(result); // yields to processor
+        verify(semanticHighlighterEngine, never()).getHighlightedSentences(any(), any(), any(), any(), any());
+    }
+
+    public void testExtBatchDisabledDoesNotYield() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+
+        // Mock ext block present but disabled
+        org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder extBuilder =
+            new org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder(false);
+        when(fetchContext.getSearchExt(SemanticHighlightingConstants.EXT_NAME)).thenReturn(extBuilder);
+
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            "<em>highlighted</em>"
+        );
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNotNull(result); // does NOT yield — runs single inference
+    }
+
+    public void testNoMatchSizeWithStringValue() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        options.put("no_match_size", "5");
+        when(fieldOptions.options()).thenReturn(options);
+
+        highlighter.initialize(semanticHighlighterEngine);
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString())).thenReturn(
+            null
+        );
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNotNull(result);
+        assertEquals("test ", result.fragments()[0].string()); // first 5 chars of "test field content"
     }
 }
