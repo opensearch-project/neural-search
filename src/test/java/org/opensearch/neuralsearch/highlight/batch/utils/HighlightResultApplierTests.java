@@ -91,18 +91,20 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         assertEquals("abcd", highlightedValue(hit, "body"));
     }
 
-    public void testInvalidSpansAreSkipped() {
+    public void testInvalidSpansThrowException() {
         SearchHit hit = hitWithSource(Map.of("body", "alpha beta gamma"));
-        applier.applyBatchResults(
-            List.of(hit),
-            List.of(List.of(Map.of("start", "not-a-number", "end", 10), Map.of("start", 6, "end", 10))),
-            List.of("body"),
-            List.of("<em>"),
-            List.of("</em>"),
-            List.of(0),
-            List.of("default")
+        expectThrows(
+            Exception.class,
+            () -> applier.applyBatchResults(
+                List.of(hit),
+                List.of(List.of(Map.of("start", "not-a-number", "end", 10), Map.of("start", 6, "end", 10))),
+                List.of("body"),
+                List.of("<em>"),
+                List.of("</em>"),
+                List.of(0),
+                List.of("default")
+            )
         );
-        assertEquals("alpha <em>beta</em> gamma", highlightedValue(hit, "body"));
     }
 
     public void testNestedFieldFallsBackToLeafName() {
@@ -246,25 +248,20 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         assertTrue(hit.getHighlightFields().isEmpty());
     }
 
-    public void testInvalidSpanRangesAreSkipped() {
-        // start >= end (invalid) and start beyond text length: those spans are skipped
+    public void testInvalidSpanRangesThrowException() {
         SearchHit hit = hitWithSource(Map.of("body", "alpha beta"));
-        applier.applyBatchResults(
-            List.of(hit),
-            List.of(
-                List.of(
-                    Map.of("start", 5, "end", 5),    // empty range
-                    Map.of("start", 100, "end", 200), // out of bounds
-                    Map.of("start", 0, "end", 5)      // valid
-                )
-            ),
-            List.of("body"),
-            List.of("<em>"),
-            List.of("</em>"),
-            List.of(0),
-            List.of("default")
+        expectThrows(
+            Exception.class,
+            () -> applier.applyBatchResults(
+                List.of(hit),
+                List.of(List.of(Map.of("start", 5, "end", 5))),
+                List.of("body"),
+                List.of("<em>"),
+                List.of("</em>"),
+                List.of(0),
+                List.of("default")
+            )
         );
-        assertEquals("<em>alpha</em> beta", highlightedValue(hit, "body"));
     }
 
     public void testApplyWithIndicesSliceSizeMismatchThrows() {
