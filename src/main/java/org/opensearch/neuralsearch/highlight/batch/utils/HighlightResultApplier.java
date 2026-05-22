@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.utils;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -13,7 +12,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.core.common.text.Text;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.utils.HighlightEncoders;
-import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
+import org.opensearch.neuralsearch.highlight.utils.HighlightTagApplier;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.fetch.subphase.highlight.HighlightField;
 
@@ -111,9 +110,8 @@ public class HighlightResultApplier {
         }
         if (text == null || text.isEmpty()) return;
 
-        boolean hasValidSpans = hasValidSpans(highlights);
-        if (!hasValidSpans) {
-            // No spans returned. Emit a no_match snippet when configured.
+        String highlighted = HighlightTagApplier.applyTags(text, highlights, preTag, postTag);
+        if (highlighted == null) {
             if (noMatchSize > 0) {
                 String snippet = text.length() <= noMatchSize ? text : text.substring(0, noMatchSize);
                 if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
@@ -124,23 +122,10 @@ public class HighlightResultApplier {
             return;
         }
 
-        String highlighted = applyPositionHighlights(text, highlights, preTag, postTag);
         if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
             highlighted = HighlightEncoders.htmlEncodePreservingTags(highlighted, preTag, postTag);
         }
         writeHighlightField(hit, fieldName, highlighted);
-    }
-
-    private static boolean hasValidSpans(List<Map<String, Object>> highlights) {
-        if (highlights == null) return false;
-        for (Map<String, Object> highlight : highlights) {
-            Object start = highlight.get(SemanticHighlightingConstants.START_KEY);
-            Object end = highlight.get(SemanticHighlightingConstants.END_KEY);
-            if (ProcessorUtils.isNumeric(start) && ProcessorUtils.isNumeric(end)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static String readString(Map<String, Object> source, String key) {
@@ -158,38 +143,5 @@ public class HighlightResultApplier {
         }
         highlightFields.put(fieldName, new HighlightField(fieldName, new Text[] { new Text(value) }));
         hit.highlightFields(highlightFields);
-    }
-
-    /**
-     * Walks the validated span list and inserts the pre/post tags into the source text.
-     * Assumes the caller has already confirmed at least one valid span exists.
-     */
-    private static String applyPositionHighlights(String text, List<Map<String, Object>> highlights, String preTag, String postTag) {
-        List<Map<String, Object>> valid = new ArrayList<>();
-        for (Map<String, Object> highlight : highlights) {
-            Object start = highlight.get(SemanticHighlightingConstants.START_KEY);
-            Object end = highlight.get(SemanticHighlightingConstants.END_KEY);
-            if (ProcessorUtils.isNumeric(start) && ProcessorUtils.isNumeric(end)) {
-                valid.add(highlight);
-            }
-        }
-
-        // Apply spans from the end of the string so earlier offsets remain valid.
-        valid.sort((a, b) -> {
-            int sa = ((Number) a.get(SemanticHighlightingConstants.START_KEY)).intValue();
-            int sb = ((Number) b.get(SemanticHighlightingConstants.START_KEY)).intValue();
-            return Integer.compare(sb, sa);
-        });
-
-        StringBuilder result = new StringBuilder(text);
-        for (Map<String, Object> highlight : valid) {
-            int start = ((Number) highlight.get(SemanticHighlightingConstants.START_KEY)).intValue();
-            int end = ((Number) highlight.get(SemanticHighlightingConstants.END_KEY)).intValue();
-            if (start >= 0 && end <= text.length() && start < end) {
-                result.insert(end, postTag);
-                result.insert(start, preTag);
-            }
-        }
-        return result.toString();
     }
 }

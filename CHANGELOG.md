@@ -28,3 +28,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Upgrade gradle wrapper to 9.4.1 ([#1849](https://github.com/opensearch-project/neural-search/pull/1849))
 
 ### Refactoring
+* [Semantic Highlighting] Unify highlight tag application logic and add strict validation for model output ([#1862](https://github.com/opensearch-project/neural-search/pull/1862))
