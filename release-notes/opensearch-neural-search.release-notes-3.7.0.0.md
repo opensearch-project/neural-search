@@ -5,12 +5,12 @@ Compatible with OpenSearch and OpenSearch Dashboards version 3.7.0
 ### Enhancements
 
 * Fix batch semantic highlighting on inner_hits fields by improving the batch processor and adding a request-level opt-in ([#1858](https://github.com/opensearch-project/neural-search/pull/1858))
-
+* Propagate setMinCompetitiveScore to sub-query scorers in HybridBulkScorer to reduce collected documents and improve response time ([#1831](https://github.com/opensearch-project/neural-search/pull/1831))
+  
 ### Bug Fixes
 
-* Propagate setMinCompetitiveScore to sub-query scorers in HybridBulkScorer to reduce collected documents and improve response time ([#1831](https://github.com/opensearch-project/neural-search/pull/1831))
 * Fix flaky integration test failure caused by ML memory circuit breaker during model deployment by adding deploy retry logic ([#1824](https://github.com/opensearch-project/neural-search/pull/1824))
-* Unwrap LeafReader to fix compatibility issue with core PR 21318 that wrapped SparsePostingsEnum into ExitablePostingsEnum ([#1855](https://github.com/opensearch-project/neural-search/pull/1855))
+
 
 ### Infrastructure
 
@@ -21,6 +21,7 @@ Compatible with OpenSearch and OpenSearch Dashboards version 3.7.0
 ### Maintenance
 
 * Upgrade Gradle wrapper to 9.4.1 ([#1849](https://github.com/opensearch-project/neural-search/pull/1849))
+* * Unwrap LeafReader to fix compatibility issue with core PR 21318 that wrapped SparsePostingsEnum into ExitablePostingsEnum ([#1855](https://github.com/opensearch-project/neural-search/pull/1855))
 
 ### Refactoring
 
