@@ -565,6 +565,106 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         );
     }
 
+    /**
+     * Tests that array format for filter produces a helpful error message:
+     * {
+     *     "queries": [...],
+     *     "filter": [
+     *         {"term": {"field1": "value1"}},
+     *         {"term": {"field2": "value2"}}
+     *     ]
+     * }
+     */
+    @SneakyThrows
+    public void testFromXContent_whenFilterIsArray_thenFailWithHelpfulMessage() {
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endArray()
+            .startArray("filter")
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field("field1", "value1")
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field("field2", "value2")
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
+        contentParser.nextToken();
+
+        ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+        assertThat(exception.getMessage(), containsString("[hybrid] query's [filter] field must be a query object"));
+        assertThat(exception.getMessage(), containsString("bool query with must clauses"));
+    }
+
+    /**
+     * Tests that scalar format for filter produces a helpful error message:
+     * {
+     *     "queries": [...],
+     *     "filter": "invalid"
+     * }
+     */
+    @SneakyThrows
+    public void testFromXContent_whenFilterIsScalarValue_thenFailWithHelpfulMessage() {
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endArray()
+            .field("filter", "invalid")
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
+        contentParser.nextToken();
+
+        ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
+        assertThat(exception.getMessage(), containsString("[hybrid] query's [filter] field must be a query object"));
+        assertThat(exception.getMessage(), containsString("bool query with must clauses"));
+    }
+
     @SneakyThrows
     public void testFromXContent_whenIncorrectFormat_thenFail() {
         XContentBuilder unsupportedFieldXContentBuilder = XContentFactory.jsonBuilder()
