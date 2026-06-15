@@ -71,8 +71,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static final String ERROR_MSG_QUERIES_REQUIRED = "[%s] requires 'queries' field with at least one clause";
     public static final String ERROR_MSG_MAX_QUERIES_EXCEEDED = "Number of sub-queries exceeds maximum supported by [%s] query";
     public static final String ERROR_MSG_BOOST_NOT_SUPPORTED = "[%s] query does not support [%s]";
-    public static final String ERROR_MSG_FILTER_MUST_BE_QUERY_OBJECT = "[%s] query's [%s] field must be a query object. "
-        + "For multiple filters, use a bool query with must clauses";
+    public static final String ERROR_MSG_FILTER_MUST_BE_QUERY_OBJECT = "[%s] query's [%s] field must be a query object";
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);

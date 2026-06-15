@@ -619,7 +619,6 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
         assertThat(exception.getMessage(), containsString("[hybrid] query's [filter] field must be a query object"));
-        assertThat(exception.getMessage(), containsString("bool query with must clauses"));
     }
 
     /**
@@ -662,7 +661,6 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
         assertThat(exception.getMessage(), containsString("[hybrid] query's [filter] field must be a query object"));
-        assertThat(exception.getMessage(), containsString("bool query with must clauses"));
     }
 
     @SneakyThrows
