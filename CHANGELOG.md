@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 
 ### Enhancements
-
+* Improve hybrid query filter validation error message ([#1870](https://github.com/opensearch-project/neural-search/pull/1870))
 ### Bug Fixes
 
 ### Infrastructure

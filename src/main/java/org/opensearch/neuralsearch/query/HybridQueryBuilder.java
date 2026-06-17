@@ -455,6 +455,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     private static void throwUnsupportedFieldParsingException(XContentParser parser, String fieldName) {
+        log.error(String.format(Locale.ROOT, "[%s] query does not support [%s]", NAME, fieldName));
         throw new ParsingException(parser.getTokenLocation(), String.format(Locale.ROOT, "Field is not supported by [%s] query", NAME));
     }
 }
