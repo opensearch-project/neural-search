@@ -61,6 +61,7 @@ public class HybridQueryNestedFilterIT extends BaseNeuralSearchIT {
         createSearchPipelineWithResultsPostProcessor(SEARCH_PIPELINE);
 
         String modelId = prepareModel();
+        waitForModelToBeReady(modelId);
         float[] queryVector = runInference(modelId, QUERY_TEXT);
         float[] decoyVector = queryVector;
         float[] targetVector = createRandomVector(TEST_DIMENSION);

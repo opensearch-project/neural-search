@@ -414,7 +414,10 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
             return this;
         }
         KNNQueryBuilder filteredKnnQueryBuilder = (KNNQueryBuilder) knnQueryBuilder.filter(filterToBeAdded);
-        return new NeuralKNNQueryBuilder(filteredKnnQueryBuilder, originalQueryText);
+        NeuralKNNQueryBuilder result = new NeuralKNNQueryBuilder(filteredKnnQueryBuilder, originalQueryText);
+        result.boost(boost());
+        result.queryName(queryName());
+        return result;
     }
 
     /**
