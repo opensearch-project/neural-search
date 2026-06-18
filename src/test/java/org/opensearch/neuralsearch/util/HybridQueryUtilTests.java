@@ -13,6 +13,7 @@ import org.apache.lucene.search.TermQuery;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.UUIDs;
+import org.opensearch.action.search.SearchType;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
@@ -31,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -44,6 +46,23 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
     private static final String FROM_TEXT = "123";
     private static final String TO_TEXT = "456";
     private static final String TEXT_FIELD_NAME = "field";
+
+    @SneakyThrows
+    public void testValidateHybridQuerySearchType_whenDfsQueryThenFetch_thenFail() {
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> HybridQueryUtil.validateHybridQuerySearchType(SearchType.DFS_QUERY_THEN_FETCH)
+        );
+        assertThat(exception.getMessage(), containsString("hybrid query does not support search_type [dfs_query_then_fetch]"));
+    }
+
+    public void testValidateHybridQuerySearchType_whenQueryThenFetch_thenSuccess() {
+        HybridQueryUtil.validateHybridQuerySearchType(SearchType.QUERY_THEN_FETCH);
+    }
+
+    public void testValidateHybridQuerySearchType_whenDefaultSearchType_thenSuccess() {
+        HybridQueryUtil.validateHybridQuerySearchType(SearchType.DEFAULT);
+    }
 
     @SneakyThrows
     public void testIsHybridQueryCheck_whenQueryIsHybridQueryInstance_thenSuccess() {

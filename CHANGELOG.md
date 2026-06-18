@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
+* [Hybrid Query] Block hybrid query execution with `search_type=dfs_query_then_fetch` ([#1873](https://github.com/opensearch-project/neural-search/pull/1873))
 
 ### Infrastructure
 

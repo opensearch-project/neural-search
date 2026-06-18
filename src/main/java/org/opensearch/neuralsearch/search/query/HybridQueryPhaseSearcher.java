@@ -33,6 +33,7 @@ import lombok.extern.log4j.Log4j2;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.extractHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.isHybridQuery;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.validateHybridQuery;
+import static org.opensearch.neuralsearch.util.HybridQueryUtil.validateHybridQuerySearchType;
 import static org.opensearch.neuralsearch.util.HybridQueryUtil.transformHybridQueryWrappedInBooleanMustQuery;
 
 /**
@@ -66,6 +67,7 @@ public class HybridQueryPhaseSearcher extends QueryPhaseSearcherWrapper {
         if (isHybridQuery(query, searchContext) == false) {
             phaseQuery = validateAndTransformQuery(searchContext, query);
         } else {
+            validateHybridQuerySearchType(searchContext.searchType());
             phaseQuery = extractHybridQuery(searchContext, query);
             validateHybridQuery((HybridQuery) phaseQuery);
         }
