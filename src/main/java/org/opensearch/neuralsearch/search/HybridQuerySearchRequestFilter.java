@@ -11,11 +11,13 @@ import java.util.Objects;
 
 import org.opensearch.action.search.SearchAction;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchType;
 import org.opensearch.action.support.ActionFilter;
 import org.opensearch.action.support.ActionFilterChain;
 import org.opensearch.core.action.ActionResponse;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.util.HybridQueryUtil;
 import org.opensearch.tasks.Task;
 
 import lombok.extern.log4j.Log4j2;
@@ -24,6 +26,7 @@ import lombok.extern.log4j.Log4j2;
  * An ActionFilter that automatically disables batched reduction for hybrid queries.
  *
  * This filter intercepts all search requests and checks if they contain a hybrid query.
+ * If a hybrid query is detected with search_type=dfs_query_then_fetch, the request is rejected.
  * If a hybrid query is detected, it unconditionally sets batchedReduceSize to Integer.MAX_VALUE
  * to disable batched reduction, regardless of any user-specified value.
  *
@@ -75,6 +78,10 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             // unconditionally disable batched reduction for hybrid queries
             // batched reduction is incompatible with hybrid query processing
             if (containsHybridQuery(searchRequest)) {
+                if (searchRequest.searchType() == SearchType.DFS_QUERY_THEN_FETCH) {
+                    listener.onFailure(new IllegalArgumentException(HybridQueryUtil.HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE));
+                    return;
+                }
                 if (searchRequest.getBatchedReduceSize() != DISABLE_BATCHED_REDUCE) {
                     log.debug(
                         String.format(

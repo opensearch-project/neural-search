@@ -38,6 +38,7 @@ import org.apache.lucene.search.BoostQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.DisjunctionMaxQuery;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
 import org.opensearch.common.lucene.search.function.ScriptScoreQuery;
@@ -50,6 +51,7 @@ import org.junit.Before;
 import org.opensearch.Version;
 import org.opensearch.script.Script;
 import org.opensearch.script.ScoreScript;
+import org.opensearch.action.search.SearchType;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.UUIDs;
@@ -72,7 +74,9 @@ import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.index.shard.SearchOperationListener;
+import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.HybridQueryContext;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.collector.HybridQueryCollectorContextSpecFactory;
 import org.opensearch.search.SearchShardTarget;
@@ -101,6 +105,27 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     public void setup() throws Exception {
         super.setUp();
         QueryCollectorContextSpecRegistry.registerFactory(new HybridQueryCollectorContextSpecFactory());
+    }
+
+    public void testQueryType_whenHybridQueryWithDfsQueryThenFetchSearchType_thenFail() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.searchType()).thenReturn(SearchType.DFS_QUERY_THEN_FETCH);
+
+        HybridQuery hybridQuery = new HybridQuery(
+            List.of(new MatchNoDocsQuery()),
+            HybridQueryContext.builder().paginationDepth(10).build()
+        );
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> hybridQueryPhaseSearcher.searchWith(searchContext, null, hybridQuery, new LinkedList<>(), false, false)
+        );
+
+        org.hamcrest.MatcherAssert.assertThat(
+            exception.getMessage(),
+            containsString("hybrid query does not support search_type [dfs_query_then_fetch]")
+        );
     }
 
     @SneakyThrows

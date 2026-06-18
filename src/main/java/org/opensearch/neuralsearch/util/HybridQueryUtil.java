@@ -13,6 +13,7 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.join.ToChildBlockJoinQuery;
+import org.opensearch.action.search.SearchType;
 import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.search.internal.SearchContext;
@@ -30,6 +31,9 @@ import java.util.stream.IntStream;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 @Log4j2
 public class HybridQueryUtil {
+    public static final String HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE =
+        "hybrid query does not support search_type [dfs_query_then_fetch]";
+
     /**
      * This method validates whether the query object is an instance of hybrid query
      */
@@ -244,6 +248,17 @@ public class HybridQueryUtil {
             if (innerQuery instanceof HybridQuery) {
                 throw new IllegalArgumentException("hybrid query cannot be nested in another hybrid query");
             }
+        }
+    }
+
+    /**
+     * Validates that hybrid query is not used with dfs_query_then_fetch search type.
+     * Hybrid query score normalization runs between QUERY and FETCH phases, which is skipped when
+     * dfs_query_then_fetch is used on multi-shard indexes because DFS_QUERY replaces QUERY.
+     */
+    public static void validateHybridQuerySearchType(final SearchType searchType) {
+        if (searchType == SearchType.DFS_QUERY_THEN_FETCH) {
+            throw new IllegalArgumentException(HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE);
         }
     }
 

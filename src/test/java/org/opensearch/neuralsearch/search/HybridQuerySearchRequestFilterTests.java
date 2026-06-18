@@ -4,14 +4,18 @@
  */
 package org.opensearch.neuralsearch.search;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
+import org.mockito.ArgumentCaptor;
 import org.opensearch.action.bulk.BulkAction;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.search.SearchAction;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchType;
 import org.opensearch.action.support.ActionFilterChain;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.action.ActionResponse;
@@ -37,7 +41,34 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
     }
 
     @SuppressWarnings("unchecked")
-    public void testApply_whenHybridQueryWithDefaultBatchReduceSize_thenDisablesBatchedReduction() {
+    public void testApply_whenHybridQueryWithDfsQueryThenFetchSearchType_thenFails() {
+        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
+        hybridQuery.add(new MatchQueryBuilder("field", "value"));
+
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(hybridQuery);
+        searchRequest.source(sourceBuilder);
+        searchRequest.searchType(SearchType.DFS_QUERY_THEN_FETCH);
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        verify(chain, never()).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertThat(
+            exceptionCaptor.getValue().getMessage(),
+            containsString("hybrid query does not support search_type [dfs_query_then_fetch]")
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testApply_whenHybridQueryWithQueryThenFetchSearchType_thenDisablesBatchedReduction() {
         // Setup
         HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
         hybridQuery.add(new MatchQueryBuilder("field", "value"));
