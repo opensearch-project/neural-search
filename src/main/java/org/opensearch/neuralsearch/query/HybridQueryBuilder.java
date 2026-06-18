@@ -41,6 +41,7 @@ import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.util.HybridQueryFilterUtil;
 
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery;
 
@@ -120,8 +121,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         ListIterator<QueryBuilder> iterator = queries.listIterator();
         while (iterator.hasNext()) {
             QueryBuilder query = iterator.next();
-            // set the query again because query.filter(filter) can return new query.
-            iterator.set(query.filter(filter));
+            // set the query again because applyFilterToSubQuery can return new query.
+            iterator.set(HybridQueryFilterUtil.applyFilterToSubQuery(query, filter));
         }
         return this;
     }
@@ -281,7 +282,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             if (filter == null) {
                 compoundQueryBuilder.add(query);
             } else {
-                compoundQueryBuilder.add(query.filter(filter));
+                compoundQueryBuilder.add(HybridQueryFilterUtil.applyFilterToSubQuery(query, filter));
             }
 
             // Check if children have inner hits for stats

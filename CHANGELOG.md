@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
-
+* Fix hybrid.filter not propagated as kNN pre-filter for nested neural/kNN sub-queries ([#1874](https://github.com/opensearch-project/neural-search/pull/1874))
 ### Infrastructure
 
 ### Documentation
