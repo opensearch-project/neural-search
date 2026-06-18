@@ -1112,6 +1112,110 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertEquals(new MatchAllQueryBuilder(), updatedNeuralSparseQueryBuilder.filter().get(0));
     }
 
+    public void testFilter_whenNestedNeuralQuery_thenFilterPushedToInnerNeuralQuery() {
+        setUpClusterService();
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName("embeddings.embedding")
+            .queryText("search terms")
+            .modelId("my-model-id")
+            .k(100)
+            .build();
+        NestedQueryBuilder nestedQueryBuilder = new NestedQueryBuilder("embeddings", neuralQueryBuilder, ScoreMode.Max);
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(nestedQueryBuilder);
+
+        TermQueryBuilder filter = new TermQueryBuilder("_id", "target-doc-id");
+        HybridQueryBuilder updatedHybridQueryBuilder = (HybridQueryBuilder) hybridQueryBuilder.filter(filter);
+
+        QueryBuilder updatedSubQuery = updatedHybridQueryBuilder.queries().get(0);
+        assertTrue(updatedSubQuery instanceof NestedQueryBuilder);
+        QueryBuilder innerQuery = ((NestedQueryBuilder) updatedSubQuery).query();
+        assertTrue(innerQuery instanceof NeuralQueryBuilder);
+        assertEquals(filter, ((NeuralQueryBuilder) innerQuery).queryfilter());
+    }
+
+    public void testFilter_whenNestedMatchQuery_thenFilterWrappedInBoolQuery() {
+        setUpClusterService();
+        NestedQueryBuilder nestedQueryBuilder = new NestedQueryBuilder(
+            "embeddings",
+            new MatchQueryBuilder("embeddings.text", "search terms"),
+            ScoreMode.Max
+        );
+        HybridQueryBuilder hybridQueryBuilder = new HybridQueryBuilder().add(nestedQueryBuilder);
+
+        TermQueryBuilder filter = new TermQueryBuilder("_id", "target-doc-id");
+        HybridQueryBuilder updatedHybridQueryBuilder = (HybridQueryBuilder) hybridQueryBuilder.filter(filter);
+
+        QueryBuilder updatedSubQuery = updatedHybridQueryBuilder.queries().get(0);
+        assertTrue(updatedSubQuery instanceof BoolQueryBuilder);
+        BoolQueryBuilder boolQueryBuilder = (BoolQueryBuilder) updatedSubQuery;
+        assertTrue(boolQueryBuilder.must().get(0) instanceof NestedQueryBuilder);
+        assertEquals(filter, boolQueryBuilder.filter().get(0));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenHybridFilterWithNestedNeuralQuery_thenFilterPushedToInnerNeuralQuery() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startObject("filter")
+            .startObject(TermQueryBuilder.NAME)
+            .field("_id", "target-doc-id")
+            .endObject()
+            .endObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(NestedQueryBuilder.NAME)
+            .field("path", "embeddings")
+            .startObject("query")
+            .startObject(NeuralQueryBuilder.NAME)
+            .startObject("embeddings.embedding")
+            .field(QUERY_TEXT_FIELD.getPreferredName(), "search terms")
+            .field(MODEL_ID_FIELD.getPreferredName(), "my-model-id")
+            .field(K_FIELD.getPreferredName(), 100)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+
+        NamedXContentRegistry namedXContentRegistry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(NeuralQueryBuilder.NAME),
+                    NeuralQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(NestedQueryBuilder.NAME),
+                    NestedQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser contentParser = createParser(
+            namedXContentRegistry,
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
+        contentParser.nextToken();
+
+        HybridQueryBuilder hybridQueryBuilder = HybridQueryBuilder.fromXContent(contentParser);
+        QueryBuilder updatedSubQuery = hybridQueryBuilder.queries().get(0);
+        assertTrue(updatedSubQuery instanceof NestedQueryBuilder);
+        QueryBuilder innerQuery = ((NestedQueryBuilder) updatedSubQuery).query();
+        assertTrue(innerQuery instanceof NeuralQueryBuilder);
+        TermQueryBuilder expectedFilter = new TermQueryBuilder("_id", "target-doc-id");
+        assertEquals(expectedFilter, ((NeuralQueryBuilder) innerQuery).queryfilter());
+    }
+
     public void testExtractInnerHitsBuilders() {
         NestedQueryBuilder nestedQueryBuilder1 = new NestedQueryBuilder(
             "path1",

@@ -9,6 +9,7 @@ import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.query.InnerHitContextBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.util.HybridQueryFilterUtil;
 import org.opensearch.transport.grpc.spi.QueryBuilderProtoConverterRegistry;
 import org.opensearch.protobufs.HybridQuery;
 import org.opensearch.protobufs.QueryContainer;
@@ -97,7 +98,7 @@ public class HybridQueryBuilderProtoUtils {
             if (filter == null) {
                 compoundQueryBuilder.add(query);
             } else {
-                compoundQueryBuilder.add(query.filter(filter));
+                compoundQueryBuilder.add(HybridQueryFilterUtil.applyFilterToSubQuery(query, filter));
             }
 
             if (hasInnerHits == false) {

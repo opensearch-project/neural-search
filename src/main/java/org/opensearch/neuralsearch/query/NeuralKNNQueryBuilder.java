@@ -403,6 +403,21 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
     }
 
     /**
+     * Applies a filter to the underlying KNN query so the kNN engine can pre-filter candidates.
+     *
+     * @param filterToBeAdded filter to apply
+     * @return a new builder with the filter applied to the underlying KNN query
+     */
+    @Override
+    public QueryBuilder filter(QueryBuilder filterToBeAdded) {
+        if (validateFilterParams(filterToBeAdded) == false) {
+            return this;
+        }
+        KNNQueryBuilder filteredKnnQueryBuilder = (KNNQueryBuilder) knnQueryBuilder.filter(filterToBeAdded);
+        return new NeuralKNNQueryBuilder(filteredKnnQueryBuilder, originalQueryText);
+    }
+
+    /**
      * Gets the name of this query for serialization purposes.
      *
      * @return The writeable name
