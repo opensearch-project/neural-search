@@ -293,49 +293,52 @@ public class HybridQueryInnerHitsIT extends BaseNeuralSearchIT {
         String expectedTopLevelDescription = "arithmetic_mean combination of:";
         assertEquals(expectedTopLevelDescription, explanationForHit1.get("description"));
 
-        // Normalization explanation
+        // Normalization explanation: one "min_max normalization of:" block per sub-query.
+        // Both sub-queries are nested queries, so the index contains nested fields and OpenSearch core wraps the
+        // hybrid query in a BooleanQuery. The explanation processor descends to the hybrid node, so each sub-query
+        // gets its own normalization block (previously they were collapsed into a single block, see issue #1875).
         List<Map<String, Object>> hit1Details = getListOfValues(explanationForHit1, "details");
-        assertEquals(1, hit1Details.size());
-        Map<String, Object> hit1DetailsForHit1 = hit1Details.get(0);
-        assertEquals(0.001f, (double) hit1DetailsForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("min_max normalization of:", hit1DetailsForHit1.get("description"));
-        assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
+        assertEquals(2, hit1Details.size());
 
-        // Combination explanation
-        List<Map<String, Object>> hit1CombinationDetails = getListOfValues(hit1DetailsForHit1, "details");
-        assertEquals(1, hit1CombinationDetails.size());
-        Map<String, Object> internalCombinationDetailsForHit1 = hit1CombinationDetails.get(0);
+        // sub-query 1 (nested field "user") — min score in its result set, normalizes to the min_max floor
+        Map<String, Object> hit1NormalizationBlock1 = hit1Details.get(0);
+        assertEquals("min_max normalization of:", hit1NormalizationBlock1.get("description"));
+        assertEquals(0.001f, (double) hit1NormalizationBlock1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        List<Map<String, Object>> hit1SubQuery1Details = getListOfValues(hit1NormalizationBlock1, "details");
+        assertEquals(1, hit1SubQuery1Details.size());
+        Map<String, Object> hit1SubQuery1Child = hit1SubQuery1Details.get(0);
         assertEquals(
             scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_1).get(0),
-            (double) internalCombinationDetailsForHit1.get("value"),
+            (double) hit1SubQuery1Child.get("value"),
             DELTA_FOR_SCORE_ASSERTION
         );
-        assertEquals("combined score of:", internalCombinationDetailsForHit1.get("description"));
-        assertEquals(2, ((List) internalCombinationDetailsForHit1.get("details")).size());
-
-        // InnerHitsChild explanation
-        List<Map<String, Object>> hit1ChildDetails = getListOfValues(internalCombinationDetailsForHit1, "details");
-        assertEquals(2, hit1ChildDetails.size());
-
-        Map<String, Object> child1Details = hit1ChildDetails.get(0);
-        assertEquals(scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_1).get(0), (double) child1Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
         assertEquals(
             "Score based on "
                 + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_1).get("total").get(0)
                 + " child docs in range from 0 to 11, using score mode Max",
-            child1Details.get("description")
+            hit1SubQuery1Child.get("description")
         );
-        assertEquals(1, ((List) child1Details.get("details")).size());
+        assertEquals(1, ((List) hit1SubQuery1Child.get("details")).size());
 
-        Map<String, Object> child2Details = hit1ChildDetails.get(1);
-        assertEquals(scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_2).get(0), (double) child2Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        // sub-query 2 (nested field "location") — max score in its result set, normalizes to 1.0
+        Map<String, Object> hit1NormalizationBlock2 = hit1Details.get(1);
+        assertEquals("min_max normalization of:", hit1NormalizationBlock2.get("description"));
+        assertEquals(1.0f, (double) hit1NormalizationBlock2.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        List<Map<String, Object>> hit1SubQuery2Details = getListOfValues(hit1NormalizationBlock2, "details");
+        assertEquals(1, hit1SubQuery2Details.size());
+        Map<String, Object> hit1SubQuery2Child = hit1SubQuery2Details.get(0);
+        assertEquals(
+            scoreOfInnerHits.get(TEST_NESTED_FIELD_NAME_2).get(0),
+            (double) hit1SubQuery2Child.get("value"),
+            DELTA_FOR_SCORE_ASSERTION
+        );
         assertEquals(
             "Score based on "
                 + innerHitCountPerFieldName.get(TEST_NESTED_FIELD_NAME_2).get("total").get(0)
                 + " child docs in range from 0 to 11, using score mode Max",
-            child2Details.get("description")
+            hit1SubQuery2Child.get("description")
         );
-        assertEquals(1, ((List) child2Details.get("details")).size());
+        assertEquals(1, ((List) hit1SubQuery2Child.get("details")).size());
     }
 
     @SneakyThrows
