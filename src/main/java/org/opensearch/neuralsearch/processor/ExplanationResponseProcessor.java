@@ -40,6 +40,11 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
 
     public static final String TYPE = "hybrid_score_explanation";
 
+    // Description emitted by HybridQueryWeight#explain for the hybrid "combined score of:" node, which has
+    // exactly one child per sub-query. Used to locate the hybrid explanation when OpenSearch core wraps the
+    // hybrid query in a BooleanQuery (e.g. for indices that contain a nested field, or with alias/DLS filters).
+    private static final String HYBRID_COMBINED_SCORE_DESCRIPTION = "combined score of:";
+
     private final String description;
     private final String tag;
     private final boolean ignoreFailure;
@@ -100,6 +105,14 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
                     CombinedExplanationDetails combinedExplainDetail = combinedExplainDetails.get(searchShard).get(explanationIndexByShard);
                     // Extract various explanation components
                     Explanation queryLevelExplanation = searchHit.getExplanation();
+                    // When the index mapping contains a nested field (or with alias/DLS filters), OpenSearch core
+                    // wraps the hybrid query in a BooleanQuery, so the shard-level explanation is a wrapper (e.g.
+                    // "sum of:") whose child is the hybrid "combined score of:" node. Descend to that node so the
+                    // normalization details map to the hybrid sub-queries instead of the wrapper's clauses.
+                    Explanation hybridQueryExplanation = getHybridQueryExplanation(queryLevelExplanation);
+                    if (Objects.nonNull(hybridQueryExplanation)) {
+                        queryLevelExplanation = hybridQueryExplanation;
+                    }
                     ExplanationDetails normalizationExplanation = combinedExplainDetail.getNormalizationExplanations();
                     ExplanationDetails combinationExplanation = combinedExplainDetail.getCombinationExplanations();
                     // Create normalized explanations for each detail
@@ -152,6 +165,30 @@ public class ExplanationResponseProcessor implements SearchResponseProcessor {
             }
         }
         return response;
+    }
+
+    /**
+     * Locates the hybrid query explanation node within a shard-level explanation tree. {@link
+     * org.opensearch.neuralsearch.query.HybridQueryWeight#explain} emits this node with description
+     * {@code "combined score of:"} and exactly one child per sub-query. When the index mapping contains a nested
+     * field (or with alias/DLS filters), OpenSearch core wraps the hybrid query in a BooleanQuery, nesting the
+     * hybrid node under a wrapper such as {@code "sum of:"}. This method returns the wrapper-free hybrid node so
+     * that normalization details can be mapped to the sub-queries.
+     *
+     * @param explanation shard-level explanation, possibly wrapped in a BooleanQuery
+     * @return the hybrid {@code "combined score of:"} node, or {@code null} if it is not present
+     */
+    private static Explanation getHybridQueryExplanation(final Explanation explanation) {
+        if (HYBRID_COMBINED_SCORE_DESCRIPTION.equals(explanation.getDescription())) {
+            return explanation;
+        }
+        for (Explanation detail : explanation.getDetails()) {
+            Explanation hybridQueryExplanation = getHybridQueryExplanation(detail);
+            if (Objects.nonNull(hybridQueryExplanation)) {
+                return hybridQueryExplanation;
+            }
+        }
+        return null;
     }
 
     @Override

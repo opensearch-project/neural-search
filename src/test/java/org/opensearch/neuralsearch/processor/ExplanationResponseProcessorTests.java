@@ -370,6 +370,103 @@ public class ExplanationResponseProcessorTests extends OpenSearchTestCase {
         assertEquals(0, processedExplanation.getDetails().length);
     }
 
+    @SneakyThrows
+    public void testProcessResponse_whenHybridWrappedInBooleanQueryForNestedField_thenAllNormalizationBlocksPresent() {
+        // Setup: reproduce the shard-level explanation OpenSearch core produces when the index mapping contains a
+        // nested field — the hybrid "combined score of:" node is wrapped in a BooleanQuery ("sum of:") together
+        // with a FieldExistsQuery[_primary_term] filter clause (Queries.newNonNestedFilter()). See GH issue #1875.
+        SearchHit searchHit = new SearchHit(1);
+        SearchShardTarget shardTarget = new SearchShardTarget("node1", new ShardId("index", "_na_", 0), null, null);
+        searchHit.shard(shardTarget);
+
+        Explanation textSubQuery = Explanation.match(0.61f, "weight(name:offshore in 1) [PerFieldSimilarity], result of:");
+        Explanation knnSubQuery = Explanation.match(1.0f, "within top 5 docs");
+        Explanation hybridNode = Explanation.match(1.0f, "combined score of:", textSubQuery, knnSubQuery);
+        Explanation nonNestedFilter = Explanation.match(
+            0.0f,
+            "match on required clause, product of:",
+            Explanation.match(0.0f, "# clause"),
+            Explanation.match(1.0f, "FieldExistsQuery [field=_primary_term]")
+        );
+        Explanation wrappedExplanation = Explanation.match(1.61f, "sum of:", hybridNode, nonNestedFilter);
+        searchHit.explanation(wrappedExplanation);
+
+        // one normalization detail per sub-query
+        ExplanationDetails normalizationExplanation = new ExplanationDetails(
+            Arrays.asList(Pair.of(1.0f, "min_max normalization of:"), Pair.of(0.7f, "min_max normalization of:"))
+        );
+
+        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponse searchResponse = createSearchResponse(searchHits);
+        PipelineProcessingContext context = createContextWithExplanations(searchHit.getShard(), normalizationExplanation);
+
+        // Act
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchResponse processedResponse = processor.processResponse(new SearchRequest(), searchResponse, context);
+
+        // Assert: one normalization block per sub-query (before the fix both sub-queries collapsed into a single block)
+        Explanation processedExplanation = processedResponse.getHits().getHits()[0].getExplanation();
+        Explanation[] details = processedExplanation.getDetails();
+        assertEquals(2, details.length);
+
+        assertEquals("min_max normalization of:", details[0].getDescription());
+        assertEquals(1.0f, details[0].getValue().floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, details[0].getDetails().length);
+        assertEquals("weight(name:offshore in 1) [PerFieldSimilarity], result of:", details[0].getDetails()[0].getDescription());
+
+        assertEquals("min_max normalization of:", details[1].getDescription());
+        assertEquals(0.7f, details[1].getValue().floatValue(), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, details[1].getDetails().length);
+        assertEquals("within top 5 docs", details[1].getDetails()[0].getDescription());
+    }
+
+    @SneakyThrows
+    public void testProcessResponse_whenHybridWrappedInBooleanQueryWithThreeSubQueries_thenNoMismatchAndAllBlocksPresent() {
+        // Setup: same nested-field wrapper, but three sub-queries. Before the fix, the size check compared the 3
+        // normalization details against the wrapper's 2 top-level clauses and threw IllegalStateException; after
+        // the fix it descends to the hybrid node (3 children) and emits 3 blocks. See GH issue #1875.
+        SearchHit searchHit = new SearchHit(1);
+        SearchShardTarget shardTarget = new SearchShardTarget("node1", new ShardId("index", "_na_", 0), null, null);
+        searchHit.shard(shardTarget);
+
+        Explanation hybridNode = Explanation.match(
+            1.0f,
+            "combined score of:",
+            Explanation.match(0.5f, "weight(name:a) [PerFieldSimilarity], result of:"),
+            Explanation.match(0.6f, "weight(body:b) [PerFieldSimilarity], result of:"),
+            Explanation.match(1.0f, "within top 5 docs")
+        );
+        Explanation nonNestedFilter = Explanation.match(
+            0.0f,
+            "match on required clause, product of:",
+            Explanation.match(0.0f, "# clause"),
+            Explanation.match(1.0f, "FieldExistsQuery [field=_primary_term]")
+        );
+        Explanation wrappedExplanation = Explanation.match(2.1f, "sum of:", hybridNode, nonNestedFilter);
+        searchHit.explanation(wrappedExplanation);
+
+        ExplanationDetails normalizationExplanation = new ExplanationDetails(
+            Arrays.asList(
+                Pair.of(0.5f, "min_max normalization of:"),
+                Pair.of(0.6f, "min_max normalization of:"),
+                Pair.of(1.0f, "min_max normalization of:")
+            )
+        );
+
+        SearchHits searchHits = new SearchHits(new SearchHit[] { searchHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponse searchResponse = createSearchResponse(searchHits);
+        PipelineProcessingContext context = createContextWithExplanations(searchHit.getShard(), normalizationExplanation);
+
+        ExplanationResponseProcessor processor = new ExplanationResponseProcessor(DESCRIPTION, PROCESSOR_TAG, false);
+        SearchResponse processedResponse = processor.processResponse(new SearchRequest(), searchResponse, context);
+
+        Explanation[] details = processedResponse.getHits().getHits()[0].getExplanation().getDetails();
+        assertEquals(3, details.length);
+        for (Explanation detail : details) {
+            assertEquals("min_max normalization of:", detail.getDescription());
+        }
+    }
+
     public void testProcessResponseThrowsExceptionWhenExplanationLengthsMismatch() {
         ExplanationResponseProcessor processor = new ExplanationResponseProcessor("test description", "test tag", false);
 
