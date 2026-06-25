@@ -48,7 +48,8 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.validate
  * <ul>
  *   <li>{@code target_field}: The field to be used for reranking (required)</li>
  *   <li>{@code remove_target_field}: Whether to remove the target field from the final results (optional, default: false)</li>
- *   <li>{@code keep_previous_score}: Whether to append the previous score in a field called <code>previous_score</code> (optional, default: false)</li>
+ *   <li>{@code keep_previous_score}: Whether to append the previous score in a configurable field (optional, default: false)</li>
+ *   <li>{@code previous_score_field}: The field name used to store the score calculated before reranking when {@code keep_previous_score} is true (optional, default: {@code previous_score})</li>
  * </ul>
  * <p>
  * Usage example:
@@ -58,7 +59,8 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.validate
  *     "by_field": {
  *       "target_field": "document.relevance_score",
  *       "remove_target_field": true,
- *       "keep_previous_score": false
+ *       "keep_previous_score": false,
+ *       "previous_score_field": "previous_score"
  *     }
  *   }
  * }
@@ -74,13 +76,16 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
     public static final String TARGET_FIELD = "target_field";
     public static final String REMOVE_TARGET_FIELD = "remove_target_field";
     public static final String KEEP_PREVIOUS_SCORE = "keep_previous_score";
+    public static final String PREVIOUS_SCORE_FIELD = "previous_score_field";
 
     public static final boolean DEFAULT_REMOVE_TARGET_FIELD = false;
     public static final boolean DEFAULT_KEEP_PREVIOUS_SCORE = false;
+    public static final String DEFAULT_PREVIOUS_SCORE_FIELD = "previous_score";
 
     protected final String targetField;
     protected final boolean removeTargetField;
     protected final boolean keepPreviousScore;
+    protected final String previousScoreField;
 
     /**
      * Constructor to pass values to the RerankProcessor constructor.
@@ -91,7 +96,8 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
      *                              continues to run the remaining processors in the search pipeline.
      * @param targetField           The field you want to replace your <code>_score</code> with
      * @param removeTargetField     A flag to let you delete the target_field for better visualization (i.e. removes a duplicate value)
-     * @param keepPreviousScore     A flag to let you decide to stash your previous <code>_score</code> in a field called <code>previous_score</code> (i.e. for debugging purposes)
+     * @param keepPreviousScore     A flag to let you decide to stash your previous <code>_score</code> in {@code previousScoreField} (i.e. for debugging purposes)
+     * @param previousScoreField    The field name used to store the score calculated before reranking when {@code keepPreviousScore} is true
      * @param contextSourceFetchers  Context from some source and puts it in a map for a reranking processor to use <b> (Unused in ByFieldRerankProcessor)</b>
      */
     public ByFieldRerankProcessor(
@@ -101,12 +107,14 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
         final String targetField,
         final boolean removeTargetField,
         final boolean keepPreviousScore,
+        final String previousScoreField,
         final List<ContextSourceFetcher> contextSourceFetchers
     ) {
         super(RerankType.BY_FIELD, description, tag, ignoreFailure, contextSourceFetchers);
         this.targetField = targetField;
         this.removeTargetField = removeTargetField;
         this.keepPreviousScore = keepPreviousScore;
+        this.previousScoreField = previousScoreField;
     }
 
     @Override
@@ -133,7 +141,7 @@ public class ByFieldRerankProcessor extends RescoringRerankProcessor {
             scores.add(score);
 
             if (keepPreviousScore) {
-                sourceAsMap.put("previous_score", hit.getScore());
+                sourceAsMap.put(previousScoreField, hit.getScore());
             }
 
             if (removeTargetField) {
