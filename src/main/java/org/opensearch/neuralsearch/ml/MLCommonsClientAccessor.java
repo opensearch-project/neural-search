@@ -176,12 +176,20 @@ public class MLCommonsClientAccessor {
         @NonNull SimilarityInferenceRequest inferenceRequest,
         @NonNull final ActionListener<List<Float>> listener
     ) {
-        retryableInference(
-            inferenceRequest,
-            0,
-            () -> NeuralSearchMLInputBuilder.createTextSimilarityInput(inferenceRequest.getQueryText(), inferenceRequest.getInputTexts()),
-            (mlOutput) -> buildVectorFromResponse(mlOutput).stream().map(v -> v.getFirst().floatValue()).collect(Collectors.toList()),
-            listener
+        checkModelAndThenPredict(
+            inferenceRequest.getModelId(),
+            listener::onFailure,
+            model -> retryableInference(
+                inferenceRequest,
+                0,
+                () -> NeuralSearchMLInputBuilder.createTextSimilarityInput(
+                    NeuralSearchMLInputBuilder.resolveFunctionName(model),
+                    inferenceRequest.getQueryText(),
+                    inferenceRequest.getInputTexts()
+                ),
+                (mlOutput) -> buildVectorFromResponse(mlOutput).stream().map(v -> v.getFirst().floatValue()).collect(Collectors.toList()),
+                listener
+            )
         );
     }
 
@@ -526,7 +534,7 @@ public class MLCommonsClientAccessor {
             List<Map<String, String>> requests = batchRequests.stream()
                 .map(req -> Map.of("question", req.getQuestion(), "context", req.getContext()))
                 .collect(Collectors.toList());
-            return NeuralSearchMLInputBuilder.createBatchHighlightingInput(requests);
+            return NeuralSearchMLInputBuilder.createBatchHighlightingInput(modelType, requests);
         }, this::parseBatchHighlightingOutput, listener);
     }
 
@@ -567,6 +575,7 @@ public class MLCommonsClientAccessor {
                 inferenceRequest,
                 0,
                 () -> NeuralSearchMLInputBuilder.createQuestionAnsweringInput(
+                    modelType,
                     inferenceRequest.getQuestion(),
                     inferenceRequest.getContext()
                 ),
@@ -579,6 +588,7 @@ public class MLCommonsClientAccessor {
                 inferenceRequest,
                 0,
                 () -> NeuralSearchMLInputBuilder.createSingleRemoteHighlightingInput(
+                    modelType,
                     inferenceRequest.getQuestion(),
                     inferenceRequest.getContext()
                 ),
