@@ -155,6 +155,8 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             "Node not connected"
         );
 
+        mockGetModelResponse(createTextSimilarityModel());
+
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(nodeNodeConnectedException);
@@ -163,6 +165,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         // Verify client.predict is called 4 times (1 initial + 3 retries)
         verify(client, times(4)).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
 
@@ -272,6 +275,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
         assertSame(algoParameter, mlInputCaptor.getValue().getParameters());
+        assertEquals(FunctionName.TEXT_EMBEDDING, mlInputCaptor.getValue().getAlgorithm());
         verify(resultListener).onResponse(List.of(map));
         Mockito.verifyNoMoreInteractions(resultListener);
     }
@@ -499,6 +503,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
     public void testInferenceSimilarity_whenValidInput_thenSuccess() {
         final List<Float> vector = new ArrayList<>(List.of(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+        mockGetModelResponse(createTextSimilarityModel());
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onResponse(createManyModelTensorOutputs(TestCommonConstants.PREDICT_VECTOR_ARRAY));
@@ -507,13 +512,30 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(similarityResultListener).onResponse(vector);
         Mockito.verifyNoMoreInteractions(similarityResultListener);
     }
 
+    public void testInferenceSimilarity_whenValidInput_thenUsesModelAlgorithm() {
+        mockGetModelResponse(createTextSimilarityModel());
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(createManyModelTensorOutputs(TestCommonConstants.PREDICT_VECTOR_ARRAY));
+            return null;
+        }).when(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
+
+        accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
+
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertEquals(FunctionName.TEXT_SIMILARITY, mlInputCaptor.getValue().getAlgorithm());
+    }
+
     public void testInferencesSimilarity_whenExceptionFromMLClient_ThenFail() {
         final RuntimeException exception = new RuntimeException();
+        mockGetModelResponse(createTextSimilarityModel());
         Mockito.doAnswer(invocation -> {
             final ActionListener<MLOutput> actionListener = invocation.getArgument(2);
             actionListener.onFailure(exception);
@@ -522,6 +544,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
 
         accessor.inferenceSimilarity(TestCommonConstants.SIMILARITY_INFERENCE_REQUEST, similarityResultListener);
 
+        verify(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
         verify(similarityResultListener).onFailure(exception);
         Mockito.verifyNoMoreInteractions(similarityResultListener);
@@ -1409,10 +1432,6 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             resultListener
         );
 
-        // Verify that the method was called and completed without error
-        verify(client).predict(eq(TestCommonConstants.MODEL_ID), Mockito.isA(MLInput.class), Mockito.isA(ActionListener.class));
-        verify(resultListener).onResponse(anyList());
-
         // Test with REMOTE model (should also work)
         accessor.inferenceSentenceHighlighting(
             SentenceHighlightingRequest.builder()
@@ -1424,7 +1443,11 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
             remoteListener
         );
 
-        // Verify that it was called without error
+        ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
+        verify(client, times(2)).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
+        assertEquals(FunctionName.QUESTION_ANSWERING, mlInputCaptor.getAllValues().get(0).getAlgorithm());
+        assertEquals(FunctionName.REMOTE, mlInputCaptor.getAllValues().get(1).getAlgorithm());
+        verify(resultListener).onResponse(anyList());
         verify(remoteListener).onResponse(anyList());
     }
 
@@ -1995,6 +2018,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         ArgumentCaptor<MLInput> mlInputCaptor = ArgumentCaptor.forClass(MLInput.class);
         verify(client).predict(eq(TestCommonConstants.MODEL_ID), mlInputCaptor.capture(), Mockito.isA(ActionListener.class));
         assertEquals(algoParams, mlInputCaptor.getValue().getParameters());
+        assertEquals(FunctionName.TEXT_EMBEDDING, mlInputCaptor.getValue().getAlgorithm());
         verify(resultListener).onResponse(vectorList);
         Mockito.verifyNoMoreInteractions(resultListener);
     }
@@ -2136,6 +2160,7 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         when(config.getPassagePrefix()).thenReturn("passage: ");
         when(config.getQueryPrefix()).thenReturn("query: ");
         when(model.getModelConfig()).thenReturn(config);
+        when(model.getAlgorithm()).thenReturn(FunctionName.TEXT_EMBEDDING);
         return model;
     }
 
@@ -2147,7 +2172,22 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         when(config.getPassagePrefix()).thenReturn(null);
         when(config.getQueryPrefix()).thenReturn(null);
         when(model.getModelConfig()).thenReturn(config);
+        when(model.getAlgorithm()).thenReturn(FunctionName.TEXT_EMBEDDING);
         return model;
+    }
+
+    private MLModel createTextSimilarityModel() {
+        MLModel model = mock(MLModel.class);
+        when(model.getAlgorithm()).thenReturn(FunctionName.TEXT_SIMILARITY);
+        return model;
+    }
+
+    private void mockGetModelResponse(MLModel model) {
+        Mockito.doAnswer(invocation -> {
+            final ActionListener<MLModel> actionListener = invocation.getArgument(2);
+            actionListener.onResponse(model);
+            return null;
+        }).when(client).getModel(eq(TestCommonConstants.MODEL_ID), eq(null), Mockito.isA(ActionListener.class));
     }
 
     private MLModel createNonTextEmbeddingModel() {

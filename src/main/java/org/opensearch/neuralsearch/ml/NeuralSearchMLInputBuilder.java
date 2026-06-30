@@ -40,6 +40,25 @@ import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 public class NeuralSearchMLInputBuilder {
 
     /**
+     * Returns the {@link FunctionName} registered on the ML model in ML Commons.
+     *
+     * @param model The ML model
+     * @return The model algorithm
+     */
+    static FunctionName resolveFunctionName(MLModel model) {
+        if (model == null) {
+            throw new IllegalArgumentException("ML model must not be null");
+        }
+        FunctionName functionName = model.getAlgorithm();
+        if (functionName == null) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, "Model algorithm must not be null for model id [%s]", model.getModelId())
+            );
+        }
+        return functionName;
+    }
+
+    /**
      * Creates MLInput for text embedding inference, supporting all model types.
      * Automatically detects model type (local/remote) and asymmetric behavior.
      *
@@ -59,15 +78,13 @@ public class NeuralSearchMLInputBuilder {
         MLModelConfig modelConfig = model.getModelConfig();
 
         if (isAsymmetric && modelConfig instanceof RemoteModelConfig) {
-            return createAsymmetricRemoteInput(inputText, inferenceRequest);
+            return createAsymmetricRemoteInput(model, inputText, inferenceRequest);
         }
 
-        // for symmetric model, pre-process function defined in ml-commons handles both remote/local use cases with funtion name as
-        // TEXT_EMBEDDING
         MLAlgoParams mlAlgoParams = createMLAlgoParams(isAsymmetric, inferenceRequest);
         ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, mlAlgoParams, inputDataset);
+        return new MLInput(resolveFunctionName(model), mlAlgoParams, inputDataset);
     }
 
     /**
@@ -117,31 +134,31 @@ public class NeuralSearchMLInputBuilder {
     /**
      * Creates MLInput for text similarity inference.
      */
-    public static MLInput createTextSimilarityInput(String query, List<String> inputText) {
+    public static MLInput createTextSimilarityInput(FunctionName functionName, String query, List<String> inputText) {
         MLInputDataset inputDataset = new TextSimilarityInputDataSet(query, inputText);
-        return createMLInput(FunctionName.TEXT_SIMILARITY, inputDataset, null);
+        return createMLInput(functionName, inputDataset, null);
     }
 
     /**
      * Creates MLInput for question answering (local highlighting).
      */
-    public static MLInput createQuestionAnsweringInput(String question, String context) {
+    public static MLInput createQuestionAnsweringInput(FunctionName functionName, String question, String context) {
         MLInputDataset inputDataset = new QuestionAnsweringInputDataSet(question, context);
-        return createMLInput(FunctionName.QUESTION_ANSWERING, inputDataset, null);
+        return createMLInput(functionName, inputDataset, null);
     }
 
     /**
      * Creates MLInput for remote inference with parameters.
      */
-    public static MLInput createRemoteHighlightingInput(Map<String, String> parameters) {
-        return createRemoteInput(FunctionName.REMOTE, new HashMap<>(parameters));
+    public static MLInput createRemoteHighlightingInput(FunctionName functionName, Map<String, String> parameters) {
+        return createRemoteInput(functionName, new HashMap<>(parameters));
     }
 
     /**
      * Creates MLInput for batch highlighting with multiple question-context pairs.
      * Uses XContentBuilder because remote highlighting models expect JSON string format.
      */
-    public static MLInput createBatchHighlightingInput(List<Map<String, String>> batchRequests) {
+    public static MLInput createBatchHighlightingInput(FunctionName functionName, List<Map<String, String>> batchRequests) {
         try {
             Map<String, Object> parameters = new HashMap<>();
             XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -154,7 +171,7 @@ public class NeuralSearchMLInputBuilder {
             }
             builder.endArray();
             parameters.put(SemanticHighlightingConstants.INPUTS_KEY, builder.toString());
-            return createRemoteInput(FunctionName.REMOTE, parameters);
+            return createRemoteInput(functionName, parameters);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create batch highlighting ML input", e);
         }
@@ -164,7 +181,7 @@ public class NeuralSearchMLInputBuilder {
      * Creates MLInput for single remote highlighting request.
      * Uses XContentBuilder because remote highlighting models expect JSON string format.
      */
-    public static MLInput createSingleRemoteHighlightingInput(String question, String context) {
+    public static MLInput createSingleRemoteHighlightingInput(FunctionName functionName, String question, String context) {
         try {
             Map<String, Object> parameters = new HashMap<>();
             XContentBuilder builder = XContentFactory.jsonBuilder();
@@ -175,7 +192,7 @@ public class NeuralSearchMLInputBuilder {
                 .endObject();
             builder.endArray();
             parameters.put(SemanticHighlightingConstants.INPUTS_KEY, builder.toString());
-            return createRemoteInput(FunctionName.REMOTE, parameters);
+            return createRemoteInput(functionName, parameters);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create remote highlighting ML input", e);
         }
@@ -185,7 +202,7 @@ public class NeuralSearchMLInputBuilder {
      * Creates MLInput for asymmetric remote models.
      * Uses XContentBuilder to ensure proper JSON serialization for texts array.
      */
-    private static MLInput createAsymmetricRemoteInput(List<String> inputText, InferenceRequest inferenceRequest) {
+    private static MLInput createAsymmetricRemoteInput(MLModel model, List<String> inputText, InferenceRequest inferenceRequest) {
         try {
             Map<String, String> parameters = new HashMap<>();
 
@@ -203,7 +220,7 @@ public class NeuralSearchMLInputBuilder {
             parameters.put(AsymmetricTextEmbeddingConstants.CONTENT_TYPE_KEY, contentType.toString().toLowerCase(Locale.ROOT));
 
             RemoteInferenceInputDataSet inputDataset = new RemoteInferenceInputDataSet(parameters);
-            return MLInput.builder().algorithm(FunctionName.REMOTE).inputDataset(inputDataset).build();
+            return MLInput.builder().algorithm(resolveFunctionName(model)).inputDataset(inputDataset).build();
         } catch (Exception e) {
             throw new IllegalStateException("Failed to create asymmetric remote ML input", e);
         }
@@ -230,7 +247,7 @@ public class NeuralSearchMLInputBuilder {
         MLModelConfig modelConfig = model.getModelConfig();
 
         if (isAsymmetric && modelConfig instanceof RemoteModelConfig) {
-            return createAsymmetricRemoteInput(inputText, inferenceRequest);
+            return createAsymmetricRemoteInput(model, inputText, inferenceRequest);
         }
 
         MLAlgoParams mlAlgoParams = null;
@@ -243,6 +260,6 @@ public class NeuralSearchMLInputBuilder {
 
         ModelResultFilter modelResultFilter = new ModelResultFilter(false, true, targetResponseFilters, null);
         MLInputDataset inputDataset = new TextDocsInputDataSet(inputText, modelResultFilter);
-        return new MLInput(FunctionName.TEXT_EMBEDDING, mlAlgoParams, inputDataset);
+        return new MLInput(resolveFunctionName(model), mlAlgoParams, inputDataset);
     }
 }
