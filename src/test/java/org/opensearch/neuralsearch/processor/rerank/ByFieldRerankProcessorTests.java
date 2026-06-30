@@ -709,6 +709,59 @@ public class ByFieldRerankProcessorTests extends OpenSearchTestCase {
         }
     }
 
+    /**
+     * When a document already has a field named {@code previous_score}, storing the pre-rerank score in a custom
+     * field must not overwrite the existing document field.
+     */
+    public void testReRank_preservesExistingPreviousScore_whenCustomPreviousScoreFieldConfigured() throws IOException {
+        String targetField = "rank_score";
+        SearchHit hit = new SearchHit(0, "1", Collections.emptyMap(), Collections.emptyMap());
+        hit.sourceRef(new BytesArray("{\"title\":\"sample document\",\"previous_score\":\"0-2\",\"rank_score\":9.5}"));
+        hit.score(0.06069608F);
+
+        SearchHits searchHits = new SearchHits(new SearchHit[] { hit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 0.06069608F);
+        SearchResponseSections searchResponseSections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        this.response = new SearchResponse(searchResponseSections, null, 1, 1, 0, 10, null, null);
+
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        targetField,
+                        ByFieldRerankProcessor.REMOVE_TARGET_FIELD,
+                        true,
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        true,
+                        ByFieldRerankProcessor.PREVIOUS_SCORE_FIELD,
+                        "original_query_score"
+                    )
+                )
+            )
+        );
+        processor = (ByFieldRerankProcessor) factory.create(
+            Map.of(),
+            "rerank processor",
+            "processor for 2nd level reranking based on provided field",
+            false,
+            config,
+            pipelineContext
+        );
+
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, Map.of(), listener);
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchResponse searchResponse = argCaptor.getValue();
+
+        Map<String, Object> sourceMap = searchResponse.getHits().getAt(0).getSourceAsMap();
+        assertEquals("0-2", sourceMap.get("previous_score"));
+        assertEquals(0.06069608F, ((Number) sourceMap.get("original_query_score")).floatValue(), 0.0001);
+        assertFalse(sourceMap.containsKey("rank_score"));
+    }
+
     public void testRerank_keepsTargetFieldAndHasNoPreviousScore_WhenByFieldHasDefaultValues() throws IOException {
         String targetField = "ml.info.score";
         setUpValidSearchResultsWithNestedTargetValue();

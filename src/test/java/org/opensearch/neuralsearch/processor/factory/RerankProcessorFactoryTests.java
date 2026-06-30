@@ -264,6 +264,26 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
         assert (processor.getType().equals(RerankProcessor.TYPE));
     }
 
+    public void testByFieldCreation_whenCustomPreviousScoreFieldSpecified_thenSuccessful() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.BY_FIELD.getLabel(),
+                new HashMap<>(
+                    Map.of(
+                        ByFieldRerankProcessor.TARGET_FIELD,
+                        "path.to.target_field",
+                        ByFieldRerankProcessor.KEEP_PREVIOUS_SCORE,
+                        true,
+                        ByFieldRerankProcessor.PREVIOUS_SCORE_FIELD,
+                        "original_query_score"
+                    )
+                )
+            )
+        );
+        SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, config, pipelineContext);
+        assert (processor instanceof ByFieldRerankProcessor);
+    }
+
     public void testByFieldCreation_WithContext_thenSucceed() {
         // You can pass context but, it won't ever be used by ByFieldRerank
         Map<String, Object> config = new HashMap<>(
