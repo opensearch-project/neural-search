@@ -30,6 +30,7 @@ jobs:
       - name: Setup Java ${{ matrix.java }}
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
+          distribution: temurin
           java-version: ${{ matrix.java }}
 
       - name: Run NeuralSearch Restart-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
@@ -57,6 +58,7 @@ jobs:
       - name: Setup Java ${{ matrix.java }}
         uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
+          distribution: temurin
           java-version: ${{ matrix.java }}
 
       - name: Run NeuralSearch Rolling-Upgrade BWC Tests from BWCVersion-${{ matrix.bwc_version }} to OpenSearch Version-${{ matrix.opensearch_version }} on ${{matrix.os}}
