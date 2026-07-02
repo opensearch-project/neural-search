@@ -8,12 +8,10 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.ml.common.dataset.remote.RemoteInferenceInputDataSet;
 import org.opensearch.ml.common.input.MLInput;
@@ -40,9 +38,7 @@ public class NeuralSearchMLInputBuilderTests extends OpenSearchTestCase {
         // Execute
         MLInput result = NeuralSearchMLInputBuilder.createTextEmbeddingInput(model, null, inputTexts, request);
 
-        // Verify
         assertNotNull(result);
-        assertEquals(FunctionName.REMOTE, result.getAlgorithm());
 
         RemoteInferenceInputDataSet dataset = (RemoteInferenceInputDataSet) result.getInputDataset();
         assertNotNull(dataset.getParameters());
@@ -75,8 +71,7 @@ public class NeuralSearchMLInputBuilderTests extends OpenSearchTestCase {
         assertEquals("passage", dataset.getParameters().get(AsymmetricTextEmbeddingConstants.CONTENT_TYPE_KEY));
     }
 
-    public void testCreateTextEmbeddingInput_remoteSymmetricModel_throwsException() {
-        // Setup
+    public void testCreateTextEmbeddingInput_remoteSymmetricModel() {
         MLModel model = mock(MLModel.class);
         RemoteModelConfig config = mock(RemoteModelConfig.class);
         InferenceRequest request = mock(InferenceRequest.class);
@@ -86,12 +81,9 @@ public class NeuralSearchMLInputBuilderTests extends OpenSearchTestCase {
 
         List<String> inputTexts = Arrays.asList("test text");
 
-        // Execute
         MLInput result = NeuralSearchMLInputBuilder.createTextEmbeddingInput(model, null, inputTexts, request);
 
-        // Verify
         assertNotNull(result);
-        assertEquals(FunctionName.TEXT_EMBEDDING, result.getAlgorithm());
     }
 
     public void testCreateTextEmbeddingInput_remoteModel_multipleInputs() {
@@ -118,7 +110,6 @@ public class NeuralSearchMLInputBuilderTests extends OpenSearchTestCase {
     }
 
     public void testCreateTextEmbeddingInput_localModel() {
-        // Setup
         MLModel model = mock(MLModel.class);
         TextEmbeddingModelConfig config = mock(TextEmbeddingModelConfig.class);
         InferenceRequest request = mock(InferenceRequest.class);
@@ -130,12 +121,9 @@ public class NeuralSearchMLInputBuilderTests extends OpenSearchTestCase {
 
         List<String> inputTexts = Arrays.asList("test text");
 
-        // Execute
         MLInput result = NeuralSearchMLInputBuilder.createTextEmbeddingInput(model, null, inputTexts, request);
 
-        // Verify
         assertNotNull(result);
-        assertEquals(FunctionName.TEXT_EMBEDDING, result.getAlgorithm());
     }
 
     public void testCreateTextEmbeddingInput_remoteAsymmetricModel_withSpecialCharacters() {
