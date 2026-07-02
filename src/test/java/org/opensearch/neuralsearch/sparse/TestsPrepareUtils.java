@@ -296,7 +296,8 @@ public class TestsPrepareUtils {
             maxDocs,
             InfoStream.getDefault(),
             Executors.newSingleThreadExecutor(),
-            false                      // needsIndexSort
+            false,                     // needsIndexSort
+            null                       // oneMerge
         );
         return mergeState;
     }
