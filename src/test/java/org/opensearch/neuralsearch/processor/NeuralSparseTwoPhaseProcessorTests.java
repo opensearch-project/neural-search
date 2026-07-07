@@ -18,6 +18,9 @@ import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
+import org.opensearch.search.sort.ScoreSortBuilder;
+import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.SortOrder;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
@@ -254,6 +257,64 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         processor.processRequest(searchRequest);
 
         assertNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenSortByField_thenSkipRescore() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(
+            new SearchSourceBuilder().query(neuralQueryBuilder).sort(SortBuilders.fieldSort("entityId").order(SortOrder.ASC))
+        );
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        assertNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenSortByScoreDescAndField_thenSkipRescore() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(
+            new SearchSourceBuilder().query(neuralQueryBuilder)
+                .sort(new ScoreSortBuilder())
+                .sort(SortBuilders.fieldSort("entityId").order(SortOrder.ASC))
+        );
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        assertNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenSortByScoreDescOnly_thenAddRescore() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder).sort(new ScoreSortBuilder()));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        assertNotNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenSortByScoreAsc_thenSkipRescore() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder).sort(new ScoreSortBuilder().order(SortOrder.ASC)));
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        assertNull(searchRequest.source().rescores());
+    }
+
+    public void testProcessRequest_whenSortByScoreDescWithTrackScores_thenAddRescore() throws Exception {
+        NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
+        NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(
+            new SearchSourceBuilder().query(neuralQueryBuilder).sort(new ScoreSortBuilder()).trackScores(true)
+        );
+        NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
+        processor.processRequest(searchRequest);
+        assertNotNull(searchRequest.source().rescores());
     }
 
     public void testType() throws Exception {
