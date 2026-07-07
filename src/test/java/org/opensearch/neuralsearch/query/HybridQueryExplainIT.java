@@ -16,6 +16,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -319,107 +320,117 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         assertEquals(RELATION_EQUAL_TO, total.get("relation"));
 
         // explain
-        Map<String, Object> searchHit1 = hitsNestedList.get(0);
-        Map<String, Object> topLevelExplanationsHit1 = getValueByKey(searchHit1, "_explanation");
-        assertNotNull(topLevelExplanationsHit1);
-        assertEquals(0.343f, (double) topLevelExplanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        // Assert the per-document explanation trees keyed by _id rather than by hit position. Documents "1"
+        // ("hello") and "2" ("place") both normalize to the same combined score (each is the sole/maximum match
+        // of its own sub-query leg, so min_max maps both to 1.0 in-leg and they combine to an identical score),
+        // so their relative rank is decided by a shard/segment tie-break and is not deterministic. Looking each
+        // hit up by _id keeps every structural check while removing the ordering dependency.
+        Map<String, Map<String, Object>> explanationById = new HashMap<>();
+        for (Map<String, Object> oneHit : hitsNestedList) {
+            explanationById.put((String) oneHit.get("_id"), getValueByKey(oneHit, "_explanation"));
+        }
         String expectedTopLevelDescription = "combined score of:";
-        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit1.get("description"));
-        List<Map<String, Object>> normalizationExplanationHit1 = getListOfValues(topLevelExplanationsHit1, "details");
-        assertEquals(2, normalizationExplanationHit1.size());
 
-        Map<String, Object> noMatchDetailsForHit1 = normalizationExplanationHit1.get(0);
-        assertEquals(0.0f, (double) noMatchDetailsForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("no matching term", noMatchDetailsForHit1.get("description"));
-        assertEquals(0, ((List) noMatchDetailsForHit1.get("details")).size());
+        // doc "2" ("Hi to this place"): sub-query 0 ("hello") does not match; sub-query 1 matches on "place"
+        Map<String, Object> explanationDoc2 = explanationById.get("2");
+        assertNotNull(explanationDoc2);
+        assertEquals(0.343f, (double) explanationDoc2.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(expectedTopLevelDescription, explanationDoc2.get("description"));
+        List<Map<String, Object>> subQueriesDoc2 = getListOfValues(explanationDoc2, "details");
+        assertEquals(2, subQueriesDoc2.size());
 
-        Map<String, Object> hit1DetailsForHit1 = normalizationExplanationHit1.get(1);
-        assertEquals(0.343f, (double) hit1DetailsForHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("sum of:", hit1DetailsForHit1.get("description"));
-        assertEquals(1, ((List) hit1DetailsForHit1.get("details")).size());
+        Map<String, Object> doc2SubQuery0 = subQueriesDoc2.get(0);
+        assertEquals(0.0f, (double) doc2SubQuery0.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("no matching term", doc2SubQuery0.get("description"));
+        assertEquals(0, getListOfValues(doc2SubQuery0, "details").size());
 
-        Map<String, Object> explanationsHit1 = getListOfValues(hit1DetailsForHit1, "details").get(0);
-        assertEquals("weight(test-text-field-1:place in 0) [PerFieldSimilarity], result of:", explanationsHit1.get("description"));
-        assertEquals(0.343f, (double) explanationsHit1.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(1, ((List) explanationsHit1.get("details")).size());
+        Map<String, Object> doc2SubQuery1 = subQueriesDoc2.get(1);
+        assertEquals(0.343f, (double) doc2SubQuery1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("sum of:", doc2SubQuery1.get("description"));
+        assertEquals(1, getListOfValues(doc2SubQuery1, "details").size());
 
-        Map<String, Object> explanationsHit1Details = getListOfValues(explanationsHit1, "details").get(0);
-        assertEquals(0.343f, (double) explanationsHit1Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit1Details.get("description"));
-        assertEquals(2, getListOfValues(explanationsHit1Details, "details").size());
+        Map<String, Object> doc2Weight = getListOfValues(doc2SubQuery1, "details").get(0);
+        assertEquals("weight(test-text-field-1:place in 0) [PerFieldSimilarity], result of:", doc2Weight.get("description"));
+        assertEquals(0.343f, (double) doc2Weight.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, getListOfValues(doc2Weight, "details").size());
 
-        Map<String, Object> explanationsDetails2Hit1Details = getListOfValues(explanationsHit1Details, "details").get(0);
-        assertEquals(0.693f, (double) explanationsDetails2Hit1Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:", explanationsDetails2Hit1Details.get("description"));
-        assertFalse(getListOfValues(explanationsDetails2Hit1Details, "details").isEmpty());
+        Map<String, Object> doc2Score = getListOfValues(doc2Weight, "details").get(0);
+        assertEquals(0.343f, (double) doc2Score.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", doc2Score.get("description"));
+        assertEquals(2, getListOfValues(doc2Score, "details").size());
 
-        Map<String, Object> explanationsDetails3Hit1Details = getListOfValues(explanationsHit1Details, "details").get(1);
-        assertEquals(0.495f, (double) explanationsDetails3Hit1Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals(
-            "tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:",
-            explanationsDetails3Hit1Details.get("description")
-        );
-        assertFalse(getListOfValues(explanationsDetails3Hit1Details, "details").isEmpty());
+        Map<String, Object> doc2Idf = getListOfValues(doc2Score, "details").get(0);
+        assertEquals(0.693f, (double) doc2Idf.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:", doc2Idf.get("description"));
+        assertFalse(getListOfValues(doc2Idf, "details").isEmpty());
 
-        // search hit 2
-        Map<String, Object> searchHit2 = hitsNestedList.get(1);
-        Map<String, Object> topLevelExplanationsHit2 = getValueByKey(searchHit2, "_explanation");
-        assertNotNull(topLevelExplanationsHit2);
-        assertEquals(0.13f, (double) topLevelExplanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        Map<String, Object> doc2Tf = getListOfValues(doc2Score, "details").get(1);
+        assertEquals(0.495f, (double) doc2Tf.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:", doc2Tf.get("description"));
+        assertFalse(getListOfValues(doc2Tf, "details").isEmpty());
 
-        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit2.get("description"));
-        List<Map<String, Object>> normalizationExplanationHit2 = getListOfValues(topLevelExplanationsHit2, "details");
-        assertEquals(2, normalizationExplanationHit2.size());
+        // doc "1" ("Hello world"): sub-query 0 matches on "hello"; sub-query 1 ("place"/"welcome") does not match
+        Map<String, Object> explanationDoc1 = explanationById.get("1");
+        assertNotNull(explanationDoc1);
+        assertEquals(0.13f, (double) explanationDoc1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(expectedTopLevelDescription, explanationDoc1.get("description"));
+        List<Map<String, Object>> subQueriesDoc1 = getListOfValues(explanationDoc1, "details");
+        assertEquals(2, subQueriesDoc1.size());
 
-        Map<String, Object> hit1DetailsForHit2 = normalizationExplanationHit2.get(0);
-        assertEquals(0.13f, (double) hit1DetailsForHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit2.get("description"));
-        assertEquals(1, getListOfValues(hit1DetailsForHit2, "details").size());
+        Map<String, Object> doc1SubQuery0 = subQueriesDoc1.get(0);
+        assertEquals(0.13f, (double) doc1SubQuery0.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", doc1SubQuery0.get("description"));
+        assertEquals(1, getListOfValues(doc1SubQuery0, "details").size());
 
-        Map<String, Object> explanationsHit2 = getListOfValues(hit1DetailsForHit2, "details").get(0);
-        assertEquals(0.13f, (double) explanationsHit2.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit2.get("description"));
-        assertEquals(2, getListOfValues(explanationsHit2, "details").size());
+        Map<String, Object> doc1Score = getListOfValues(doc1SubQuery0, "details").get(0);
+        assertEquals(0.13f, (double) doc1Score.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", doc1Score.get("description"));
+        assertEquals(2, getListOfValues(doc1Score, "details").size());
 
-        Map<String, Object> explanationsHit2Details = getListOfValues(explanationsHit2, "details").get(1);
-        assertEquals(0.454f, (double) explanationsHit2Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:", explanationsHit2Details.get("description"));
-        assertEquals(5, getListOfValues(explanationsHit2Details, "details").size());
+        // sub-query 1 did not match this document; assert value and description only. The number of child
+        // "no match on optional clause" entries under "No matching clauses" is a Lucene BooleanQuery rendering
+        // detail (one per optional clause) and is not part of the hybrid explanation contract.
+        Map<String, Object> doc1SubQuery1 = subQueriesDoc1.get(1);
+        assertEquals(0.0f, (double) doc1SubQuery1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("No matching clauses", doc1SubQuery1.get("description"));
 
-        Map<String, Object> hit1DetailsForHit2NoMatch = normalizationExplanationHit2.get(0);
-        assertEquals(0.13f, (double) hit1DetailsForHit2NoMatch.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit2NoMatch.get("description"));
-        assertEquals(1, ((List) hit1DetailsForHit2NoMatch.get("details")).size());
+        // doc "3" ("We would like to welcome everyone"): sub-query 0 does not match; sub-query 1 matches on "welcome"
+        Map<String, Object> explanationDoc3 = explanationById.get("3");
+        assertNotNull(explanationDoc3);
+        assertEquals(0.291f, (double) explanationDoc3.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(expectedTopLevelDescription, explanationDoc3.get("description"));
+        List<Map<String, Object>> subQueriesDoc3 = getListOfValues(explanationDoc3, "details");
+        assertEquals(2, subQueriesDoc3.size());
 
-        // search hit 3
-        Map<String, Object> searchHit3 = hitsNestedList.get(1);
-        Map<String, Object> topLevelExplanationsHit3 = getValueByKey(searchHit3, "_explanation");
-        assertNotNull(topLevelExplanationsHit3);
-        assertEquals(0.13f, (double) topLevelExplanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        Map<String, Object> doc3SubQuery0 = subQueriesDoc3.get(0);
+        assertEquals(0.0f, (double) doc3SubQuery0.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("no matching term", doc3SubQuery0.get("description"));
+        assertEquals(0, getListOfValues(doc3SubQuery0, "details").size());
 
-        assertEquals(expectedTopLevelDescription, topLevelExplanationsHit3.get("description"));
-        List<Map<String, Object>> normalizationExplanationHit3 = getListOfValues(topLevelExplanationsHit3, "details");
-        assertEquals(2, normalizationExplanationHit3.size());
+        Map<String, Object> doc3SubQuery1 = subQueriesDoc3.get(1);
+        assertEquals(0.291f, (double) doc3SubQuery1.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("sum of:", doc3SubQuery1.get("description"));
+        assertEquals(1, getListOfValues(doc3SubQuery1, "details").size());
 
-        Map<String, Object> hit1DetailsForHit3 = normalizationExplanationHit3.get(0);
-        assertEquals(0.13f, (double) hit1DetailsForHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("weight(test-text-field-1:hello in 0) [PerFieldSimilarity], result of:", hit1DetailsForHit3.get("description"));
-        assertEquals(1, getListOfValues(hit1DetailsForHit3, "details").size());
+        Map<String, Object> doc3Weight = getListOfValues(doc3SubQuery1, "details").get(0);
+        assertEquals("weight(test-text-field-1:welcome in 0) [PerFieldSimilarity], result of:", doc3Weight.get("description"));
+        assertEquals(0.291f, (double) doc3Weight.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(1, getListOfValues(doc3Weight, "details").size());
 
-        Map<String, Object> explanationsHit3 = getListOfValues(hit1DetailsForHit3, "details").get(0);
-        assertEquals(0.13f, (double) explanationsHit3.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", explanationsHit3.get("description"));
-        assertEquals(2, getListOfValues(explanationsHit3, "details").size());
+        Map<String, Object> doc3Score = getListOfValues(doc3Weight, "details").get(0);
+        assertEquals(0.291f, (double) doc3Score.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("score(freq=1.0), computed as boost * idf * tf from:", doc3Score.get("description"));
+        assertEquals(2, getListOfValues(doc3Score, "details").size());
 
-        Map<String, Object> explanationsHit3Details = getListOfValues(explanationsHit3, "details").get(0);
-        assertEquals(0.287f, (double) explanationsHit3Details.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:", explanationsHit3Details.get("description"));
-        assertEquals(2, getListOfValues(explanationsHit3Details, "details").size());
+        Map<String, Object> doc3Idf = getListOfValues(doc3Score, "details").get(0);
+        assertEquals(0.693f, (double) doc3Idf.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("idf, computed as log(1 + (N - n + 0.5) / (n + 0.5)) from:", doc3Idf.get("description"));
+        assertFalse(getListOfValues(doc3Idf, "details").isEmpty());
 
-        Map<String, Object> hit1DetailsForHit3NoMatch = normalizationExplanationHit2.get(1);
-        assertEquals(0.0f, (double) hit1DetailsForHit3NoMatch.get("value"), DELTA_FOR_SCORE_ASSERTION);
-        assertEquals("No matching clauses", hit1DetailsForHit3NoMatch.get("description"));
-        assertEquals(0, ((List) hit1DetailsForHit3NoMatch.get("details")).size());
+        Map<String, Object> doc3Tf = getListOfValues(doc3Score, "details").get(1);
+        assertEquals(0.420f, (double) doc3Tf.get("value"), DELTA_FOR_SCORE_ASSERTION);
+        assertEquals("tf, computed as freq / (freq + k1 * (1 - b + b * dl / avgdl)) from:", doc3Tf.get("description"));
+        assertFalse(getListOfValues(doc3Tf, "details").isEmpty());
     }
 
     @SneakyThrows
