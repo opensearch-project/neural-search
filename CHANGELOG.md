@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Fix `hybrid_score_explanation` returning a single normalization block for hybrid queries on indices that contain a nested field ([#1876](https://github.com/opensearch-project/neural-search/pull/1876))
 
 ### Infrastructure
+* Fix `Check Workflow Events` CI job: allowlist `pr_review.yml` for its required `pull_request_target` event and remove a stray fragment that broke YAML parsing of the BWC workflow ([#1901](https://github.com/opensearch-project/neural-search/pull/1901))
 
 ### Documentation
 
