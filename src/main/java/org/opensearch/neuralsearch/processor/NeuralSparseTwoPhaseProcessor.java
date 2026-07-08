@@ -27,7 +27,11 @@ import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescorerBuilder;
+import org.opensearch.search.sort.ScoreSortBuilder;
+import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortOrder;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -103,6 +107,13 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
         if (!enabled || pruneRatio == 0f) {
             return request;
         }
+        // Two-phase rescore is incompatible with explicit sort (other than _score DESC).
+        // OpenSearch rejects sort + rescore in DefaultSearchContext.preProcess(), so when the
+        // request already has a non-_score-DESC sort, skip the optimization and let the full
+        // neural_sparse query run as a single phase. Correctness over latency.
+        if (hasIncompatibleSort(request.source())) {
+            return request;
+        }
         QueryBuilder queryBuilder = request.source().query();
         // Collect the nested NeuralSparseQueryBuilder in the whole query.
         Multimap<AbstractNeuralQueryBuilder<?>, Float> queryBuilderMap = collectNeuralQueryBuilderWithSparseEmbedding(
@@ -137,6 +148,28 @@ public class NeuralSparseTwoPhaseProcessor extends AbstractProcessor implements 
             boolQueryBuilder.should(neuralQueryBuilderWithSparseEmbedding.boost(reduceBoost));
         });
         return boolQueryBuilder;
+    }
+
+    /**
+     * Returns true when the request specifies a sort that OpenSearch will treat as an explicit
+     * sort at execution time, in which case adding a rescore would cause
+     * {@code DefaultSearchContext.preProcess()} to throw
+     * "Cannot use [sort] option in conjunction with [rescore]".
+     *
+     * Mirrors the optimization in {@code SortBuilder.buildSort}: a single {@code _score DESC}
+     * is collapsed to "no sort" and is therefore compatible. Anything else (a field sort, a
+     * non-default _score order, or a multi-element sort list) is incompatible.
+     */
+    static boolean hasIncompatibleSort(final SearchSourceBuilder searchSourceBuilder) {
+        List<SortBuilder<?>> sorts = searchSourceBuilder.sorts();
+        if (sorts == null || sorts.isEmpty()) {
+            return false;
+        }
+        if (sorts.size() == 1) {
+            SortBuilder<?> only = sorts.get(0);
+            return !(only instanceof ScoreSortBuilder) || only.order() != SortOrder.DESC;
+        }
+        return true;
     }
 
     private float getOriginQueryWeightAfterRescore(final SearchSourceBuilder searchSourceBuilder) {
