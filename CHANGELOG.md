@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Add `previous_score_field` to `by_field` rerank processor to avoid overwriting existing document fields ([#1880](https://github.com/opensearch-project/neural-search/pull/1880)) (OpenSearch [#21440](https://github.com/opensearch-project/OpenSearch/issues/21440))
 * [Hybrid Query] Block hybrid query execution with `search_type=dfs_query_then_fetch` ([#1873](https://github.com/opensearch-project/neural-search/pull/1873))
 * [Hybrid Query] Fix `hybrid_score_explanation` returning a single normalization block for hybrid queries on indices that contain a nested field ([#1876](https://github.com/opensearch-project/neural-search/pull/1876))
+* [Two-phase] Skip two phase rescore for sort query ([#1898](https://github.com/opensearch-project/neural-search/pull/1898))
 
 ### Infrastructure
 * [Hybrid Query] Fix flaky `HybridQueryExplainIT` explanation test by asserting per-document explanation trees keyed by `_id` instead of hit position ([#1899](https://github.com/opensearch-project/neural-search/pull/1899))
