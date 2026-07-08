@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Enhancements
 * Improve hybrid query filter validation error message ([#1870](https://github.com/opensearch-project/neural-search/pull/1870))
+
 ### Bug Fixes
 * Add `previous_score_field` to `by_field` rerank processor to avoid overwriting existing document fields ([#1880](https://github.com/opensearch-project/neural-search/pull/1880)) (OpenSearch [#21440](https://github.com/opensearch-project/OpenSearch/issues/21440))
 * [Hybrid Query] Block hybrid query execution with `search_type=dfs_query_then_fetch` ([#1873](https://github.com/opensearch-project/neural-search/pull/1873))
@@ -16,7 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Two-phase] Skip two phase rescore for sort query ([#1898](https://github.com/opensearch-project/neural-search/pull/1898))
 
 ### Infrastructure
+* Fix `Check Workflow Events` CI job: allowlist `pr_review.yml` for its required `pull_request_target` event and remove a stray fragment that broke YAML parsing of the BWC workflow ([#1901](https://github.com/opensearch-project/neural-search/pull/1901))
 * [Hybrid Query] Fix flaky `HybridQueryExplainIT` explanation test by asserting per-document explanation trees keyed by `_id` instead of hit position ([#1899](https://github.com/opensearch-project/neural-search/pull/1899))
+
 
 ### Documentation
 

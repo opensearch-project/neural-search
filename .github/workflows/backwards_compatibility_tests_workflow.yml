@@ -61,8 +61,6 @@ jobs:
           echo "Running restart-upgrade backwards compatibility tests ..."
           su `id -un 1000` -c "./gradlew :qa:restart-upgrade:testAgainstNewCluster --parallel -D'tests.bwc.version=${{ matrix.bwc_version }}'"
 
-   }}'"
-
   Rolling-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
     strategy:
