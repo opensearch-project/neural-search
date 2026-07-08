@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Fix `hybrid_score_explanation` returning a single normalization block for hybrid queries on indices that contain a nested field ([#1876](https://github.com/opensearch-project/neural-search/pull/1876))
 
 ### Infrastructure
+* [Hybrid Query] Fix flaky `HybridQueryExplainIT` explanation test by asserting per-document explanation trees keyed by `_id` instead of hit position ([#1899](https://github.com/opensearch-project/neural-search/pull/1899))
 
 ### Documentation
 
