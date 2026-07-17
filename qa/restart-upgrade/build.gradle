@@ -121,9 +121,11 @@ task testAgainstOldCluster(type: StandaloneRestIntegTestTask) {
     }
 
     // Excluding the batching processor tests because we introduce this feature in 2.16
+    // Excluding hybrid search with search_after tests because sorting and search_after in hybrid query were introduced in 2.16
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchWithSearchAfterIT.*"
         }
     }
 
@@ -228,9 +230,11 @@ task testAgainstNewCluster(type: StandaloneRestIntegTestTask) {
     }
 
     // Excluding the batch processor tests because we introduce this feature in 2.16
+    // Excluding hybrid search with search_after tests because sorting and search_after in hybrid query were introduced in 2.16
     if (versionsBelow2_16.any { ext.neural_search_bwc_version.startsWith(it) }){
         filter {
             excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.BatchIngestionIT.*"
+            excludeTestsMatching "org.opensearch.neuralsearch.bwc.restart.HybridSearchWithSearchAfterIT.*"
         }
     }
 
