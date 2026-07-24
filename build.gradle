@@ -689,15 +689,16 @@ task updateVersion {
                     println "Added ${currentVersionWithoutSnapshot} to Restart-Upgrade BWC version list"
                 }
 
-                // Extract and update Rolling-Upgrade section
-                def rollingSection = updatedContent.substring(rollingStart)
+                // Extract and update Rolling-Upgrade section.
+                // Recompute the offset inline, since updating the restart section above may have
+                // changed the length of updatedContent and invalidated rollingStart.
+                def rollingSection = updatedContent.substring(updatedContent.indexOf('Rolling-Upgrade-BWCTests-NeuralSearch:'))
                 def rollingVersions = extractVersions(rollingSection)
                 if (!rollingVersions.isEmpty() && isCurrentVersionNewer(rollingVersions.last())) {
                     def updatedRollingSection = rollingSection.replaceFirst(
                         /(?m)(^\s*bwc_version:\s*\[([^\]]+))\]/,
                         "\$1, \"${currentVersionWithoutSnapshot}\"]"
                     )
-                    // Need to recalculate rollingStart in case the restart section changed
                     def newRollingStart = updatedContent.indexOf('Rolling-Upgrade-BWCTests-NeuralSearch:')
                     updatedContent = updatedContent.substring(0, newRollingStart) + updatedRollingSection
                     println "Added ${currentVersionWithoutSnapshot} to Rolling-Upgrade BWC version list"
