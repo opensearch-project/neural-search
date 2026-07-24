@@ -4,17 +4,22 @@
  */
 package org.opensearch.neuralsearch.query.ext;
 
-import java.io.IOException;
-import java.util.List;
-
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.ParseField;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.xcontent.MediaType;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.xcontent.ToXContentObject;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.search.SearchExtBuilder;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.test.OpenSearchTestCase;
+
+import java.io.IOException;
+import java.util.List;
 
 public class SemanticHighlighterExtBuilderTests extends OpenSearchTestCase {
 
@@ -57,6 +62,14 @@ public class SemanticHighlighterExtBuilderTests extends OpenSearchTestCase {
         roundTrip(false);
     }
 
+    public void testRoundTripXContentTrue() throws IOException {
+        roundTripXContent(true);
+    }
+
+    public void testRoundTripXContentFalse() throws IOException {
+        roundTripXContent(false);
+    }
+
     public void testParseBooleanTrue() throws IOException {
         SemanticHighlighterExtBuilder result = parseValue("true");
         assertTrue(result.isEnabled());
@@ -94,6 +107,26 @@ public class SemanticHighlighterExtBuilderTests extends OpenSearchTestCase {
                 SemanticHighlighterExtBuilder deserialized = new SemanticHighlighterExtBuilder(in);
                 assertEquals(original, deserialized);
             }
+        }
+    }
+
+    private void roundTripXContent(boolean value) throws IOException {
+        SemanticHighlighterExtBuilder original = new SemanticHighlighterExtBuilder(value);
+        MediaType xContentType = randomFrom(XContentType.values());
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder().ext(List.of(original));
+        assertEquals("{\"ext\":{\"semantic_highlighting_batch\":" + value + "}}", sourceBuilder.toString());
+        boolean humanReadable = randomBoolean();
+        BytesReference shuffledXContent = this.toShuffledXContent(
+            sourceBuilder,
+            xContentType,
+            ToXContentObject.EMPTY_PARAMS,
+            humanReadable
+        );
+
+        try (XContentParser parser = this.createParser(xContentType.xContent(), shuffledXContent)) {
+            SearchSourceBuilder searchSourceBuilder = SearchSourceBuilder.fromXContent(parser);
+            assertEquals(1, searchSourceBuilder.ext().size());
+            assertEquals(original, searchSourceBuilder.ext().getFirst());
         }
     }
 
