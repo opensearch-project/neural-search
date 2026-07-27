@@ -4,16 +4,16 @@
  */
 package org.opensearch.neuralsearch.query.ext;
 
-import java.io.IOException;
-import java.util.Locale;
-import java.util.Objects;
-
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.search.SearchExtBuilder;
+
+import java.io.IOException;
+import java.util.Locale;
+import java.util.Objects;
 
 /**
  * Search request ext builder that opts a request into batch semantic highlighting.
@@ -61,7 +61,7 @@ public class SemanticHighlighterExtBuilder extends SearchExtBuilder {
 
     @Override
     public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
-        return builder.value(enabled);
+        return builder.field(NAME, enabled);
     }
 
     @Override
