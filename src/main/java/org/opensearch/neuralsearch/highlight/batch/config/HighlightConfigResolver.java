@@ -10,18 +10,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import lombok.extern.log4j.Log4j2;
+import org.apache.lucene.search.BooleanClause;
 import org.opensearch.action.search.SearchRequest;
-import org.opensearch.index.query.BoolQueryBuilder;
-import org.opensearch.index.query.BoostingQueryBuilder;
-import org.opensearch.index.query.ConstantScoreQueryBuilder;
-import org.opensearch.index.query.DisMaxQueryBuilder;
+import org.opensearch.common.Nullable;
 import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
-import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
-import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.processor.util.ProcessorUtils;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -77,78 +75,10 @@ public final class HighlightConfigResolver {
         }
     }
 
-    private static void collectInnerHitsTargets(QueryBuilder query, List<SemanticHighlightTarget> sink) {
+    private static void collectInnerHitsTargets(@Nullable QueryBuilder query, List<SemanticHighlightTarget> sink) {
         if (query == null) return;
-
-        if (query instanceof NestedQueryBuilder) {
-            NestedQueryBuilder nested = (NestedQueryBuilder) query;
-            InnerHitBuilder inner = nested.innerHit();
-            if (inner != null && inner.getHighlightBuilder() != null) {
-                String bucketName = inner.getName() != null ? inner.getName() : nested.path();
-                addSemanticFieldsFromInnerHit(inner.getHighlightBuilder(), nested.path(), bucketName, sink);
-            }
-            collectInnerHitsTargets(nested.query(), sink);
-            return;
-        }
-        if (query instanceof BoolQueryBuilder) {
-            BoolQueryBuilder bool = (BoolQueryBuilder) query;
-            for (QueryBuilder clause : bool.must())
-                collectInnerHitsTargets(clause, sink);
-            for (QueryBuilder clause : bool.should())
-                collectInnerHitsTargets(clause, sink);
-            for (QueryBuilder clause : bool.filter())
-                collectInnerHitsTargets(clause, sink);
-            for (QueryBuilder clause : bool.mustNot())
-                collectInnerHitsTargets(clause, sink);
-            return;
-        }
-        if (query instanceof DisMaxQueryBuilder) {
-            for (QueryBuilder clause : ((DisMaxQueryBuilder) query).innerQueries()) {
-                collectInnerHitsTargets(clause, sink);
-            }
-            return;
-        }
-        if (query instanceof ConstantScoreQueryBuilder) {
-            collectInnerHitsTargets(((ConstantScoreQueryBuilder) query).innerQuery(), sink);
-            return;
-        }
-        if (query instanceof BoostingQueryBuilder) {
-            BoostingQueryBuilder boosting = (BoostingQueryBuilder) query;
-            collectInnerHitsTargets(boosting.positiveQuery(), sink);
-            collectInnerHitsTargets(boosting.negativeQuery(), sink);
-            return;
-        }
-        if (query instanceof FunctionScoreQueryBuilder) {
-            collectInnerHitsTargets(((FunctionScoreQueryBuilder) query).query(), sink);
-            return;
-        }
-        if (query instanceof ScriptScoreQueryBuilder) {
-            collectInnerHitsTargets(((ScriptScoreQueryBuilder) query).query(), sink);
-        }
-    }
-
-    private static void addSemanticFieldsFromInnerHit(
-        HighlightBuilder innerHighlight,
-        String nestedPath,
-        String bucketName,
-        List<SemanticHighlightTarget> sink
-    ) {
-        List<HighlightBuilder.Field> fields = Optional.ofNullable(innerHighlight.fields()).orElse(Collections.emptyList());
-        for (HighlightBuilder.Field field : fields) {
-            if (!SemanticHighlightingConstants.HIGHLIGHTER_TYPE.equals(field.highlighterType())) {
-                continue;
-            }
-            sink.add(
-                SemanticHighlightTarget.builder()
-                    .fieldName(field.name())
-                    .nestedPath(nestedPath)
-                    .innerHitsBucketName(bucketName)
-                    .options(mergeOptions(innerHighlight.options(), field.options()))
-                    .preTag(pickFirstTag(field.preTags(), innerHighlight.preTags()))
-                    .postTag(pickFirstTag(field.postTags(), innerHighlight.postTags()))
-                    .build()
-            );
-        }
+        QueryBuilderVisitor visitor = new InnerHitHighlightVisitor(sink::add);
+        query.visit(visitor);
     }
 
     private static String resolveQueryText(SearchRequest request) {
@@ -189,5 +119,43 @@ public final class HighlightConfigResolver {
         if (fieldLevel != null && fieldLevel.length > 0) return fieldLevel[0];
         if (global != null && global.length > 0) return global[0];
         return null;
+    }
+
+    private record InnerHitHighlightVisitor(Consumer<SemanticHighlightTarget> consumer) implements QueryBuilderVisitor {
+        @Override
+        public void accept(QueryBuilder qb) {
+            if (qb instanceof NestedQueryBuilder nested) {
+                InnerHitBuilder inner = nested.innerHit();
+                if (inner == null) {
+                    return;
+                }
+                if (inner.getHighlightBuilder() == null) {
+                    return;
+                }
+                HighlightBuilder innerHighlight = inner.getHighlightBuilder();
+                String bucketName = inner.getName() != null ? inner.getName() : nested.path();
+                List<HighlightBuilder.Field> fields = Optional.ofNullable(innerHighlight.fields()).orElse(Collections.emptyList());
+                for (HighlightBuilder.Field field : fields) {
+                    if (!SemanticHighlightingConstants.HIGHLIGHTER_TYPE.equals(field.highlighterType())) {
+                        continue;
+                    }
+                    consumer.accept(
+                        SemanticHighlightTarget.builder()
+                            .fieldName(field.name())
+                            .nestedPath(nested.path())
+                            .innerHitsBucketName(bucketName)
+                            .options(mergeOptions(innerHighlight.options(), field.options()))
+                            .preTag(pickFirstTag(field.preTags(), innerHighlight.preTags()))
+                            .postTag(pickFirstTag(field.postTags(), innerHighlight.postTags()))
+                            .build()
+                    );
+                }
+            }
+        }
+
+        @Override
+        public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
+            return this;
+        }
     }
 }
