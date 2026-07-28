@@ -197,6 +197,34 @@ public class HighlightConfigResolverTests extends OpenSearchTestCase {
         assertEquals("body", config.getTargetsOrEmpty().get(0).getFieldName());
     }
 
+    public void testNestedQueryWithoutInnerHits() {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        src.query(new NestedQueryBuilder("path", new MatchQueryBuilder("chunks.text", "x"), ScoreMode.Avg));
+        request.source(src);
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertEquals(0, config.getTargetsOrEmpty().size());
+    }
+
+    public void testNestedQueryWithNoHighlights() {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        src.query(new NestedQueryBuilder("path", new MatchQueryBuilder("chunks.text", "x"), ScoreMode.Avg).innerHit(new InnerHitBuilder()));
+        request.source(src);
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertEquals(0, config.getTargetsOrEmpty().size());
+    }
+
+    public void testNestedQueryWithinNested() {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        src.query(new NestedQueryBuilder("path", buildNestedWithInnerHit("path.path"), ScoreMode.Avg).innerHit(new InnerHitBuilder()));
+        request.source(src);
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+        assertEquals("path.path", config.getTargetsOrEmpty().getFirst().getNestedPath());
+    }
+
     private static SearchRequest buildTopLevelRequest(String fieldName, String queryText) {
         SearchRequest request = new SearchRequest();
         SearchSourceBuilder src = new SearchSourceBuilder();
