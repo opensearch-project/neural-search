@@ -13,10 +13,14 @@ import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.neuralsearch.constants.SemanticFieldConstants;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.resolver.SemanticModelResolver;
 import lombok.NonNull;
+import lombok.Setter;
+import lombok.extern.log4j.Log4j2;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -24,6 +28,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.constants.MappingConstants.PROPERTIES;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.LANGUAGE_OPTION;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SPARSE_ENCODING_CONFIG;
 import static org.opensearch.neuralsearch.util.SemanticMappingUtils.collectSemanticField;
@@ -39,6 +47,7 @@ import static org.opensearch.neuralsearch.util.SemanticMappingUtils.validateSema
  * SemanticMappingTransformer transforms the index mapping for the semantic field to auto add the semantic info fields
  * based on the ML model id defined in the semantic field.
  */
+@Log4j2
 public class SemanticMappingTransformer implements MappingTransformer {
     public final static Set<String> SUPPORTED_MODEL_ALGORITHMS = Set.of(
         FunctionName.TEXT_EMBEDDING.name(),
@@ -54,6 +63,9 @@ public class SemanticMappingTransformer implements MappingTransformer {
 
     private final MLCommonsClientAccessor mlClientAccessor;
     private final NamedXContentRegistry xContentRegistry;
+
+    @Setter
+    private volatile SemanticModelResolver modelResolver;
 
     public SemanticMappingTransformer(final MLCommonsClientAccessor mlClientAccessor, final NamedXContentRegistry xContentRegistry) {
         this.mlClientAccessor = mlClientAccessor;
@@ -142,13 +154,118 @@ public class SemanticMappingTransformer implements MappingTransformer {
 
             collectSemanticField(properties, semanticFieldPathToConfigMap);
 
-            validateSemanticFields(semanticFieldPathToConfigMap);
+            // Validate: reject fields that have BOTH model_id AND language_option/model_type.
+            // This catches user-provided conflicts before resolution. After resolution,
+            // fields legitimately have all three (model_id is system-set).
+            for (Map.Entry<String, Map<String, Object>> entry : semanticFieldPathToConfigMap.entrySet()) {
+                Object modelId = entry.getValue().get(MODEL_ID);
+                Object langOpt = entry.getValue().get(LANGUAGE_OPTION);
+                Object modType = entry.getValue().get(MODEL_TYPE);
+                if (modelId != null && (langOpt != null || modType != null)) {
+                    throw new IllegalArgumentException(
+                        "Cannot specify model_id together with language_option or model_type. These are mutually exclusive."
+                    );
+                }
+            }
 
-            fetchModelAndModifyMapping(semanticFieldPathToConfigMap, properties, listener);
+            // Split into fields with model_id (existing path) and managed fields (need resolution).
+            // A field is "managed" only if it has language_option or model_type but no model_id.
+            // Fields without model_id AND without language_option/model_type are kept in fieldsWithModelId
+            // so that the existing validation catches the missing model_id error.
+            final Map<String, Map<String, Object>> fieldsWithModelId = new HashMap<>();
+            final Map<String, Map<String, Object>> managedFields = new HashMap<>();
+
+            for (Map.Entry<String, Map<String, Object>> entry : semanticFieldPathToConfigMap.entrySet()) {
+                final Map<String, Object> config = entry.getValue();
+                if (config.containsKey(MODEL_ID) && config.get(MODEL_ID) != null) {
+                    fieldsWithModelId.put(entry.getKey(), config);
+                } else if (config.containsKey(LANGUAGE_OPTION) || config.containsKey(MODEL_TYPE)) {
+                    managedFields.put(entry.getKey(), config);
+                } else {
+                    // No model_id, no language_option, no model_type - let validation catch it
+                    fieldsWithModelId.put(entry.getKey(), config);
+                }
+            }
+
+            validateSemanticFields(fieldsWithModelId);
+
+            if (managedFields.isEmpty()) {
+                // Only fields with explicit model_id, use the existing path
+                fetchModelAndModifyMapping(fieldsWithModelId, properties, listener);
+            } else {
+                // Resolve managed fields first, then process all together
+                resolveManagedFields(managedFields, fieldsWithModelId, properties, listener);
+            }
         } catch (Exception e) {
             listener.onFailure(e);
         }
 
+    }
+
+    private void resolveManagedFields(
+        @NonNull final Map<String, Map<String, Object>> managedFields,
+        @NonNull final Map<String, Map<String, Object>> fieldsWithModelId,
+        @NonNull final Map<String, Object> properties,
+        @NonNull final ActionListener<Void> listener
+    ) {
+        if (modelResolver == null) {
+            log.warn("SemanticModelResolver is not set, skipping managed semantic fields");
+            if (fieldsWithModelId.isEmpty()) {
+                listener.onResponse(null);
+            } else {
+                fetchModelAndModifyMapping(fieldsWithModelId, properties, listener);
+            }
+            return;
+        }
+
+        // Process managed fields sequentially
+        Iterator<Map.Entry<String, Map<String, Object>>> iterator = managedFields.entrySet().iterator();
+        resolveNextManagedField(iterator, fieldsWithModelId, properties, listener);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void resolveNextManagedField(
+        @NonNull final Iterator<Map.Entry<String, Map<String, Object>>> iterator,
+        @NonNull final Map<String, Map<String, Object>> fieldsWithModelId,
+        @NonNull final Map<String, Object> properties,
+        @NonNull final ActionListener<Void> listener
+    ) {
+        if (!iterator.hasNext()) {
+            // All managed fields resolved, now process all fields with model_id
+            if (fieldsWithModelId.isEmpty()) {
+                listener.onResponse(null);
+            } else {
+                fetchModelAndModifyMapping(fieldsWithModelId, properties, listener);
+            }
+            return;
+        }
+
+        final Map.Entry<String, Map<String, Object>> entry = iterator.next();
+        final String fieldPath = entry.getKey();
+        final Map<String, Object> fieldConfig = entry.getValue();
+
+        final String languageOption = fieldConfig.containsKey(LANGUAGE_OPTION) ? (String) fieldConfig.get(LANGUAGE_OPTION) : "ENGLISH";
+        final String modelTypeVal = fieldConfig.containsKey(MODEL_TYPE) ? (String) fieldConfig.get(MODEL_TYPE) : "SPARSE";
+
+        modelResolver.resolve(languageOption, modelTypeVal, ActionListener.wrap(resolvedModelId -> {
+            // Set model_id on the field config
+            fieldConfig.put(MODEL_ID, resolvedModelId);
+
+            // For DENSE models, set dense_embedding_config with method.engine=lucene to avoid faiss native lib requirement
+            if ("DENSE".equalsIgnoreCase(modelTypeVal) && !fieldConfig.containsKey(DENSE_EMBEDDING_CONFIG)) {
+                Map<String, Object> denseConfig = new HashMap<>();
+                Map<String, Object> method = new HashMap<>();
+                method.put("engine", "lucene");
+                denseConfig.put("method", method);
+                fieldConfig.put(DENSE_EMBEDDING_CONFIG, denseConfig);
+            }
+
+            // Move this field into the fieldsWithModelId map for subsequent processing
+            fieldsWithModelId.put(fieldPath, fieldConfig);
+
+            // Continue resolving next field
+            resolveNextManagedField(iterator, fieldsWithModelId, properties, listener);
+        }, listener::onFailure));
     }
 
     private void validateSemanticFields(@NonNull final Map<String, Map<String, Object>> semanticFieldPathToConfigMap) {

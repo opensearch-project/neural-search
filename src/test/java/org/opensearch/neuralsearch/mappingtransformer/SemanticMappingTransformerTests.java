@@ -494,6 +494,42 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         assertEquals(expectedErrorMessage, capturedException.getMessage());
     }
 
+    public void testTransform_whenModelIdAndLanguageOptionBothPresent_thenFail() {
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_ID, "some_model_id");
+        semanticField.put("language_option", "ENGLISH");
+
+        transformer.transform(mappings, null, listener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Cannot specify model_id together with language_option or model_type"));
+    }
+
+    public void testTransform_whenModelIdAndModelTypeBothPresent_thenFail() {
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_ID, "some_model_id");
+        semanticField.put("model_type", "SPARSE");
+
+        transformer.transform(mappings, null, listener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("Cannot specify model_id together with language_option or model_type"));
+    }
+
     private Map<String, Object> getBaseMappingsWithOneSemanticField(@NonNull final String modelId) {
         final Map<String, Object> mappings = new HashMap<>();
         final Map<String, Object> properties = new HashMap<>();

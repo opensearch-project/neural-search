@@ -213,7 +213,7 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
 
     public void testBuilder_getParameters() {
         final SemanticFieldMapper.Builder builder = new SemanticFieldMapper.Builder(fieldName);
-        assertEquals(9, builder.getParameters().size());
+        assertEquals(11, builder.getParameters().size());
         List<String> actualParams = builder.getParameters().stream().map(a -> a.name).collect(Collectors.toList());
         List<String> expectedParams = Arrays.asList(
             MODEL_ID,
@@ -224,7 +224,9 @@ public class SemanticFieldMapperTests extends OpenSearchTestCase {
             SEMANTIC_FIELD_SEARCH_ANALYZER,
             DENSE_EMBEDDING_CONFIG,
             SPARSE_ENCODING_CONFIG,
-            SKIP_EXISTING_EMBEDDING
+            SKIP_EXISTING_EMBEDDING,
+            "language_option",
+            "model_type"
         );
         assertEquals(expectedParams, actualParams);
     }
