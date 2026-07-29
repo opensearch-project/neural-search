@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Features
 
 ### Enhancements
+- Add `model_selection` (language_option/model_type) parameter to semantic field to resolve the model id from cluster settings ([#1918](https://github.com/opensearch-project/neural-search/issues/1918))
 
 ### Bug Fixes
 * [Hybrid Query] Fix NoSuchElementException in hybrid query with sort/search_after when a shard returns no results ([#1939](https://github.com/opensearch-project/neural-search/pull/1939))

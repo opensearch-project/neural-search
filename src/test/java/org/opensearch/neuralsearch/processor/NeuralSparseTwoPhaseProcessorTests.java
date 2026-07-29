@@ -309,9 +309,7 @@ public class NeuralSparseTwoPhaseProcessorTests extends OpenSearchTestCase {
         NeuralSparseTwoPhaseProcessor.Factory factory = new NeuralSparseTwoPhaseProcessor.Factory();
         NeuralSparseQueryBuilder neuralQueryBuilder = new NeuralSparseQueryBuilder();
         SearchRequest searchRequest = new SearchRequest();
-        searchRequest.source(
-            new SearchSourceBuilder().query(neuralQueryBuilder).sort(new ScoreSortBuilder()).trackScores(true)
-        );
+        searchRequest.source(new SearchSourceBuilder().query(neuralQueryBuilder).sort(new ScoreSortBuilder()).trackScores(true));
         NeuralSparseTwoPhaseProcessor processor = createTestProcessor(factory, 0.5f, true, 4.0f, 10000);
         processor.processRequest(searchRequest);
         assertNotNull(searchRequest.source().rescores());

@@ -201,7 +201,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(8, settings.size());
+        assertEquals(9, settings.size());
+        assertTrue(settings.contains(NeuralSearchSettings.SEMANTIC_MODEL_SELECTION_MODEL_ID));
     }
 
     public void testRequestProcessors() {

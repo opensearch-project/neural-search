@@ -115,4 +115,23 @@ public final class NeuralSearchSettings {
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
+
+    /**
+     * Prefix of the model selection model id affix setting.
+     * {@link #SEMANTIC_MODEL_SELECTION_MODEL_ID}
+     */
+    public static final String SEMANTIC_MODEL_SELECTION_MODEL_ID_PREFIX = "plugins.neural_search.model_selection.model_id.";
+
+    /**
+     * Affix setting that maps a semantic field {@code model_selection} profile to a deployed model id. The concrete
+     * setting key takes the form {@code plugins.neural_search.model_selection.model_id.<model_type>.<language_option>}
+     * (both lower cased), e.g. {@code plugins.neural_search.model_selection.model_id.sparse.english}.
+     * <p>
+     * Using an affix setting keeps the mapping flexible: additional dimensions can be introduced in the future without
+     * having to define a new fixed setting per combination.
+     */
+    public static final Setting.AffixSetting<String> SEMANTIC_MODEL_SELECTION_MODEL_ID = Setting.prefixKeySetting(
+        SEMANTIC_MODEL_SELECTION_MODEL_ID_PREFIX,
+        key -> Setting.simpleString(key, Setting.Property.NodeScope, Setting.Property.Dynamic)
+    );
 }

@@ -49,6 +49,9 @@ import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
+import org.opensearch.neuralsearch.ml.resolver.DefaultSemanticModelResolver;
+import org.opensearch.neuralsearch.ml.resolver.SemanticModelResolver;
+import org.opensearch.neuralsearch.settings.SemanticModelSelectionSettingsAccessor;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.search.query.QueryCollectorContextSpecFactory;
@@ -192,6 +195,8 @@ public class NeuralSearch extends Plugin
     private PipelineServiceUtil pipelineServiceUtil;
     private InfoStatsManager infoStatsManager;
     private ClusterService clusterService;
+    private SemanticMappingTransformer semanticMappingTransformer;
+    private SemanticModelResolver modelResolver;
     private final SemanticHighlighter semanticHighlighter;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
@@ -241,6 +246,14 @@ public class NeuralSearch extends Plugin
 
         // Initialize the semantic highlighter
         this.semanticHighlighter.initialize(semanticHighlighterEngine);
+
+        // Create model resolver for semantic field model_selection support. It resolves the model_id from the
+        // plugins.neural_search.model_selection.model_id.* cluster settings.
+        SemanticModelSelectionSettingsAccessor modelSelectionSettingsAccessor = new SemanticModelSelectionSettingsAccessor(clusterService);
+        modelResolver = new DefaultSemanticModelResolver(modelSelectionSettingsAccessor);
+        if (semanticMappingTransformer != null) {
+            semanticMappingTransformer.setModelResolver(modelResolver);
+        }
 
         // Create and provide the Hybrid query converter for gRPC transport
         HybridQueryBuilderProtoConverter hybridQueryConverter = new HybridQueryBuilderProtoConverter();
@@ -366,7 +379,8 @@ public class NeuralSearch extends Plugin
             SparseSettings.IS_SPARSE_INDEX_SETTING,
             NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
             NEURAL_CIRCUIT_BREAKER_LIMIT,
-            NEURAL_CIRCUIT_BREAKER_OVERHEAD
+            NEURAL_CIRCUIT_BREAKER_OVERHEAD,
+            NeuralSearchSettings.SEMANTIC_MODEL_SELECTION_MODEL_ID
         );
     }
 
@@ -466,7 +480,11 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<MappingTransformer> getMappingTransformers() {
-        return List.of(new SemanticMappingTransformer(clientAccessor, xContentRegistry));
+        semanticMappingTransformer = new SemanticMappingTransformer(clientAccessor, xContentRegistry);
+        if (modelResolver != null) {
+            semanticMappingTransformer.setModelResolver(modelResolver);
+        }
+        return List.of(semanticMappingTransformer);
     }
 
     @Override
