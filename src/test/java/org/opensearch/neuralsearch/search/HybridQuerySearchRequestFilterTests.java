@@ -9,24 +9,40 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import org.mockito.ArgumentCaptor;
+import org.opensearch.Version;
 import org.opensearch.action.bulk.BulkAction;
 import org.opensearch.action.bulk.BulkRequest;
 import org.opensearch.action.search.SearchAction;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchType;
 import org.opensearch.action.support.ActionFilterChain;
+import org.opensearch.cluster.ClusterName;
+import org.opensearch.cluster.ClusterState;
+import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.metadata.Metadata;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.common.util.concurrent.ThreadContext;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.action.ActionResponse;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
+import org.opensearch.neuralsearch.util.HybridQueryUtil;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.tasks.Task;
 
 public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase {
+
+    private static final String TEST_INDEX = "test_index";
 
     private HybridQuerySearchRequestFilter filter;
 
@@ -34,6 +50,28 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
     public void setUp() throws Exception {
         super.setUp();
         filter = new HybridQuerySearchRequestFilter();
+        // by default, resolve a default search pipeline for TEST_INDEX so existing tests that
+        // don't care about pipeline resolution keep exercising the batched-reduce-size behavior
+        setUpDefaultSearchPipeline(TEST_INDEX, "test-pipeline");
+    }
+
+    private void setUpDefaultSearchPipeline(String indexName, String defaultSearchPipelineId) {
+        Settings.Builder settingsBuilder = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0);
+        if (defaultSearchPipelineId != null) {
+            settingsBuilder.put(IndexSettings.DEFAULT_SEARCH_PIPELINE.getKey(), defaultSearchPipelineId);
+        }
+        IndexMetadata indexMetadata = IndexMetadata.builder(indexName).settings(settingsBuilder).build();
+        Metadata metadata = Metadata.builder().put(indexMetadata, false).build();
+        ClusterState clusterState = ClusterState.builder(ClusterName.DEFAULT).metadata(metadata).build();
+
+        ClusterService clusterService = mock(ClusterService.class);
+        when(clusterService.state()).thenReturn(clusterState);
+
+        IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        NeuralSearchClusterUtil.instance().initialize(clusterService, indexNameExpressionResolver);
     }
 
     public void testOrder_thenReturnsZero() {
@@ -299,6 +337,106 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
 
         // Verify batch reduce size was changed to MAX_VALUE (still a hybrid query even if empty)
         assertEquals(Integer.MAX_VALUE, searchRequest.getBatchedReduceSize());
+        verify(chain).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testApply_whenHybridQueryWithNoResolvableSearchPipeline_thenFails() {
+        // no default search pipeline configured on the index, no request-level pipeline set
+        setUpDefaultSearchPipeline(TEST_INDEX, null);
+
+        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
+        hybridQuery.add(new MatchQueryBuilder("field", "value"));
+
+        SearchRequest searchRequest = new SearchRequest(TEST_INDEX);
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(hybridQuery);
+        searchRequest.source(sourceBuilder);
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        verify(chain, never()).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertThat(exceptionCaptor.getValue().getMessage(), containsString(HybridQueryUtil.HYBRID_QUERY_REQUIRES_SEARCH_PIPELINE_MESSAGE));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testApply_whenHybridQueryWithNoopRequestPipelineAndNoIndexDefault_thenFails() {
+        // request explicitly disables the pipeline (search_pipeline=_none), and index has no default either
+        setUpDefaultSearchPipeline(TEST_INDEX, null);
+
+        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
+        hybridQuery.add(new MatchQueryBuilder("field", "value"));
+
+        SearchRequest searchRequest = new SearchRequest(TEST_INDEX);
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(hybridQuery);
+        searchRequest.source(sourceBuilder);
+        searchRequest.pipeline(SearchPipelineService.NOOP_PIPELINE_ID);
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        verify(chain, never()).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
+        assertThat(exceptionCaptor.getValue().getMessage(), containsString(HybridQueryUtil.HYBRID_QUERY_REQUIRES_SEARCH_PIPELINE_MESSAGE));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testApply_whenHybridQueryWithRequestLevelPipelineAndNoIndexDefault_thenProceeds() {
+        // no default search pipeline on the index, but the request explicitly names one
+        setUpDefaultSearchPipeline(TEST_INDEX, null);
+
+        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
+        hybridQuery.add(new MatchQueryBuilder("field", "value"));
+
+        SearchRequest searchRequest = new SearchRequest(TEST_INDEX);
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(hybridQuery);
+        searchRequest.source(sourceBuilder);
+        searchRequest.pipeline("my-normalization-pipeline");
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        verify(listener, never()).onFailure(org.mockito.ArgumentMatchers.any());
+        verify(chain).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
+        assertEquals(Integer.MAX_VALUE, searchRequest.getBatchedReduceSize());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testApply_whenHybridQueryWithIndexDefaultSearchPipeline_thenProceeds() {
+        // index has a default search pipeline configured, request doesn't specify one
+        setUpDefaultSearchPipeline(TEST_INDEX, "index-default-pipeline");
+
+        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
+        hybridQuery.add(new MatchQueryBuilder("field", "value"));
+
+        SearchRequest searchRequest = new SearchRequest(TEST_INDEX);
+        SearchSourceBuilder sourceBuilder = new SearchSourceBuilder();
+        sourceBuilder.query(hybridQuery);
+        searchRequest.source(sourceBuilder);
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        verify(listener, never()).onFailure(org.mockito.ArgumentMatchers.any());
         verify(chain).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
     }
 }

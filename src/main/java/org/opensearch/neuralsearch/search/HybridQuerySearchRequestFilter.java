@@ -14,21 +14,31 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchType;
 import org.opensearch.action.support.ActionFilter;
 import org.opensearch.action.support.ActionFilterChain;
+import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.core.action.ActionResponse;
+import org.opensearch.index.IndexSettings;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.util.HybridQueryUtil;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.tasks.Task;
+
+import java.util.List;
 
 import lombok.extern.log4j.Log4j2;
 
 /**
- * An ActionFilter that automatically disables batched reduction for hybrid queries.
+ * An ActionFilter that validates hybrid query requests and disables batched reduction for them.
  *
  * This filter intercepts all search requests and checks if they contain a hybrid query.
  * If a hybrid query is detected with search_type=dfs_query_then_fetch, the request is rejected.
- * If a hybrid query is detected, it unconditionally sets batchedReduceSize to Integer.MAX_VALUE
- * to disable batched reduction, regardless of any user-specified value.
+ * If a hybrid query is detected but no search pipeline can be resolved for it (neither inline,
+ * via the search_pipeline request parameter, nor as every target index's default search
+ * pipeline), the request is rejected, since without a pipeline the normalization processor
+ * never runs and the response would otherwise be returned in an unnormalized, internal format.
+ * Otherwise, it unconditionally sets batchedReduceSize to Integer.MAX_VALUE to disable batched
+ * reduction, regardless of any user-specified value.
  *
  * This prevents the "topDocs already consumed" error that occurs when:
  * 1. Hybrid query is executed
@@ -39,8 +49,6 @@ import lombok.extern.log4j.Log4j2;
  * batched reduction is fundamentally incompatible with hybrid query processing.
  * The NormalizationProcessor requires access to all shard results simultaneously
  * to perform score normalization and combination.
- *
- * This filter works transparently without any pipeline or query configuration.
  *
  */
 @Log4j2
@@ -82,6 +90,10 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
                     listener.onFailure(new IllegalArgumentException(HybridQueryUtil.HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE));
                     return;
                 }
+                if (hasResolvableSearchPipeline(searchRequest) == false) {
+                    listener.onFailure(new IllegalArgumentException(HybridQueryUtil.HYBRID_QUERY_REQUIRES_SEARCH_PIPELINE_MESSAGE));
+                    return;
+                }
                 if (searchRequest.getBatchedReduceSize() != DISABLE_BATCHED_REDUCE) {
                     log.debug(
                         String.format(
@@ -118,5 +130,34 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
 
         // direct check for HybridQueryBuilder
         return query instanceof HybridQueryBuilder;
+    }
+
+    /**
+     * Check whether a search pipeline can be resolved for this request, either from the request
+     * itself (inline or via the search_pipeline request parameter) or from the default search
+     * pipeline configured on every index the request targets.
+     *
+     * @param searchRequest the search request to check
+     * @return true if a non-noop pipeline can be resolved for this request
+     */
+    private boolean hasResolvableSearchPipeline(SearchRequest searchRequest) {
+        String requestPipeline = searchRequest.pipeline();
+        if (isConfiguredPipeline(requestPipeline)) {
+            return true;
+        }
+
+        List<IndexMetadata> indexMetadataList = NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest);
+        return indexMetadataList.isEmpty() == false && indexMetadataList.stream().allMatch(this::hasDefaultSearchPipeline);
+    }
+
+    private boolean hasDefaultSearchPipeline(IndexMetadata indexMetadata) {
+        String defaultPipeline = IndexSettings.DEFAULT_SEARCH_PIPELINE.get(indexMetadata.getSettings());
+        return isConfiguredPipeline(defaultPipeline);
+    }
+
+    private boolean isConfiguredPipeline(String pipelineId) {
+        return Objects.nonNull(pipelineId)
+            && pipelineId.isBlank() == false
+            && SearchPipelineService.NOOP_PIPELINE_ID.equals(pipelineId) == false;
     }
 }
