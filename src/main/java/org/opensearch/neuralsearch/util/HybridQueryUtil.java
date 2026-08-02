@@ -34,6 +34,10 @@ public class HybridQueryUtil {
     public static final String HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE =
         "hybrid query does not support search_type [dfs_query_then_fetch]";
 
+    public static final String HYBRID_QUERY_REQUIRES_SEARCH_PIPELINE_MESSAGE =
+        "hybrid query requires a search pipeline with a normalization processor to be configured, "
+            + "either via the search_pipeline request parameter or as the target index's default search pipeline";
+
     /**
      * This method validates whether the query object is an instance of hybrid query
      */
