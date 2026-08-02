@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 * [SemanticHighlighter] Fix SemanticHighlighterExtBuilder.toXContent ([#1906](https://github.com/opensearch-project/neural-search/issues/1906)) (query-insights [#651](https://github.com/opensearch-project/query-insights/issues/651))
+* [HybridQuery] Block hybrid query when no search pipeline is configured ([#1922](https://github.com/opensearch-project/neural-search/issues/1922))
 
 ### Infrastructure
 
