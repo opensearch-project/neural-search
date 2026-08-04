@@ -66,4 +66,16 @@ public class SemanticFieldConstants {
      * model is not changed.
      */
     public static final String SKIP_EXISTING_EMBEDDING = "skip_existing_embedding";
+
+    /**
+     * Name of the language option parameter. When specified without model_id, the system automatically resolves
+     * and deploys a pretrained model for the given language. Supported values: ENGLISH, MULTILINGUAL.
+     */
+    public static final String LANGUAGE_OPTION = "language_option";
+
+    /**
+     * Name of the model type parameter. Used together with language_option to resolve the appropriate pretrained
+     * model. Supported values: SPARSE, DENSE.
+     */
+    public static final String MODEL_TYPE = "model_type";
 }

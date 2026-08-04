@@ -38,7 +38,9 @@ import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARA
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNKING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.LANGUAGE_OPTION;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SKIP_EXISTING_EMBEDDING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
@@ -211,6 +213,22 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
             false
         );
 
+        @Getter
+        protected final Parameter<String> languageOption = Parameter.stringParam(
+            LANGUAGE_OPTION,
+            true,
+            m -> ((SemanticFieldMapper) m).semanticParameters.getLanguageOption(),
+            null
+        );
+
+        @Getter
+        protected final Parameter<String> modelType = Parameter.stringParam(
+            MODEL_TYPE,
+            true,
+            m -> ((SemanticFieldMapper) m).semanticParameters.getModelType(),
+            null
+        );
+
         @Setter
         protected ParametrizedFieldMapper.Builder delegateBuilder;
 
@@ -229,7 +247,9 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 semanticFieldSearchAnalyzer,
                 denseEmbeddingConfig,
                 sparseEncodingConfig,
-                skipExistingEmbedding
+                skipExistingEmbedding,
+                languageOption,
+                modelType
             );
         }
 
@@ -261,6 +281,8 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 .denseEmbeddingConfig(denseEmbeddingConfig.getValue())
                 .sparseEncodingConfig(sparseEncodingConfig.getValue())
                 .skipExistingEmbedding(skipExistingEmbedding.getValue())
+                .languageOption(languageOption.getValue())
+                .modelType(modelType.getValue())
                 .build();
         }
     }
