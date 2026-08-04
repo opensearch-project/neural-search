@@ -19,7 +19,11 @@ public final class SparseConstants {
     public static final String CLUSTER_RATIO_FIELD = "cluster_ratio";
     public static final String APPROXIMATE_THRESHOLD_FIELD = "approximate_threshold";
     public static final String THREAD_POOL_NAME = "seismic_thread_pool";
-    public static final int MODULUS_FOR_SHORT = 65536;
+    // Tokens are stored in a signed short[] to keep the memory footprint low, so they are folded
+    // into the non-negative signed-short range [0, Short.MAX_VALUE] via this modulus. Using 32768
+    // (not 65536) keeps every folded value <= Short.MAX_VALUE, so it round-trips without being
+    // sign-extended to a negative int on read.
+    public static final int MODULUS_FOR_SHORT = 32768;
 
     /**
      * SEISMIC algorithm configuration constants and default values.

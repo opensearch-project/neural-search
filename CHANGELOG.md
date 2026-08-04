@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Text Chunking] Fix text chunking processor ignoring index max_token_count setting when ingesting via alias ([#1803](https://github.com/opensearch-project/neural-search/pull/1803))
 * Fix sparse ANN search failure due to a core change ([#1855](https://github.com/opensearch-project/neural-search/pull/1855))
 * [Semantic Highlighting] Fix batch semantic highlighting on inner_hits fields ([#1858](https://github.com/opensearch-project/neural-search/pull/1858))
+* [Sparse ANN] Fold sparse vector tokens into the signed-short range (modulus 32768) so folded tokens are never sign-extended to a negative value when stored in short[] ([#1926](https://github.com/opensearch-project/neural-search/pull/1926))
 
 ### Infrastructure
 * Fix flaky integration test failure caused by ML memory circuit breaker during model deployment in distribution pipeline ([#1824](https://github.com/opensearch-project/neural-search/pull/1824))
