@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Bug Fixes
 - [SEISMIC]: Resolve a security risk of Sparse ANN - Move 'index.sparse' validation from REST to transport layer. ([#1630](https://github.com/opensearch-project/neural-search/pull/1630))
 - [SEISMIC IT]: Fix some failed IT cases ([#1649](https://github.com/opensearch-project/neural-search/pull/1649))
+- [Sparse ANN] Fold sparse vector tokens into the signed-short range (modulus 32768) so folded tokens are never sign-extended to a negative value when stored in short[] ([#1926](https://github.com/opensearch-project/neural-search/pull/1926))
 
 ### Infrastructure
 

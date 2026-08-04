@@ -117,7 +117,7 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         List<SparseVector.Item> items = new ArrayList<>();
         items.add(new SparseVector.Item(1, (byte) 10));
         items.add(new SparseVector.Item(65537, (byte) 20));
-        items.add(new SparseVector.Item(131074, (byte) 20)); // % 65536 = 2
+        items.add(new SparseVector.Item(131074, (byte) 20)); // 131074 % 32768 = 2
         items.add(new SparseVector.Item(2, (byte) 30));
         items.add(new SparseVector.Item(65539, (byte) 40));
 
@@ -144,6 +144,57 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertEquals(40, ByteQuantizationUtil.getUnsignedByte(item3.getWeight()));
 
         Assert.assertFalse(iterator.hasNext());
+    }
+
+    public void testConstructorWithTokenFoldingIntoSignedShortRange() {
+        // Tokens are folded via MODULUS_FOR_SHORT (32768) into [0, Short.MAX_VALUE] so they always
+        // fit a signed short and round-trip without sign extension. 40000 -> 7232, 65535 -> 32767.
+        List<SparseVector.Item> items = new ArrayList<>();
+        items.add(new SparseVector.Item(40000, (byte) 50)); // 40000 % 32768 = 7232
+        items.add(new SparseVector.Item(65535, (byte) 60)); // 65535 % 32768 = 32767 (Short.MAX_VALUE)
+
+        SparseVector vector = new SparseVector(items);
+
+        Assert.assertEquals(2, vector.getSize());
+        IteratorWrapper<SparseVector.Item> iterator = vector.iterator();
+        Assert.assertTrue(iterator.hasNext());
+        SparseVector.Item item1 = iterator.next();
+        Assert.assertEquals(7232, item1.getToken());
+        Assert.assertEquals(50, ByteQuantizationUtil.getUnsignedByte(item1.getWeight()));
+
+        Assert.assertTrue(iterator.hasNext());
+        SparseVector.Item item2 = iterator.next();
+        Assert.assertEquals(32767, item2.getToken());
+        Assert.assertEquals(60, ByteQuantizationUtil.getUnsignedByte(item2.getWeight()));
+    }
+
+    public void testToDenseVectorWithTokenFoldingIntoSignedShortRange() {
+        // A token folding to Short.MAX_VALUE (65535 -> 32767) must not become a negative array index.
+        List<SparseVector.Item> items = new ArrayList<>();
+        items.add(new SparseVector.Item(1, (byte) 10));
+        items.add(new SparseVector.Item(65535, (byte) 50)); // 65535 % 32768 = 32767
+
+        SparseVector vector = new SparseVector(items);
+
+        byte[] denseVector = vector.toDenseVector();
+        Assert.assertEquals(32768, denseVector.length); // max folded token (32767) + 1
+        Assert.assertEquals(10, denseVector[1] & 0xFF);
+        Assert.assertEquals(50, denseVector[32767] & 0xFF);
+    }
+
+    public void testDotProductWithTokenFoldingIntoSignedShortRange() {
+        // A token folding to Short.MAX_VALUE must still score correctly (no negative index / bounds bug).
+        List<SparseVector.Item> items = new ArrayList<>();
+        items.add(new SparseVector.Item(1, (byte) 10));
+        items.add(new SparseVector.Item(65535, (byte) 50)); // 65535 % 32768 = 32767
+        SparseVector vector = new SparseVector(items);
+
+        byte[] denseVector = new byte[32768];
+        denseVector[1] = 3;
+        denseVector[32767] = 4;
+
+        // (10*3) + (50*4) = 30 + 200 = 230
+        Assert.assertEquals(230, vector.dotProduct(denseVector));
     }
 
     public void testToDenseVector() {
