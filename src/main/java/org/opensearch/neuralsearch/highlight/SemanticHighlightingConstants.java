@@ -11,6 +11,7 @@ public final class SemanticHighlightingConstants {
     // System-generated factory and processor types
     public static final String SYSTEM_FACTORY_TYPE = "semantic-highlighter";
     public static final String PROCESSOR_TYPE = "semantic_highlighting";
+    public static final String QUERY_ENRICHER_TYPE = "semantic_highlighter_query_enricher";
 
     // Default processor tags and descriptions
     public static final String DEFAULT_PROCESSOR_TAG = "semantic-highlighter";

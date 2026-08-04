@@ -32,6 +32,7 @@ import org.opensearch.neuralsearch.highlight.single.extractor.QueryTextExtractor
 import com.google.common.collect.ImmutableList;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.ActionRequest;
+import org.opensearch.neuralsearch.processor.SemanticHighlighterQueryEnricherProcessor;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -389,7 +390,9 @@ public class NeuralSearch extends Plugin
             NeuralSparseTwoPhaseProcessor.TYPE,
             new NeuralSparseTwoPhaseProcessor.Factory(),
             AgenticQueryTranslatorProcessor.TYPE,
-            new AgenticQueryTranslatorProcessor.Factory(clientAccessor, xContentRegistry, settingsAccessor)
+            new AgenticQueryTranslatorProcessor.Factory(clientAccessor, xContentRegistry, settingsAccessor),
+            SemanticHighlighterQueryEnricherProcessor.TYPE,
+            new SemanticHighlighterQueryEnricherProcessor.Factory()
         );
     }
 
