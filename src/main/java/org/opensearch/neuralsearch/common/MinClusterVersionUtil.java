@@ -32,6 +32,7 @@ public final class MinClusterVersionUtil {
     public static final Version MINIMAL_SUPPORTED_VERSION_METRICS_STATS = Version.V_3_3_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER = Version.V_3_0_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_AGENTIC_EMBEDDING_MODEL_ID = Version.V_3_6_0;
+    public static final Version MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY = Version.V_3_8_0;
 
     // Constant for neural_knn_query version check
     public static final String NEURAL_KNN_QUERY = "neural_knn_query";
@@ -83,6 +84,19 @@ public final class MinClusterVersionUtil {
      */
     public static boolean isVersionOnOrAfterMinReqVersionForNeuralKNNQueryText(Version version) {
         return version.onOrAfter(MINIMAL_SUPPORTED_VERSION_NEURAL_ORIGINAL_QUERY_TEXT);
+    }
+
+    /**
+     * Checks if the version from StreamInput/StreamOutput is on or after the minimum required version for the fused
+     * (resolver) mode in the hybrid query. Use this (not the cluster-min-version variant) for wire read/write gating so
+     * the format matches the negotiated version of the specific peer stream — see CR-290524846 for the mixed-version
+     * bug the cluster-based check causes in a coordinator/worker split.
+     *
+     * @param version The version to check
+     * @return true if the version is on or after the minimum required version
+     */
+    public static boolean isVersionOnOrAfterMinReqVersionForFusedModeInHybridQuery(Version version) {
+        return version.onOrAfter(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
     }
 
     /**

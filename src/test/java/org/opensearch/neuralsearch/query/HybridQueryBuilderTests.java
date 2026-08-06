@@ -6,7 +6,9 @@ package org.opensearch.neuralsearch.query;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
@@ -20,6 +22,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -66,9 +69,13 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryCoordinatorContext;
+import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.knn.index.KNNSettings;
@@ -359,6 +366,539 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
         assertThat(exception.getMessage(), containsString("Number of sub-queries exceeds maximum supported"));
+    }
+
+    // ---- resolver (fused) mode: `fusion` parameter parse / round-trip / validation (PR1, execution inert) ----
+
+    private XContentParser fusionTestParser(XContentBuilder xContentBuilder) throws IOException {
+        NamedXContentRegistry registry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser parser = createParser(registry, xContentBuilder.contentType().xContent(), BytesReference.bytes(xContentBuilder));
+        parser.nextToken();
+        return parser;
+    }
+
+    private XContentBuilder hybridWithOneTermQuery() throws IOException {
+        return XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endArray();
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionObject_thenParsedAndInert() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion")
+            .startObject("normalization")
+            .field("technique", "l2")
+            .endObject()
+            .endObject()
+            .endObject();
+
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNotNull("fusion block must be parsed and retained", builder.fusion());
+        assertTrue(builder.fusion().containsKey("normalization"));
+        // doRewrite on a shard context (no coordinator) is a no-op — the coordinator self-erase is the sole entry.
+        QueryRewriteContext shardRewrite = mock(QueryRewriteContext.class);
+        when(shardRewrite.convertToCoordinatorContext()).thenReturn(null);
+        assertSame(builder, builder.doRewrite(shardRewrite));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionStringPipeline_thenNormalizedToSourceMap() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().field("fusion", "pipeline").endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNotNull(builder.fusion());
+        assertEquals("pipeline", builder.fusion().get("source"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenNoFusion_thenClassicUnchanged() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNull("absent fusion => classic path", builder.fusion());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionSourcePlusInlineTechniques_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion")
+            .field("source", "pipeline")
+            .startObject("normalization")
+            .field("technique", "l2")
+            .endObject()
+            .endObject()
+            .endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("cannot combine"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionUnknownKey_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion").field("bogus", "x").endObject().endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("unknown key"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionWindowSizeNonPositive_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion").field("window_size", 0).endObject().endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("greater than 0"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionWithPaginationDepth_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().field("pagination_depth", 10)
+            .startObject("fusion")
+            .field("window_size", 50)
+            .endObject()
+            .endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("pagination_depth"));
+    }
+
+    @SneakyThrows
+    public void testToXContent_whenFusionPresent_thenEmitsFusionField() {
+        setUpClusterService();
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        original.fusion(new HashMap<>()); // empty fusion:{} must be emitted (and stay non-null)
+
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder();
+        original.toXContent(xContentBuilder, EMPTY_PARAMS);
+        Map<String, Object> asMap = xContentBuilderToMap(xContentBuilder);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> hybrid = (Map<String, Object>) asMap.get(HybridQueryBuilder.NAME);
+        assertTrue("toXContent must emit the fusion field", hybrid.containsKey("fusion"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenEmptyFusionObject_thenNonNullAndInert() {
+        // fusion:{} — presence enables the resolver; must survive parse as a non-null (empty) map, not collapse to null.
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion").endObject().endObject();
+        HybridQueryBuilder reparsed = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNotNull("fusion:{} must survive as non-null", reparsed.fusion());
+        assertTrue(reparsed.fusion().isEmpty());
+    }
+
+    // ---- PR3: wire round-trip + coordinator self-erase lifecycle ----
+
+    @SneakyThrows
+    public void testSerialization_whenFusionPresent_thenSurvivesNonNull() {
+        // Wire round-trip on a fused cluster (V_3_8_0): fusion:{} must survive as a non-null empty map, else the
+        // resolver silently flips off on the receiving node.
+        setUpClusterService(Version.V_3_8_0);
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        original.fusion(new HashMap<>());
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+        FilterStreamInput in = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
+            )
+        );
+        HybridQueryBuilder copy = new HybridQueryBuilder(in);
+        assertNotNull("fusion must survive the wire as non-null", copy.fusion());
+        assertTrue(copy.fusion().isEmpty());
+        assertEquals(original, copy);
+    }
+
+    @SneakyThrows
+    public void testSerialization_whenNoFusion_thenClassicWireForm() {
+        // Absence of fusion writes only a false boolean → equal classic builder round-trips unchanged.
+        setUpClusterService(Version.V_3_8_0);
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+        FilterStreamInput in = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
+            )
+        );
+        HybridQueryBuilder copy = new HybridQueryBuilder(in);
+        assertNull(copy.fusion());
+        assertEquals(original, copy);
+    }
+
+    @SneakyThrows
+    public void testSerialization_whenPeerStreamOnPreFusionVersion_thenFusionGatedByStreamVersion() {
+        // Mixed-version wire safety (mirrors AOSS CR-290524846): even on a fused-capable cluster singleton, a stream
+        // pinned to a pre-fusion peer version must NOT read/write the fusion field — the gate keys off
+        // StreamInput/StreamOutput#getVersion(), not the cluster-min-version singleton. An old peer that mistakenly
+        // wrote the field would corrupt the classic wire form on the receiving node.
+        setUpClusterService(Version.V_3_8_0);
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        original.fusion(new HashMap<>());
+
+        // A peer negotiated below the fused-mode minimum (V_3_8_0).
+        Version oldPeer = Version.V_3_7_0;
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        streamOutput.setVersion(oldPeer);
+        original.writeTo(streamOutput);
+
+        FilterStreamInput in = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
+            )
+        );
+        in.setVersion(oldPeer);
+        HybridQueryBuilder copy = new HybridQueryBuilder(in);
+
+        assertNull("fusion must not cross the wire to a pre-fusion peer", copy.fusion());
+    }
+
+    @SneakyThrows
+    public void testSerialization_whenPeerStreamOnFusedVersion_thenFusionSurvivesRegardlessOfSingleton() {
+        // Symmetric to the above: a stream pinned to a fused-capable version round-trips fusion even when the cluster
+        // singleton would report an older min version, proving the wire format follows the negotiated stream version.
+        setUpClusterService(Version.V_3_0_0);
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        original.fusion(new HashMap<>());
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        streamOutput.setVersion(Version.V_3_8_0);
+        original.writeTo(streamOutput);
+
+        FilterStreamInput in = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
+            )
+        );
+        in.setVersion(Version.V_3_8_0);
+        HybridQueryBuilder copy = new HybridQueryBuilder(in);
+
+        assertNotNull("fusion must survive a fused-version stream", copy.fusion());
+        assertTrue(copy.fusion().isEmpty());
+    }
+
+    @SneakyThrows
+    public void testDoToQuery_whenFusedReachesShard_thenThrows() {
+        // Safety net: a fused builder must self-erase at the coordinator; if it reaches a shard's doToQuery, fail loudly.
+        setUpClusterService();
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        builder.fusion(new HashMap<>());
+        QueryShardContext shardContext = mock(QueryShardContext.class);
+        IllegalStateException e = expectThrows(IllegalStateException.class, () -> builder.doToQuery(shardContext));
+        assertThat(e.getMessage(), containsString("must not reach a shard"));
+    }
+
+    @SneakyThrows
+    public void testDoRewrite_whenFusedOnShardContext_thenNoOp() {
+        // On a shard (convertToCoordinatorContext == null), fused doRewrite is a no-op — it returns itself and waits.
+        setUpClusterService();
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        builder.fusion(new HashMap<>());
+        QueryRewriteContext shardRewrite = mock(QueryRewriteContext.class);
+        when(shardRewrite.convertToCoordinatorContext()).thenReturn(null);
+        assertSame(builder, builder.doRewrite(shardRewrite));
+    }
+
+    private HybridQueryBuilder fusedBuilder(Map<String, Object> fusion) {
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"));
+        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        builder.fusion(fusion);
+        return builder;
+    }
+
+    /** A coordinator rewrite context whose SearchRequest wraps the given builder as the top-level query. */
+    private QueryCoordinatorContext coordinatorContextFor(HybridQueryBuilder builder) {
+        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().query(builder));
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+        return ctx;
+    }
+
+    // NOTE: the "no resolvable config → fail fast" path routes through FusionConfigResolver's index-default lookup,
+    // which needs real cluster-state metadata (see FusionConfigResolverTests); it is covered by the integration tests.
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenUnsupportedTechnique_thenFailsFast() {
+        setUpClusterService();
+        // inline l2 normalization resolves fine, but only min_max is wired today → fail fast at rewrite.
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("normalization", Map.of("technique", "l2"))));
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("currently supports only"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenRrf_thenFailsFast() {
+        setUpClusterService();
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 60))))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("currently supports only"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenSupportedInlineConfig_thenRegistersAsyncAndReturnsMarker() {
+        initClusterUtilWithMaxResultWindow(10000);
+        // inline min_max + arithmetic_mean resolves and is supported → registers the leg MultiSearch async action and
+        // returns a distinct marker builder (round 1). The marker still carries the fusion block.
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        java.util.concurrent.atomic.AtomicInteger asyncRegistered = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            asyncRegistered.incrementAndGet();
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+
+        QueryBuilder rewritten = builder.doRewrite(ctx);
+
+        assertEquals("exactly one leg MultiSearch async action registered", 1, asyncRegistered.get());
+        assertTrue(rewritten instanceof HybridQueryBuilder);
+        assertNotSame("round 1 returns a marker, not the original", builder, rewritten);
+        assertNotNull("marker carries the fusion block", ((HybridQueryBuilder) rewritten).fusion());
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenRound2SupplierUnset_thenMarkerWaits() {
+        // Round-2 path: the marker returned by round 1 holds a supplier that is empty until the async action completes;
+        // rewriting it again while the supplier is empty returns itself (waits) rather than erroring.
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        QueryBuilder marker = builder.doRewrite(ctx);
+        QueryBuilder round2 = marker.rewrite(ctx);
+        assertSame("supplier empty → marker waits (returns itself)", marker, round2);
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenWindowSizeInFusion_thenSupportedAndRegisters() {
+        // A fusion block carrying window_size + supported techniques resolves and registers without error (the leg
+        // size wiring itself is asserted in HybridFusionOrchestratorTests#testBuildLegMultiSearch_perLegSourceShape).
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder withWindow = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "window_size", 25))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(withWindow);
+        java.util.concurrent.atomic.AtomicInteger asyncRegistered = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            asyncRegistered.incrementAndGet();
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        withWindow.doRewrite(ctx);
+        assertEquals(1, asyncRegistered.get());
+    }
+
+    /** Initialize NeuralSearchClusterUtil with a cluster state that resolves NO pipeline (empty metadata, no default). */
+    private void initClusterUtilWithNoPipeline() {
+        org.opensearch.cluster.metadata.Metadata metadata = mock(org.opensearch.cluster.metadata.Metadata.class);
+        org.opensearch.cluster.ClusterState clusterState = mock(org.opensearch.cluster.ClusterState.class);
+        org.opensearch.cluster.service.ClusterService clusterService = mock(org.opensearch.cluster.service.ClusterService.class);
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(clusterState.getMetadata()).thenReturn(metadata);
+        org.opensearch.cluster.metadata.IndexNameExpressionResolver resolver = mock(
+            org.opensearch.cluster.metadata.IndexNameExpressionResolver.class
+        );
+        // No concrete indices → resolveIndexDefaultPipelineId returns null → resolve() returns null.
+        when(resolver.concreteIndices(any(org.opensearch.cluster.ClusterState.class), any(org.opensearch.action.IndicesRequest.class)))
+            .thenReturn(new org.opensearch.core.index.Index[0]);
+        org.opensearch.neuralsearch.util.NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenNoResolvableConfig_thenFailsFast() {
+        // fusion:{source: pipeline} but the cluster resolves no pipeline / no index default → fail fast at rewrite.
+        initClusterUtilWithNoPipeline();
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("source", "pipeline")));
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("requires a normalization or score-ranker processor"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenSearchRequestNotResolvable_thenReturnsThis() {
+        // If the coordinator context's request is not a SearchRequest, doRewriteFused is a no-op (returns itself).
+        setUpClusterService();
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"))));
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(mock(org.opensearch.action.IndicesRequest.class));
+        assertSame(builder, builder.doRewrite(ctx));
+    }
+
+    /** A MultiSearch item wrapping a SearchResponse whose hits carry the given (_id -> score) pairs. */
+    private org.opensearch.action.search.MultiSearchResponse.Item legItem(Map<String, Float> idToScore) {
+        org.opensearch.search.SearchHit[] hits = new org.opensearch.search.SearchHit[idToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : idToScore.entrySet()) {
+            org.opensearch.search.SearchHit hit = new org.opensearch.search.SearchHit(i, e.getKey(), Map.of(), Map.of());
+            hit.score(e.getValue());
+            hits[i++] = hit;
+        }
+        org.opensearch.search.SearchHits searchHits = new org.opensearch.search.SearchHits(
+            hits,
+            new org.apache.lucene.search.TotalHits(hits.length, org.apache.lucene.search.TotalHits.Relation.EQUAL_TO),
+            1.0f
+        );
+        org.opensearch.action.search.SearchResponseSections sections = new org.opensearch.action.search.SearchResponseSections(
+            searchHits,
+            null,
+            null,
+            false,
+            false,
+            null,
+            0
+        );
+        org.opensearch.action.search.SearchResponse response = new org.opensearch.action.search.SearchResponse(
+            sections,
+            null,
+            1,
+            1,
+            0,
+            10,
+            null,
+            null
+        );
+        return new org.opensearch.action.search.MultiSearchResponse.Item(response, null);
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_endToEnd_asyncActionProducesFusedQuery() {
+        // Drives the full round-1 → round-2 lifecycle: capture the registered async action, run it with a mock client
+        // that returns a fake per-leg MultiSearchResponse, and confirm the marker's supplier then yields the fused
+        // HybridFusionQuery (exercises the registerAsyncAction lambda body: buildLegMultiSearch + buildFusedQuery).
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+
+        // Capture the async action registered in round 1.
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+
+        QueryBuilder marker = builder.doRewrite(ctx);
+        assertTrue(marker instanceof HybridQueryBuilder);
+        assertNotNull("an async action must have been registered", captured.get());
+
+        // Mock client: multiSearch(request, listener) → return a two-leg fake response.
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(
+            new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                legItem(Map.of("1", 0.9f, "2", 0.5f)),
+                legItem(Map.of("2", 0.8f, "3", 0.4f)) },
+            10L
+        );
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
+            l.onResponse(msResponse);
+            return null;
+        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        // Run the captured async action; its inner listener sets the fused query on the marker's SetOnce.
+        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
+        assertTrue("async action should complete", done.get());
+
+        // Round 2: rewriting the marker now yields the self-erased fused query.
+        QueryBuilder fused = marker.rewrite(ctx);
+        assertTrue("round 2 returns the fused HybridFusionQuery", fused instanceof HybridFusionQuery);
+    }
+
+    /** Initialize NeuralSearchClusterUtil so getIndexMetadataList returns one index with the given max_result_window. */
+    private void initClusterUtilWithMaxResultWindow(int maxResultWindow) {
+        org.opensearch.cluster.metadata.Metadata metadata = mock(org.opensearch.cluster.metadata.Metadata.class);
+        org.opensearch.cluster.ClusterState clusterState = mock(org.opensearch.cluster.ClusterState.class);
+        org.opensearch.cluster.service.ClusterService clusterService = mock(org.opensearch.cluster.service.ClusterService.class);
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(clusterState.getMetadata()).thenReturn(metadata);
+        when(metadata.custom(org.opensearch.search.pipeline.SearchPipelineMetadata.TYPE)).thenReturn(
+            new org.opensearch.search.pipeline.SearchPipelineMetadata(Map.of())
+        );
+        org.opensearch.core.index.Index index = new org.opensearch.core.index.Index("test-index", "uuid-1");
+        org.opensearch.cluster.metadata.IndexNameExpressionResolver resolver = mock(
+            org.opensearch.cluster.metadata.IndexNameExpressionResolver.class
+        );
+        when(resolver.concreteIndices(any(org.opensearch.cluster.ClusterState.class), any(org.opensearch.action.IndicesRequest.class)))
+            .thenReturn(new org.opensearch.core.index.Index[] { index });
+        Settings settings = Settings.builder()
+            .put("index.number_of_shards", 1)
+            .put("index.number_of_replicas", 0)
+            .put("index.version.created", org.opensearch.Version.CURRENT.id)
+            .put("index.max_result_window", maxResultWindow)
+            .build();
+        when(metadata.index(index)).thenReturn(IndexMetadata.builder("test-index").settings(settings).build());
+        org.opensearch.neuralsearch.util.NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenWindowSizeExceedsMaxResultWindow_thenFailsFast() {
+        // window_size above index.max_result_window is rejected at rewrite (each leg fires size=window per shard).
+        initClusterUtilWithMaxResultWindow(100);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "window_size", 500))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("max_result_window"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenWindowSizeWithinMaxResultWindow_thenProceeds() {
+        // window_size at/under the ceiling proceeds and registers the leg MultiSearch.
+        initClusterUtilWithMaxResultWindow(1000);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "window_size", 500))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        java.util.concurrent.atomic.AtomicInteger asyncRegistered = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            asyncRegistered.incrementAndGet();
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        builder.doRewrite(ctx);
+        assertEquals(1, asyncRegistered.get());
     }
 
     /**

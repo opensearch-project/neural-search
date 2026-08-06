@@ -15,6 +15,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -34,6 +35,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.ActionRequest;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.HybridFusionQuery;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
@@ -255,7 +257,8 @@ public class NeuralSearch extends Plugin
             new QuerySpec<>(HybridQueryBuilder.NAME, HybridQueryBuilder::new, HybridQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralSparseQueryBuilder.NAME, NeuralSparseQueryBuilder::new, NeuralSparseQueryBuilder::fromXContent),
             new QuerySpec<>(NeuralKNNQueryBuilder.NAME, NeuralKNNQueryBuilder::new, NeuralKNNQueryBuilder::fromXContent),
-            new QuerySpec<>(AgenticSearchQueryBuilder.NAME, AgenticSearchQueryBuilder::new, AgenticSearchQueryBuilder::fromXContent)
+            new QuerySpec<>(AgenticSearchQueryBuilder.NAME, AgenticSearchQueryBuilder::new, AgenticSearchQueryBuilder::fromXContent),
+            new QuerySpec<>(HybridFusionQuery.NAME, HybridFusionQuery::new, HybridFusionQuery::fromXContent)
         );
     }
 
@@ -308,7 +311,7 @@ public class NeuralSearch extends Plugin
     @Override
     public Map<String, Processor.Factory> getProcessors(Processor.Parameters parameters) {
         // clientAccessor is already initialized in createComponents
-        if (clientAccessor == null) {
+        if (Objects.isNull(clientAccessor)) {
             // Fallback initialization if createComponents wasn't called (e.g., in some test scenarios)
             clientAccessor = new MLCommonsClientAccessor(new MachineLearningNodeClient(parameters.client));
         }
