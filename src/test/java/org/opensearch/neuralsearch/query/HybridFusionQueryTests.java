@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import static org.mockito.Mockito.mock;
+
 import java.util.List;
 
 import org.opensearch.common.settings.Settings;
@@ -70,5 +72,60 @@ public class HybridFusionQueryTests extends OpenSearchTestCase {
         BoolQueryBuilder self = query.buildSelfErasedQuery();
         assertEquals(0, self.should().size());
         assertEquals(0, self.filter().size());
+    }
+
+    public void testDoXContent_isInformationalOnly() throws Exception {
+        HybridFusionQuery query = new HybridFusionQuery(new String[] { "d1", "d2", "d3" }, new float[] { 0.9f, 0.5f, 0.1f }, List.of());
+        org.opensearch.core.xcontent.XContentBuilder builder = org.opensearch.common.xcontent.XContentFactory.jsonBuilder();
+        query.toXContent(builder, org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS);
+        String json = builder.toString();
+        assertTrue(json.contains("hybrid_fusion"));
+        assertTrue("informational representation reports the fused doc count", json.contains("fused_docs_count"));
+        assertTrue(json.contains("3"));
+    }
+
+    public void testDoRewrite_whenNoSourceQueryChanges_thenReturnsSame() throws Exception {
+        // Tail source queries that don't rewrite (already terminal term queries) → doRewrite returns the same instance.
+        HybridFusionQuery query = new HybridFusionQuery(
+            new String[] { "d1" },
+            new float[] { 0.7f },
+            List.of(new org.opensearch.index.query.TermQueryBuilder("text", "keyword"))
+        );
+        org.opensearch.index.query.QueryRewriteContext ctx = mock(org.opensearch.index.query.QueryRewriteContext.class);
+        assertSame(query, query.rewrite(ctx));
+    }
+
+    public void testDoRewrite_whenSourceQueryRewrites_thenReturnsRewrittenCopy() throws Exception {
+        // A source query that always rewrites to a new instance forces the changed==true branch: doRewrite returns a
+        // NEW HybridFusionQuery preserving ids/scores/boost/queryName.
+        org.opensearch.index.query.QueryBuilder alwaysRewrites = new org.opensearch.index.query.MatchAllQueryBuilder() {
+            @Override
+            protected org.opensearch.index.query.QueryBuilder doRewrite(org.opensearch.index.query.QueryRewriteContext c) {
+                return new org.opensearch.index.query.MatchAllQueryBuilder(); // different instance each rewrite
+            }
+        };
+        HybridFusionQuery query = new HybridFusionQuery(new String[] { "d1", "d2" }, new float[] { 0.7f, 0.3f }, List.of(alwaysRewrites));
+        query.boost(1.0f);
+        org.opensearch.index.query.QueryRewriteContext ctx = mock(org.opensearch.index.query.QueryRewriteContext.class);
+
+        org.opensearch.index.query.QueryBuilder rewritten = query.rewrite(ctx);
+        assertTrue(rewritten instanceof HybridFusionQuery);
+        assertNotSame("changed source → new copy", query, rewritten);
+        assertEquals(2, ((HybridFusionQuery) rewritten).buildSelfErasedQuery().should().size());
+    }
+
+    public void testExtractInnerHitBuilders_recursesIntoSourceQueries() {
+        // A nested source query declaring inner_hits must be surfaced through extractInnerHitBuilders so the self-erased
+        // query still fetches leg-level inner_hits.
+        org.opensearch.index.query.NestedQueryBuilder nested = new org.opensearch.index.query.NestedQueryBuilder(
+            "user",
+            new org.opensearch.index.query.MatchQueryBuilder("user.name", "alice"),
+            org.apache.lucene.search.join.ScoreMode.None
+        ).innerHit(new org.opensearch.index.query.InnerHitBuilder());
+        HybridFusionQuery query = new HybridFusionQuery(new String[] { "d1" }, new float[] { 0.9f }, List.of(nested));
+
+        java.util.Map<String, org.opensearch.index.query.InnerHitContextBuilder> innerHits = new java.util.HashMap<>();
+        query.extractInnerHitBuilders(innerHits);
+        assertFalse("leg inner_hits must be surfaced", innerHits.isEmpty());
     }
 }

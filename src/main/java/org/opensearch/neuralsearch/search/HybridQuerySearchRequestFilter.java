@@ -75,9 +75,10 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         if (SearchAction.NAME.equals(action) && request instanceof SearchRequest) {
             SearchRequest searchRequest = (SearchRequest) request;
 
-            // unconditionally disable batched reduction for hybrid queries
-            // batched reduction is incompatible with hybrid query processing
-            if (containsHybridQuery(searchRequest)) {
+            // These workarounds apply to CLASSIC hybrid only. Resolver (fused) mode self-erases at the coordinator into
+            // a standard bool query and never produces the sentinel CompoundTopDocs format, so it is DFS-compatible and
+            // safe with batched reduction — the mode-aware check below skips it.
+            if (containsClassicHybridQuery(searchRequest)) {
                 if (searchRequest.searchType() == SearchType.DFS_QUERY_THEN_FETCH) {
                     listener.onFailure(new IllegalArgumentException(HybridQueryUtil.HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE));
                     return;
@@ -101,22 +102,24 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
     }
 
     /**
-     * Check if the search request contains a hybrid query.
+     * Check if the search request's top-level query is a CLASSIC hybrid query (i.e. a {@link HybridQueryBuilder} with no
+     * {@code fusion} block). Resolver (fused) mode is intentionally excluded — it needs neither the DFS rejection nor
+     * the batched-reduce disable, since it self-erases into a standard query.
      *
      * @param searchRequest the search request to check
-     * @return true if the request contains a hybrid query
+     * @return true if the request's top-level query is a classic (non-fused) hybrid query
      */
-    private boolean containsHybridQuery(SearchRequest searchRequest) {
+    private boolean containsClassicHybridQuery(SearchRequest searchRequest) {
         if (Objects.isNull(searchRequest.source())) {
             return false;
         }
 
         QueryBuilder query = searchRequest.source().query();
-        if (Objects.isNull(query)) {
+        if ((query instanceof HybridQueryBuilder) == false) {
             return false;
         }
 
-        // direct check for HybridQueryBuilder
-        return query instanceof HybridQueryBuilder;
+        // Fused mode self-erases at the coordinator; the classic-only workarounds must not apply to it.
+        return Objects.isNull(((HybridQueryBuilder) query).fusion());
     }
 }
