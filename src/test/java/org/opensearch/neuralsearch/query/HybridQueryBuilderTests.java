@@ -20,6 +20,7 @@ import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.K_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.MODEL_ID_FIELD;
 import static org.opensearch.neuralsearch.query.NeuralQueryBuilder.QUERY_TEXT_FIELD;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -68,6 +69,7 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
@@ -359,6 +361,138 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         ParsingException exception = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(contentParser));
         assertThat(exception.getMessage(), containsString("Number of sub-queries exceeds maximum supported"));
+    }
+
+    // ---- resolver (fused) mode: `fusion` parameter parse / round-trip / validation (PR1, execution inert) ----
+
+    private XContentParser fusionTestParser(XContentBuilder xContentBuilder) throws IOException {
+        NamedXContentRegistry registry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
+            )
+        );
+        XContentParser parser = createParser(registry, xContentBuilder.contentType().xContent(), BytesReference.bytes(xContentBuilder));
+        parser.nextToken();
+        return parser;
+    }
+
+    private XContentBuilder hybridWithOneTermQuery() throws IOException {
+        return XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .endArray();
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionObject_thenParsedAndInert() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion")
+            .startObject("normalization")
+            .field("technique", "l2")
+            .endObject()
+            .endObject()
+            .endObject();
+
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNotNull("fusion block must be parsed and retained", builder.fusion());
+        assertTrue(builder.fusion().containsKey("normalization"));
+        // Execution stays inert in this build: a well-formed fusion fails fast at rewrite (not silent classic).
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(mock(QueryRewriteContext.class)));
+        assertThat(e.getMessage(), containsString("not available in this build yet"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionStringPipeline_thenNormalizedToSourceMap() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().field("fusion", "pipeline").endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNotNull(builder.fusion());
+        assertEquals("pipeline", builder.fusion().get("source"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenNoFusion_thenClassicUnchanged() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNull("absent fusion => classic path", builder.fusion());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionSourcePlusInlineTechniques_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion")
+            .field("source", "pipeline")
+            .startObject("normalization")
+            .field("technique", "l2")
+            .endObject()
+            .endObject()
+            .endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("cannot combine"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionUnknownKey_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion").field("bogus", "x").endObject().endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("unknown key"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionWindowSizeNonPositive_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion").field("window_size", 0).endObject().endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("greater than 0"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionWithPaginationDepth_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().field("pagination_depth", 10)
+            .startObject("fusion")
+            .field("window_size", 50)
+            .endObject()
+            .endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("pagination_depth"));
+    }
+
+    @SneakyThrows
+    public void testToXContent_whenFusionPresent_thenEmitsFusionField() {
+        setUpClusterService();
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        original.fusion(new HashMap<>()); // empty fusion:{} must be emitted (and stay non-null)
+
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder();
+        original.toXContent(xContentBuilder, EMPTY_PARAMS);
+        Map<String, Object> asMap = xContentBuilderToMap(xContentBuilder);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> hybrid = (Map<String, Object>) asMap.get(HybridQueryBuilder.NAME);
+        assertTrue("toXContent must emit the fusion field", hybrid.containsKey("fusion"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenEmptyFusionObject_thenNonNullAndInert() {
+        // fusion:{} — presence enables the resolver; must survive parse as a non-null (empty) map, not collapse to null.
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion").endObject().endObject();
+        HybridQueryBuilder reparsed = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNotNull("fusion:{} must survive as non-null", reparsed.fusion());
+        assertTrue(reparsed.fusion().isEmpty());
     }
 
     /**

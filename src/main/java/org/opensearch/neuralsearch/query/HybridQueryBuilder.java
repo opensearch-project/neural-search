@@ -59,19 +59,39 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private static final ParseField QUERIES_FIELD = new ParseField("queries");
     private static final ParseField FILTER_FIELD = new ParseField("filter");
     private static final ParseField PAGINATION_DEPTH_FIELD = new ParseField("pagination_depth");
+    private static final ParseField FUSION_FIELD = new ParseField("fusion");
 
     private final List<QueryBuilder> queries = new ArrayList<>();
 
     private Integer paginationDepth;
 
+    /**
+     * Resolver (fused) mode config: the raw inline {@code fusion} block from the query body. Its <b>presence</b> is the
+     * resolver on/off flag; its <b>shape</b> carries the config. {@code null} = classic hybrid (byte-identical wire
+     * form). A string {@code "pipeline"} is normalized to {@code {source: "pipeline"}} at parse. In this build the
+     * parameter is parsed, validated, and round-tripped, but execution is not yet wired — a well-formed {@code fusion}
+     * fails fast at {@link #doRewrite} (see PR sequencing in the LLD/tracker). Not serialized over the transport wire
+     * yet (binary wire gate lands with the execution path).
+     */
+    private Map<String, Object> fusion;
+
     public static final int MAX_NUMBER_OF_SUB_QUERIES = 5;
     private static final int LOWER_BOUND_OF_PAGINATION_DEPTH = 0;
+
+    // Allowed top-level keys inside a `fusion` object; anything else is a parse-time 400.
+    private static final String FUSION_KEY_SOURCE = "source";
+    private static final String FUSION_KEY_NORMALIZATION = "normalization";
+    private static final String FUSION_KEY_COMBINATION = "combination";
+    private static final String FUSION_KEY_WINDOW_SIZE = "window_size";
+    private static final String FUSION_SOURCE_PIPELINE = "pipeline";
 
     // Error message templates for reuse across REST and gRPC paths
     public static final String ERROR_MSG_QUERIES_REQUIRED = "[%s] requires 'queries' field with at least one clause";
     public static final String ERROR_MSG_MAX_QUERIES_EXCEEDED = "Number of sub-queries exceeds maximum supported by [%s] query";
     public static final String ERROR_MSG_BOOST_NOT_SUPPORTED = "[%s] query does not support [%s]";
     public static final String ERROR_MSG_FILTER_MUST_BE_QUERY_OBJECT = "[%s] query's [%s] field must be a query object";
+    public static final String ERROR_MSG_FUSION_NOT_SUPPORTED_YET =
+        "[%s] query [%s] (resolver/fused mode) is not available in this build yet";
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
@@ -100,7 +120,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * @return
      */
     public HybridQueryBuilder add(QueryBuilder queryBuilder) {
-        if (queryBuilder == null) {
+        if (Objects.isNull(queryBuilder)) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "inner %s query clause cannot be null", NAME));
         }
         queries.add(queryBuilder);
@@ -144,6 +164,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // TODO https://github.com/opensearch-project/neural-search/issues/1097
         if (Objects.nonNull(paginationDepth)) {
             builder.field(PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth);
+        }
+        if (Objects.nonNull(fusion)) {
+            builder.field(FUSION_FIELD.getPreferredName(), fusion);
         }
         printBoostAndQueryName(builder);
         builder.endObject();
@@ -217,6 +240,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         float boost = AbstractQueryBuilder.DEFAULT_BOOST;
 
         Integer paginationDepth = null;
+        Map<String, Object> fusion = null;
         final List<QueryBuilder> queries = new ArrayList<>();
         QueryBuilder filter = null;
         String queryName = null;
@@ -231,6 +255,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     queries.add(parseInnerQueryBuilder(parser));
                 } else if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     filter = parseInnerQueryBuilder(parser);
+                } else if (FUSION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    fusion = parser.map();
                 } else {
                     throwUnsupportedFieldParsingException(parser, currentFieldName);
                 }
@@ -263,6 +289,26 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     queryName = parser.text();
                 } else if (PAGINATION_DEPTH_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     paginationDepth = parser.intValue();
+                } else if (FUSION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
+                    // `"fusion": "pipeline"` == `"fusion": { "source": "pipeline" }`. Presence still
+                    // enables the resolver; the config comes from the attached pipeline.
+                    String source = parser.text();
+                    if (FUSION_SOURCE_PIPELINE.equals(source) == false) {
+                        throw new ParsingException(
+                            parser.getTokenLocation(),
+                            String.format(
+                                Locale.ROOT,
+                                "[%s] query [%s] as a string must be [%s], got [%s]",
+                                NAME,
+                                FUSION_FIELD.getPreferredName(),
+                                FUSION_SOURCE_PIPELINE,
+                                source
+                            )
+                        );
+                    }
+                    Map<String, Object> normalized = new HashMap<>();
+                    normalized.put(FUSION_KEY_SOURCE, source);
+                    fusion = normalized;
                 } else if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     throwUnsupportedFilterParsingException(parser);
                 } else {
@@ -275,16 +321,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             throw new ParsingException(parser.getTokenLocation(), String.format(Locale.ROOT, ERROR_MSG_QUERIES_REQUIRED, NAME));
         }
 
+        if (Objects.nonNull(fusion)) {
+            validateFusion(fusion, paginationDepth, parser);
+        }
+
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
         compoundQueryBuilder.queryName(queryName);
         compoundQueryBuilder.boost(boost);
+        compoundQueryBuilder.fusion(fusion);
         if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
             compoundQueryBuilder.paginationDepth(paginationDepth);
         }
 
         boolean hasInnerHits = false;
         for (QueryBuilder query : queries) {
-            if (filter == null) {
+            if (Objects.isNull(filter)) {
                 compoundQueryBuilder.add(query);
             } else {
                 compoundQueryBuilder.add(query.filter(filter));
@@ -298,13 +349,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }
 
-        boolean hasFilter = filter != null;
-        boolean hasPagination = paginationDepth != null;
+        boolean hasFilter = Objects.nonNull(filter);
+        boolean hasPagination = Objects.nonNull(paginationDepth);
         updateQueryStats(hasFilter, hasPagination, hasInnerHits);
         return compoundQueryBuilder;
     }
 
     protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
+        // Resolver (fused) mode: parameter parses, validates, and round-trips in this build, but the fan-out /
+        // fuse / self-erase execution path is not wired yet. Fail fast with a clear message rather than silently
+        // running classic hybrid (which would mislead a tester and silently change results once execution lands).
+        if (Objects.nonNull(fusion)) {
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, ERROR_MSG_FUSION_NOT_SUPPORTED_YET, NAME, FUSION_FIELD.getPreferredName())
+            );
+        }
         HybridQueryBuilder newBuilder = new HybridQueryBuilder();
         boolean changed = false;
         for (QueryBuilder query : queries) {
@@ -336,12 +395,13 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (this == obj) {
             return true;
         }
-        if (obj == null) {
+        if (Objects.isNull(obj)) {
             return false;
         }
         EqualsBuilder equalsBuilder = new EqualsBuilder();
         equalsBuilder.append(queries, obj.queries);
         equalsBuilder.append(paginationDepth, obj.paginationDepth);
+        equalsBuilder.append(fusion, obj.fusion);
         return equalsBuilder.isEquals();
     }
 
@@ -351,7 +411,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      */
     @Override
     protected int doHashCode() {
-        return Objects.hash(queries, paginationDepth);
+        return Objects.hash(queries, paginationDepth, fusion);
     }
 
     /**
@@ -380,6 +440,107 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }).filter(Objects::nonNull).collect(Collectors.toList());
         return queries;
+    }
+
+    /**
+     * Parse-time (HTTP 400) structural validation of the {@code fusion} block. The value type (string|object) is already
+     * enforced by the parser branches; this checks the object's internal consistency:
+     * <ul>
+     *   <li>unknown top-level key (outside {@code source|normalization|combination|window_size}) → 400;</li>
+     *   <li>{@code source: "pipeline"} alongside inline {@code normalization}/{@code combination} → 400 (contradiction:
+     *       read-from-pipeline vs inline config);</li>
+     *   <li>{@code source} present but not {@code "pipeline"} → 400;</li>
+     *   <li>{@code window_size} non-positive → 400 (upper bound vs {@code index.max_result_window} is shard-side);</li>
+     *   <li>{@code pagination_depth} co-set with {@code fusion} → 400 (fused pages over {@code window_size}).</li>
+     * </ul>
+     */
+    private static void validateFusion(final Map<String, Object> fusion, final Integer paginationDepth, final XContentParser parser) {
+        for (String key : fusion.keySet()) {
+            if (FUSION_KEY_SOURCE.equals(key) == false
+                && FUSION_KEY_NORMALIZATION.equals(key) == false
+                && FUSION_KEY_COMBINATION.equals(key) == false
+                && FUSION_KEY_WINDOW_SIZE.equals(key) == false) {
+                throw new ParsingException(
+                    parser.getTokenLocation(),
+                    String.format(Locale.ROOT, "[%s] query [%s] contains unknown key [%s]", NAME, FUSION_FIELD.getPreferredName(), key)
+                );
+            }
+        }
+
+        Object source = fusion.get(FUSION_KEY_SOURCE);
+        if (Objects.nonNull(source)) {
+            if (FUSION_SOURCE_PIPELINE.equals(source) == false) {
+                throw new ParsingException(
+                    parser.getTokenLocation(),
+                    String.format(
+                        Locale.ROOT,
+                        "[%s] query [%s.%s] must be [%s]",
+                        NAME,
+                        FUSION_FIELD.getPreferredName(),
+                        FUSION_KEY_SOURCE,
+                        FUSION_SOURCE_PIPELINE
+                    )
+                );
+            }
+            if (fusion.containsKey(FUSION_KEY_NORMALIZATION) || fusion.containsKey(FUSION_KEY_COMBINATION)) {
+                throw new ParsingException(
+                    parser.getTokenLocation(),
+                    String.format(
+                        Locale.ROOT,
+                        "[%s] query [%s] cannot combine [%s: %s] with inline [%s]/[%s]",
+                        NAME,
+                        FUSION_FIELD.getPreferredName(),
+                        FUSION_KEY_SOURCE,
+                        FUSION_SOURCE_PIPELINE,
+                        FUSION_KEY_NORMALIZATION,
+                        FUSION_KEY_COMBINATION
+                    )
+                );
+            }
+        }
+
+        Object windowSize = fusion.get(FUSION_KEY_WINDOW_SIZE);
+        if (Objects.nonNull(windowSize)) {
+            if ((windowSize instanceof Number) == false) {
+                throw new ParsingException(
+                    parser.getTokenLocation(),
+                    String.format(
+                        Locale.ROOT,
+                        "[%s] query [%s.%s] must be a positive integer",
+                        NAME,
+                        FUSION_FIELD.getPreferredName(),
+                        FUSION_KEY_WINDOW_SIZE
+                    )
+                );
+            }
+            if (((Number) windowSize).intValue() <= 0) {
+                throw new ParsingException(
+                    parser.getTokenLocation(),
+                    String.format(
+                        Locale.ROOT,
+                        "[%s] query [%s.%s] must be greater than 0",
+                        NAME,
+                        FUSION_FIELD.getPreferredName(),
+                        FUSION_KEY_WINDOW_SIZE
+                    )
+                );
+            }
+        }
+
+        if (Objects.nonNull(paginationDepth)) {
+            throw new ParsingException(
+                parser.getTokenLocation(),
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query does not support [%s] together with [%s]; fused mode pages over [%s.%s]",
+                    NAME,
+                    PAGINATION_DEPTH_FIELD.getPreferredName(),
+                    FUSION_FIELD.getPreferredName(),
+                    FUSION_FIELD.getPreferredName(),
+                    FUSION_KEY_WINDOW_SIZE
+                )
+            );
+        }
     }
 
     private static void validatePaginationDepth(final Integer paginationDepth, final QueryShardContext queryShardContext) {
