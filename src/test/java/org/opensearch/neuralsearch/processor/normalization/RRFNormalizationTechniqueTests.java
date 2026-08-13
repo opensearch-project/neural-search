@@ -19,8 +19,6 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -245,6 +243,52 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         }
     }
 
+    /**
+     * Pins the multi shard ranking contract with exact score equality. Ranks for a subquery are assigned
+     * globally across all shards, ordered by descending original score with ascending docId as tie break
+     * (the ordering of {@link ScoreDoc#COMPARATOR}), and only then by ascending shard. This is the contract
+     * that any other RRF implementation has to reproduce to stay score compatible, and the assertion
+     * deltas used elsewhere in this class are too loose to detect a regression in it.
+     */
+    public void testNormalization_whenResultFromMultipleShards_thenRanksAreGlobalAcrossShards() {
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
+        TopDocs shard1TopDocs = new TopDocs(
+            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
+        );
+        TopDocs shard2TopDocs = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] { new ScoreDoc(3, 0.8f), new ScoreDoc(9, 0.7f), new ScoreDoc(10, 0.6f), new ScoreDoc(15, 0.5f) }
+        );
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(shard1TopDocs),
+                false,
+                new SearchShard("my_index", 0, "shard-uuid-1")
+            ),
+            new CompoundTopDocs(
+                new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                List.of(shard2TopDocs),
+                false,
+                new SearchShard("my_index", 1, "shard-uuid-2")
+            )
+        );
+
+        normalizationTechnique.normalize(
+            NormalizeScoresDTO.builder().queryTopDocs(compoundTopDocs).normalizationTechnique(normalizationTechnique).build()
+        );
+
+        // global order by descending score: 0.9, 0.8, then 0.7 tied and broken by docId 4 before 9, then 0.6, 0.5, 0.1
+        assertEquals(rrfNorm(0), shard1TopDocs.scoreDocs[0].score, 0.0f); // doc 3, score 0.9
+        assertEquals(rrfNorm(2), shard1TopDocs.scoreDocs[1].score, 0.0f); // doc 4, score 0.7
+        assertEquals(rrfNorm(6), shard1TopDocs.scoreDocs[2].score, 0.0f); // doc 2, score 0.1
+        assertEquals(rrfNorm(1), shard2TopDocs.scoreDocs[0].score, 0.0f); // doc 3, score 0.8
+        assertEquals(rrfNorm(3), shard2TopDocs.scoreDocs[1].score, 0.0f); // doc 9, score 0.7
+        assertEquals(rrfNorm(4), shard2TopDocs.scoreDocs[2].score, 0.0f); // doc 10, score 0.6
+        assertEquals(rrfNorm(5), shard2TopDocs.scoreDocs[3].score, 0.0f); // doc 15, score 0.5
+    }
+
     public void testNormalizedScoresAreSetAtCorrectIndices() {
         // Setup test data
         SearchShardTarget shardTarget = new SearchShardTarget("node1", new ShardId("index", "_na_", 0), null, null);
@@ -355,55 +399,12 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     /**
-     * Rank scores are computed in integer arithmetic rather than with {@link BigDecimal}. That is only a safe
-     * substitution if it is exactly equal to the BigDecimal form it replaced, so this asserts on raw float bits
-     * rather than within a delta - a change that rounded even one ULP differently would pass a delta comparison.
-     * The ranks covered span the point where a scale-10 numerator crosses 2^24, where BigDecimal's conversion to
-     * float changes behavior, and rank constants at both ends of the permitted range.
+     * Expected scores come from the shared normalizer rather than a local copy of the formula, so this asserts
+     * that the technique delegates to it. That the formula itself is correct, and bit-identical to the BigDecimal
+     * implementation it replaced, is pinned separately in {@link RRFScoreNormalizerTests}.
      */
-    public void testNormalize_whenScoresComputed_thenBitIdenticalToBigDecimalReference() {
-        int numDocs = 1200;
-        float[] scores = new float[numDocs];
-        for (int i = 0; i < numDocs; i++) {
-            scores[i] = 1.0f - i / (float) numDocs;
-        }
-
-        for (int rankConstant : new int[] { 1, RANK_CONSTANT, 10_000 }) {
-            CompoundTopDocs compoundTopDocs = createCompoundTopDocs(scores, numDocs);
-            RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(
-                Map.of("rank_constant", rankConstant),
-                scoreNormalizationUtil
-            );
-            normalizationTechnique.normalize(
-                NormalizeScoresDTO.builder()
-                    .queryTopDocs(List.of(compoundTopDocs))
-                    .normalizationTechnique(normalizationTechnique)
-                    .singleShard(true)
-                    .build()
-            );
-
-            ScoreDoc[] scoreDocs = compoundTopDocs.getTopDocs().get(0).scoreDocs;
-            for (int rank = 0; rank < numDocs; rank++) {
-                assertEquals(
-                    "rank_constant [" + rankConstant + "], rank [" + rank + "]",
-                    Float.floatToIntBits(rrfNorm(rank, rankConstant)),
-                    Float.floatToIntBits(scoreDocs[rank].score)
-                );
-            }
-        }
-    }
-
     private float rrfNorm(int rank) {
-        return rrfNorm(rank, RANK_CONSTANT);
-    }
-
-    /**
-     * The BigDecimal implementation that {@code RRFNormalizationTechnique#calculateNormalizedScore} replaced,
-     * retained here as an independent reference for what the rank score must be.
-     */
-    private float rrfNorm(int rank, int rankConstant) {
-        // 1.0f / (float) (rank + rankConstant + 1);
-        return BigDecimal.ONE.divide(BigDecimal.valueOf(rank + rankConstant + 1), 10, RoundingMode.HALF_UP).floatValue();
+        return RRFScoreNormalizer.scoreForRank(rank, RANK_CONSTANT);
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {
