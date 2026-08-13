@@ -23,4 +23,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Refactoring
 * [SemanticHighlighter] Traverse the query tree with a QueryBuilderVisitor instead of a "manual" walk ([#1915](https://github.com/opensearch-project/neural-search/pull/1915))
-* [RRF] Compute rank scores with exact integer arithmetic instead of allocating a BigDecimal per document ([#1941](https://github.com/opensearch-project/neural-search/issues/1941))
+* [RRF] Compute rank scores with exact integer arithmetic instead of allocating a BigDecimal per document ([#1942](https://github.com/opensearch-project/neural-search/pull/1942))
