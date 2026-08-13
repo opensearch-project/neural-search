@@ -24,6 +24,7 @@ jobs:
   Check-neural-search-linux:
     needs: Get-CI-Image-Tag
     strategy:
+      fail-fast: false
       matrix:
         java: [21, 25]
         os: [ubuntu-latest]
@@ -69,6 +70,7 @@ jobs:
 
   Check-neural-search-windows:
     strategy:
+      fail-fast: false
       matrix:
         java: [21, 25]
         os: [windows-latest]
@@ -93,6 +95,7 @@ jobs:
   Precommit-neural-search-linux:
     needs: Get-CI-Image-Tag
     strategy:
+      fail-fast: false
       matrix:
         java: [21, 25]
         os: [ubuntu-latest]
@@ -127,6 +130,7 @@ jobs:
   integTest:
     needs: Precommit-neural-search-linux
     strategy:
+      fail-fast: false
       matrix:
         java: [ 21, 25 ]
         os: [ ubuntu-latest ]
@@ -147,6 +151,7 @@ jobs:
   integMultiNodeTest:
       needs: Precommit-neural-search-linux
       strategy:
+        fail-fast: false
         matrix:
           java: [ 21 ]
           os: [ ubuntu-latest ]
