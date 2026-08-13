@@ -354,9 +354,56 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         assertTrue(explanation.containsKey(new DocIdAtSearchShard(0, new SearchShard("test_index", 0, "uuid"))));
     }
 
+    /**
+     * Rank scores are computed in integer arithmetic rather than with {@link BigDecimal}. That is only a safe
+     * substitution if it is exactly equal to the BigDecimal form it replaced, so this asserts on raw float bits
+     * rather than within a delta - a change that rounded even one ULP differently would pass a delta comparison.
+     * The ranks covered span the point where a scale-10 numerator crosses 2^24, where BigDecimal's conversion to
+     * float changes behavior, and rank constants at both ends of the permitted range.
+     */
+    public void testNormalize_whenScoresComputed_thenBitIdenticalToBigDecimalReference() {
+        int numDocs = 1200;
+        float[] scores = new float[numDocs];
+        for (int i = 0; i < numDocs; i++) {
+            scores[i] = 1.0f - i / (float) numDocs;
+        }
+
+        for (int rankConstant : new int[] { 1, RANK_CONSTANT, 10_000 }) {
+            CompoundTopDocs compoundTopDocs = createCompoundTopDocs(scores, numDocs);
+            RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(
+                Map.of("rank_constant", rankConstant),
+                scoreNormalizationUtil
+            );
+            normalizationTechnique.normalize(
+                NormalizeScoresDTO.builder()
+                    .queryTopDocs(List.of(compoundTopDocs))
+                    .normalizationTechnique(normalizationTechnique)
+                    .singleShard(true)
+                    .build()
+            );
+
+            ScoreDoc[] scoreDocs = compoundTopDocs.getTopDocs().get(0).scoreDocs;
+            for (int rank = 0; rank < numDocs; rank++) {
+                assertEquals(
+                    "rank_constant [" + rankConstant + "], rank [" + rank + "]",
+                    Float.floatToIntBits(rrfNorm(rank, rankConstant)),
+                    Float.floatToIntBits(scoreDocs[rank].score)
+                );
+            }
+        }
+    }
+
     private float rrfNorm(int rank) {
-        // 1.0f / (float) (rank + RANK_CONSTANT + 1);
-        return BigDecimal.ONE.divide(BigDecimal.valueOf(rank + RANK_CONSTANT + 1), 10, RoundingMode.HALF_UP).floatValue();
+        return rrfNorm(rank, RANK_CONSTANT);
+    }
+
+    /**
+     * The BigDecimal implementation that {@code RRFNormalizationTechnique#calculateNormalizedScore} replaced,
+     * retained here as an independent reference for what the rank score must be.
+     */
+    private float rrfNorm(int rank, int rankConstant) {
+        // 1.0f / (float) (rank + rankConstant + 1);
+        return BigDecimal.ONE.divide(BigDecimal.valueOf(rank + rankConstant + 1), 10, RoundingMode.HALF_UP).floatValue();
     }
 
     private void assertCompoundTopDocs(TopDocs expected, TopDocs actual) {

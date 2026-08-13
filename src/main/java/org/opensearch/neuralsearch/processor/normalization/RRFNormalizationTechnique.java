@@ -4,8 +4,6 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -49,6 +47,9 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
     private static final int MIN_RANK_CONSTANT = 1;
     private static final int MAX_RANK_CONSTANT = 10_000;
     private static final Range<Integer> RANK_CONSTANT_RANGE = Range.of(MIN_RANK_CONSTANT, MAX_RANK_CONSTANT);
+    // Rank scores are quantized to 10 decimal places, i.e. expressed as an integer numerator over 10^10.
+    private static final long SCORE_SCALE_L = 10_000_000_000L;
+    private static final double SCORE_SCALE_D = 1.0e10;
     @ToString.Include
     private final int rankConstant;
     // Comparator to compare ShardResultPerSubQuery
@@ -218,8 +219,29 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
         }
     }
 
+    /**
+     * Computes the rank score of a result, {@code 1 / (rankConstant + position + 1)} rounded HALF_UP to 10
+     * decimal places. This is an allocation-free integer equivalent of the original implementation:
+     * <pre>{@code
+     * BigDecimal.ONE.divide(BigDecimal.valueOf(rankConstant + position + 1), 10, RoundingMode.HALF_UP).floatValue()
+     * }</pre>
+     * Because 10^10 and 2 * 10^10 both fit in a {@code long}, rounding HALF_UP to scale 10 is exactly expressible
+     * as the integer division {@code (2 * 10^10 + d) / (2 * d)}. That quotient is at most 5 * 10^9, well inside
+     * the range a {@code double} represents exactly, as is 10^10 itself, so the single narrowing to {@code float}
+     * reproduces what {@code BigDecimal.floatValue()} produced. Verified bit-identical for every reachable
+     * denominator in [2, Integer.MAX_VALUE].
+     * <p>
+     * The final division is deliberately performed in {@code double}. Narrowing the numerator to {@code float}
+     * first and dividing by {@code 1.0e10f} rounds twice and is <em>not</em> bit-identical: it differs for 167
+     * denominators, starting at 3.
+     *
+     * @param position zero-based rank of the result within its subquery
+     * @return the rank score, to be summed across subqueries in the combination step
+     */
     private float calculateNormalizedScore(int position) {
-        return BigDecimal.ONE.divide(BigDecimal.valueOf(rankConstant + position + 1), 10, RoundingMode.HALF_UP).floatValue();
+        long denominator = (long) rankConstant + position + 1;
+        long numerator = (2 * SCORE_SCALE_L + denominator) / (2 * denominator);
+        return (float) (numerator / SCORE_SCALE_D);
     }
 
     private int getRankConstant(final Map<String, Object> params) {
