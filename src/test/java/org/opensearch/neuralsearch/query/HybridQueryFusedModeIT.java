@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.opensearch.client.Request;
@@ -22,6 +23,7 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
@@ -65,8 +67,11 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     private static final String INDEX_WITH_DEFAULT_NORM = "test-hybrid-fused-default-norm";
     private static final String INDEX_NO_PIPELINE = "test-hybrid-fused-inline-config";
     private static final String INDEX_WITH_DEFAULT_RRF = "test-hybrid-fused-default-rrf";
+    private static final String INDEX_RRF_PARITY = "test-hybrid-fused-rrf-parity";
     private static final String NORM_PIPELINE = "fused-mode-norm-pipeline";
     private static final String RRF_PIPELINE = "fused-mode-rrf-pipeline";
+    /** Candidate window for the parity test, comfortably above the match count so neither path truncates. */
+    private static final int WINDOW = 50;
 
     private String indexConfigWithDefaultPipeline(String pipelineId) {
         return "{\"settings\":{\"number_of_shards\":3,\"number_of_replicas\":0,\"index.search.default_pipeline\":\""
@@ -77,7 +82,13 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     private String indexConfigWithoutPipeline() {
-        return "{\"settings\":{\"number_of_shards\":3,\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
+        return indexConfigWithoutPipeline(3);
+    }
+
+    private String indexConfigWithoutPipeline(int shards) {
+        return "{\"settings\":{\"number_of_shards\":"
+            + shards
+            + ",\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
             + TEXT_FIELD
             + "\":{\"type\":\"text\"}}}}";
     }
@@ -844,6 +855,126 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         List<Map<String, Object>> hits = getNestedHits(response);
         assertEquals("2", hits.get(0).get("_id"));
         assertScoresAreRrfRankSums(hits, 1);
+    }
+
+    /**
+     * Corpus for the classic-vs-fused parity test. Every document has a distinct (term frequency, length) pair per leg,
+     * so neither leg ties two documents on score. That matters because a within-leg tie is the one place the two paths
+     * deliberately disagree — classic orders it by Lucene docId, fused by ascending fusion key — and the test asserts
+     * tie-freeness up front so a future scoring change surfaces as "the corpus developed a tie" rather than as an
+     * unexplained parity failure. Docs 1-4 match both legs, 5 and 8 only leg A, 6 only leg B, 7 neither.
+     */
+    @SneakyThrows
+    private void addParityDocs(String index) {
+        addDocument(index, "1", TEXT_FIELD, "hello place", null, null);
+        addDocument(index, "2", TEXT_FIELD, "hello hello place", null, null);
+        addDocument(index, "3", TEXT_FIELD, "hello place place", null, null);
+        addDocument(index, "4", TEXT_FIELD, "hello hello hello place place place place", null, null);
+        addDocument(index, "5", TEXT_FIELD, "hello hello hello hello", null, null);
+        addDocument(index, "6", TEXT_FIELD, "place place place place place", null, null);
+        addDocument(index, "7", TEXT_FIELD, "alpha beta gamma delta", null, null);
+        addDocument(index, "8", TEXT_FIELD, "hello alpha beta gamma delta", null, null);
+    }
+
+    private static final List<QueryBuilder> PARITY_LEGS = List.of(
+        new MatchQueryBuilder(TEXT_FIELD, "hello"),
+        new MatchQueryBuilder(TEXT_FIELD, "place")
+    );
+
+    private HybridQueryBuilder withParityLegs(HybridQueryBuilder builder) {
+        PARITY_LEGS.forEach(builder::add);
+        return builder;
+    }
+
+    /** (_id -> _score) in the order returned, preserving duplicates in the score sequence. */
+    private List<Map.Entry<String, Double>> idsAndScores(Map<String, Object> response) {
+        List<Map.Entry<String, Object>> raw = new ArrayList<>();
+        for (Map<String, Object> hit : getNestedHits(response)) {
+            raw.add(Map.entry((String) hit.get("_id"), hit.get("_score")));
+        }
+        List<Map.Entry<String, Double>> hits = new ArrayList<>();
+        raw.forEach(e -> hits.add(Map.entry(e.getKey(), ((Number) e.getValue()).doubleValue())));
+        return hits;
+    }
+
+    /** Fail loudly if a leg ties two documents on score, which would make exact per-document parity ill-defined. */
+    @SneakyThrows
+    private void assertLegsAreTieFree(String index) {
+        for (QueryBuilder leg : PARITY_LEGS) {
+            List<Double> scores = idsAndScores(search(index, leg, WINDOW)).stream().map(Map.Entry::getValue).toList();
+            assertEquals("leg " + leg + " must not tie two documents on score", scores.size(), Set.copyOf(scores).size());
+        }
+    }
+
+    /**
+     * The core regression guard: for the same index and the same two sub-queries, classic shard-side RRF (a
+     * {@code score-ranker-processor} pipeline) and coordinator-side fused RRF must return the same documents with the
+     * same scores. Asserted three ways per configuration — classic against fused-with-inline-config, and classic
+     * against fused reading the very same pipeline.
+     *
+     * <p>Scores are compared per document at exact equality, and the score <em>sequence</em> is compared separately so
+     * the assertion stays agnostic about which document wins a tie on the fused score.
+     */
+    @SneakyThrows
+    private void assertRrfParity(String index, int rankConstant, List<Double> weights) {
+        String pipeline = "fused-mode-rrf-parity-k" + rankConstant + (weights.isEmpty() ? "" : "-weighted");
+        createRRFSearchPipeline(pipeline, weights, rankConstant, false);
+
+        Map<String, Object> combination = new HashMap<>(Map.of("technique", "rrf", "rank_constant", rankConstant));
+        if (weights.isEmpty() == false) {
+            combination.put("parameters", Map.of("weights", weights));
+        }
+
+        // pagination_depth / window_size are both well above the match count, so the two paths' candidate pools are the
+        // same set and parity is well defined. (They can legitimately differ once a truncating window meets more than
+        // one shard: classic ranks the union of each shard's top-depth, fused the merged global top-window.)
+        HybridQueryBuilder classicQuery = withParityLegs(new HybridQueryBuilder()).paginationDepth(WINDOW);
+        HybridQueryBuilder fusedInline = withParityLegs(
+            new HybridQueryBuilder().fusion(Map.of("combination", combination, "window_size", WINDOW))
+        );
+        HybridQueryBuilder fusedFromPipeline = withParityLegs(
+            new HybridQueryBuilder().fusion(Map.of("source", "pipeline", "window_size", WINDOW))
+        );
+
+        Map<String, String> usePipeline = Map.of("search_pipeline", pipeline);
+        List<Map.Entry<String, Double>> classic = idsAndScores(search(index, classicQuery, null, WINDOW, usePipeline, null));
+        String what = "rank_constant=" + rankConstant + ", weights=" + weights;
+        for (Map.Entry<String, List<Map.Entry<String, Double>>> fused : Map.of(
+            "fused inline config",
+            idsAndScores(search(index, fusedInline, WINDOW)),
+            "fused reading the same pipeline",
+            idsAndScores(search(index, fusedFromPipeline, null, WINDOW, usePipeline, null))
+        ).entrySet()) {
+            assertEquals(
+                "classic vs " + fused.getKey() + " score per document (" + what + ")",
+                classic.stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)),
+                fused.getValue().stream().collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue))
+            );
+            assertEquals(
+                "classic vs " + fused.getKey() + " score sequence (" + what + ")",
+                classic.stream().map(Map.Entry::getValue).toList(),
+                fused.getValue().stream().map(Map.Entry::getValue).toList()
+            );
+        }
+    }
+
+    @SneakyThrows
+    public void testFusedMode_whenRrf_thenScoresMatchClassicScoreRankerPipeline() {
+        // Single shard so the candidate pools coincide unconditionally, rather than only because this corpus happens to
+        // fit inside the window on every shard.
+        if (indexExists(INDEX_RRF_PARITY) == false) {
+            createIndex(INDEX_RRF_PARITY, indexConfigWithoutPipeline(1));
+            addParityDocs(INDEX_RRF_PARITY);
+        }
+        assertLegsAreTieFree(INDEX_RRF_PARITY);
+
+        // Both ends of the supported rank_constant range plus the default: the rank scores differ by orders of
+        // magnitude across these, so a discrepancy in the shared arithmetic cannot hide in any one of them.
+        assertRrfParity(INDEX_RRF_PARITY, RRFScoreNormalizer.MIN_RANK_CONSTANT, List.of());
+        assertRrfParity(INDEX_RRF_PARITY, RRFScoreNormalizer.DEFAULT_RANK_CONSTANT, List.of());
+        assertRrfParity(INDEX_RRF_PARITY, RRFScoreNormalizer.MAX_RANK_CONSTANT, List.of());
+        // Weights are applied by the shared combination technique on both paths, so parity must survive them too.
+        assertRrfParity(INDEX_RRF_PARITY, RRFScoreNormalizer.DEFAULT_RANK_CONSTANT, List.of(0.3, 0.7));
     }
 
     @SneakyThrows
