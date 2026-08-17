@@ -26,12 +26,56 @@ public class FusionSpecTests extends OpenSearchTestCase {
     }
 
     public void testFromInlineFusion_whenRrf_thenRankConstantAndNoNormalization() {
-        Map<String, Object> inline = Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 42)));
+        Map<String, Object> inline = Map.of("combination", Map.of("technique", "rrf", "rank_constant", 42));
         FusionSpec spec = FusionSpec.fromInlineFusion(inline);
         assertNotNull(spec);
         assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
         assertEquals(FusionSpec.NORMALIZATION_NONE, spec.normalizationTechnique());
         assertEquals(42, spec.rankConstant());
+    }
+
+    public void testFromInlineFusion_whenRrfWithNormalizationClause_thenNormalizationReported() {
+        // RRF takes no normalization technique, but an inline block can still carry one. It is reported rather than
+        // dropped so the caller's technique check can reject the contradictory pairing.
+        Map<String, Object> inline = Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "rrf"));
+        FusionSpec spec = FusionSpec.fromInlineFusion(inline);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
+        assertEquals(FusionSpec.NORMALIZATION_MIN_MAX, spec.normalizationTechnique());
+    }
+
+    public void testFromInlineFusion_whenRrfRankConstantInvalid_thenRejected() {
+        // Resolved through the shared validator, so fused mode rejects exactly what the score-ranker-processor rejects.
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 0)))
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 10001)))
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "rank_constant", "not-a-number")))
+        );
+    }
+
+    public void testFromInlineFusion_whenRankConstantUnderParameters_thenRejected() {
+        // The score-ranker-processor reads rank_constant off the combination clause and rejects it under `parameters`
+        // ("supported parameters are [weights]"). Fused mode must reject it the same way rather than silently defaulting
+        // to 60 and mis-ranking every query.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 42))))
+        );
+        assertTrue(e.getMessage().contains("must be set on the [combination] clause"));
+    }
+
+    public void testFromInlineFusion_whenRrfWithoutRankConstant_thenDefault() {
+        FusionSpec spec = FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf")));
+        assertNotNull(spec);
+        assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
+        assertEquals(FusionSpec.DEFAULT_RANK_CONSTANT, spec.rankConstant());
     }
 
     public void testFromInlineFusion_whenDefaults_thenMinMaxArithmeticMean() {
@@ -67,12 +111,7 @@ public class FusionSpecTests extends OpenSearchTestCase {
     public void testFromPipelineConfig_whenScoreRankerProcessor_thenRrf() {
         Map<String, Object> pipelineConfig = Map.of(
             "phase_results_processors",
-            List.of(
-                Map.of(
-                    "score-ranker-processor",
-                    Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 10)))
-                )
-            )
+            List.of(Map.of("score-ranker-processor", Map.of("combination", Map.of("technique", "rrf", "rank_constant", 10))))
         );
         FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
         assertNotNull(spec);

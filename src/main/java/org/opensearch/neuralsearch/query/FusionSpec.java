@@ -17,6 +17,7 @@ import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 
 /**
  * Immutable, resolved fusion configuration for the {@code hybrid} query resolver (fused) mode — the normalization +
@@ -33,8 +34,9 @@ import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizat
  * <ul>
  *   <li>{@code normalization-processor}: {@code normalization.technique} (min_max|l2|z_score) +
  *       {@code combination.technique} (arithmetic_mean) + optional {@code combination.parameters.weights}.</li>
- *   <li>{@code score-ranker-processor}: {@code combination.technique = rrf} +
- *       {@code combination.parameters.rank_constant}. RRF is rank-based (no normalization clause).</li>
+ *   <li>{@code score-ranker-processor}: {@code combination.technique = rrf} + {@code combination.rank_constant} (on the
+ *       combination clause itself, NOT under {@code parameters} — that is where {@code RRFProcessorFactory} reads it) +
+ *       optional {@code combination.parameters.weights}. RRF is rank-based (no normalization clause).</li>
  * </ul>
  */
 @Getter(AccessLevel.PACKAGE)
@@ -48,7 +50,8 @@ public final class FusionSpec {
     static final String NORMALIZATION_NONE = "none";
     static final String NORMALIZATION_MIN_MAX = MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME;
 
-    static final int DEFAULT_RANK_CONSTANT = 60;
+    // Sourced from the shared normalizer rather than redeclared, so fused mode and classic cannot drift apart.
+    static final int DEFAULT_RANK_CONSTANT = RRFScoreNormalizer.DEFAULT_RANK_CONSTANT;
 
     // Config-map keys (shared by the normalization-processor and score-ranker-processor definitions)
     private static final String PHASE_RESULTS_PROCESSORS_KEY = "phase_results_processors";
@@ -57,7 +60,7 @@ public final class FusionSpec {
     private static final String TECHNIQUE_KEY = "technique";
     private static final String PARAMETERS_KEY = "parameters";
     private static final String WEIGHTS_KEY = "weights";
-    private static final String RANK_CONSTANT_KEY = "rank_constant";
+    private static final String RANK_CONSTANT_KEY = RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT;
 
     private final String combinationTechnique; // rrf | arithmetic_mean
     private final String normalizationTechnique; // none | min_max | z_score | l2
@@ -108,7 +111,7 @@ public final class FusionSpec {
     /**
      * Read a {@link FusionSpec} from an inline {@code fusion} block on the query body (precedence step 1: inline wins
      * over the attached pipeline). The block mirrors the processor JSON verbatim —
-     * {@code {normalization: {technique}, combination: {technique, parameters: {weights | rank_constant}}}} — so this
+     * {@code {normalization: {technique}, combination: {technique, rank_constant, parameters: {weights}}}} — so this
      * reuses the pipeline-config parsing. {@code combination.technique: rrf} routes to the rank-constant shape.
      *
      * @param fusionConfig the parsed inline fusion map (nullable)
@@ -130,13 +133,7 @@ public final class FusionSpec {
 
     @SuppressWarnings("unchecked")
     private static FusionSpec fromNormalizationProcessor(Map<String, Object> config) {
-        String normalization = NORMALIZATION_MIN_MAX;
-        if (config.get(NORMALIZATION_CLAUSE) instanceof Map) {
-            Object technique = ((Map<String, Object>) config.get(NORMALIZATION_CLAUSE)).get(TECHNIQUE_KEY);
-            if (Objects.nonNull(technique)) {
-                normalization = technique.toString().toLowerCase(Locale.ROOT);
-            }
-        }
+        String normalization = readNormalizationTechnique(config, NORMALIZATION_MIN_MAX);
         String combination = TECHNIQUE_ARITHMETIC_MEAN;
         float[] weights = new float[0];
         if (config.get(COMBINATION_CLAUSE) instanceof Map) {
@@ -156,15 +153,52 @@ public final class FusionSpec {
         float[] weights = new float[0];
         if (config.get(COMBINATION_CLAUSE) instanceof Map) {
             Map<String, Object> combinationClause = (Map<String, Object>) config.get(COMBINATION_CLAUSE);
-            if (combinationClause.get(PARAMETERS_KEY) instanceof Map) {
-                Map<String, Object> parameters = (Map<String, Object>) combinationClause.get(PARAMETERS_KEY);
-                if (parameters.get(RANK_CONSTANT_KEY) instanceof Number) {
-                    rankConstant = ((Number) parameters.get(RANK_CONSTANT_KEY)).intValue();
-                }
-            }
+            rejectRankConstantUnderParameters(combinationClause);
+            // rank_constant sits on the combination clause itself, which is where RRFProcessorFactory reads it — NOT
+            // under `parameters`, whose only supported key is `weights`. Delegating to the shared resolver makes fused
+            // mode accept, reject and report exactly what classic does: absent -> default, non-integer -> "must be an
+            // integer", outside [1, 10000] -> the range error. Reading the value directly here would silently accept a
+            // negative, oversized or fractional rank constant that the score-ranker-processor rejects.
+            rankConstant = RRFScoreNormalizer.resolveRankConstant(combinationClause);
             weights = readWeights(combinationClause);
         }
-        return new FusionSpec(TECHNIQUE_RRF, NORMALIZATION_NONE, rankConstant, weights);
+        // RRF is rank based, so the score-ranker-processor has no normalization clause and this resolves to "none".
+        // An inline fusion block can still carry one, and it is reported rather than dropped so the caller's technique
+        // check rejects the contradictory pairing instead of silently ignoring what the user asked for.
+        return new FusionSpec(TECHNIQUE_RRF, readNormalizationTechnique(config, NORMALIZATION_NONE), rankConstant, weights);
+    }
+
+    /**
+     * {@code rank_constant} under {@code combination.parameters} is a config error, not a place we also look: the
+     * score-ranker-processor rejects it there ("supported parameters are [weights]"). Fused mode rejects it too, rather
+     * than silently falling back to the default 60 and mis-ranking every query for a user who put it in the wrong place.
+     */
+    @SuppressWarnings("unchecked")
+    private static void rejectRankConstantUnderParameters(Map<String, Object> combinationClause) {
+        if ((combinationClause.get(PARAMETERS_KEY) instanceof Map) == false) {
+            return;
+        }
+        if (((Map<String, Object>) combinationClause.get(PARAMETERS_KEY)).containsKey(RANK_CONSTANT_KEY)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] must be set on the [%s] clause, not under [%s]; supported parameters are [%s]",
+                    RANK_CONSTANT_KEY,
+                    COMBINATION_CLAUSE,
+                    PARAMETERS_KEY,
+                    WEIGHTS_KEY
+                )
+            );
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static String readNormalizationTechnique(Map<String, Object> config, String defaultTechnique) {
+        if ((config.get(NORMALIZATION_CLAUSE) instanceof Map) == false) {
+            return defaultTechnique;
+        }
+        Object technique = ((Map<String, Object>) config.get(NORMALIZATION_CLAUSE)).get(TECHNIQUE_KEY);
+        return Objects.isNull(technique) ? defaultTechnique : technique.toString().toLowerCase(Locale.ROOT);
     }
 
     @SuppressWarnings("unchecked")

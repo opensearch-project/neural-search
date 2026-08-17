@@ -675,7 +675,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     public void testDoRewriteFused_whenRrf_thenFailsFast() {
         setUpClusterService();
         HybridQueryBuilder builder = fusedBuilder(
-            new HashMap<>(Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 60))))
+            new HashMap<>(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 60)))
         );
         QueryCoordinatorContext ctx = coordinatorContextFor(builder);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));

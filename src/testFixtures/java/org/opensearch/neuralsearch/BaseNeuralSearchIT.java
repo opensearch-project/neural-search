@@ -2766,6 +2766,22 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void createRRFSearchPipeline(final String pipelineName, final List<Double> weights, boolean addExplainResponseProcessor) {
+        createRRFSearchPipeline(pipelineName, weights, null, addExplainResponseProcessor);
+    }
+
+    /**
+     * @param rankConstant written as {@code combination.rank_constant} when non-null — the location
+     *                     {@code RRFProcessorFactory} reads, which is the combination clause itself and NOT
+     *                     {@code parameters} (whose only supported key is {@code weights}). Null omits the key so the
+     *                     processor applies its own default.
+     */
+    @SneakyThrows
+    protected void createRRFSearchPipeline(
+        final String pipelineName,
+        final List<Double> weights,
+        final Integer rankConstant,
+        boolean addExplainResponseProcessor
+    ) {
         XContentBuilder builder = XContentFactory.jsonBuilder()
             .startObject()
             .field("description", "Post processor for hybrid search")
@@ -2773,8 +2789,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .startObject()
             .startObject("score-ranker-processor")
             .startObject("combination")
-            .field("technique", "rrf")
-            .startObject("parameters");
+            .field("technique", "rrf");
+        if (rankConstant != null) {
+            builder.field("rank_constant", rankConstant);
+        }
+        builder.startObject("parameters");
         if (weights.size() > 0) {
             builder.startArray("weights");
             for (Double weight : weights) {
