@@ -23,6 +23,7 @@ import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.util.concurrent.AtomicArray;
 import org.opensearch.core.common.Strings;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
@@ -136,6 +137,26 @@ public class RRFProcessorTests extends OpenSearchTestCase {
         rrfProcessor.process(mockQueryPhaseResultConsumer, mockSearchPhaseContext);
 
         verify(mockNormalizationWorkflow, never()).execute(any(NormalizationProcessorWorkflowExecuteRequest.class));
+    }
+
+    @SneakyThrows
+    public void testProcess_whenCombinationTechniqueHasNoStatsIncrementer_thenSucceed() {
+        // RRFProcessorFactory now rejects any combination technique but rrf, so this is unreachable from a pipeline
+        // definition. It stays reachable by direct construction, and a stats lookup miss must not fail the query.
+        when(mockCombinationTechnique.techniqueName()).thenReturn(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME);
+        QuerySearchResult result = createQuerySearchResult(true);
+        AtomicArray<SearchPhaseResult> atomicArray = new AtomicArray<>(1);
+        atomicArray.set(0, result);
+
+        when(mockQueryPhaseResultConsumer.getAtomicArray()).thenReturn(atomicArray);
+
+        SearchRequest searchRequest = new SearchRequest();
+        searchRequest.source(new SearchSourceBuilder());
+        when(mockSearchPhaseContext.getRequest()).thenReturn(searchRequest);
+
+        rrfProcessor.process(mockQueryPhaseResultConsumer, mockSearchPhaseContext);
+
+        verify(mockNormalizationWorkflow).execute(any(NormalizationProcessorWorkflowExecuteRequest.class));
     }
 
     @SneakyThrows

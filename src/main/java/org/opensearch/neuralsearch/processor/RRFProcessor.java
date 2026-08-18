@@ -156,6 +156,8 @@ public class RRFProcessor extends AbstractScoreHybridizationProcessor {
 
     private void recordStats(ScoreCombinationTechnique combinationTechnique) {
         EventStatsManager.increment(EventStatName.RRF_PROCESSOR_EXECUTIONS);
-        Optional.of(combTechniqueIncrementers.get(combinationTechnique.techniqueName())).ifPresent(Runnable::run);
+        // ofNullable, not of: a technique with no incrementer must not fail the query. RRFProcessorFactory rejects any
+        // technique but rrf, so this is no longer reachable from a pipeline definition, but this constructor is public.
+        Optional.ofNullable(combTechniqueIncrementers.get(combinationTechnique.techniqueName())).ifPresent(Runnable::run);
     }
 }
