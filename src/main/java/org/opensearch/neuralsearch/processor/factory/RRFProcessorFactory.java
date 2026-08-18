@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.factory;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -63,6 +64,22 @@ public class RRFProcessorFactory implements Processor.Factory<SearchPhaseResults
                 TECHNIQUE,
                 RRFScoreCombinationTechnique.TECHNIQUE_NAME
             );
+
+            // This processor normalizes by rank, so rrf is the only combination that means anything here. The other
+            // techniques registered in ScoreCombinationFactory (the means) belong to the normalization-processor, where
+            // they combine normalized scores. Accepting one here produced a pipeline that threw on every query, so
+            // reject it at pipeline creation with a 400 instead of failing at search time.
+            if (RRFScoreCombinationTechnique.TECHNIQUE_NAME.equals(combinationTechnique) == false) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "provided combination technique is not supported by [%s], supported technique is [%s], got [%s]",
+                        RRFProcessor.TYPE,
+                        RRFScoreCombinationTechnique.TECHNIQUE_NAME,
+                        combinationTechnique
+                    )
+                );
+            }
 
             String rankConstantParam = RRFNormalizationTechnique.PARAM_NAME_RANK_CONSTANT;
             if (combinationClause.containsKey(rankConstantParam)) {

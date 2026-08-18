@@ -4,10 +4,17 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.Floats;
 import lombok.SneakyThrows;
 import lombok.extern.log4j.Log4j2;
+import org.apache.hc.core5.http.HttpHeaders;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.apache.hc.core5.http.message.BasicHeader;
 import org.junit.Before;
+import org.opensearch.client.ResponseException;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
@@ -27,6 +34,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.opensearch.neuralsearch.util.TestUtils.DEFAULT_USER_AGENT;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
@@ -55,6 +63,49 @@ public class RRFProcessorIT extends BaseNeuralSearchIT {
         );
         addDocuments();
         createDefaultRRFSearchPipeline();
+    }
+
+    /**
+     * The score-ranker-processor normalizes by rank, so rrf is the only combination technique that applies. The mean
+     * techniques are registered in ScoreCombinationFactory and used to be accepted here, producing a pipeline that
+     * threw NullPointerException on every query. Creating such a pipeline must fail with 400 instead.
+     */
+    @SneakyThrows
+    public void testRRFPipelineCreation_whenCombinationTechniqueIsNotRrf_thenBadRequest() {
+        String body = XContentFactory.jsonBuilder()
+            .startObject()
+            .field("description", "score-ranker-processor with a combination technique it does not support")
+            .startArray("phase_results_processors")
+            .startObject()
+            .startObject("score-ranker-processor")
+            .startObject("combination")
+            .field("technique", "arithmetic_mean")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject()
+            .toString();
+
+        ResponseException exception = expectThrows(
+            ResponseException.class,
+            () -> makeRequest(
+                client(),
+                "PUT",
+                "/_search/pipeline/rrf-unsupported-combination",
+                null,
+                toHttpEntity(body),
+                ImmutableList.of(new BasicHeader(HttpHeaders.USER_AGENT, DEFAULT_USER_AGENT))
+            )
+        );
+
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
+        String message = EntityUtils.toString(exception.getResponse().getEntity());
+        assertTrue(
+            message,
+            message.contains("provided combination technique is not supported by [score-ranker-processor], supported technique is [rrf]")
+        );
+        assertTrue(message, message.contains("arithmetic_mean"));
     }
 
     @SneakyThrows

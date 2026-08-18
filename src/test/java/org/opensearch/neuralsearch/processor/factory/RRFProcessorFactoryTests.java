@@ -9,6 +9,9 @@ import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.processor.NormalizationProcessorWorkflow;
 import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
@@ -20,6 +23,7 @@ import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.mockito.Mockito.mock;
@@ -190,6 +194,55 @@ public class RRFProcessorFactoryTests extends OpenSearchTestCase {
             () -> rrfProcessorFactory.create(processorFactories, tag, description, ignoreFailure, config, pipelineContext)
         );
         assertTrue(exception.getMessage().contains("provided combination technique is not supported"));
+    }
+
+    @SneakyThrows
+    public void testInvalidCombinationName_whenTechniqueBelongsToNormalizationProcessor_thenFail() {
+        // These three are registered in ScoreCombinationFactory, so they used to be accepted here and then threw
+        // NullPointerException on every query. They combine normalized scores and belong to the normalization-processor;
+        // this processor normalizes by rank, so rrf is the only combination that applies.
+        for (String technique : List.of(
+            ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+            HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+            GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME
+        )) {
+            RRFProcessorFactory rrfProcessorFactory = new RRFProcessorFactory(
+                new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+                new ScoreNormalizationFactory(),
+                new ScoreCombinationFactory()
+            );
+            final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+            Map<String, Object> config = new HashMap<>();
+            config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, technique)));
+            Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+
+            IllegalArgumentException exception = expectThrows(
+                IllegalArgumentException.class,
+                () -> rrfProcessorFactory.create(processorFactories, "tag", "description", false, config, pipelineContext)
+            );
+            assertTrue(
+                "unexpected message for [" + technique + "]: " + exception.getMessage(),
+                exception.getMessage()
+                    .contains("provided combination technique is not supported by [score-ranker-processor], supported technique is [rrf]")
+            );
+            assertTrue("message should name the rejected technique: " + exception.getMessage(), exception.getMessage().contains(technique));
+        }
+    }
+
+    @SneakyThrows
+    public void testCombinationName_whenRrfExplicitlyRequested_thenSuccessful() {
+        // The counterpart to the rejection above: rrf stated explicitly is still accepted, so the guard rejects only
+        // the techniques that never worked.
+        RRFProcessorFactory rrfProcessorFactory = new RRFProcessorFactory(
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()),
+            new ScoreNormalizationFactory(),
+            new ScoreCombinationFactory()
+        );
+        final Map<String, Processor.Factory<SearchPhaseResultsProcessor>> processorFactories = new HashMap<>();
+        Map<String, Object> config = new HashMap<>();
+        config.put(COMBINATION_CLAUSE, new HashMap<>(Map.of(TECHNIQUE, RRFScoreCombinationTechnique.TECHNIQUE_NAME)));
+        Processor.PipelineContext pipelineContext = mock(Processor.PipelineContext.class);
+        assertRRFProcessor(rrfProcessorFactory.create(processorFactories, "tag", "description", false, config, pipelineContext));
     }
 
     @SneakyThrows
