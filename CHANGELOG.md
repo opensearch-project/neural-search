@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
+* [Hybrid Query] Fix collapse dropping valid groups when one group owns multiple top-scoring documents on a shard ([#1947](https://github.com/opensearch-project/neural-search/issues/1947))
 
 ### Infrastructure
 
