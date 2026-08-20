@@ -12,10 +12,12 @@ import org.apache.lucene.document.SortedDocValuesField;
 import org.apache.lucene.document.StoredField;
 import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
+import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
@@ -32,8 +34,11 @@ import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -92,7 +97,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            // totalHits counts all docs with score > 0 per sub-query
             // random().nextFloat() returns [0.0, 1.0), so nearly all 1000 docs have score > 0
             assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
             assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
@@ -149,7 +154,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            // totalHits counts all docs with score > 0 per sub-query
             assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
             assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
@@ -159,7 +164,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testCollapse_whenDefaultConfig_thenFlatQueueCollectsSuccessfully() throws IOException {
+    public void testCollapse_whenDefaultConfig_thenCollectsSuccessfully() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
@@ -202,7 +207,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            // totalHits counts all docs with score > 0 per sub-query
             assertTrue(collapseTopFieldDocs.totalHits.value() >= 999);
             assertEquals(numHits, collapseTopFieldDocs.scoreDocs.length);
         }
@@ -212,13 +217,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testCollapse_whenManyDocsInSameGroup_thenFlatQueueHandlesCorrectly() throws IOException {
-        /*
-         * Tests that the flat per-sub-query queue correctly handles many documents
-         * mapping to the same collapse group. With the flat queue approach, all docs
-         * compete globally for the top-K slots regardless of group membership.
-         */
-
+    public void testCollapse_whenManyDocsInSameGroup_thenGroupsCollapsedCorrectly() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
@@ -260,7 +259,7 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
-        // This exercises the flat queue with many docs competing for the same slots
+        // Many docs compete within group0 for its single representative slot
         collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
 
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
@@ -268,12 +267,16 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         assertEquals(1, topDocs.size());  // One for each sub-query
 
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            // totalHits counts all docs with score > 0 per sub-query
             assertEquals(100, collapseTopFieldDocs.totalHits.value());
 
-            // Flat queue of size topNGroups=10, so at most 10 results
-            assertTrue("Should have some results", collapseTopFieldDocs.scoreDocs.length > 0);
-            assertTrue("Should not exceed topNGroups", collapseTopFieldDocs.scoreDocs.length <= 10);
+            // 5 distinct groups (group0..group4) and topNGroups=10, so exactly one result per group
+            assertEquals("Should have one result per distinct group", 5, collapseTopFieldDocs.scoreDocs.length);
+            Set<String> distinctGroups = new HashSet<>();
+            for (Object cv : collapseTopFieldDocs.collapseValues) {
+                distinctGroups.add(((BytesRef) cv).utf8ToString());
+            }
+            assertEquals("Collapse values must contain no duplicate groups", 5, distinctGroups.size());
         }
 
         reader.close();
@@ -281,17 +284,12 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testCollapse_whenAllDocsInSameGroup_thenQueueFillsCorrectly() throws IOException {
-        /*
-         * Tests that when ALL documents map to the same collapse group,
-         * the flat queue correctly fills to capacity and evicts weaker entries.
-         */
-
+    public void testCollapse_whenAllDocsInSameGroup_thenSingleGroupReturned() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
         // Add documents where ALL documents map to the same group
-        // This maximizes the pressure on the single-document queue
+        // This maximizes the pressure on the group bookkeeping
         for (int i = 0; i < 20; i++) {
             addKeywordDoc(writer, i, "text" + i, 100 + i, "samegroup");
         }
@@ -303,7 +301,6 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         Sort sort = new Sort(SortField.FIELD_SCORE);
         KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
 
-        // Extreme case: docsPerGroupPerSubQuery = 1, all docs in same group
         HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
             COLLAPSE_FIELD_NAME,
             fieldType,
@@ -324,25 +321,21 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
-        // Before: queue not full, docs added directly
-        // After queue fills to 5: subsequent docs compete via updateExistingEntry
         collectDocsAndScores(hybridScorer, scores, leafCollector, 0, docIds);
 
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
 
         assertEquals(1, topDocs.size());
 
+        float bestScore = scores.stream().max(Float::compare).orElseThrow();
         for (CollapseTopFieldDocs collapseTopFieldDocs : topDocs) {
-            // With flat queue, totalHits counts all docs with score > 0 per sub-query
+            // totalHits counts all docs with score > 0 per sub-query
             assertEquals(20, collapseTopFieldDocs.totalHits.value());
 
-            // Flat queue of size 5, all 20 docs are in same group "samegroup"
-            // Queue holds top 5 docs globally
-            assertEquals("Should have exactly 5 docs in flat queue", 5, collapseTopFieldDocs.scoreDocs.length);
-
-            // All collapse values should be "samegroup" since all docs are in the same group
-            assertEquals("Should have exactly 5 collapse values", 5, collapseTopFieldDocs.collapseValues.length);
+            assertEquals("Should have exactly 1 doc — one per distinct group", 1, collapseTopFieldDocs.scoreDocs.length);
+            assertEquals("Should have exactly 1 collapse value", 1, collapseTopFieldDocs.collapseValues.length);
             assertEquals("samegroup", ((BytesRef) collapseTopFieldDocs.collapseValues[0]).utf8ToString());
+            assertEquals(bestScore, collapseTopFieldDocs.scoreDocs[0].score, 0.001f);
         }
 
         reader.close();
@@ -956,13 +949,21 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         leafCollector.setScorer(hybridScorer);
 
         // groupA starts low, gets evicted, then comes back with higher scores
-        float[] scores = new float[] { 0.1f, 0.9f, 0.8f, 0.7f, 0.6f, 0.5f, 0.95f, 0.99f };
-
-        for (int i = 0; i < scores.length; i++) {
-            hybridScorer.resetScores();
-            hybridScorer.getSubQueryScores()[0] = scores[i];
-            leafCollector.collect(i);
-        }
+        Map<String, float[]> scoresByGroup = Map.of(
+            "groupA",
+            new float[] { 0.1f, 0.95f, 0.99f },
+            "groupB",
+            new float[] { 0.9f },
+            "groupC",
+            new float[] { 0.8f },
+            "groupD",
+            new float[] { 0.7f },
+            "groupE",
+            new float[] { 0.6f },
+            "groupF",
+            new float[] { 0.5f }
+        );
+        collectWithGroupDerivedScores(context, leafCollector, hybridScorer, scoresByGroup);
 
         // Should not throw NPE or any exception
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
@@ -971,11 +972,15 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         // 6 unique groups, numHits=5, so exactly 5 groups survive
         assertEquals(numHits, result.collapseValues.length);
 
-        // Verify groupA survived (it re-entered with 0.95 and 0.99)
-        Set<String> survivingGroups = new HashSet<>();
+        List<String> survivingGroupList = new ArrayList<>();
         for (Object cv : result.collapseValues) {
-            survivingGroups.add(((BytesRef) cv).utf8ToString());
+            survivingGroupList.add(((BytesRef) cv).utf8ToString());
         }
+        Set<String> survivingGroups = new HashSet<>(survivingGroupList);
+
+        assertEquals("Collapse values must contain no duplicate groups: " + survivingGroupList, numHits, survivingGroups.size());
+
+        // Verify groupA survived (it re-entered with 0.95 and 0.99)
         assertTrue("groupA should be back in top-K after high-score re-entry", survivingGroups.contains("groupA"));
 
         // groupF (0.5) should have been evicted since it's the weakest among the 6 groups
@@ -991,6 +996,90 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         // Verify the top score is from groupA's best doc (0.99)
         assertEquals(0.99f, result.scoreDocs[0].score, 0.001f);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    /**
+     * Reproduces https://github.com/opensearch-project/neural-search/issues/1947: a group owning
+     * multiple top-scoring docs must not crowd out other distinct groups.
+     */
+    public void testCollapse_whenGroupOwnsMultipleTopSlots_thenDistinctGroupsReturned() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupB");
+        addKeywordDoc(writer, 2, "text2", 102, "groupC");
+        addKeywordDoc(writer, 3, "text3", 103, "groupD");
+        addKeywordDoc(writer, 4, "text4", 104, "groupE");
+        addKeywordDoc(writer, 5, "text5", 105, "groupF");
+        addKeywordDoc(writer, 6, "text6", 106, "groupA");
+        addKeywordDoc(writer, 7, "text7", 107, "groupA");
+
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        Map<String, float[]> scoresByGroup = Map.of(
+            "groupA",
+            new float[] { 0.10f, 0.95f, 0.99f },
+            "groupB",
+            new float[] { 0.90f },
+            "groupC",
+            new float[] { 0.80f },
+            "groupD",
+            new float[] { 0.70f },
+            "groupE",
+            new float[] { 0.60f },
+            "groupF",
+            new float[] { 0.50f }
+        );
+        collectWithGroupDerivedScores(context, leafCollector, hybridScorer, scoresByGroup);
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+        CollapseTopFieldDocs result = topDocs.get(0);
+
+        List<String> survivingGroups = new ArrayList<>();
+        for (Object cv : result.collapseValues) {
+            survivingGroups.add(((BytesRef) cv).utf8ToString());
+        }
+
+        assertEquals(
+            "Collapse values must contain no duplicate groups, but got: " + survivingGroups,
+            survivingGroups.size(),
+            new HashSet<>(survivingGroups).size()
+        );
+
+        assertEquals(
+            "Expected numHits distinct groups, but got: " + survivingGroups,
+            Set.of("groupA", "groupB", "groupC", "groupD", "groupE"),
+            new HashSet<>(survivingGroups)
+        );
 
         reader.close();
         writer.close();
@@ -1109,6 +1198,29 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         reader.close();
         writer.close();
         directory.close();
+    }
+
+    /**
+     * Collects every document, deriving its score from its collapse group value rather than its doc id —
+     * randomized merge policies can reorder docs, so doc-id-based scores make a test seed-dependent.
+     */
+    private void collectWithGroupDerivedScores(
+        LeafReaderContext context,
+        LeafCollector leafCollector,
+        HybridSubQueryScorer hybridScorer,
+        Map<String, float[]> scoresByGroup
+    ) throws IOException {
+        Map<String, Integer> nextScoreIndexByGroup = new HashMap<>();
+        SortedDocValues collapseDocValues = DocValues.getSorted(context.reader(), COLLAPSE_FIELD_NAME);
+        int maxDoc = context.reader().maxDoc();
+        for (int doc = 0; doc < maxDoc; doc++) {
+            assertTrue(collapseDocValues.advanceExact(doc));
+            String group = collapseDocValues.lookupOrd(collapseDocValues.ordValue()).utf8ToString();
+            int scoreIndex = nextScoreIndexByGroup.merge(group, 1, Integer::sum) - 1;
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByGroup.get(group)[scoreIndex];
+            leafCollector.collect(doc);
+        }
     }
 
     private void addNumericDoc(IndexWriter writer, int id, String textValue, int intValue, long collapseValue) throws IOException {

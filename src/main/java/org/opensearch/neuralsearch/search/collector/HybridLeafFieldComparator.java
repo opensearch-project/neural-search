@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
-import lombok.Getter;
 import org.apache.lucene.search.LeafFieldComparator;
 import org.apache.lucene.search.Scorable;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
@@ -53,7 +52,6 @@ import java.io.IOException;
  */
 public class HybridLeafFieldComparator implements LeafFieldComparator {
     private final LeafFieldComparator delegate;
-    @Getter
     private float currentSubQueryScore;
 
     /**
