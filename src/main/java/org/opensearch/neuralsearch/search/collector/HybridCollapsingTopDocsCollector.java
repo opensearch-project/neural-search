@@ -21,6 +21,7 @@ import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.search.grouping.GroupSelector;
+import org.apache.lucene.util.BytesRef;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
@@ -451,8 +452,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     fields[k] = comparators[k].value(group.comparatorSlot);
                 }
                 fieldDocs[index] = new FieldDoc(group.topDoc, group.score, fields);
-                // Group values were deep-copied by GroupSelector#copyValue when stored
-                collapseValues[index] = group.groupValue;
+                if (group.groupValue instanceof BytesRef) {
+                    collapseValues[index] = BytesRef.deepCopyOf((BytesRef) group.groupValue);
+                } else {
+                    collapseValues[index] = group.groupValue;
+                }
                 index++;
             }
 
