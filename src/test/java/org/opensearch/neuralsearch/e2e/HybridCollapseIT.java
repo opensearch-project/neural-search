@@ -10,6 +10,7 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.functionscore.ScoreFunctionBuilders;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortBuilders;
@@ -17,8 +18,10 @@ import org.opensearch.search.sort.SortBuilders;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import lombok.SneakyThrows;
 
@@ -42,6 +45,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_INTEGER_FIELD_AGE = "age";
     private static final String DEFAULT_INDEX_CONFIGURATION = "default_config";
     private static final String DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET = "default_config_with_large_dataset";
+    private static final String DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS = "default_config_with_skewed_groups";
     private static final String KNN_INDEX_CONFIGURATION = "knn_config";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
 
@@ -57,8 +61,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
 
-        // For min_score=0.5005f, it filters out 1 doc
-        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
+        // For min_score=0.5005f, total hits count fused-window entries above it: one per group per shard
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 1);
     }
 
     public void testCollapse_withMultipleShard_thenSuccessful() {
@@ -70,6 +74,101 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
         // For min_score=0.5005f, it filters out no docs;
         testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
+    }
+
+    public void testCollapse_whenOneGroupOwnsMultipleTopDocs_thenDistinctGroupsReturned() {
+        // Reproduces https://github.com/opensearch-project/neural-search/issues/1947
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_ONE);
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        List<String> collapseValues = getCollapseValues(searchResponse);
+        assertEquals("Expected `size` hits, one per distinct group, but got: " + collapseValues, 5, collapseValues.size());
+        assertEquals(
+            "Expected the 5 best distinct groups, but got: " + collapseValues,
+            Set.of("groupA", "groupB", "groupC", "groupD", "groupE"),
+            new HashSet<>(collapseValues)
+        );
+    }
+
+    private void indexDocumentsForSkewedGroupsConfiguration() {
+        // 6 distinct groups; groupA owns the three highest-priced documents
+        indexGroupedDocument("1", "groupA", "10");
+        indexGroupedDocument("2", "groupB", "90");
+        indexGroupedDocument("3", "groupC", "80");
+        indexGroupedDocument("4", "groupD", "70");
+        indexGroupedDocument("5", "groupE", "60");
+        indexGroupedDocument("6", "groupF", "50");
+        indexGroupedDocument("7", "groupA", "95");
+        indexGroupedDocument("8", "groupA", "99");
+    }
+
+    private void indexGroupedDocument(String docId, String group, String price) {
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            docId,
+            List.of(),
+            List.of(),
+            List.of(TEST_TEXT_FIELD_ITEM, TEST_TEXT_FIELD_CATEGORY),
+            List.of(group, "groups"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of(price),
+            null
+        );
+    }
+
+    private List<String> getCollapseValues(Map<String, Object> collapseResponse) {
+        Map<String, Object> hits = (Map<String, Object>) collapseResponse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        List<String> collapseValues = new ArrayList<>();
+        for (Map<String, Object> actualHit : actualHits) {
+            Map<String, Object> fields = (Map<String, Object>) actualHit.get("fields");
+            ArrayList<Object> items = (ArrayList<Object>) fields.get(TEST_TEXT_FIELD_ITEM);
+            for (Object item : items) {
+                collapseValues.add(item.toString());
+            }
+        }
+        return collapseValues;
     }
 
     public void testCollapseOnNestedFieldWithInnerHits_withoutReferenceOnGroup_thenSuccessful() {
@@ -504,6 +603,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             case DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET:
                 index100DocumentsForDefaultConfiguration();
                 break;
+            case DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS:
+                indexDocumentsForSkewedGroupsConfiguration();
+                break;
             default:
                 throw new IllegalArgumentException("Invalid configuration: " + configuration);
         }
@@ -700,27 +802,28 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     private String getIndexConfiguration(String configuration, int numberOfShards) throws IOException {
         return switch (configuration) {
-            case DEFAULT_INDEX_CONFIGURATION, DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET -> XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject("settings")
-                .field("number_of_shards", numberOfShards)
-                .field("number_of_replicas", 1)
-                .endObject()
-                .startObject("mappings")
-                .startObject("properties")
-                .startObject(TEST_TEXT_FIELD_ITEM)
-                .field("type", "keyword")
-                .endObject()
-                .startObject(TEST_TEXT_FIELD_CATEGORY)
-                .field("type", "keyword")
-                .endObject()
-                .startObject(TEST_FLOAT_FIELD)
-                .field("type", "float")
-                .endObject()
-                .endObject()
-                .endObject()
-                .endObject()
-                .toString();
+            case DEFAULT_INDEX_CONFIGURATION, DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET,
+                DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS -> XContentFactory.jsonBuilder()
+                    .startObject()
+                    .startObject("settings")
+                    .field("number_of_shards", numberOfShards)
+                    .field("number_of_replicas", 1)
+                    .endObject()
+                    .startObject("mappings")
+                    .startObject("properties")
+                    .startObject(TEST_TEXT_FIELD_ITEM)
+                    .field("type", "keyword")
+                    .endObject()
+                    .startObject(TEST_TEXT_FIELD_CATEGORY)
+                    .field("type", "keyword")
+                    .endObject()
+                    .startObject(TEST_FLOAT_FIELD)
+                    .field("type", "float")
+                    .endObject()
+                    .endObject()
+                    .endObject()
+                    .endObject()
+                    .toString();
             case KNN_INDEX_CONFIGURATION -> XContentFactory.jsonBuilder()
                 .startObject()
                 .startObject("settings")
