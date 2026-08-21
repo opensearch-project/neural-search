@@ -126,28 +126,6 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         return getDocIdAtQueryForNormalization(normalizedScores, this);
     }
 
-    private static float[] calculateMaxScorePerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
-
-        float[] maxPerSubQuery = new float[numOfSubqueries];
-        for (int i = 0; i < numOfSubqueries; i++) {
-            maxPerSubQuery[i] = (float) statsPerSubquery[i].getMax();
-        }
-
-        return maxPerSubQuery;
-    }
-
-    private static float[] calculateMinScorePerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
-
-        float[] minPerSubQuery = new float[numOfSubqueries];
-        for (int i = 0; i < numOfSubqueries; i++) {
-            minPerSubQuery[i] = (float) statsPerSubquery[i].getMin();
-        }
-
-        return minPerSubQuery;
-    }
-
     private static DescriptiveStatistics[] calculateStatsPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
         DescriptiveStatistics[] statsPerSubquery = new DescriptiveStatistics[numOfSubqueries];
         for (int i = 0; i < numOfSubqueries; i++) {
@@ -170,36 +148,24 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         return statsPerSubquery;
     }
 
-    private static float[] calculateMeanPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
-
-        float[] meanPerSubQuery = new float[numOfSubqueries];
-        for (int i = 0; i < numOfSubqueries; i++) {
-            meanPerSubQuery[i] = (float) statsPerSubquery[i].getMean();
-        }
-
-        return meanPerSubQuery;
-    }
-
-    private static float[] calculateStandardDeviationPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
-
-        float[] stdPerSubQuery = new float[numOfSubqueries];
-        for (int i = 0; i < numOfSubqueries; i++) {
-            stdPerSubQuery[i] = (float) statsPerSubquery[i].getStandardDeviation();
-        }
-
-        return stdPerSubQuery;
-    }
-
     private ZScores getZScoreResults(final List<CompoundTopDocs> queryTopDocs) {
         int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
 
-        // to be done for each subquery
-        float[] maxPerSubquery = calculateMaxScorePerSubquery(queryTopDocs, numOfSubqueries);
-        float[] minPerSubquery = calculateMinScorePerSubquery(queryTopDocs, numOfSubqueries);
-        float[] meanPerSubQuery = calculateMeanPerSubquery(queryTopDocs, numOfSubqueries);
-        float[] stdPerSubquery = calculateStandardDeviationPerSubquery(queryTopDocs, numOfSubqueries);
+        // One walk of the hits builds one DescriptiveStatistics per sub query, and all four statistics are read off it.
+        // Each statistic used to rebuild the whole array from scratch, so every hit was visited four times and
+        // 4 * numOfSubqueries DescriptiveStatistics each retained a copy of every score.
+        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
+
+        float[] maxPerSubquery = new float[numOfSubqueries];
+        float[] minPerSubquery = new float[numOfSubqueries];
+        float[] meanPerSubQuery = new float[numOfSubqueries];
+        float[] stdPerSubquery = new float[numOfSubqueries];
+        for (int i = 0; i < numOfSubqueries; i++) {
+            maxPerSubquery[i] = (float) statsPerSubquery[i].getMax();
+            minPerSubquery[i] = (float) statsPerSubquery[i].getMin();
+            meanPerSubQuery[i] = (float) statsPerSubquery[i].getMean();
+            stdPerSubquery[i] = (float) statsPerSubquery[i].getStandardDeviation();
+        }
         return new ZScores(meanPerSubQuery, stdPerSubquery, maxPerSubquery, minPerSubquery);
     }
 
