@@ -16,9 +16,7 @@ import java.util.Locale;
 
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
-import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
-import com.google.common.primitives.Floats;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
@@ -33,8 +31,6 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOf
 public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "z_score";
-    private static final float SINGLE_RESULT_SCORE = 1.0f;
-    private static final float MIN_SCORE = 0.001f;
 
     /**
      * Z-score normalization transforms the data based on its mean and standard deviation, making it more robust to outliers.
@@ -126,10 +122,13 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         return getDocIdAtQueryForNormalization(normalizedScores, this);
     }
 
-    private static DescriptiveStatistics[] calculateStatsPerSubquery(final List<CompoundTopDocs> queryTopDocs, final int numOfSubqueries) {
-        DescriptiveStatistics[] statsPerSubquery = new DescriptiveStatistics[numOfSubqueries];
+    private static ZScoreNormalizer.StatsAccumulator[] calculateStatsPerSubquery(
+        final List<CompoundTopDocs> queryTopDocs,
+        final int numOfSubqueries
+    ) {
+        ZScoreNormalizer.StatsAccumulator[] statsPerSubquery = new ZScoreNormalizer.StatsAccumulator[numOfSubqueries];
         for (int i = 0; i < numOfSubqueries; i++) {
-            statsPerSubquery[i] = new DescriptiveStatistics();
+            statsPerSubquery[i] = new ZScoreNormalizer.StatsAccumulator();
         }
 
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
@@ -140,7 +139,7 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
             for (int subQueryIndex = 0; subQueryIndex < topDocsPerSubQuery.size(); subQueryIndex++) {
                 TopDocs topDocs = topDocsPerSubQuery.get(subQueryIndex);
                 for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
-                    statsPerSubquery[subQueryIndex].addValue(scoreDoc.score);
+                    statsPerSubquery[subQueryIndex].add(scoreDoc.score);
                 }
             }
         }
@@ -151,20 +150,20 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
     private ZScores getZScoreResults(final List<CompoundTopDocs> queryTopDocs) {
         int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
 
-        // One walk of the hits builds one DescriptiveStatistics per sub query, and all four statistics are read off it.
-        // Each statistic used to rebuild the whole array from scratch, so every hit was visited four times and
-        // 4 * numOfSubqueries DescriptiveStatistics each retained a copy of every score.
-        DescriptiveStatistics[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
+        // One walk of the hits builds one StatsAccumulator per sub query, and all four statistics are read off it. Each
+        // statistic used to rebuild the whole array from scratch, so every hit was visited four times and
+        // 4 * numOfSubqueries accumulators each retained a copy of every score.
+        ZScoreNormalizer.StatsAccumulator[] statsPerSubquery = calculateStatsPerSubquery(queryTopDocs, numOfSubqueries);
 
         float[] maxPerSubquery = new float[numOfSubqueries];
         float[] minPerSubquery = new float[numOfSubqueries];
         float[] meanPerSubQuery = new float[numOfSubqueries];
         float[] stdPerSubquery = new float[numOfSubqueries];
         for (int i = 0; i < numOfSubqueries; i++) {
-            maxPerSubquery[i] = (float) statsPerSubquery[i].getMax();
-            minPerSubquery[i] = (float) statsPerSubquery[i].getMin();
-            meanPerSubQuery[i] = (float) statsPerSubquery[i].getMean();
-            stdPerSubquery[i] = (float) statsPerSubquery[i].getStandardDeviation();
+            maxPerSubquery[i] = statsPerSubquery[i].max();
+            minPerSubquery[i] = statsPerSubquery[i].min();
+            meanPerSubQuery[i] = statsPerSubquery[i].mean();
+            stdPerSubquery[i] = statsPerSubquery[i].standardDeviation();
         }
         return new ZScores(meanPerSubQuery, stdPerSubquery, maxPerSubquery, minPerSubquery);
     }
@@ -176,17 +175,9 @@ public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique
         final float maxScore,
         final float minScore
     ) {
-        // edge case when there is only one score and z scores are same
-        if (Floats.compare(mean, score) == 0) {
-            return maxScore;
-        }
-        // Case when sd is 0
-        if (Floats.compare(standardDeviation, 0.0f) == 0) {
-            return minScore;
-        }
-        float normalizedScore = (score - mean) / standardDeviation;
-
-        return normalizedScore <= 0.0f ? MIN_SCORE : normalizedScore;
+        // Delegate the arithmetic to the shared core so the classic shard path and the resolver coordinator path use one
+        // implementation of the z-score formula (see ZScoreNormalizer).
+        return ZScoreNormalizer.normalizeSingleScore(score, standardDeviation, mean, maxScore, minScore);
     }
 
     /**
