@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [RRF] Reject a combination technique other than rrf when creating a score-ranker-processor, instead of accepting the pipeline and throwing NullPointerException on every query ([#1949](https://github.com/opensearch-project/neural-search/pull/1949))
 
 ### Infrastructure
+* [Neural Sparse] Pin the two-phase processor IT index to a single shard so its pruned-score assertions do not depend on the cluster's default shard count ([#1959](https://github.com/opensearch-project/neural-search/pull/1959))
 * [Semantic Field] Add an end-to-end remote dense model IT for the semantic field mapping transformer using the TorchServe mock model ([#1966](https://github.com/opensearch-project/neural-search/pull/1966))
 
 ### Documentation
