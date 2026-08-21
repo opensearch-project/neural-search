@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.apache.hc.core5.http.io.entity.EntityUtils;
@@ -27,13 +28,14 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import lombok.SneakyThrows;
 
 /**
- * End-to-end integration test for the resolver (fused) mode of the {@code hybrid} query — the first working slice
- * (min_max normalization + arithmetic_mean combination, top-level). Exercises the full coordinator flow: parse the
+ * End-to-end integration test for the resolver (fused) mode of the {@code hybrid} query — the score-normalization family
+ * (min_max, z_score, l2) combined by arithmetic_mean, top-level. Exercises the full coordinator flow: parse the
  * {@code fusion} parameter, fan the legs out as a MultiSearch, fuse on the coordinator via the shared fusion core, and
  * self-erase into a standard query that returns fused results.
  *
- * <p>Happy path only for this PR; broader coverage (nested, RRF, aggregations, explain/profiler, min_score, more
- * technique pairs) is scoped to later PRs.
+ * <p>Happy path plus the classic-vs-fused differential in
+ * {@link #testFusedMode_forEveryNormalizationTechnique_thenMatchesClassicPipeline}; broader coverage (nested, RRF,
+ * aggregations, explain/profiler, min_score, geometric/harmonic mean) is scoped to later PRs.
  */
 public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
 
@@ -54,6 +56,9 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     private static final String GRP_FIELD = "grp";
     private static final int COLLAPSE_GROUPS = 2;
     private static final int DOCS_PER_GROUP = 2;
+    /** Own index, and deliberately single-shard: the classic-vs-fused score comparison is only exact on one shard. */
+    private static final String INDEX_FOR_FAMILY_PARITY = "test-hybrid-fused-family-parity";
+    private static final int FAMILY_PARITY_DOCS = 6;
     private static final String INDEX_WITH_DEFAULT_NORM = "test-hybrid-fused-default-norm";
     private static final String INDEX_NO_PIPELINE = "test-hybrid-fused-inline-config";
     private static final String NORM_PIPELINE = "fused-mode-norm-pipeline";
@@ -664,5 +669,103 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         Map<String, Object> named = (Map<String, Object>) inner.get(name);
         Map<String, Object> hits = (Map<String, Object>) named.get("hits");
         return (List<Map<String, Object>>) hits.get("hits");
+    }
+
+    /**
+     * End-to-end differential test for the whole score-normalization family: for each of {@code min_max}, {@code z_score}
+     * and {@code l2}, the same two legs fused on the coordinator must return the same documents, in the same order, with
+     * the same scores as the classic shard-side {@code normalization-processor} pipeline using that technique. This is the
+     * plumbing counterpart to {@code CoordinatorScoreFusionDifferentialTests}, which pins the arithmetic in isolation:
+     * together they say the shared cores are both correct and actually reached from both paths.
+     *
+     * <p>Three properties of the fixture make the comparison well-defined:
+     * <ul>
+     *   <li><b>One shard.</b> {@code l2} accumulates its sum of squares in {@code float} and float addition is not
+     *       associative, so classic's per-shard accumulation and the coordinator's accumulation over the merged leg are
+     *       bit-identical on one shard and may differ in the last bit across shards.</li>
+     *   <li><b>Scores come from a numeric field, not BM25.</b> Raw leg scores are then exactly the {@code rank} values,
+     *       so no score depends on per-shard term statistics and the expected ordering is readable from the data.</li>
+     *   <li><b>The legs match different document sets.</b> Leg B is filtered to the top ranks, so most documents match
+     *       one leg only — which is what exercises the "leg did not match" path on both sides rather than comparing two
+     *       fully-overlapping legs where normalization differences would largely cancel.</li>
+     * </ul>
+     */
+    @SneakyThrows
+    public void testFusedMode_forEveryNormalizationTechnique_thenMatchesClassicPipeline() {
+        if (indexExists(INDEX_FOR_FAMILY_PARITY) == false) {
+            createIndex(INDEX_FOR_FAMILY_PARITY, indexConfigWithRankField(1));
+            for (int id = 1; id <= FAMILY_PARITY_DOCS; id++) {
+                indexRankedDoc(INDEX_FOR_FAMILY_PARITY, id, id * 10);
+            }
+        }
+
+        for (String technique : List.of("min_max", "z_score", "l2")) {
+            String pipeline = "fused-mode-parity-" + technique;
+            createSearchPipeline(pipeline, technique, "arithmetic_mean", Map.of());
+
+            List<Map<String, Object>> classicHits = getNestedHits(
+                searchRawWithParams(
+                    "/" + INDEX_FOR_FAMILY_PARITY + "/_search",
+                    "{\"query\":" + familyParityQuery(null) + "}",
+                    Map.of("search_pipeline", pipeline)
+                )
+            );
+            List<Map<String, Object>> fusedHits = getNestedHits(
+                searchRaw("/" + INDEX_FOR_FAMILY_PARITY + "/_search", "{\"query\":" + familyParityQuery(technique) + "}")
+            );
+
+            assertEquals("same document count for " + technique, classicHits.size(), fusedHits.size());
+            assertTrue("fixture must return documents for " + technique, classicHits.isEmpty() == false);
+            for (int i = 0; i < classicHits.size(); i++) {
+                String classicId = (String) classicHits.get(i).get("_id");
+                double classicScore = ((Number) classicHits.get(i).get("_score")).doubleValue();
+                assertEquals("rank " + i + " document for " + technique, classicId, fusedHits.get(i).get("_id"));
+                // Relative tolerance: the two paths run the same float arithmetic, but the scores travel through JSON as
+                // doubles, so pin agreement to float precision rather than to the exact decimal rendering.
+                assertEquals(
+                    "fused score for doc " + classicId + " with " + technique,
+                    classicScore,
+                    ((Number) fusedHits.get(i).get("_score")).doubleValue(),
+                    Math.max(1e-6, Math.abs(classicScore) * 1e-5)
+                );
+            }
+        }
+    }
+
+    /**
+     * Two legs over the rank field: leg A matches everything, leg B only the top ranks. Passing a {@code technique}
+     * produces the fused form (inline {@code fusion} block, coordinator path); passing null produces the classic form,
+     * which takes its technique from the {@code search_pipeline} request parameter instead.
+     */
+    private String familyParityQuery(String normalizationTechnique) {
+        String legScoringByRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"none\",\"missing\":1}}}";
+        String legScoringTopRanksOnly = "{\"function_score\":{\"query\":{\"range\":{\""
+            + RANK_FIELD
+            + "\":{\"gte\":"
+            + (FAMILY_PARITY_DOCS * 10 / 2)
+            + "}}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"sqrt\",\"missing\":1}}}";
+        String fusionBlock = Objects.isNull(normalizationTechnique)
+            ? ""
+            : "\"fusion\":{\"window_size\":"
+                + FAMILY_PARITY_DOCS
+                + ",\"normalization\":{\"technique\":\""
+                + normalizationTechnique
+                + "\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},";
+        return "{\"hybrid\":{" + fusionBlock + "\"queries\":[" + legScoringByRank + "," + legScoringTopRanksOnly + "]}}";
+    }
+
+    @SneakyThrows
+    private Map<String, Object> searchRawWithParams(String endpoint, String jsonBody, Map<String, String> params) {
+        Request request = new Request("POST", endpoint);
+        request.addParameter("size", "10");
+        params.forEach(request::addParameter);
+        request.setJsonEntity(jsonBody);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
     }
 }

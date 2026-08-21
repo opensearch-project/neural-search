@@ -7,11 +7,14 @@ package org.opensearch.neuralsearch.fusion;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizer;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizer;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class ScalarNormalizerTests extends OpenSearchTestCase {
@@ -38,10 +41,28 @@ public class ScalarNormalizerTests extends OpenSearchTestCase {
         assertEquals("min_max", normalizer.techniqueName());
     }
 
+    public void testForTechnique_resolvesZScore() {
+        ScalarNormalizer normalizer = ScalarNormalizers.forTechnique("z_score");
+        assertSame(ZScoreScalarNormalizer.INSTANCE, normalizer);
+        assertEquals("z_score", normalizer.techniqueName());
+    }
+
+    public void testForTechnique_resolvesL2() {
+        ScalarNormalizer normalizer = ScalarNormalizers.forTechnique("l2");
+        assertSame(L2ScalarNormalizer.INSTANCE, normalizer);
+        assertEquals("l2", normalizer.techniqueName());
+    }
+
+    public void testSupportedTechniques_isTheWholeScoreNormalizationFamily() {
+        // The caller's rewrite-time gate refuses anything outside this set, so it doubles as the fused-mode scope
+        // statement — rank-based rrf is deliberately absent, and so is the `none` it arrives under.
+        assertEquals(Set.of("min_max", "z_score", "l2"), ScalarNormalizers.supportedTechniques());
+    }
+
     public void testForTechnique_whenTechniqueNotWiredYet_thenThrows() {
-        // z_score / l2 / rrf parse but have no coordinator implementation yet — the caller rejects them at rewrite, so
-        // this is the defense-in-depth backstop.
-        for (String notWired : List.of("z_score", "l2", "rrf", "none")) {
+        // rrf is rank-based and arrives as normalization=none, so neither name resolves here; the caller rejects both at
+        // rewrite, making this the defense-in-depth backstop.
+        for (String notWired : List.of("rrf", "none", "not_a_technique")) {
             IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> ScalarNormalizers.forTechnique(notWired));
             assertTrue(e.getMessage().contains("is not supported in fused mode"));
         }
@@ -80,6 +101,75 @@ public class ScalarNormalizerTests extends OpenSearchTestCase {
     public void testMinMaxNormalizeLeg_preservesEveryKey() {
         Map<String, Float> raw = leg("a", 0.1f, "b", 0.2f, "c", 0.3f, "d", 0.4f);
         assertEquals(raw.size(), MinMaxScalarNormalizer.INSTANCE.normalizeLeg(raw).size());
+    }
+
+    // ---- z_score normalizer ----
+
+    public void testZScoreNormalizeLeg_matchesSharedScalarMath() {
+        // Same contract as min_max: a pure re-expression of the shared classic math, per score. The statistics must be
+        // the ones the shared accumulator computes over the leg, so the reference builds them the same way.
+        Map<String, Float> raw = leg("a", 1.0f, "b", 4.0f, "c", 10.0f);
+        ZScoreNormalizer.StatsAccumulator statistics = new ZScoreNormalizer.StatsAccumulator();
+        raw.values().forEach(statistics::add);
+
+        Map<String, Float> normalized = ZScoreScalarNormalizer.INSTANCE.normalizeLeg(raw);
+
+        assertEquals(raw.keySet(), normalized.keySet());
+        for (Map.Entry<String, Float> entry : raw.entrySet()) {
+            float expected = ZScoreNormalizer.normalizeSingleScore(
+                entry.getValue(),
+                statistics.standardDeviation(),
+                statistics.mean(),
+                statistics.max(),
+                statistics.min()
+            );
+            assertEquals(Float.floatToIntBits(expected), Float.floatToIntBits(normalized.get(entry.getKey())));
+        }
+    }
+
+    public void testZScoreNormalizeLeg_whenEmptyLeg_thenEmptyResult() {
+        // A leg that matched nothing must stay empty; in particular no statistic is read off an empty accumulator.
+        assertTrue(ZScoreScalarNormalizer.INSTANCE.normalizeLeg(Map.of()).isEmpty());
+    }
+
+    public void testZScoreNormalizeLeg_whenSingleScore_thenSubqueryMax() {
+        // mean == score single-result edge case: classic returns the sub-query max, which for one hit is the score.
+        Map<String, Float> normalized = ZScoreScalarNormalizer.INSTANCE.normalizeLeg(leg("only", 0.7f));
+        assertEquals(0.7f, normalized.get("only"), DELTA);
+    }
+
+    public void testZScoreNormalizeLeg_preservesEveryKey() {
+        Map<String, Float> raw = leg("a", 0.1f, "b", 0.2f, "c", 0.3f, "d", 0.4f);
+        assertEquals(raw.size(), ZScoreScalarNormalizer.INSTANCE.normalizeLeg(raw).size());
+    }
+
+    // ---- l2 normalizer ----
+
+    public void testL2NormalizeLeg_matchesSharedScalarMath() {
+        // 3^2 + 4^2 = 25, so the leg norm is 5 and each score is divided by it.
+        Map<String, Float> raw = leg("a", 3.0f, "b", 4.0f);
+
+        Map<String, Float> normalized = L2ScalarNormalizer.INSTANCE.normalizeLeg(raw);
+
+        assertEquals(raw.keySet(), normalized.keySet());
+        assertEquals(Float.floatToIntBits(0.6f), Float.floatToIntBits(normalized.get("a")));
+        assertEquals(Float.floatToIntBits(0.8f), Float.floatToIntBits(normalized.get("b")));
+    }
+
+    public void testL2NormalizeLeg_whenEmptyLeg_thenEmptyResult() {
+        assertTrue(L2ScalarNormalizer.INSTANCE.normalizeLeg(Map.of()).isEmpty());
+    }
+
+    public void testL2NormalizeLeg_whenAllScoresZero_thenMinScore() {
+        // A whole leg of zero scores has a zero norm; the shared core guards the division rather than emitting NaN.
+        Map<String, Float> normalized = L2ScalarNormalizer.INSTANCE.normalizeLeg(leg("a", 0.0f, "b", 0.0f));
+        assertEquals(L2ScoreNormalizer.MIN_SCORE, normalized.get("a"), DELTA);
+        assertEquals(L2ScoreNormalizer.MIN_SCORE, normalized.get("b"), DELTA);
+    }
+
+    public void testL2NormalizeLeg_preservesEveryKey() {
+        Map<String, Float> raw = leg("a", 0.1f, "b", 0.2f, "c", 0.3f, "d", 0.4f);
+        assertEquals(raw.size(), L2ScalarNormalizer.INSTANCE.normalizeLeg(raw).size());
     }
 
     // ---- fuse(normalizer) is behavior-identical to the fuseMinMax it replaced ----

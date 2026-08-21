@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 * In-query fusion in hybrid search. Implement base classes and enable fusion (min_max and arithmetic mean) ([#1933](https://github.com/opensearch-project/neural-search/pull/1933))
 * In-query fusion in hybrid search. Support nested hybrid queries, search across multiple indices, aggregations, collapse with group expansion, and point in time; refuse fused mode while any node in the cluster is below 3.8.0; refuse `scroll` in fused mode with a validation error (use `point_in_time` instead); cap the leg sub-searches one request may fan out with the `plugins.neural_search.hybrid.fusion.max_leg_searches` cluster setting ([#1943](https://github.com/opensearch-project/neural-search/pull/1943))
+* In-query fusion in hybrid search. Support `z_score` and `l2` normalization in fused mode, so the whole score-normalization family is available with `arithmetic_mean`; both run the same shared normalization cores as the classic shard-side path ([#1962](https://github.com/opensearch-project/neural-search/pull/1962))
 
 ### Bug Fixes
 * [SemanticHighlighter] Fix SemanticHighlighterExtBuilder.toXContent ([#1906](https://github.com/opensearch-project/neural-search/issues/1906)) (query-insights [#651](https://github.com/opensearch-project/query-insights/issues/651))

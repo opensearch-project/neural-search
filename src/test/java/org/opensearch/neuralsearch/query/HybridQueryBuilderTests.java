@@ -647,13 +647,28 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     // which needs real cluster-state metadata (see FusionConfigResolverTests); it is covered by the integration tests.
 
     @SneakyThrows
-    public void testDoRewriteFused_whenUnsupportedTechnique_thenFailsFast() {
+    public void testDoRewriteFused_whenUnsupportedNormalization_thenFailsFast() {
         setUpClusterService();
-        // inline l2 normalization resolves fine, but only min_max is wired today → fail fast at rewrite.
-        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("normalization", Map.of("technique", "l2"))));
+        // The normalization clause parses any technique name, so an unknown one resolves into a FusionSpec and is caught
+        // by the rewrite-time gate rather than by the normalizer registry's backstop.
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("normalization", Map.of("technique", "not_a_technique"))));
         QueryCoordinatorContext ctx = coordinatorContextFor(builder);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
-        assertThat(e.getMessage(), containsString("currently supports only"));
+        assertThat(e.getMessage(), containsString("does not support normalization [not_a_technique] in fused mode"));
+        // The message names the alternatives, so a user hitting a typo can fix it without reading the source.
+        assertThat(e.getMessage(), containsString("[l2, min_max, z_score]"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenUnsupportedCombination_thenFailsFast() {
+        setUpClusterService();
+        // geometric_mean is a valid classic pairing for min_max but is not wired into the coordinator path yet.
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "geometric_mean")))
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("does not support combination [geometric_mean] in fused mode"));
     }
 
     @SneakyThrows
@@ -664,7 +679,22 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         );
         QueryCoordinatorContext ctx = coordinatorContextFor(builder);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
-        assertThat(e.getMessage(), containsString("currently supports only"));
+        // RRF is rank-based and carries normalization=none, so the combination check must be the one that fires —
+        // blaming [none] would send the user looking for a normalization they never asked for.
+        assertThat(e.getMessage(), containsString("does not support combination [rrf] in fused mode"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenZScoreOrL2_thenSupported() {
+        // The whole score-normalization family is wired with arithmetic_mean; these resolve and register the fan-out
+        // rather than failing the gate.
+        for (String normalization : List.of("z_score", "l2")) {
+            initClusterUtilWithMaxResultWindow(10000);
+            HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("normalization", Map.of("technique", normalization))));
+            QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+            QueryBuilder rewritten = builder.doRewrite(ctx);
+            assertNotSame("round 1 returns a marker for " + normalization, builder, rewritten);
+        }
     }
 
     @SneakyThrows

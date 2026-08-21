@@ -13,6 +13,8 @@ import java.util.ListIterator;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -55,6 +57,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
+import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
+import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -516,8 +521,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 )
             );
         }
-        // Current scope (first working slice): min_max + arithmetic_mean only. Other techniques parse but are not wired
-        // into the coordinator fusion path yet — fail fast rather than silently mis-fuse.
+        // Current scope: the whole score-normalization family (min_max, z_score, l2) combined by arithmetic_mean. Other
+        // techniques parse but are not wired into the coordinator fusion path yet — fail fast rather than mis-fuse.
         requireSupportedTechniques(fusionSpec);
 
         int window = effectiveWindowSize();
@@ -835,21 +840,70 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return fusion.containsKey(FUSION_KEY_NORMALIZATION) || fusion.containsKey(FUSION_KEY_COMBINATION);
     }
 
-    /** Fail fast on techniques not yet wired into the coordinator fusion path (current scope: min_max + arithmetic_mean). */
+    /**
+     * Combination techniques wired into the coordinator fusion path. Narrower than the classic compatibility matrix
+     * while combination support is widened one technique at a time; widening this set is what admits a new combiner.
+     */
+    private static final Set<String> FUSED_COMBINATION_TECHNIQUES = Set.of(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN);
+
+    /**
+     * Fail fast on fusion configs the coordinator path cannot honor, rather than silently mis-fusing. Three checks,
+     * ordered so that whichever one fires names the blocker a user can act on:
+     * <ol>
+     *   <li>the combination technique is inside fused mode's current scope;</li>
+     *   <li>the normalization technique has a coordinator-side {@link ScalarNormalizer};</li>
+     *   <li>the pairing is one the classic path allows, read from the same matrix classic enforces.</li>
+     * </ol>
+     */
     private static void requireSupportedTechniques(final FusionSpec fusionSpec) {
-        boolean supported = FusionSpec.TECHNIQUE_ARITHMETIC_MEAN.equals(fusionSpec.combinationTechnique())
-            && FusionSpec.NORMALIZATION_MIN_MAX.equals(fusionSpec.normalizationTechnique());
-        if (supported == false) {
+        final String normalization = fusionSpec.normalizationTechnique();
+        final String combination = fusionSpec.combinationTechnique();
+
+        // Combination first, because that is where RRF stops: it is modelled as combination=rrf with normalization=none,
+        // so checking the normalizer registry first would blame [none] instead of naming rrf. Rank-based fusion needs
+        // its own routing rather than a ScalarNormalizer.
+        if (FUSED_COMBINATION_TECHNIQUES.contains(combination) == false) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "[%s] query [%s] currently supports only normalization [%s] with combination [%s]; got normalization [%s], combination [%s]",
+                    "[%s] query [%s] does not support combination [%s] in fused mode; supported combinations are %s",
                     NAME,
                     FUSION_FIELD.getPreferredName(),
-                    FusionSpec.NORMALIZATION_MIN_MAX,
-                    FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
-                    fusionSpec.normalizationTechnique(),
-                    fusionSpec.combinationTechnique()
+                    combination,
+                    new TreeSet<>(FUSED_COMBINATION_TECHNIQUES)
+                )
+            );
+        }
+
+        if (ScalarNormalizers.supportedTechniques().contains(normalization) == false) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query [%s] does not support normalization [%s] in fused mode; supported normalizations are %s",
+                    NAME,
+                    FUSION_FIELD.getPreferredName(),
+                    normalization,
+                    new TreeSet<>(ScalarNormalizers.supportedTechniques())
+                )
+            );
+        }
+
+        // Defer to the one compatibility matrix the classic path enforces, so a pairing classic rejects cannot slip in
+        // through fused mode — z_score with geometric or harmonic mean being the case that exists today. Not yet
+        // load-bearing, because the scope check above admits only arithmetic_mean and every normalization accepts that;
+        // it starts biting as soon as that scope widens.
+        final Set<String> classicPairings = ScoreNormalizationFactory.supportedCombinationTechniques(normalization);
+        if (classicPairings.contains(combination) == false) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query [%s] does not support combination [%s] with normalization [%s]; supported combinations "
+                        + "for that normalization are %s",
+                    NAME,
+                    FUSION_FIELD.getPreferredName(),
+                    combination,
+                    normalization,
+                    new TreeSet<>(classicPairings)
                 )
             );
         }
