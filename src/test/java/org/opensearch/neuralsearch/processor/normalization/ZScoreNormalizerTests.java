@@ -37,7 +37,9 @@ public class ZScoreNormalizerTests extends OpenSearchTestCase {
             accumulator.add(score);
         }
 
-        // Population statistics as DescriptiveStatistics defines them: mean 5.667, sample standard deviation 3.215.
+        // Mean 5.667. DescriptiveStatistics#getStandardDeviation is the sample (n-1, bias-corrected) standard deviation,
+        // not the population (n) one: for {2, 7, 8} that is sqrt(20.667/2) = 3.215, where population would give
+        // sqrt(20.667/3) = 2.625. z_score's behaviour inherits that convention, so it is pinned here.
         assertEquals(5.6666665f, accumulator.mean(), DELTA);
         assertEquals(3.2145503f, accumulator.standardDeviation(), DELTA);
         assertEquals(8.0f, accumulator.max(), DELTA);

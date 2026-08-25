@@ -46,13 +46,21 @@ public class L2ScoreNormalizerTests extends OpenSearchTestCase {
     public void testNormAccumulator_accumulatesInFloat() {
         // The running sum is a float, matching what the classic path has always done. Summing in double would round
         // differently and silently change existing l2 scores, so this pins the narrower arithmetic.
-        float score = 1.0f;
-        float tiny = 1e-4f;
+        //
+        // The fixture has to be one where float and double actually diverge in the final float norm, and the expectation
+        // has to be a literal rather than the implementation's own expression, or the test asserts nothing. 2.0e-4f
+        // squares to 4.0e-8, below half an ulp of 1.0f (5.96e-8), so a float sum swallows each of the 100 addends and
+        // stays exactly 1.0f. A double sum keeps them, reaching 1.000004 and narrowing to 1.000002f, 17 bits away.
         L2ScoreNormalizer.NormAccumulator accumulator = new L2ScoreNormalizer.NormAccumulator();
-        accumulator.add(score);
-        accumulator.add(tiny);
+        accumulator.add(1.0f);
+        double sumOfSquaresInDouble = 1.0;
+        for (int i = 0; i < 100; i++) {
+            accumulator.add(2.0e-4f);
+            sumOfSquaresInDouble += 2.0e-4f * 2.0e-4f;
+        }
 
-        float expectedFloatSum = score * score + tiny * tiny;
-        assertEquals(Float.floatToIntBits((float) Math.sqrt(expectedFloatSum)), Float.floatToIntBits(accumulator.norm()));
+        assertEquals(Float.floatToIntBits(1.0f), Float.floatToIntBits(accumulator.norm()));
+        // Guard the fixture itself: if this ever stops holding, the assertion above no longer tells float from double.
+        assertNotEquals(Float.floatToIntBits(1.0f), Float.floatToIntBits((float) Math.sqrt(sumOfSquaresInDouble)));
     }
 }
