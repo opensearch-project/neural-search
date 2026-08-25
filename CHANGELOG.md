@@ -16,6 +16,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [RRF] Reject a combination technique other than rrf when creating a score-ranker-processor, instead of accepting the pipeline and throwing NullPointerException on every query ([#1949](https://github.com/opensearch-project/neural-search/pull/1949))
 
 ### Infrastructure
+* Resolve the Eclipse JDT formatter directly from download.eclipse.org instead of the ci.opensearch.org P2 mirror, which was timing out at configuration time and failing CI ([#20826](https://github.com/opensearch-project/OpenSearch/issues/20826))
 
 
 ### Documentation
