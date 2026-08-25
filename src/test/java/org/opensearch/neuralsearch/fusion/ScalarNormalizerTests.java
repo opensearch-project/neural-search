@@ -14,6 +14,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechniq
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
 import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizer;
+import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizer;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -53,16 +54,48 @@ public class ScalarNormalizerTests extends OpenSearchTestCase {
         assertEquals("l2", normalizer.techniqueName());
     }
 
-    public void testSupportedTechniques_isTheWholeScoreNormalizationFamily() {
+    public void testForTechnique_resolvesRrf() {
+        // rrf resolves through the same lookup as the score-based techniques rather than through a branch of its own; that
+        // is what makes it the extension point the other rank-based techniques would use.
+        ScalarNormalizer normalizer = ScalarNormalizers.forTechnique(
+            "rrf",
+            Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, RRFScoreNormalizer.DEFAULT_RANK_CONSTANT)
+        );
+        assertTrue(normalizer instanceof RrfScalarNormalizer);
+        assertEquals("rrf", normalizer.techniqueName());
+    }
+
+    public void testForTechnique_whenRrfWithoutParameters_thenDefaultRankConstant() {
+        // The no-parameter overload has to stay usable for rrf too, because the score-ranker-processor shape supplies no
+        // rank_constant; it must fall back to the same default classic uses rather than reject the lookup.
+        Map<String, Float> withDefault = ScalarNormalizers.forTechnique("rrf").normalizeLeg(leg("a", 2.0f, "b", 1.0f));
+        assertEquals(RRFScoreNormalizer.scoreForRank(0, RRFScoreNormalizer.DEFAULT_RANK_CONSTANT), withDefault.get("a"), 0.0f);
+    }
+
+    public void testForTechnique_whenRrfWithRankConstant_thenParameterIsHonored() {
+        // Names map to factories precisely so a parameterized technique can be built per-query: two different rank
+        // constants must produce two differently-scored normalizers, not one shared singleton.
+        Map<String, Float> raw = leg("a", 2.0f, "b", 1.0f);
+
+        Map<String, Float> small = ScalarNormalizers.forTechnique("rrf", Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, 1))
+            .normalizeLeg(raw);
+        Map<String, Float> large = ScalarNormalizers.forTechnique("rrf", Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, 100))
+            .normalizeLeg(raw);
+
+        assertEquals(RRFScoreNormalizer.scoreForRank(0, 1), small.get("a"), 0.0f);
+        assertEquals(RRFScoreNormalizer.scoreForRank(0, 100), large.get("a"), 0.0f);
+        assertTrue(small.get("a") > large.get("a"));
+    }
+
+    public void testSupportedTechniques_isTheScoreNormalizationFamilyPlusRrf() {
         // The caller's rewrite-time gate refuses anything outside this set, so it doubles as the fused-mode scope
-        // statement — rank-based rrf is deliberately absent, and so is the `none` it arrives under.
-        assertEquals(Set.of("min_max", "z_score", "l2"), ScalarNormalizers.supportedTechniques());
+        // statement. `none` is deliberately absent: a fusion config that names no normalization has nothing to resolve.
+        assertEquals(Set.of("min_max", "z_score", "l2", "rrf"), ScalarNormalizers.supportedTechniques());
     }
 
     public void testForTechnique_whenTechniqueNotWiredYet_thenThrows() {
-        // rrf is rank-based and arrives as normalization=none, so neither name resolves here; the caller rejects both at
-        // rewrite, making this the defense-in-depth backstop.
-        for (String notWired : List.of("rrf", "none", "not_a_technique")) {
+        // The caller rejects these at rewrite, making this the defense-in-depth backstop.
+        for (String notWired : List.of("none", "not_a_technique")) {
             IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> ScalarNormalizers.forTechnique(notWired));
             assertTrue(e.getMessage().contains("is not supported in fused mode"));
         }
@@ -170,6 +203,39 @@ public class ScalarNormalizerTests extends OpenSearchTestCase {
     public void testL2NormalizeLeg_preservesEveryKey() {
         Map<String, Float> raw = leg("a", 0.1f, "b", 0.2f, "c", 0.3f, "d", 0.4f);
         assertEquals(raw.size(), L2ScalarNormalizer.INSTANCE.normalizeLeg(raw).size());
+    }
+
+    // ---- rrf normalizer ----
+
+    public void testRrfNormalizeLeg_replacesScoresWithRankScores() {
+        // Unlike the score-based normalizers, the output is a function of order alone: the shared rank arithmetic applied to
+        // each score's position within the leg, descending.
+        Map<String, Float> raw = leg("a", 0.2f, "b", 9.0f, "c", 1.0f);
+
+        Map<String, Float> normalized = new RrfScalarNormalizer(RRFScoreNormalizer.DEFAULT_RANK_CONSTANT).normalizeLeg(raw);
+
+        assertEquals(raw.keySet(), normalized.keySet());
+        int k = RRFScoreNormalizer.DEFAULT_RANK_CONSTANT;
+        assertEquals(RRFScoreNormalizer.scoreForRank(2, k), normalized.get("a"), 0.0f);
+        assertEquals(RRFScoreNormalizer.scoreForRank(0, k), normalized.get("b"), 0.0f);
+        assertEquals(RRFScoreNormalizer.scoreForRank(1, k), normalized.get("c"), 0.0f);
+    }
+
+    public void testRrfNormalizeLeg_whenEmptyLeg_thenEmptyResult() {
+        assertTrue(new RrfScalarNormalizer(RRFScoreNormalizer.DEFAULT_RANK_CONSTANT).normalizeLeg(Map.of()).isEmpty());
+    }
+
+    public void testRrfNormalizeLeg_ignoresScoreMagnitude() {
+        // Two legs with the same ordering but wildly different score scales must normalize identically — the property that
+        // makes rrf immune to the incomparable-score problem the score-based techniques exist to solve.
+        RrfScalarNormalizer normalizer = new RrfScalarNormalizer(RRFScoreNormalizer.DEFAULT_RANK_CONSTANT);
+
+        assertEquals(normalizer.normalizeLeg(leg("a", 2.0f, "b", 1.0f)), normalizer.normalizeLeg(leg("a", 9000.0f, "b", 0.001f)));
+    }
+
+    public void testRrfNormalizeLeg_preservesEveryKey() {
+        Map<String, Float> raw = leg("a", 0.1f, "b", 0.2f, "c", 0.3f, "d", 0.4f);
+        assertEquals(raw.size(), new RrfScalarNormalizer(RRFScoreNormalizer.DEFAULT_RANK_CONSTANT).normalizeLeg(raw).size());
     }
 
     // ---- fuse(normalizer) is behavior-identical to the fuseMinMax it replaced ----

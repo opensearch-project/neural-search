@@ -33,6 +33,7 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.InnerHitBuilder;
+import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -51,6 +52,10 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             FusionSpec.DEFAULT_RANK_CONSTANT,
             new float[0]
         );
+    }
+
+    private FusionSpec rrf(int rankConstant) {
+        return new FusionSpec(FusionSpec.TECHNIQUE_RRF, FusionSpec.NORMALIZATION_RRF, rankConstant, new float[0]);
     }
 
     /**
@@ -1199,5 +1204,84 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         }
         assertTrue("five rescorers at query_weight 0.001 still hold", compounded > 0.0f);
         assertEquals("six do not", 0.0f, compounded * 0.001f, 0.0f);
+    }
+
+    // ---- rrf dispatch: rank scores, not min_max normalization, and the resolved rank_constant is honored ----
+
+    /** The scoring should-clause boosts in Top order — i.e. the fused scores, highest first. */
+    private float[] topScores(QueryBuilder fused) {
+        List<QueryBuilder> should = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().should();
+        float[] scores = new float[should.size()];
+        for (int i = 0; i < should.size(); i++) {
+            scores[i] = should.get(i).boost();
+        }
+        return scores;
+    }
+
+    public void testBuildFusedQuery_rrf_fusesRankScores() {
+        // leg0 ranks 1 > 2; leg1 ranks 2 > 3. RRF sums rank scores, so doc 2 (rank 1 in leg0 + rank 0 in leg1) tops the
+        // window, then doc 1 (rank 0, one leg) then doc 3 (rank 1, one leg). Scores must be the rank arithmetic, NOT the
+        // min_max normalization of the raw scores — this is what proves the lookup resolved RrfScalarNormalizer.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f, "3", 0.4f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+            10
+        );
+
+        float rank0 = RRFScoreNormalizer.scoreForRank(0, FusionSpec.DEFAULT_RANK_CONSTANT);
+        float rank1 = RRFScoreNormalizer.scoreForRank(1, FusionSpec.DEFAULT_RANK_CONSTANT);
+        assertArrayEquals("doc2 (both legs), then doc1, then doc3", new float[] { rank1 + rank0, rank0, rank1 }, topScores(fused), 0.0f);
+    }
+
+    public void testBuildFusedQuery_rrf_honorsRankConstant() {
+        // The rank constant is read from the FusionSpec rather than defaulted: the same single-leg hit set fuses to
+        // 1/(k+1) and 1/(k+2) for whichever k was configured.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        for (int rankConstant : new int[] { 1, 10_000 }) {
+            MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)));
+            QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                ms,
+                legs,
+                rrf(rankConstant),
+                10
+            );
+            assertArrayEquals(
+                "rank_constant " + rankConstant + " drives the rank scores",
+                new float[] { RRFScoreNormalizer.scoreForRank(0, rankConstant), RRFScoreNormalizer.scoreForRank(1, rankConstant) },
+                topScores(fused),
+                0.0f
+            );
+        }
+    }
+
+    public void testBuildFusedQuery_rrf_ignoresRawScoreMagnitude() {
+        // Two legs whose raw scores are orders of magnitude apart fuse identically to two legs with comparable scores,
+        // because RRF reads rank only. Under min_max the per-leg normalization would differ.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        float[] comparable = topScores(
+            HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("1", 0.8f, "2", 0.4f))),
+                legs,
+                rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+                10
+            )
+        );
+        float[] skewed = topScores(
+            HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                multiSearch(legItem(Map.of("1", 900.0f, "2", 0.5f)), legItem(Map.of("1", 0.008f, "2", 0.004f))),
+                legs,
+                rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+                10
+            )
+        );
+        assertArrayEquals("rank-only fusion is invariant to raw score magnitude", comparable, skewed, 0.0f);
     }
 }

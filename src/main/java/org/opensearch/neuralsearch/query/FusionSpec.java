@@ -17,6 +17,7 @@ import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 
 /**
@@ -36,7 +37,9 @@ import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
  *       {@code combination.technique} (arithmetic_mean) + optional {@code combination.parameters.weights}.</li>
  *   <li>{@code score-ranker-processor}: {@code combination.technique = rrf} + {@code combination.rank_constant} (on the
  *       combination clause itself, NOT under {@code parameters} — that is where {@code RRFProcessorFactory} reads it) +
- *       optional {@code combination.parameters.weights}. RRF is rank-based (no normalization clause).</li>
+ *       optional {@code combination.parameters.weights}. RRF is rank-based, so this shape carries no normalization
+ *       clause; it still resolves to {@code normalization = rrf}, because that is the normalization classic applies for
+ *       it — see {@link #readNormalizationTechnique}.</li>
  * </ul>
  */
 @Getter(AccessLevel.PACKAGE)
@@ -49,6 +52,7 @@ public final class FusionSpec {
     // Normalization techniques
     static final String NORMALIZATION_NONE = "none";
     static final String NORMALIZATION_MIN_MAX = MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME;
+    static final String NORMALIZATION_RRF = RRFNormalizationTechnique.TECHNIQUE_NAME;
 
     // Sourced from the shared normalizer rather than redeclared, so fused mode and classic cannot drift apart.
     static final int DEFAULT_RANK_CONSTANT = RRFScoreNormalizer.DEFAULT_RANK_CONSTANT;
@@ -63,7 +67,7 @@ public final class FusionSpec {
     private static final String RANK_CONSTANT_KEY = RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT;
 
     private final String combinationTechnique; // rrf | arithmetic_mean
-    private final String normalizationTechnique; // none | min_max | z_score | l2
+    private final String normalizationTechnique; // none | min_max | z_score | l2 | rrf
     private final int rankConstant; // RRF only
     private final float[] weights; // per-leg weights; empty => unweighted
 
@@ -162,10 +166,13 @@ public final class FusionSpec {
             rankConstant = RRFScoreNormalizer.resolveRankConstant(combinationClause);
             weights = readWeights(combinationClause);
         }
-        // RRF is rank based, so the score-ranker-processor has no normalization clause and this resolves to "none".
-        // An inline fusion block can still carry one, and it is reported rather than dropped so the caller's technique
-        // check rejects the contradictory pairing instead of silently ignoring what the user asked for.
-        return new FusionSpec(TECHNIQUE_RRF, readNormalizationTechnique(config, NORMALIZATION_NONE), rankConstant, weights);
+        // The score-ranker-processor has no normalization clause, so the default is what this shape almost always
+        // resolves to. It is "rrf", not "none", because rank scoring IS this shape's normalization step — classic says so
+        // itself: RRFProcessorFactory builds an RRFNormalizationTechnique for a processor with no normalization clause.
+        // Naming it lets the coordinator resolve rrf through the same ScalarNormalizers lookup as every other technique.
+        // An inline fusion block can still carry a normalization clause, and it is reported rather than dropped so the
+        // caller's technique check rejects the contradictory pairing instead of silently ignoring what the user asked for.
+        return new FusionSpec(TECHNIQUE_RRF, readNormalizationTechnique(config, NORMALIZATION_RRF), rankConstant, weights);
     }
 
     /**

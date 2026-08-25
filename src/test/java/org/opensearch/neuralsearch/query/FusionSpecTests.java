@@ -25,12 +25,14 @@ public class FusionSpecTests extends OpenSearchTestCase {
         assertArrayEquals(new float[] { 0.3f, 0.7f }, spec.weights(), 0.0001f);
     }
 
-    public void testFromInlineFusion_whenRrf_thenRankConstantAndNoNormalization() {
+    public void testFromInlineFusion_whenRrf_thenRankConstantAndRrfNormalization() {
+        // An rrf block carries no normalization clause, and the technique it defaults to is rrf rather than none: rank
+        // scoring IS the normalization step, which is how the coordinator resolves it through the same lookup as min_max.
         Map<String, Object> inline = Map.of("combination", Map.of("technique", "rrf", "rank_constant", 42));
         FusionSpec spec = FusionSpec.fromInlineFusion(inline);
         assertNotNull(spec);
         assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
-        assertEquals(FusionSpec.NORMALIZATION_NONE, spec.normalizationTechnique());
+        assertEquals(FusionSpec.NORMALIZATION_RRF, spec.normalizationTechnique());
         assertEquals(42, spec.rankConstant());
     }
 

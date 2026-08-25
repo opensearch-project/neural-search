@@ -39,7 +39,9 @@ import lombok.NoArgsConstructor;
  * {@link ScalarNormalizers}); the combination step is the caller-supplied {@link ScoreCombinationTechnique}. This
  * class owns only the shape-level work that is identical for every technique: per-leg normalization dispatch, the doc
  * union, and building each doc's per-leg input array. Adding a technique therefore touches neither this class nor the
- * orchestrator. Current fused-mode scope is {@code min_max} + arithmetic_mean; the caller gates the rest at rewrite.
+ * orchestrator — {@code rrf} joined this path that way, as a normalizer over ranks rather than a second fusion routine.
+ * Current fused-mode scope is the score-normalization family + arithmetic_mean, plus rrf; the caller gates the rest at
+ * rewrite.
  *
  * <p>Document keys are treated as <b>opaque strings</b> throughout — this class never parses or builds them — so the
  * caller can change its document identity scheme (e.g. to disambiguate same-{@code _id} docs across indices) without

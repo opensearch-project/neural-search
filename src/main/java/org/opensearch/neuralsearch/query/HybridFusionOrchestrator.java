@@ -33,6 +33,7 @@ import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.fusion.CoordinatorScoreFusion;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
+import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
@@ -54,8 +55,8 @@ import lombok.NoArgsConstructor;
  * <p>Fusion arithmetic is NOT reimplemented here — it delegates to {@link CoordinatorScoreFusion}, the shared core that
  * classic hybrid also calls, so fused-mode relevance matches classic for the same hit set. Current scope: the whole
  * score-normalization family ({@code min_max}, {@code z_score}, {@code l2}, resolved by name through
- * {@link ScalarNormalizers}) combined by {@code arithmetic_mean}; the caller rejects every other combination technique at
- * rewrite.
+ * {@link ScalarNormalizers}) combined by {@code arithmetic_mean}, plus rank-based {@code rrf}; the caller rejects every
+ * other combination technique at rewrite.
  *
  * <p>The request's {@code rescore} is deliberately <b>not</b> handled here — see {@link FusedRescoreScope}. Confining a
  * rescore has to be set up before the legs are even fired, which is the one thing this class cannot do from a callback that
@@ -331,8 +332,9 @@ final class HybridFusionOrchestrator {
             weightsParams(fusion.weights())
         );
         // Normalization is resolved by name, so widening technique support is a new ScalarNormalizer plus one entry in
-        // ScalarNormalizers — no change here. The caller already rejected out-of-scope techniques at rewrite.
-        ScalarNormalizer normalizer = ScalarNormalizers.forTechnique(fusion.normalizationTechnique());
+        // ScalarNormalizers — no change here, rank-based rrf included. The caller already rejected out-of-scope
+        // techniques at rewrite.
+        ScalarNormalizer normalizer = ScalarNormalizers.forTechnique(fusion.normalizationTechnique(), normalizerParams(fusion));
         Map<String, Float> combined = CoordinatorScoreFusion.fuse(legRawScores, normalizer, combination);
         timings.fuseScoresNanos(System.nanoTime() - fuseScoresStart);
         long rankWindowStart = System.nanoTime();
@@ -383,6 +385,16 @@ final class HybridFusionOrchestrator {
                 )
             );
         }
+    }
+
+    /**
+     * Parameters handed to the resolved {@link ScalarNormalizer}. Passed for every technique, not just the one that reads
+     * them — same as the classic path, where {@code ScoreNormalizationFactory.createNormalization} hands the params map to
+     * whichever technique it builds and the stateless ones ignore it. {@code rank_constant} is already resolved and
+     * validated by {@link FusionSpec}, so a non-rrf spec simply carries the default.
+     */
+    private static Map<String, Object> normalizerParams(FusionSpec fusion) {
+        return Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, fusion.rankConstant());
     }
 
     private static Map<String, Object> weightsParams(float[] weights) {

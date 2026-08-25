@@ -577,8 +577,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 )
             );
         }
-        // Current scope: the whole score-normalization family (min_max, z_score, l2) combined by arithmetic_mean. Other
-        // techniques parse but are not wired into the coordinator fusion path yet — fail fast rather than mis-fuse.
+        // Current scope: the whole score-normalization family (min_max, z_score, l2) combined by arithmetic_mean, plus
+        // rank-based rrf. Other techniques parse but are not wired into the coordinator fusion path yet — fail fast
+        // rather than mis-fuse.
         requireSupportedTechniques(fusionSpec);
 
         int window = effectiveWindowSize();
@@ -1164,7 +1165,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * Combination techniques wired into the coordinator fusion path. Narrower than the classic compatibility matrix
      * while combination support is widened one technique at a time; widening this set is what admits a new combiner.
      */
-    private static final Set<String> FUSED_COMBINATION_TECHNIQUES = Set.of(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN);
+    private static final Set<String> FUSED_COMBINATION_TECHNIQUES = Set.of(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, FusionSpec.TECHNIQUE_RRF);
 
     /**
      * Fail fast on fusion configs the coordinator path cannot honor, rather than silently mis-fusing. Three checks,
@@ -1179,9 +1180,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         final String normalization = fusionSpec.normalizationTechnique();
         final String combination = fusionSpec.combinationTechnique();
 
-        // Combination first, because that is where RRF stops: it is modelled as combination=rrf with normalization=none,
-        // so checking the normalizer registry first would blame [none] instead of naming rrf. Rank-based fusion needs
-        // its own routing rather than a ScalarNormalizer.
         if (FUSED_COMBINATION_TECHNIQUES.contains(combination) == false) {
             throw new IllegalArgumentException(
                 String.format(
@@ -1208,10 +1206,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             );
         }
 
+        // rrf paired with itself is the one shape the matrix below cannot speak to. That matrix describes the
+        // normalization-processor, whose combination options are the three means; rrf comes from the score-ranker-processor,
+        // where RRFProcessorFactory pins the combination to rrf and supplies the normalization itself, so rrf + rrf is the
+        // only pairing that processor can produce. Any *other* normalization alongside rrf is a config contradiction and
+        // still falls through to the matrix, which rejects it by name.
+        if (FusionSpec.TECHNIQUE_RRF.equals(combination) && FusionSpec.NORMALIZATION_RRF.equals(normalization)) {
+            return;
+        }
+
         // Defer to the one compatibility matrix the classic path enforces, so a pairing classic rejects cannot slip in
         // through fused mode — z_score with geometric or harmonic mean being the case that exists today. Not yet
-        // load-bearing, because the scope check above admits only arithmetic_mean and every normalization accepts that;
-        // it starts biting as soon as that scope widens.
+        // load-bearing for the mean combiners, because the scope check above admits only arithmetic_mean and every
+        // normalization accepts that; it starts biting as soon as that scope widens.
         final Set<String> classicPairings = ScoreNormalizationFactory.supportedCombinationTechniques(normalization);
         if (classicPairings.contains(combination) == false) {
             throw new IllegalArgumentException(

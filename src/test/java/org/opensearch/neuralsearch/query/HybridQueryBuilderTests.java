@@ -656,7 +656,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
         assertThat(e.getMessage(), containsString("does not support normalization [not_a_technique] in fused mode"));
         // The message names the alternatives, so a user hitting a typo can fix it without reading the source.
-        assertThat(e.getMessage(), containsString("[l2, min_max, z_score]"));
+        assertThat(e.getMessage(), containsString("[l2, min_max, rrf, z_score]"));
     }
 
     @SneakyThrows
@@ -672,16 +672,51 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testDoRewriteFused_whenRrf_thenFailsFast() {
+    public void testDoRewriteFused_whenRrf_thenRegistersAsyncAndReturnsMarker() {
+        initClusterUtilWithMaxResultWindow(10000);
+        // rrf takes no normalization clause and is wired into the fused path → same rewrite shape as min_max.
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 60))));
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        java.util.concurrent.atomic.AtomicInteger asyncRegistered = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            asyncRegistered.incrementAndGet();
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+
+        QueryBuilder rewritten = builder.doRewrite(ctx);
+
+        assertEquals("exactly one leg MultiSearch async action registered", 1, asyncRegistered.get());
+        assertTrue(rewritten instanceof HybridQueryBuilder);
+        assertNotSame("round 1 returns a marker, not the original", builder, rewritten);
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenRrfWithScoreNormalizationTechnique_thenFailsFast() {
         setUpClusterService();
+        // rrf is rank based; pairing it with a score-normalization technique is contradictory, so it must be rejected
+        // rather than have the normalization clause silently dropped.
         HybridQueryBuilder builder = fusedBuilder(
-            new HashMap<>(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 60)))
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "rrf")))
         );
         QueryCoordinatorContext ctx = coordinatorContextFor(builder);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
-        // RRF is rank-based and carries normalization=none, so the combination check must be the one that fires —
-        // blaming [none] would send the user looking for a normalization they never asked for.
-        assertThat(e.getMessage(), containsString("does not support combination [rrf] in fused mode"));
+        // The pairing check is the one that fires, and it names both halves: rrf is in fused-mode scope on its own, and so
+        // is min_max — it is the combination of the two that classic's matrix has never allowed.
+        assertThat(e.getMessage(), containsString("does not support combination [rrf] with normalization [min_max]"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenRrf_thenSupported() {
+        // rrf + rrf is the pairing the score-ranker-processor produces, and the only one classic's matrix cannot speak to,
+        // so it short circuits ahead of that matrix instead of being rejected by it.
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("combination", Map.of("technique", "rrf"))));
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+
+        QueryBuilder rewritten = builder.doRewrite(ctx);
+
+        assertTrue(rewritten instanceof HybridQueryBuilder);
+        assertNotSame("round 1 returns a marker, not the original", builder, rewritten);
     }
 
     @SneakyThrows
@@ -695,6 +730,17 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             QueryBuilder rewritten = builder.doRewrite(ctx);
             assertNotSame("round 1 returns a marker for " + normalization, builder, rewritten);
         }
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenRrfRankConstantOutOfRange_thenFailsFast() {
+        setUpClusterService();
+        // The rank constant is resolved through the same shared validator classic uses, so fused mode rejects what the
+        // score-ranker-processor rejects instead of fusing with an out-of-range constant.
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 0))));
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("rank constant must be in the interval between 1 and 10000"));
     }
 
     @SneakyThrows

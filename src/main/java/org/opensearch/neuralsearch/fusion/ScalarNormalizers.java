@@ -8,6 +8,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+
+import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -15,22 +19,22 @@ import lombok.NoArgsConstructor;
 /**
  * Resolves a coordinator-side {@link ScalarNormalizer} by technique name — the extension point for widening fused-mode
  * normalization support. Adding a technique is a new {@link ScalarNormalizer} plus one entry here; neither
- * {@link CoordinatorScoreFusion} nor the orchestrator changes. A static holder rather than a factory, since nothing is
- * constructed: every technique is a stateless singleton, so the lookup hands back a shared instance.
+ * {@link CoordinatorScoreFusion} nor the orchestrator changes.
+ *
+ * <p>Names map to factories rather than instances, mirroring classic's
+ * {@link org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory}, because a technique may be
+ * parameterized: {@code rrf} carries a rank_constant. The three score-based techniques are stateless, so their factories
+ * hand back a shared singleton and ignore the parameters.
  *
  * <p>The whole score-normalization family — {@code min_max}, {@code z_score}, {@code l2} — is wired, each delegating to the
- * shared scalar core the classic shard-side path also uses. The fused-mode scope gate in
+ * shared scalar core the classic shard-side path also uses, as is rank-based {@code rrf}. The fused-mode scope gate in
  * {@code HybridQueryBuilder#requireSupportedTechniques} rejects anything else earlier, at rewrite, so the throw below is a
  * defense-in-depth backstop rather than the user-facing validation.
  *
- * <p>Still open, and deliberately left to whoever wires it:
- * <ul>
- *   <li><b>RRF</b> is rank-based and is modelled as {@code combination=rrf, normalization=none}, so it does not arrive
- *       here under a normalization name. It fits the {@link ScalarNormalizer} shape (sort the leg, emit
- *       {@code 1/(rank_constant + rank + 1)} by position) but needs its own routing plus a rank_constant parameter, and
- *       the classic {@code (doc, shardId)} rank tie-break has no equivalent over the coordinator's already-merged view —
- *       so a tie-break must be defined explicitly.</li>
- * </ul>
+ * <p>{@code rrf} reaches this registry under a normalization name even though the score-ranker-processor has no
+ * normalization clause, because that is what classic does too: {@code RRFProcessorFactory} builds an
+ * {@link org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique}. So {@code combination=rrf}
+ * resolves to {@code normalization=rrf} in {@code FusionSpec}, and rank-based fusion needs no routing of its own.
  *
  * <p>An earlier note here suggested geometric/harmonic mean would need an explicit presence mask rather than
  * {@link CoordinatorScoreFusion}'s {@code 0.0} "leg did not match" sentinel, because {@code l2} can legitimately normalize
@@ -43,13 +47,15 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class ScalarNormalizers {
 
-    private static final Map<String, ScalarNormalizer> NORMALIZERS = Map.of(
+    private static final Map<String, Function<Map<String, Object>, ScalarNormalizer>> NORMALIZERS = Map.of(
         MinMaxScalarNormalizer.INSTANCE.techniqueName(),
-        MinMaxScalarNormalizer.INSTANCE,
+        parameters -> MinMaxScalarNormalizer.INSTANCE,
         ZScoreScalarNormalizer.INSTANCE.techniqueName(),
-        ZScoreScalarNormalizer.INSTANCE,
+        parameters -> ZScoreScalarNormalizer.INSTANCE,
         L2ScalarNormalizer.INSTANCE.techniqueName(),
-        L2ScalarNormalizer.INSTANCE
+        parameters -> L2ScalarNormalizer.INSTANCE,
+        RRFNormalizationTechnique.TECHNIQUE_NAME,
+        parameters -> new RrfScalarNormalizer(RRFScoreNormalizer.resolveRankConstant(parameters))
     );
 
     /**
@@ -63,13 +69,25 @@ public final class ScalarNormalizers {
     }
 
     /**
+     * Resolve a technique that takes no parameters.
+     *
      * @param techniqueName normalization technique name from the resolved fusion config
      * @return the normalizer for that technique
      * @throws IllegalArgumentException when the technique has no coordinator-side implementation yet
      */
     public static ScalarNormalizer forTechnique(final String techniqueName) {
-        ScalarNormalizer normalizer = Objects.isNull(techniqueName) ? null : NORMALIZERS.get(techniqueName);
-        if (Objects.isNull(normalizer)) {
+        return forTechnique(techniqueName, Map.of());
+    }
+
+    /**
+     * @param techniqueName normalization technique name from the resolved fusion config
+     * @param parameters technique parameters ({@code rank_constant} for {@code rrf}); ignored by the score-based techniques
+     * @return the normalizer for that technique
+     * @throws IllegalArgumentException when the technique has no coordinator-side implementation yet
+     */
+    public static ScalarNormalizer forTechnique(final String techniqueName, final Map<String, Object> parameters) {
+        Function<Map<String, Object>, ScalarNormalizer> factory = Objects.isNull(techniqueName) ? null : NORMALIZERS.get(techniqueName);
+        if (Objects.isNull(factory)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -79,6 +97,6 @@ public final class ScalarNormalizers {
                 )
             );
         }
-        return normalizer;
+        return factory.apply(parameters);
     }
 }
