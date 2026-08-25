@@ -1,0 +1,12 @@
+{
+  "products": [
+    {
+      "id": "product-1",
+      "product_description": "OpenSearch is a distributed search and analytics engine."
+    },
+    {
+      "id": "product-2",
+      "product_description": "Neural search brings semantic retrieval to OpenSearch."
+    }
+  ]
+}
