@@ -121,6 +121,91 @@ public class FusionSpecTests extends OpenSearchTestCase {
         assertEquals(10, spec.rankConstant());
     }
 
+    public void testFromPipelineConfig_whenNormalizationProcessorWithRrfNormalization_thenRankConstantHonored() {
+        // rrf is also a normalization-processor normalization technique, and there the rank constant lives under
+        // `normalization.parameters` — that is where NormalizationProcessorFactory hands params to RRFNormalizationTechnique.
+        // Reading it only off the combination clause would silently rank this config at the default 60.
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 100)),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean")
+                    )
+                )
+            )
+        );
+        FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.NORMALIZATION_RRF, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        assertEquals(100, spec.rankConstant());
+    }
+
+    public void testFromPipelineConfig_whenNormalizationProcessorRankConstantInvalid_thenRejected() {
+        // Same shared validator as the score-ranker shape, so an out-of-range value is a 400 here too rather than a
+        // silent fallback to 60.
+        assertThrows(IllegalArgumentException.class, () -> FusionSpec.fromPipelineConfig(normalizationProcessorWithRankConstant(0)));
+        assertThrows(IllegalArgumentException.class, () -> FusionSpec.fromPipelineConfig(normalizationProcessorWithRankConstant(10001)));
+    }
+
+    public void testShape_distinguishesRrfPairingsThatResolveIdentically() {
+        // Both shapes can resolve to normalization=rrf + combination=rrf, and only the score-ranker one is a pairing
+        // classic allows — a normalization-processor asked to combine rrf-normalized scores by rrf is rejected by classic's
+        // compatibility matrix. The technique names cannot tell them apart, so the shape is what the fused-mode gate keys
+        // its exemption from that matrix on.
+        Map<String, Object> asNormalizationProcessor = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of("normalization", Map.of("technique", "rrf"), "combination", Map.of("technique", "rrf"))
+                )
+            )
+        );
+        FusionSpec normalizationShaped = FusionSpec.fromPipelineConfig(asNormalizationProcessor);
+        assertNotNull(normalizationShaped);
+        assertEquals(FusionSpec.Shape.NORMALIZATION_PROCESSOR, normalizationShaped.shape());
+        assertEquals(FusionSpec.NORMALIZATION_RRF, normalizationShaped.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_RRF, normalizationShaped.combinationTechnique());
+
+        Map<String, Object> asScoreRanker = Map.of(
+            "phase_results_processors",
+            List.of(Map.of("score-ranker-processor", Map.of("combination", Map.of("technique", "rrf"))))
+        );
+        FusionSpec rankFusionShaped = FusionSpec.fromPipelineConfig(asScoreRanker);
+        assertNotNull(rankFusionShaped);
+        assertEquals(FusionSpec.Shape.SCORE_RANKER_PROCESSOR, rankFusionShaped.shape());
+        // Same two technique names as above, which is the whole point.
+        assertEquals(normalizationShaped.normalizationTechnique(), rankFusionShaped.normalizationTechnique());
+        assertEquals(normalizationShaped.combinationTechnique(), rankFusionShaped.combinationTechnique());
+    }
+
+    public void testFromInlineFusion_whenRrf_thenScoreRankerShape() {
+        // An inline block naming rrf as the combination is the score-ranker shape, wherever it came from.
+        assertEquals(
+            FusionSpec.Shape.SCORE_RANKER_PROCESSOR,
+            FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf"))).shape()
+        );
+        assertEquals(FusionSpec.Shape.NORMALIZATION_PROCESSOR, FusionSpec.fromInlineFusion(Map.of()).shape());
+    }
+
+    private static Map<String, Object> normalizationProcessorWithRankConstant(int rankConstant) {
+        return Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of("normalization", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", rankConstant)))
+                )
+            )
+        );
+    }
+
     public void testFromPipelineConfig_whenNoFusionProcessor_thenNull() {
         // A pipeline with no normalization/score-ranker processor yields null → caller fails fast.
         assertNull(FusionSpec.fromPipelineConfig(Map.of("phase_results_processors", List.of())));

@@ -31,20 +31,41 @@ import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
  *       ({@link #fromPipelineConfig(Map)}) — the same config source as classic hybrid, giving zero-migration UX.</li>
  * </ul>
  *
- * <p>Two processor shapes are understood, mirroring the classic phase-results processors:
+ * <p>Two processor shapes are understood, mirroring the classic phase-results processors. Which one a config came from
+ * is retained as its {@link Shape}, because the resolved technique names do not always distinguish them:
  * <ul>
- *   <li>{@code normalization-processor}: {@code normalization.technique} (min_max|l2|z_score) +
- *       {@code combination.technique} (arithmetic_mean) + optional {@code combination.parameters.weights}.</li>
+ *   <li>{@code normalization-processor}: {@code normalization.technique} (min_max|l2|z_score|rrf) + optional
+ *       {@code normalization.parameters} (rank_constant, for rrf) + {@code combination.technique} (arithmetic_mean) +
+ *       optional {@code combination.parameters.weights}.</li>
  *   <li>{@code score-ranker-processor}: {@code combination.technique = rrf} + {@code combination.rank_constant} (on the
  *       combination clause itself, NOT under {@code parameters} — that is where {@code RRFProcessorFactory} reads it) +
  *       optional {@code combination.parameters.weights}. RRF is rank-based, so this shape carries no normalization
  *       clause; it still resolves to {@code normalization = rrf}, because that is the normalization classic applies for
  *       it — see {@link #readNormalizationTechnique}.</li>
  * </ul>
+ *
+ * <p>Note that {@code rrf} appears in both, and means different things: under a {@code normalization-processor} it is
+ * only the normalization step and one of the means does the combining, while the {@code score-ranker-processor} is
+ * reciprocal rank fusion end to end. That is also why {@code rank_constant} is read from a different place in each —
+ * each shape reads it where its own classic factory reads it.
  */
 @Getter(AccessLevel.PACKAGE)
 @Accessors(fluent = true)
 public final class FusionSpec {
+
+    /**
+     * Which of the two processor shapes a config was read as. Carried rather than re-derived because the resolved
+     * technique names alone cannot tell {@code normalization = rrf, combination = rrf} apart, and only one of the two
+     * shapes may legitimately produce it: reciprocal rank fusion is the {@code score-ranker-processor}'s whole job,
+     * whereas a {@code normalization-processor} combining rrf-normalized scores by rrf is a pairing classic's
+     * compatibility matrix rejects. The fused-mode gate keys its one exemption from that matrix on this.
+     */
+    enum Shape {
+        /** {@code normalization-processor}: a normalization technique whose scores one of the means combines. */
+        NORMALIZATION_PROCESSOR,
+        /** {@code score-ranker-processor}: reciprocal rank fusion supplying both normalization and combination. */
+        SCORE_RANKER_PROCESSOR
+    }
 
     // Combination techniques
     static final String TECHNIQUE_RRF = RRFScoreCombinationTechnique.TECHNIQUE_NAME;
@@ -65,12 +86,14 @@ public final class FusionSpec {
     private static final String WEIGHTS_KEY = "weights";
     private static final String RANK_CONSTANT_KEY = RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT;
 
+    private final Shape shape; // which processor shape this was read as
     private final String combinationTechnique; // rrf | arithmetic_mean
     private final String normalizationTechnique; // min_max | z_score | l2 | rrf
     private final int rankConstant; // RRF only
     private final float[] weights; // per-leg weights; empty => unweighted
 
-    FusionSpec(String combinationTechnique, String normalizationTechnique, int rankConstant, float[] weights) {
+    FusionSpec(Shape shape, String combinationTechnique, String normalizationTechnique, int rankConstant, float[] weights) {
+        this.shape = Objects.requireNonNull(shape);
         this.combinationTechnique = combinationTechnique;
         // Both factories always resolve a name, each shape defaulting its own way, so there is no null case here — and
         // nothing sensible to default it to, now that "none" is not a technique fused mode understands.
@@ -149,7 +172,38 @@ public final class FusionSpec {
             }
             weights = readWeights(combinationClause);
         }
-        return new FusionSpec(combination, normalization, DEFAULT_RANK_CONSTANT, weights);
+        return new FusionSpec(Shape.NORMALIZATION_PROCESSOR, combination, normalization, readRankConstant(config, normalization), weights);
+    }
+
+    /**
+     * {@code rank_constant} for the {@code normalization-processor} shape, where {@code rrf} is the <em>normalization</em>
+     * technique and its parameters therefore live under {@code normalization.parameters} — that is the map
+     * {@code NormalizationProcessorFactory} hands to {@code RRFNormalizationTechnique}, so it is where fused mode has to
+     * look. Reading it only off the combination clause (the other shape's location) left a rrf-normalized
+     * {@code normalization-processor} pipeline ranking at the default 60 no matter what the user configured.
+     *
+     * <p>Only read for {@code rrf}, because it is an rrf parameter: resolving it for a score-based technique would answer
+     * a stray {@code rank_constant} under {@code min_max} with a rank-constant range error instead of the unsupported-
+     * parameter error {@code ScoreNormalizationUtil} raises for it.
+     */
+    private static int readRankConstant(Map<String, Object> config, String normalization) {
+        if (NORMALIZATION_RRF.equals(normalization) == false) {
+            return DEFAULT_RANK_CONSTANT;
+        }
+        // Shared resolver, so an absent value defaults and an out-of-range or non-integer one is rejected with the same
+        // message classic gives, rather than silently falling back.
+        return RRFScoreNormalizer.resolveRankConstant(readNormalizationParameters(config));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> readNormalizationParameters(Map<String, Object> config) {
+        if ((config.get(NORMALIZATION_CLAUSE) instanceof Map) == false) {
+            return Map.of();
+        }
+        Map<String, Object> normalizationClause = (Map<String, Object>) config.get(NORMALIZATION_CLAUSE);
+        return normalizationClause.get(PARAMETERS_KEY) instanceof Map
+            ? (Map<String, Object>) normalizationClause.get(PARAMETERS_KEY)
+            : Map.of();
     }
 
     @SuppressWarnings("unchecked")
@@ -173,7 +227,13 @@ public final class FusionSpec {
         // Naming it lets the coordinator resolve rrf through the same ScalarNormalizers lookup as every other technique.
         // An inline fusion block can still carry a normalization clause, and it is reported rather than dropped so the
         // caller's technique check rejects the contradictory pairing instead of silently ignoring what the user asked for.
-        return new FusionSpec(TECHNIQUE_RRF, readNormalizationTechnique(config, NORMALIZATION_RRF), rankConstant, weights);
+        return new FusionSpec(
+            Shape.SCORE_RANKER_PROCESSOR,
+            TECHNIQUE_RRF,
+            readNormalizationTechnique(config, NORMALIZATION_RRF),
+            rankConstant,
+            weights
+        );
     }
 
     /**

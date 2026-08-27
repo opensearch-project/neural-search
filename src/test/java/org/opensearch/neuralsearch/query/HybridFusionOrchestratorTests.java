@@ -47,6 +47,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
 
     private FusionSpec minMaxArithmetic() {
         return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
             FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
             FusionSpec.NORMALIZATION_MIN_MAX,
             FusionSpec.DEFAULT_RANK_CONSTANT,
@@ -55,7 +56,13 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     private FusionSpec rrf(int rankConstant) {
-        return new FusionSpec(FusionSpec.TECHNIQUE_RRF, FusionSpec.NORMALIZATION_RRF, rankConstant, new float[0]);
+        return new FusionSpec(
+            FusionSpec.Shape.SCORE_RANKER_PROCESSOR,
+            FusionSpec.TECHNIQUE_RRF,
+            FusionSpec.NORMALIZATION_RRF,
+            rankConstant,
+            new float[0]
+        );
     }
 
     /**
@@ -657,6 +664,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
         MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f, "3", 0.4f)));
         FusionSpec weighted = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
             FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
             FusionSpec.NORMALIZATION_MIN_MAX,
             FusionSpec.DEFAULT_RANK_CONSTANT,
@@ -910,15 +918,28 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     // ---- fused scores are floored above the non-scoring Tail ----
 
     private FusionSpec l2Arithmetic() {
-        return new FusionSpec(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, "l2", FusionSpec.DEFAULT_RANK_CONSTANT, new float[0]);
+        return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            "l2",
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            new float[0]
+        );
     }
 
     private FusionSpec zScoreArithmetic() {
-        return new FusionSpec(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, "z_score", FusionSpec.DEFAULT_RANK_CONSTANT, new float[0]);
+        return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            "z_score",
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            new float[0]
+        );
     }
 
     private FusionSpec minMaxWeighted(float... weights) {
         return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
             FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
             FusionSpec.NORMALIZATION_MIN_MAX,
             FusionSpec.DEFAULT_RANK_CONSTANT,

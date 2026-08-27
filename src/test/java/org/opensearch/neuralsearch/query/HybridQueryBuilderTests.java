@@ -719,6 +719,40 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertNotSame("round 1 returns a marker, not the original", builder, rewritten);
     }
 
+    public void testRequireSupportedTechniques_whenRrfPairing_thenExemptionKeyedOnShapeNotTechniqueNames() {
+        // The score-ranker shape's rrf + rrf is exempt from classic's compatibility matrix, because that matrix keys on the
+        // normalization technique and lists the three means — it describes the normalization-processor and cannot speak to
+        // this pairing. The exemption has to stop there: a normalization-processor combining rrf-normalized scores by rrf
+        // resolves to the same two technique names, but is a pairing classic rejects through that very matrix, so admitting
+        // it would leave fused mode looser than classic (and, since that shape keeps rank_constant under
+        // `normalization.parameters`, would silently fuse at the default 60).
+        HybridQueryBuilder.requireSupportedTechniques(
+            new FusionSpec(
+                FusionSpec.Shape.SCORE_RANKER_PROCESSOR,
+                FusionSpec.TECHNIQUE_RRF,
+                FusionSpec.NORMALIZATION_RRF,
+                FusionSpec.DEFAULT_RANK_CONSTANT,
+                new float[0]
+            )
+        );
+
+        IllegalArgumentException e = expectThrows(
+            IllegalArgumentException.class,
+            () -> HybridQueryBuilder.requireSupportedTechniques(
+                new FusionSpec(
+                    FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+                    FusionSpec.TECHNIQUE_RRF,
+                    FusionSpec.NORMALIZATION_RRF,
+                    FusionSpec.DEFAULT_RANK_CONSTANT,
+                    new float[0]
+                )
+            )
+        );
+        assertThat(e.getMessage(), containsString("does not support combination [rrf] with normalization [rrf]"));
+        // Rejected by the matrix, so the message names what classic does allow for rrf normalization.
+        assertThat(e.getMessage(), containsString("[arithmetic_mean, geometric_mean, harmonic_mean]"));
+    }
+
     @SneakyThrows
     public void testDoRewriteFused_whenZScoreOrL2_thenSupported() {
         // The whole score-normalization family is wired with arithmetic_mean; these resolve and register the fan-out
@@ -875,7 +909,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testProjectResolvedConfigOntoLegs_projectsOnlyFusedLegsWithoutInlineConfig() {
-        FusionSpec resolved = new FusionSpec(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, FusionSpec.NORMALIZATION_MIN_MAX, 60, new float[0]);
+        FusionSpec resolved = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            60,
+            new float[0]
+        );
 
         // A fused leg with no inline config is substituted by an equal-but-distinct copy carrying the resolved config.
         List<QueryBuilder> legs = outerWithNestedFusedLeg().queries();
@@ -906,7 +946,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         HybridQueryBuilder outer = outerWithNestedFusedLeg();
         SearchRequest userRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().query(outer))
             .pipeline("norm-pipeline");
-        FusionSpec resolved = new FusionSpec(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, FusionSpec.NORMALIZATION_MIN_MAX, 60, new float[0]);
+        FusionSpec resolved = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            60,
+            new float[0]
+        );
 
         org.opensearch.action.search.MultiSearchRequest fannedOut = HybridFusionOrchestrator.buildLegMultiSearch(
             CandidateScope.from(userRequest),

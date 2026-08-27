@@ -1175,8 +1175,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      *   <li>the normalization technique has a coordinator-side {@link ScalarNormalizer};</li>
      *   <li>the pairing is one the classic path allows, read from the same matrix classic enforces.</li>
      * </ol>
+     * Package-private so the shape-dependent third check can be exercised directly on both shapes; reaching it through
+     * {@link #doRewrite} needs a resolvable search pipeline, and so cluster-state metadata.
      */
-    private static void requireSupportedTechniques(final FusionSpec fusionSpec) {
+    static void requireSupportedTechniques(final FusionSpec fusionSpec) {
         final String normalization = fusionSpec.normalizationTechnique();
         final String combination = fusionSpec.combinationTechnique();
 
@@ -1206,12 +1208,14 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             );
         }
 
-        // rrf paired with itself is the one shape the matrix below cannot speak to. That matrix describes the
-        // normalization-processor, whose combination options are the three means; rrf comes from the score-ranker-processor,
-        // where RRFProcessorFactory pins the combination to rrf and supplies the normalization itself, so rrf + rrf is the
-        // only pairing that processor can produce. Any *other* normalization alongside rrf is a config contradiction and
-        // still falls through to the matrix, which rejects it by name.
-        if (FusionSpec.TECHNIQUE_RRF.equals(combination) && FusionSpec.NORMALIZATION_RRF.equals(normalization)) {
+        // The score-ranker-processor's own pairing is the one thing the matrix below cannot speak to. That matrix keys on
+        // the normalization technique and lists the three means, because it describes the normalization-processor; the
+        // score-ranker-processor instead pins the combination to rrf (RRFProcessorFactory) and supplies the rrf
+        // normalization itself, so rrf + rrf is the only pairing it can produce. Exempt exactly that, keyed on the shape
+        // rather than on the technique names: the same names also arise from a normalization-processor asked to combine
+        // rrf-normalized scores by rrf, which classic rejects through this very matrix, so that one must fall through to
+        // it. Any *other* normalization alongside rrf is a config contradiction and falls through too, rejected by name.
+        if (fusionSpec.shape() == FusionSpec.Shape.SCORE_RANKER_PROCESSOR && FusionSpec.NORMALIZATION_RRF.equals(normalization)) {
             return;
         }
 
