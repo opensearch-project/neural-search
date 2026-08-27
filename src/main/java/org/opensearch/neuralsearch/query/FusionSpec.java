@@ -50,7 +50,6 @@ public final class FusionSpec {
     static final String TECHNIQUE_RRF = RRFScoreCombinationTechnique.TECHNIQUE_NAME;
     static final String TECHNIQUE_ARITHMETIC_MEAN = ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME;
     // Normalization techniques
-    static final String NORMALIZATION_NONE = "none";
     static final String NORMALIZATION_MIN_MAX = MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME;
     static final String NORMALIZATION_RRF = RRFNormalizationTechnique.TECHNIQUE_NAME;
 
@@ -67,13 +66,15 @@ public final class FusionSpec {
     private static final String RANK_CONSTANT_KEY = RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT;
 
     private final String combinationTechnique; // rrf | arithmetic_mean
-    private final String normalizationTechnique; // none | min_max | z_score | l2 | rrf
+    private final String normalizationTechnique; // min_max | z_score | l2 | rrf
     private final int rankConstant; // RRF only
     private final float[] weights; // per-leg weights; empty => unweighted
 
     FusionSpec(String combinationTechnique, String normalizationTechnique, int rankConstant, float[] weights) {
         this.combinationTechnique = combinationTechnique;
-        this.normalizationTechnique = Objects.isNull(normalizationTechnique) ? NORMALIZATION_NONE : normalizationTechnique;
+        // Both factories always resolve a name, each shape defaulting its own way, so there is no null case here — and
+        // nothing sensible to default it to, now that "none" is not a technique fused mode understands.
+        this.normalizationTechnique = Objects.requireNonNull(normalizationTechnique);
         this.rankConstant = rankConstant;
         this.weights = Objects.isNull(weights) ? new float[0] : weights;
     }
