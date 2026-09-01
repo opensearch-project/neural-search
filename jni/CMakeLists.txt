@@ -99,6 +99,21 @@ add_library(${TARGET_LIB_NSPARSE} SHARED $<TARGET_OBJECTS:${TARGET_OBJ_NSPARSE}>
 target_link_libraries(${TARGET_LIB_NSPARSE} PRIVATE ${TARGET_OBJ_NSPARSE})
 set_target_properties(${TARGET_LIB_NSPARSE} PROPERTIES SUFFIX ${LIB_EXT})
 set_target_properties(${TARGET_LIB_NSPARSE} PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+# nsparse links statically, so the OpenMP runtime is the only dependency that has to
+# travel with the plugin. scripts/build.sh puts it next to this library inside the
+# zip, but System.loadLibrary's java.library.path does not apply to a library's own
+# dependencies -- the dynamic loader resolves those, and without an rpath it would
+# only ever find a system-wide copy. Look beside ourselves first so the shipped copy
+# is the one that gets used.
+if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL Windows)
+    if (APPLE)
+        set(NSPARSE_ORIGIN "@loader_path")
+    else()
+        set(NSPARSE_ORIGIN "$ORIGIN")
+    endif()
+    set_target_properties(${TARGET_LIB_NSPARSE} PROPERTIES BUILD_RPATH "${NSPARSE_ORIGIN}" INSTALL_RPATH "${NSPARSE_ORIGIN}")
+endif()
 # ---------------------------------------------------------------------------
 
 # --------------------------------- TESTS -----------------------------------

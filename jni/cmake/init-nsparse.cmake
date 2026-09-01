@@ -52,9 +52,8 @@ set(NSPARSE_ENABLE_TESTS OFF)
 set(NSPARSE_ENABLE_BENCHMARKS OFF)
 
 # AVX2_ENABLED / AVX512_ENABLED / SVE_ENABLED select which nsparse variant to
-# build. Exactly one variant is built and it is loaded unconditionally, so an
-# instruction set the running CPU lacks is not a slow path -- it is SIGILL on the
-# first vectorized call.
+# build. Exactly one variant is built per configure pass, and an instruction set the
+# running CPU lacks is not a slow path -- it is SIGILL on the first vectorized call.
 #
 # They therefore default to what THIS host can actually execute, not to true.
 # Defaulting them on assumed the build machine and the machine running the result
@@ -62,9 +61,9 @@ set(NSPARSE_ENABLE_BENCHMARKS OFF)
 # that died the moment it was called, which is what broke the Linux CI runners
 # while Windows (pinned to the generic build) passed.
 #
-# Pass them explicitly to override, which is what a distribution build wants: it
-# forces each variant in turn to produce the full set, and pairs that with
-# runtime CPU detection to choose between them on the target host.
+# Pass them explicitly to override, which is what a distribution build wants:
+# scripts/build.sh forces each variant in turn to produce the full set, and
+# NativeCpuFeatures then chooses between them from the target host's CPU flags.
 #
 # k-NN reached the same conclusion for its newest tier: init-faiss.cmake leaves
 # AVX2_ENABLED/AVX512_ENABLED defaulting to true but probes the host with `lscpu`
@@ -106,13 +105,33 @@ else()
     endif()
 endif()
 
+# __builtin_cpu_supports has no SVE query, so probe by running SVE code instead --
+# same reasoning as the tiers above, and a Graviton2 answers it with SIGILL, which
+# check_cxx_source_runs reports as a failure. Only non-Apple aarch64 has an SVE
+# branch in nsparse at all.
 if(NOT DEFINED SVE_ENABLED)
-    # __builtin_cpu_supports has no SVE query, so this stays opt-out rather than
-    # detected. nsparse only reaches the SVE branch on non-Apple aarch64.
-    set(SVE_ENABLED true)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64" AND NOT APPLE AND NOT CMAKE_CROSSCOMPILING AND NOT MSVC)
+        include(CheckCXXSourceRuns)
+        set(CMAKE_REQUIRED_FLAGS "-march=armv8-a+sve")
+        check_cxx_source_runs("#include <arm_sve.h>\nint main() { return svcntb() > 0 ? 0 : 1; }" HAS_SVE)
+        unset(CMAKE_REQUIRED_FLAGS)
+        if(HAS_SVE)
+            set(SVE_ENABLED true)
+        else()
+            set(SVE_ENABLED false)
+        endif()
+        message(STATUS "Build host supports SVE: ${HAS_SVE}")
+    else()
+        set(SVE_ENABLED false)
+    endif()
 endif()
 
 # Determine optimization level and target library.
+#
+# The branches are ordered by architecture rather than by flag, because the flags
+# are not mutually exclusive: SVE_ENABLED means nothing on x86_64 and the AVX
+# toggles mean nothing on aarch64, so a flat chain of conditions ends up letting an
+# irrelevant flag decide the variant.
 #
 # Windows is pinned to the generic build, matching k-NN ("SIMD optimization is not
 # supported on Windows" in the OpenSearch docs) -- but NOT for the same reason, so
@@ -122,21 +141,17 @@ endif()
 # compiles clean, the test suite passes, and the DLL really does contain
 # zmm-register instructions.
 #
-# The blocker is selection, not compilation. Only one variant is built, for
-# whatever machine ran the build, and the Java side finds it by probing file
-# names. An AVX-512 DLL shipped to a host without AVX-512 dies on an illegal
-# instruction. Lifting this needs the same work as the packaging story: build
-# every variant and pick one at runtime from the host's CPU features. Until then
-# the generic build is the only safe default for a Windows artifact.
-if(${CMAKE_SYSTEM_NAME} STREQUAL Windows OR ( NOT AVX2_ENABLED AND NOT AVX512_ENABLED))
+# The blocker is selection: NativeCpuFeatures reads /proc/cpuinfo to decide which
+# variant is safe to load, and there is no equivalent on Windows, so an AVX-512 DLL
+# there could only be picked by filename -- and dies on an illegal instruction on a
+# host without AVX-512. Same on macOS. Both stay generic-only until the loader can
+# verify the CPU on those platforms.
+if(${CMAKE_SYSTEM_NAME} STREQUAL Windows)
     set(NSPARSE_OPT_LEVEL generic)
     set(TARGET_LINK_NSPARSE_LIB nsparse)
-elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64" OR ${CMAKE_SYSTEM_PROCESSOR} MATCHES "arm64")
-    if(APPLE)
-        # Apple Silicon does not support SVE
-        set(NSPARSE_OPT_LEVEL generic)
-        set(TARGET_LINK_NSPARSE_LIB nsparse)
-    elseif(SVE_ENABLED)
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64|arm64")
+    # Apple Silicon does not support SVE.
+    if(SVE_ENABLED AND NOT APPLE)
         set(NSPARSE_OPT_LEVEL sve)
         set(TARGET_LINK_NSPARSE_LIB nsparse_sve)
         string(PREPEND LIB_EXT "_sve")
@@ -144,14 +159,24 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "aarch64" OR ${CMAKE_SYSTEM_PROCESSOR} 
         set(NSPARSE_OPT_LEVEL generic)
         set(TARGET_LINK_NSPARSE_LIB nsparse)
     endif()
-elseif(${CMAKE_SYSTEM_NAME} STREQUAL Linux AND AVX512_ENABLED)
-    set(NSPARSE_OPT_LEVEL avx512)
-    set(TARGET_LINK_NSPARSE_LIB nsparse_avx512)
-    string(PREPEND LIB_EXT "_avx512")
+elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "x86_64|AMD64")
+    # nsparse only has an avx512 target on Linux.
+    if(AVX512_ENABLED AND ${CMAKE_SYSTEM_NAME} STREQUAL Linux)
+        set(NSPARSE_OPT_LEVEL avx512)
+        set(TARGET_LINK_NSPARSE_LIB nsparse_avx512)
+        string(PREPEND LIB_EXT "_avx512")
+    elseif(AVX2_ENABLED)
+        set(NSPARSE_OPT_LEVEL avx2)
+        set(TARGET_LINK_NSPARSE_LIB nsparse_avx2)
+        string(PREPEND LIB_EXT "_avx2")
+    else()
+        set(NSPARSE_OPT_LEVEL generic)
+        set(TARGET_LINK_NSPARSE_LIB nsparse)
+    endif()
 else()
-    set(NSPARSE_OPT_LEVEL avx2)
-    set(TARGET_LINK_NSPARSE_LIB nsparse_avx2)
-    string(PREPEND LIB_EXT "_avx2")
+    set(NSPARSE_OPT_LEVEL generic)
+    set(TARGET_LINK_NSPARSE_LIB nsparse)
 endif()
+message(STATUS "nsparse optimization level: ${NSPARSE_OPT_LEVEL}")
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/external/neural-sparse-cpp EXCLUDE_FROM_ALL)

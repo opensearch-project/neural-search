@@ -11,8 +11,11 @@ import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.lucene.store.IndexOutput;
@@ -145,40 +148,66 @@ public class NativeLibraryContractTests extends OpenSearchTestCase {
         }
     }
 
-    /**
-     * init-nsparse.cmake bakes the chosen SIMD variant into the library filename.
-     * NativeLibrary probes a hard-coded suffix list to find it, and the two have no
-     * shared source of truth — if cmake gains a variant that the list does not
-     * know, the plugin silently fails to load on that architecture.
-     */
-    public void testSimdSuffixesCoverEveryVariantCmakeCanProduce() throws Exception {
-        String cmake = readProjectFile("jni/cmake/init-nsparse.cmake");
-
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("string\\(PREPEND LIB_EXT \"(_\\w+)\"\\)").matcher(cmake);
-        Set<String> cmakeSuffixes = new java.util.HashSet<>();
-        while (matcher.find()) {
-            cmakeSuffixes.add(matcher.group(1));
+    /** The names are the library base name plus each suffix, in order. */
+    public void testCandidateNamesAreOrderedMostSpecificFirst() {
+        List<String> all = NativeLibraryCandidates.allCandidates();
+        assertEquals(NativeLibraryCandidates.SIMD_SUFFIXES.size(), all.size());
+        for (int i = 0; i < all.size(); i++) {
+            assertEquals(NativeLibraryCandidates.LIBRARY_NAME + NativeLibraryCandidates.SIMD_SUFFIXES.get(i), all.get(i));
         }
-        assertFalse("expected init-nsparse.cmake to append at least one SIMD suffix", cmakeSuffixes.isEmpty());
-
-        Set<String> probed = Set.copyOf(NativeLibraryCandidates.SIMD_SUFFIXES);
-        for (String suffix : cmakeSuffixes) {
-            assertTrue(
-                "init-nsparse.cmake can build " + suffix + " but NativeLibraryCandidates.SIMD_SUFFIXES does not probe for it",
-                probed.contains(suffix)
-            );
-        }
-        assertTrue("the generic (unsuffixed) build must remain a fallback candidate", probed.contains(""));
+        assertEquals("the generic build must be tried last", NativeLibraryCandidates.LIBRARY_NAME, all.get(all.size() - 1));
     }
 
-    /** The probed names are the library base name plus each suffix, in order. */
-    public void testCandidateNamesAreOrderedMostSpecificFirst() {
-        List<String> candidates = NativeLibraryCandidates.candidates();
-        assertEquals(NativeLibraryCandidates.SIMD_SUFFIXES.size(), candidates.size());
-        for (int i = 0; i < candidates.size(); i++) {
-            assertEquals(NativeLibraryCandidates.LIBRARY_NAME + NativeLibraryCandidates.SIMD_SUFFIXES.get(i), candidates.get(i));
+    /**
+     * A distribution build ships every variant, so what is on disk no longer proves
+     * the CPU can run it — candidates() must drop the ones it cannot, keep the rest
+     * in the same order, and always end with the generic build.
+     */
+    public void testCandidatesAreTheSupportedSubsetInOrder() {
+        List<String> supported = NativeLibraryCandidates.candidates();
+        List<String> all = NativeLibraryCandidates.allCandidates();
+
+        assertEquals("the generic build is always a candidate", NativeLibraryCandidates.LIBRARY_NAME, supported.get(supported.size() - 1));
+        assertTrue("candidates() must be a subset of the names a build can produce", all.containsAll(supported));
+        assertEquals(
+            "candidates() must preserve the most-specific-first order",
+            all.stream().filter(supported::contains).collect(Collectors.toList()),
+            supported
+        );
+    }
+
+    /**
+     * Every variant cmake can build needs a CPU check paired with it. A suffix without
+     * one would be loaded on any host that happens to have the file, which for a
+     * distribution artifact means SIGILL on the first vectorized call rather than a
+     * failed load.
+     */
+    public void testEveryCmakeVariantIsGatedOnACpuCheck() throws Exception {
+        Set<String> cmakeSuffixes = simdSuffixesInCmake();
+        List<String> gated = NativeLibraryCandidates.SIMD_SUFFIXES;
+        for (String suffix : cmakeSuffixes) {
+            assertTrue(
+                "init-nsparse.cmake can build " + suffix + " but NativeLibraryCandidates does not pair it with a CPU check",
+                gated.contains(suffix)
+            );
         }
-        assertEquals("the generic build must be tried last", NativeLibraryCandidates.LIBRARY_NAME, candidates.get(candidates.size() - 1));
+        // Only the generic build may be unconditional.
+        assertEquals("", gated.get(gated.size() - 1));
+    }
+
+    /**
+     * The SIMD suffixes init-nsparse.cmake can bake into the library filename. Parsed
+     * from the cmake source because the two sides have no shared source of truth.
+     */
+    private Set<String> simdSuffixesInCmake() throws IOException {
+        String cmake = readProjectFile("jni/cmake/init-nsparse.cmake");
+        Matcher matcher = Pattern.compile("string\\(PREPEND LIB_EXT \"(_\\w+)\"\\)").matcher(cmake);
+        Set<String> suffixes = new HashSet<>();
+        while (matcher.find()) {
+            suffixes.add(matcher.group(1));
+        }
+        assertFalse("expected init-nsparse.cmake to append at least one SIMD suffix", suffixes.isEmpty());
+        return suffixes;
     }
 
     /**

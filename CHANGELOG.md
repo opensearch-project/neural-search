@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [RRF] Reject a combination technique other than rrf when creating a score-ranker-processor, instead of accepting the pipeline and throwing NullPointerException on every query ([#1949](https://github.com/opensearch-project/neural-search/pull/1949))
 
 ### Infrastructure
+* [Sparse ANN] Add scripts/build.sh so the distribution build ships the native sparse engine: every SIMD variant the target architecture may need is built into the plugin zip, and the variant to load is picked from the host's CPU flags at runtime ([#1978](https://github.com/opensearch-project/neural-search/pull/1978))
 * [Sparse ANN] Add the JNI layer for the native sparse engine, bridging to the neural-sparse-cpp library, with a googletest suite run on Linux and Windows plus an ASan/LSan job ([#1972](https://github.com/opensearch-project/neural-search/pull/1972))
 * [Neural Sparse] Pin the two-phase processor IT index to a single shard so its pruned-score assertions do not depend on the cluster's default shard count ([#1959](https://github.com/opensearch-project/neural-search/pull/1959))
 * [Semantic Field] Add an end-to-end remote dense model IT for the semantic field mapping transformer using the TorchServe mock model ([#1966](https://github.com/opensearch-project/neural-search/pull/1966))

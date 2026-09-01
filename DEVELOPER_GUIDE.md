@@ -115,6 +115,53 @@ also run Integration Tests and Unit Tests.
 ./gradlew build
 ```
 
+### Native sparse engine (JNI)
+
+The native sparse engine under `jni/` is C++ and needs its submodule checked out
+before anything builds it:
+
+```
+git submodule update --init --recursive
+```
+
+`./gradlew buildJniLib` builds the shared library into `jni/build`, and the test and
+run tasks depend on it. By default the build compiles the SIMD variant *this host*
+can execute, and bakes the variant into the filename
+(`libopensearch_neuralsearch_nsparse_avx512.so` and friends).
+
+### Distribution build
+
+`scripts/build.sh` is what [opensearch-build](https://github.com/opensearch-project/opensearch-build)
+invokes to produce the released artifact. It differs from `./gradlew assemble` in
+two ways that matter:
+
+* it builds every SIMD variant the target architecture may need (generic + avx2 +
+  avx512 on Linux x64, generic + sve on Linux arm64, generic elsewhere), by forcing
+  `-Davx2.enabled`, `-Davx512.enabled` and `-Dsve.enabled` one pass at a time, and
+* it adds those libraries, plus the OpenMP runtime they were linked against, to
+  `lib/` inside the plugin zip, which the plugin installer extracts to
+  `plugins/opensearch-neural-search/lib`.
+
+`NativeCpuFeatures` then picks a variant from `/proc/cpuinfo` at load time, so the
+node never loads a library its CPU cannot execute. Building a variant that the
+loader cannot verify would be a crash waiting to happen, which is why macOS and
+Windows stay generic-only.
+
+One piece lives outside this repo: nothing in OpenSearch puts a plugin's `lib`
+directory on `java.library.path` by itself. The release images do it explicitly —
+`docker/release/dockerfiles/opensearch.*.dockerfile` in `opensearch-build` sets
+`LD_LIBRARY_PATH` to `$OPENSEARCH_HOME/plugins/opensearch-knn/lib`, and the JVM folds
+`LD_LIBRARY_PATH` into `java.library.path` on Linux. Until
+`plugins/opensearch-neural-search/lib` is added there as well, `System.loadLibrary`
+will not find these libraries on an installed node.
+
+```
+./scripts/build.sh -v 3.9.0 -s true -o artifacts
+```
+
+Note that only the zip under `artifacts/plugins` carries the native libraries; the
+maven artifact is a plain plugin zip, matching k-NN.
+
 ## Run Unit Tests
 If you want to strictly test that your unit tests are passing
 you can run the following.

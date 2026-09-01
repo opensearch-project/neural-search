@@ -371,6 +371,15 @@ def jniTestsRequested = gradle.startParameter.taskNames.any { it.endsWith('jniTe
 // sanitizer runtime preloaded, which aborts at load time.
 def jniSanitizers = Boolean.parseBoolean(findProperty('jniSanitizers')?.toString() ?: 'false')
 
+// init-nsparse.cmake defaults each SIMD toggle to what the build host can execute,
+// which is right for a developer build and wrong for a distribution build: the
+// artifact has to carry every variant the target architecture may need, so
+// scripts/build.sh forces one variant per pass. Only properties that are actually
+// set are forwarded -- an absent property leaves the host detection in place.
+def simdCmakeFlags = ['AVX2_ENABLED': 'avx2.enabled', 'AVX512_ENABLED': 'avx512.enabled', 'SVE_ENABLED': 'sve.enabled'].collectEntries {
+    cmakeVar, systemProperty -> [(cmakeVar): System.getProperty(systemProperty)]
+}.findAll { it.value != null }
+
 tasks.register('cmakeJniLib', Exec) {
     def args = []
     args.add("cmake")
@@ -388,6 +397,7 @@ tasks.register('cmakeJniLib', Exec) {
     }
     args.add("-DCONFIG_TEST=${jniTestsRequested ? 'ON' : 'OFF'}")
     args.add("-DENABLE_SANITIZERS=${jniSanitizers ? 'ON' : 'OFF'}")
+    simdCmakeFlags.each { cmakeVar, value -> args.add("-D${cmakeVar}=${value}") }
     def javaHome = Jvm.current().getJavaHome()
     logger.lifecycle("Java home directory used by gradle: $javaHome")
     // No -G override on Windows: cmake selects the installed Visual Studio
@@ -404,6 +414,7 @@ tasks.register('cmakeJniLib', Exec) {
     inputs.property('configTest', jniTestsRequested)
     inputs.property('sanitizers', jniSanitizers)
     inputs.property('buildType', cmakeBuildConfig)
+    inputs.property('simdFlags', simdCmakeFlags)
     outputs.file("$projectDir/jni/build/CMakeCache.txt")
 }
 
