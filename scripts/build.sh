@@ -29,7 +29,7 @@ function usage() {
     echo -e "-h help"
 }
 
-while getopts ":h:v:q:s:o:p:a:j:" arg; do
+while getopts ":hv:q:s:o:p:a:j:" arg; do
     case $arg in
         h)
             usage
@@ -210,10 +210,16 @@ else
     # dependency is the OpenMP runtime. Ship the copy it was linked against;
     # resolve it from the library rather than from a hard-coded name so gcc's
     # libgomp and clang's libomp are both handled.
+    #
+    # Probe the generic variant by name: every variant comes out of the same
+    # toolchain and so links the same runtime, the generic one is built on every
+    # platform, and a glob here would hand ldd/otool several libraries at once.
     if [ "$PLATFORM" = "darwin" ]; then
-        ompPath=$(otool -L $distributions/lib/libopensearch_neuralsearch_nsparse* | grep -o '\S*libomp[^ ]*\.dylib' | head -n 1)
+        probeLib=$distributions/lib/libopensearch_neuralsearch_nsparse.jnilib
+        ompPath=$(otool -L $probeLib | grep -o '\S*libomp[^ ]*\.dylib' | head -n 1)
     else
-        ompPath=$(ldd $distributions/lib/libopensearch_neuralsearch_nsparse* | grep -o '/\S*libgomp[^ ]*' | head -n 1)
+        probeLib=$distributions/lib/libopensearch_neuralsearch_nsparse.so
+        ompPath=$(ldd $probeLib | grep -o '/\S*libgomp[^ ]*' | head -n 1)
     fi
     if [ -f "$ompPath" ]; then
         cp -v $ompPath $distributions/lib
