@@ -34,6 +34,7 @@ public class SparseIndexingIT extends SparseBaseIT {
     private static final String NON_SPARSE_TEST_INDEX_NAME = TEST_INDEX_NAME + "_non_sparse";
     private static final String INVALID_PARAM_TEST_INDEX_NAME = TEST_INDEX_NAME + "_invalid";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
+    private static final String TEST_TEXT_FIELD_NAME = "text";
     private static final String PIPELINE_NAME = "seismic_test_pipeline";
     private static final List<String> TEST_TOKENS = List.of("1000", "2000", "3000", "4000", "5000");
 
@@ -370,6 +371,48 @@ public class SparseIndexingIT extends SparseBaseIT {
         searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
         Set<String> actualIds = new HashSet<>(getDocIDs(searchResults));
         assertEquals(Set.of("1"), actualIds);
+    }
+
+    /**
+     * A closed index's shards have no MapperService, so removing that index on reopen used to throw
+     * out of SparseIndexEventListener, abort IndicesService#removeIndex and leak the shard lock,
+     * leaving the shard unassigned and every search failing with "all shards failed".
+     */
+    public void testSeismicIndexRemainsSearchableAfterCloseAndOpen() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 3);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(Map.of("1000", 0.1f, "2000", 0.1f), Map.of("1000", 0.2f, "2000", 0.2f), Map.of("1000", 0.3f, "2000", 0.3f))
+        );
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            10,
+            Map.of("1000", 0.1f, "2000", 0.2f)
+        );
+        assertEquals(3, getHitCount(search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10)));
+
+        assertEquals(
+            RestStatus.OK,
+            RestStatus.fromCode(
+                client().performRequest(new Request("POST", "/" + TEST_INDEX_NAME + "/_close")).getStatusLine().getStatusCode()
+            )
+        );
+        assertEquals(
+            RestStatus.OK,
+            RestStatus.fromCode(
+                client().performRequest(new Request("POST", "/" + TEST_INDEX_NAME + "/_open")).getStatusLine().getStatusCode()
+            )
+        );
+        waitForClusterHealthGreen(String.valueOf(getNodeCount()));
+
+        assertEquals(3, getDocCount(TEST_INDEX_NAME));
+        assertEquals(3, getHitCount(search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10)));
     }
 
     @SuppressWarnings("unchecked")

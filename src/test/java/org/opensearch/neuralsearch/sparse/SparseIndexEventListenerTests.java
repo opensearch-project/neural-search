@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -99,6 +100,22 @@ public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
         listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.DELETED);
 
         verify(gatedCloseable).close();
+    }
+
+    public void testBeforeIndexRemoved_withNullMapperService_skipsShard() throws IOException {
+        // A closed index's shards have no MapperService. Throwing here would abort
+        // IndicesService#removeIndex and leak the shard lock, wedging the reopened index.
+        GatedCloseable<SegmentInfos> gatedCloseable = mock(GatedCloseable.class);
+        when(gatedCloseable.get()).thenReturn(segmentInfos);
+
+        when(indexService.iterator()).thenReturn(Arrays.asList(indexShard).iterator());
+        when(indexShard.mapperService()).thenReturn(null);
+        when(indexShard.getSegmentInfosSnapshot()).thenReturn(gatedCloseable);
+
+        listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.REOPENED);
+
+        verify(gatedCloseable).close();
+        verify(segmentInfos, never()).size();
     }
 
     public void testBeforeIndexRemoved_withException_throwsRuntimeException() {

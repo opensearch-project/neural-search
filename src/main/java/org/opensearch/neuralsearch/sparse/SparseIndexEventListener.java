@@ -38,6 +38,14 @@ public class SparseIndexEventListener implements IndexEventListener {
         for (IndexShard shard : indexService) {
             try (GatedCloseable<SegmentInfos> snapshot = shard.getSegmentInfosSnapshot()) {
                 MapperService mapperService = shard.mapperService();
+                if (mapperService == null) {
+                    // A closed index's IndexService is built without a MapperService
+                    // (IndexService#needsMapperService), so a shard of one has no field types to
+                    // look up. Its caches were already cleared when the index was closed. Letting
+                    // the NPE out here aborts IndicesService#removeIndex before it releases the
+                    // shard lock, which leaves the reopened shard permanently unassigned.
+                    continue;
+                }
                 SegmentInfos segmentInfos = snapshot.get();
                 for (int i = 0; i < segmentInfos.size(); i++) {
                     SegmentInfo segmentInfo = segmentInfos.info(i).info;
