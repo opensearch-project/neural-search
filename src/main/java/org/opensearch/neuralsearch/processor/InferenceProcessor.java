@@ -34,7 +34,6 @@ import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.neuralsearch.util.prune.PruneUtils;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -246,27 +245,46 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     }
 
     protected Tuple<List<String>, Map<Integer, Integer>> sortByLengthAndReturnOriginalOrder(List<String> inferenceList) {
+        Map<String, Integer> uniqueIndexByText = new LinkedHashMap<>();
+        List<Integer> uniqueIndexesInOriginalOrder = new ArrayList<>();
+        for (String inferenceText : inferenceList) {
+            int uniqueIndex = uniqueIndexByText.computeIfAbsent(inferenceText, ignored -> uniqueIndexByText.size());
+            uniqueIndexesInOriginalOrder.add(uniqueIndex);
+        }
+
         List<Tuple<Integer, String>> docsWithIndex = new ArrayList<>();
-        for (int i = 0; i < inferenceList.size(); ++i) {
-            docsWithIndex.add(Tuple.tuple(i, inferenceList.get(i)));
+        for (Map.Entry<String, Integer> entry : uniqueIndexByText.entrySet()) {
+            docsWithIndex.add(Tuple.tuple(entry.getValue(), entry.getKey()));
         }
         docsWithIndex.sort(Comparator.comparingInt(t -> t.v2().length()));
         List<String> sortedInferenceList = docsWithIndex.stream().map(Tuple::v2).collect(Collectors.toList());
-        Map<Integer, Integer> originalOrderMap = new HashMap<>();
+        Map<Integer, Integer> sortedIndexByUniqueIndex = new HashMap<>();
         for (int i = 0; i < docsWithIndex.size(); ++i) {
-            originalOrderMap.put(i, docsWithIndex.get(i).v1());
+            sortedIndexByUniqueIndex.put(docsWithIndex.get(i).v1(), i);
+        }
+        Map<Integer, Integer> originalOrderMap = new HashMap<>();
+        for (int i = 0; i < uniqueIndexesInOriginalOrder.size(); ++i) {
+            originalOrderMap.put(i, sortedIndexByUniqueIndex.get(uniqueIndexesInOriginalOrder.get(i)));
         }
         return Tuple.tuple(sortedInferenceList, originalOrderMap);
     }
 
     private List<?> restoreToOriginalOrder(List<?> results, Map<Integer, Integer> originalOrder) {
-        List<Object> sortedResults = Arrays.asList(results.toArray());
-        for (int i = 0; i < results.size(); ++i) {
-            if (!originalOrder.containsKey(i)) continue;
-            int oldIndex = originalOrder.get(i);
-            sortedResults.set(oldIndex, results.get(i));
+        List<Object> originalResults = new ArrayList<>(originalOrder.size());
+        for (int i = 0; i < originalOrder.size(); ++i) {
+            originalResults.add(copyInferenceResult(results.get(originalOrder.get(i))));
         }
-        return sortedResults;
+        return originalResults;
+    }
+
+    private Object copyInferenceResult(Object result) {
+        if (result instanceof List<?> listResult) {
+            return new ArrayList<>(listResult);
+        }
+        if (result instanceof Map<?, ?> mapResult) {
+            return new LinkedHashMap<>(mapResult);
+        }
+        return result;
     }
 
     protected List<String> constructInferenceTexts(List<DataForInference> dataForInferences) {
