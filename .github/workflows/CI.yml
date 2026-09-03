@@ -24,13 +24,58 @@ jobs:
   # The JNI layer is C++ and has its own googletest suite under jni/tests. The Java
   # `test` task builds the shared library but never runs these, so without a
   # dedicated job the native code ships untested.
-  JNI-native-tests:
+  #
+  # In the container, not on a bare runner: ubuntu-latest would test against a GCC
+  # and an OpenMP runtime (LLVM libomp, via libomp-dev) that never ship.
+  # arm64 is the only config where SVE_ENABLED holds, so the only one that builds
+  # nsparse_sve.
+  JNI-native-tests-linux:
+    needs: Get-CI-Image-Tag
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+    name: JNI C++ Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    container:
+      # Same image opensearch-build uses for the distribution. Multi-arch manifest,
+      # so this tag resolves to the arm64 image on an arm64 runner.
+      image: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-version-linux }}
+      # need to switch to root so that github actions can install runner binary on container without permission issues.
+      options: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-options }}
+
+    steps:
+      - name: Run start commands
+        run: ${{ needs.Get-CI-Image-Tag.outputs.ci-image-start-command }}
+
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # jni/external/neural-sparse-cpp is a submodule the native build needs
+          submodules: recursive
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          java-version: 21
+          distribution: temurin
+          cache: 'gradle'
+
+      # No toolchain step needed: the image carries cmake, gcc-toolset-13 and libgomp.
+      # su to 1000 because gradle refuses to run as root.
+      - name: Run JNI C++ tests
+        run: |
+          chown -R 1000:1000 `pwd`
+          su `id -un 1000` -c "./gradlew jniTest"
+
+  # No CI-runner container for Windows. init-nsparse.cmake pins it to generic
+  # nsparse, so this covers the MSVC toolchain and packaging path, not SIMD.
+  JNI-native-tests-windows:
     strategy:
       fail-fast: false
       matrix:
         # Windows builds with MSVC via the Visual Studio generator; the runner image
         # already ships VS 2022 and CMake, so no toolchain step is needed there.
-        os: [ubuntu-latest, windows-latest]
+        os: [windows-latest]
     name: JNI C++ Tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     steps:
@@ -46,12 +91,6 @@ jobs:
           distribution: temurin
           cache: 'gradle'
 
-      - name: Install native toolchain
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake build-essential libomp-dev
-
       - name: Run JNI C++ tests
         run: ./gradlew jniTest
 
@@ -59,6 +98,9 @@ jobs:
   # cannot see: the layer hands raw pointers to Java and frees them on the native
   # side. This job is the real coverage for the ownership rules. Linux only: the
   # -fsanitize flags are GCC/Clang, and MSVC's /fsanitize=address has no LSan.
+  #
+  # Stays on a bare runner unlike JNI-native-tests-linux: the CI image's
+  # gcc-toolset-13 has no libasan, so -fsanitize=address cannot link there.
   JNI-native-tests-sanitizers:
     name: JNI C++ Tests (ASan/LSan)
     runs-on: ubuntu-latest
