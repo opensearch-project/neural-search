@@ -702,7 +702,7 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         Consumer resultHandler = mock(Consumer.class);
         TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
             .modelId("mockModelID")
-            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .inputTexts(List.of("value1"))
             .build();
         mockVectorCreation(ingestRequest, null);
         mockUpdateMultipleDocuments(ingestDocumentWrappers);
@@ -744,11 +744,11 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         Consumer resultHandler = mock(Consumer.class);
         TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
             .modelId("mockModelID")
-            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .inputTexts(List.of("value1"))
             .build();
         TextInferenceRequest updateRequest = TextInferenceRequest.builder()
             .modelId("mockModelID")
-            .inputTexts(List.of("newValue", "newValue", "newValue", "newValue", "newValue"))
+            .inputTexts(List.of("newValue"))
             .build();
         mockVectorCreation(ingestRequest, updateRequest);
         mockUpdateMultipleDocuments(ingestDocumentWrappers);
@@ -943,6 +943,53 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
             assertEquals(ingestDocumentWrappers.get(i).getIngestDocument(), resultCallback.getValue().get(i).getIngestDocument());
             assertNull(resultCallback.getValue().get(i).getException());
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    public void test_batchExecute_deduplicatesWithinSparseFormatWithoutCombiningFormats() {
+        mockSeismic(KEY1_MAPPED);
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(2, KEY1, VALUE1, KEY2, VALUE1);
+        SparseEncodingProcessor processor = createInstance(2, false);
+        doAnswer(invocation -> {
+            TextInferenceRequest request = invocation.getArgument(0);
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
+            if (request.getMlAlgoParams() instanceof AsymmetricTextEmbeddingParameters) {
+                listener.onResponse(createMockMapResultWithIntToken(request.getInputTexts().size()));
+            } else {
+                listener.onResponse(createMockMapResultWithWordToken(request.getInputTexts().size()));
+            }
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(isA(TextInferenceRequest.class), isA(ActionListener.class));
+
+        List<IngestDocumentWrapper> results = new ArrayList<>();
+        processor.batchExecute(ingestDocumentWrappers, results::addAll);
+
+        verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(
+            inferenceRequestCaptor.capture(),
+            isA(ActionListener.class)
+        );
+        List<TextInferenceRequest> requests = inferenceRequestCaptor.getAllValues();
+        assertEquals(List.of(VALUE1), requests.get(0).getInputTexts());
+        assertEquals(
+            SparseEmbeddingFormat.TOKEN_ID,
+            ((AsymmetricTextEmbeddingParameters) requests.get(0).getMlAlgoParams()).getSparseEmbeddingFormat()
+        );
+        assertEquals(List.of(VALUE1), requests.get(1).getInputTexts());
+        assertNull(requests.get(1).getMlAlgoParams());
+        for (IngestDocumentWrapper result : results) {
+            assertNull(result.getException());
+            assertTrue(((Map<String, Float>) result.getIngestDocument().getFieldValue(KEY1_MAPPED, Map.class)).containsKey("1000"));
+            assertTrue(((Map<String, Float>) result.getIngestDocument().getFieldValue(KEY2_MAPPED, Map.class)).containsKey("hello"));
+        }
+        assertNotSame(
+            results.get(0).getIngestDocument().getFieldValue(KEY1_MAPPED, Map.class),
+            results.get(1).getIngestDocument().getFieldValue(KEY1_MAPPED, Map.class)
+        );
+        assertNotSame(
+            results.get(0).getIngestDocument().getFieldValue(KEY2_MAPPED, Map.class),
+            results.get(1).getIngestDocument().getFieldValue(KEY2_MAPPED, Map.class)
+        );
     }
 
     public void test_batchExecute_mixed_seismic_exception() {

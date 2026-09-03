@@ -1166,6 +1166,47 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         }
     }
 
+    public void test_batchExecute_deduplicatesInferenceInputsAndScattersResults() {
+        List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(
+            2,
+            "key1",
+            "duplicate",
+            "key2",
+            "tiny"
+        );
+        ingestDocumentWrappers.get(1).getIngestDocument().setFieldValue("key1", "lengthy input");
+        ingestDocumentWrappers.get(1).getIngestDocument().setFieldValue("key2", "duplicate");
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(2, false);
+        Map<String, List<Float>> embeddingsByInput = Map.of(
+            "tiny",
+            List.of(1.0f),
+            "duplicate",
+            List.of(2.0f),
+            "lengthy input",
+            List.of(3.0f)
+        );
+        doAnswer(invocation -> {
+            TextInferenceRequest request = invocation.getArgument(0);
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(request.getInputTexts().stream().map(embeddingsByInput::get).toList());
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(isA(TextInferenceRequest.class), isA(ActionListener.class));
+
+        List<IngestDocumentWrapper> results = new ArrayList<>();
+        processor.batchExecute(ingestDocumentWrappers, results::addAll);
+
+        verify(mlCommonsClientAccessor).inferenceSentences(inferenceRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(List.of("tiny", "duplicate", "lengthy input"), inferenceRequestCaptor.getValue().getInputTexts());
+        assertEquals(List.of(2.0f), results.get(0).getIngestDocument().getFieldValue("key1_knn", List.class));
+        assertEquals(List.of(1.0f), results.get(0).getIngestDocument().getFieldValue("key2_knn", List.class));
+        assertEquals(List.of(3.0f), results.get(1).getIngestDocument().getFieldValue("key1_knn", List.class));
+        assertEquals(List.of(2.0f), results.get(1).getIngestDocument().getFieldValue("key2_knn", List.class));
+        assertNotSame(
+            results.get(0).getIngestDocument().getFieldValue("key1_knn", List.class),
+            results.get(1).getIngestDocument().getFieldValue("key2_knn", List.class)
+        );
+    }
+
     public void test_batchExecute_exception() {
         final int docCount = 5;
         List<IngestDocumentWrapper> ingestDocumentWrappers = createIngestDocumentWrappers(docCount);
@@ -1196,7 +1237,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         ArgumentCaptor<List<IngestDocumentWrapper>> resultCallback = ArgumentCaptor.forClass(List.class);
         TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
             .modelId("mockModelID")
-            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .inputTexts(List.of("value1"))
             .build();
         mockVectorCreation(ingestRequest, ingestRequest);
         mockFailedUpdateMultipleDocuments(ingestDocumentWrappers);
@@ -2124,7 +2165,7 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         Consumer resultHandler = mock(Consumer.class);
         TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
             .modelId("mockModelID")
-            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .inputTexts(List.of("value1"))
             .build();
         mockVectorCreation(ingestRequest, null);
         mockUpdateMultipleDocuments(ingestDocumentWrappers);
@@ -2153,11 +2194,11 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         Consumer resultHandler = mock(Consumer.class);
         TextInferenceRequest ingestRequest = TextInferenceRequest.builder()
             .modelId("mockModelID")
-            .inputTexts(List.of("value1", "value1", "value1", "value1", "value1"))
+            .inputTexts(List.of("value1"))
             .build();
         TextInferenceRequest updateRequest = TextInferenceRequest.builder()
             .modelId("mockModelID")
-            .inputTexts(List.of("newValue", "newValue", "newValue", "newValue", "newValue"))
+            .inputTexts(List.of("newValue"))
             .build();
         mockVectorCreation(ingestRequest, updateRequest);
         mockUpdateMultipleDocuments(ingestDocumentWrappers);
