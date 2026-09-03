@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.sparse;
 import lombok.SneakyThrows;
 import org.apache.lucene.index.SegmentCommitInfo;
 import org.apache.lucene.index.SegmentInfos;
+import org.apache.lucene.store.AlreadyClosedException;
 import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -22,6 +23,8 @@ import java.io.IOException;
 import java.util.Arrays;
 
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -101,14 +104,36 @@ public class SparseIndexEventListenerTests extends AbstractSparseTestBase {
         verify(gatedCloseable).close();
     }
 
-    public void testBeforeIndexRemoved_withException_throwsRuntimeException() {
+    public void testBeforeIndexRemoved_withNullMapperService_skipsShardWithoutSnapshot() throws IOException {
+        // A closed index's shards have no MapperService, and their engine is closed, so asking for
+        // a segment snapshot would throw AlreadyClosedException.
         when(indexService.iterator()).thenReturn(Arrays.asList(indexShard).iterator());
+        when(indexShard.mapperService()).thenReturn(null);
+
+        listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.REOPENED);
+
+        verify(indexShard, never()).getSegmentInfosSnapshot();
+    }
+
+    public void testBeforeIndexRemoved_withException_doesNotPropagate() throws IOException {
+        // Throwing aborts IndicesService#removeIndex before it releases the shard lock, which
+        // leaves a reopened shard unassigned. Every failure here has to stay logged and swallowed.
+        when(indexService.iterator()).thenReturn(Arrays.asList(indexShard, indexShard).iterator());
         when(indexShard.mapperService()).thenThrow(new RuntimeException("Test exception"));
 
-        RuntimeException exception = expectThrows(RuntimeException.class, () ->
-            listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.DELETED)
-        );
+        listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.DELETED);
 
-        assertTrue(exception.getMessage().contains("Test exception"));
+        // The second shard is still visited rather than skipped by an escaping exception.
+        verify(indexShard, times(2)).mapperService();
+    }
+
+    public void testBeforeIndexRemoved_withClosedEngine_doesNotPropagate() throws IOException {
+        when(indexService.iterator()).thenReturn(Arrays.asList(indexShard).iterator());
+        when(indexShard.mapperService()).thenReturn(mapperService);
+        when(indexShard.getSegmentInfosSnapshot()).thenThrow(new AlreadyClosedException("engine is closed"));
+
+        listener.beforeIndexRemoved(indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason.REOPENED);
+
+        verify(indexShard).getSegmentInfosSnapshot();
     }
 }

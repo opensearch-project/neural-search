@@ -22,6 +22,7 @@ jobs:
   Restart-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
     strategy:
+      fail-fast: false
       matrix:
         java: [21, 25]
         os: [ubuntu-latest]
@@ -64,6 +65,7 @@ jobs:
   Rolling-Upgrade-BWCTests-NeuralSearch:
     needs: Get-CI-Image-Tag
     strategy:
+      fail-fast: false
       matrix:
         java: [21, 25]
         os: [ubuntu-latest]

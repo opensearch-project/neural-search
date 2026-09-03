@@ -591,7 +591,10 @@ public class NeuralSparseTwoPhaseProcessorIT extends BaseNeuralSearchIT {
         if (TEST_TWO_PHASE_BASIC_INDEX_NAME.equals(indexName) && !indexExists(indexName)) {
             Map<String, Float> twoPhaseRandFeatures = new HashMap<>();
             Map<String, Float> normalRandFeatures = new HashMap<>();
-            prepareSparseEncodingIndex(indexName, List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1));
+            // Two-phase rescoring collects size * window_size_expansion documents per shard, so spreading these 20 documents over
+            // multiple shards lets phase one cover a whole shard and every document recovers its full score. Pin one shard to keep
+            // the pruned scores this index is built to assert on deterministic on any cluster.
+            prepareSparseEncodingIndex(indexName, List.of(TEST_NEURAL_SPARSE_FIELD_NAME_1), 1);
             // put [(5,5.0), (6,6.0)] into twoPhaseRandFeatures
             for (int i = 5; i < 7; i++) {
                 twoPhaseRandFeatures.put(String.valueOf(i), (float) i);

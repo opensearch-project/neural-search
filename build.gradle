@@ -6,8 +6,10 @@
  * This project uses @Incubating APIs which are subject to change.
  */
 
+import org.gradle.internal.jvm.Jvm
 import org.opensearch.gradle.test.RestIntegTestTask
 import org.opensearch.gradle.testclusters.OpenSearchCluster
+import org.apache.tools.ant.taskdefs.condition.Os
 
 import java.nio.file.Paths
 import java.util.concurrent.Callable
@@ -29,6 +31,9 @@ buildscript {
         }
         opensearch_group = "org.opensearch"
         opensearch_no_snapshot = opensearch_build.replace("-SNAPSHOT","")
+        // Parallelism for the native (CMake) build. Defaults to the machine's core count;
+        // a serial default made every `./gradlew test` rebuild nsparse + abseil single-threaded.
+        nproc_count = System.getProperty("nproc.count", "${Runtime.runtime.availableProcessors()}")
     }
 
     repositories {
@@ -42,7 +47,7 @@ buildscript {
 
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:6.25.0"
+        classpath "com.diffplug.spotless:spotless-plugin-gradle:8.10.1"
         classpath "io.freefair.gradle:lombok-plugin:8.14"
 
         configurations.all {
@@ -346,13 +351,140 @@ compileTestFixturesJava {
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 
+//****************************************************************************/
+// JNI Lib Build
+//****************************************************************************/
+
+def usingRemoteCluster = System.properties.containsKey('tests.rest.cluster') || System.properties.containsKey('tests.cluster')
+def integTestDependOnJniLib = !usingRemoteCluster
+def isWindows = Os.isFamily(Os.FAMILY_WINDOWS)
+def cmakeBuildConfig = findProperty('cmakeBuildType') ?: 'Release'
+
+// The C++ unit tests pull in googletest at CMake configure time, so they are
+// opt-in: `./gradlew jniTest` (or -PjniTests=true) turns them on. CI runs the
+// dedicated jniTest job; a plain `./gradlew test` stays free of the extra fetch.
+def jniTestsRequested = gradle.startParameter.taskNames.any { it.endsWith('jniTest') } ||
+        Boolean.parseBoolean(findProperty('jniTests')?.toString() ?: 'false')
+
+// -PjniSanitizers=true builds the native code with ASan/LSan. Only use it with
+// `jniTest`: the Java tests load this same shared object into a JVM that has no
+// sanitizer runtime preloaded, which aborts at load time.
+def jniSanitizers = Boolean.parseBoolean(findProperty('jniSanitizers')?.toString() ?: 'false')
+
+// init-nsparse.cmake defaults each SIMD toggle to what the build host can execute,
+// which is right for a developer build and wrong for a distribution build: the
+// artifact has to carry every variant the target architecture may need, so
+// scripts/build.sh forces one variant per pass. Only properties that are actually
+// set are forwarded -- an absent property leaves the host detection in place.
+def simdCmakeFlags = ['AVX2_ENABLED': 'avx2.enabled', 'AVX512_ENABLED': 'avx512.enabled', 'SVE_ENABLED': 'sve.enabled'].collectEntries {
+    cmakeVar, systemProperty -> [(cmakeVar): System.getProperty(systemProperty)]
+}.findAll { it.value != null }
+
+tasks.register('cmakeJniLib', Exec) {
+    def args = []
+    args.add("cmake")
+    args.add("-S")
+    args.add("jni")
+    args.add("-B")
+    args.add("jni/build")
+    // Without this cmake leaves CMAKE_BUILD_TYPE empty, which drops -O3 and -DNDEBUG
+    // from the nsparse compile. The SIMD flags come from init-nsparse.cmake either
+    // way, so the library still looks correct while running unoptimized with asserts.
+    // Ignored by multi-configuration generators (Visual Studio), which take the
+    // configuration at build time instead -- see --config on buildJniLib.
+    if (!isWindows) {
+        args.add("-DCMAKE_BUILD_TYPE=${cmakeBuildConfig}")
+    }
+    args.add("-DCONFIG_TEST=${jniTestsRequested ? 'ON' : 'OFF'}")
+    args.add("-DENABLE_SANITIZERS=${jniSanitizers ? 'ON' : 'OFF'}")
+    simdCmakeFlags.each { cmakeVar, value -> args.add("-D${cmakeVar}=${value}") }
+    def javaHome = Jvm.current().getJavaHome()
+    logger.lifecycle("Java home directory used by gradle: $javaHome")
+    // No -G override on Windows: cmake selects the installed Visual Studio
+    // generator, which locates MSVC without a vcvars shell. Forcing "Unix
+    // Makefiles" here assumed a MinGW toolchain that this build does not use.
+    logger.lifecycle("CMake command: ${args.join(' ')}")
+    environment 'JAVA_HOME', Jvm.current().getJavaHome().toString()
+    commandLine args
+
+    inputs.files(fileTree("$projectDir/jni") {
+        include '**/*.txt', '**/*.txt.in', '**/*.cmake'
+        exclude 'build/**'
+    })
+    inputs.property('configTest', jniTestsRequested)
+    inputs.property('sanitizers', jniSanitizers)
+    inputs.property('buildType', cmakeBuildConfig)
+    inputs.property('simdFlags', simdCmakeFlags)
+    outputs.file("$projectDir/jni/build/CMakeCache.txt")
+}
+
+tasks.register('buildJniLib', Exec) {
+    dependsOn cmakeJniLib
+    def args = []
+    args.add("cmake")
+    args.add("--build")
+    args.add("jni/build")
+    // Multi-configuration generators take the configuration here rather than from
+    // CMAKE_BUILD_TYPE; single-configuration generators ignore it.
+    args.add("--config")
+    args.add("${cmakeBuildConfig}")
+    args.add("--parallel")
+    args.add("${nproc_count}")
+    logger.lifecycle("Build command: ${args.join(' ')}")
+    environment 'JAVA_HOME', Jvm.current().getJavaHome().toString()
+    commandLine args
+
+    inputs.files(fileTree("$projectDir/jni/src"))
+    inputs.files(fileTree("$projectDir/jni/tests"))
+    inputs.file("$projectDir/jni/build/CMakeCache.txt")
+    outputs.dir("$projectDir/jni/build")
+}
+
+// Runs the googletest suite for the JNI/C++ layer (jni/tests). Separate from the
+// Java `test` task: it needs CONFIG_TEST=ON so the jni_test binary exists.
+tasks.register('jniTest', Exec) {
+    group = 'verification'
+    description = 'Runs the C++ unit tests for the JNI layer'
+    dependsOn buildJniLib
+    def testBinary = isWindows ? 'jni_test.exe' : 'jni_test'
+    workingDir "$projectDir/jni/build"
+    if (isWindows) {
+        // Windows resolves a binary's dependent DLLs through PATH, not
+        // java.library.path / LD_LIBRARY_PATH.
+        environment 'PATH', "$projectDir/jni/build;${System.getenv('PATH') ?: ''}"
+    }
+    // nsparse is built as a shared library into the same tree, so the loader
+    // needs it on the search path.
+    environment 'LD_LIBRARY_PATH', "$projectDir/jni/build:$projectDir/jni/build/external/neural-sparse-cpp:${System.getenv('LD_LIBRARY_PATH') ?: ''}"
+    environment 'DYLD_LIBRARY_PATH', "$projectDir/jni/build:$projectDir/jni/build/external/neural-sparse-cpp:${System.getenv('DYLD_LIBRARY_PATH') ?: ''}"
+    if (jniSanitizers) {
+        // detect_leaks is on by default for ASan on Linux but not on macOS.
+        environment 'ASAN_OPTIONS', 'detect_leaks=1'
+    }
+    commandLine "$projectDir/jni/build/$testBinary", '--gtest_color=yes'
+}
+
+// Makes sure that `./gradlew clean` removes all JNI build artifacts
+tasks.clean.doFirst {
+    delete "${projectDir}/jni/build"
+    delete "${projectDir}/jni/third_party"
+}
+
 def _numNodes = findProperty('numNodes') as Integer ?: 1
 def _configureNodeRoles = findProperty('configureNodeRoles') as Boolean ?: false
 
 test {
+    dependsOn buildJniLib
     include '**/*Tests.class'
     systemProperty 'tests.security.manager', 'false'
+    systemProperty "java.library.path", "$rootDir/jni/build"
+    // NativeLibraryContractTests reads jni/ sources to check the Java <-> native contracts
+    systemProperty('project.root', project.rootDir.absolutePath)
     systemProperty "jdk.attach.allowAttachSelf", true
+    if (isWindows) {
+        // The DLL's own dependencies are resolved through PATH, not java.library.path
+        environment('PATH', System.getenv('PATH') + ";$rootDir/jni/build")
+    }
 }
 
 // Setting up Integration Tests
@@ -370,7 +502,11 @@ task integTest(type: RestIntegTestTask) {
 tasks.named("check").configure { dependsOn(integTest) }
 
 integTest {
+    if (integTestDependOnJniLib) {
+        dependsOn buildJniLib
+    }
     systemProperty 'tests.security.manager', 'false'
+    systemProperty "java.library.path", "$rootDir/jni/build"
     systemProperty 'java.io.tmpdir', opensearch_tmp_dir.absolutePath
     // allows integration test classes to access test resource from project root path
     systemProperty('project.root', project.rootDir.absolutePath)
@@ -502,6 +638,13 @@ testClusters.integTest {
     // Increase heap size from default of 512mb to 1gb. When heap size is 512mb, our integ tests sporadically fail due
     // to ml-commons memory circuit breaker exception
     jvmArgs("-Xms1g", "-Xmx2g")
+
+    systemProperty("java.library.path", "$rootDir/jni/build")
+    if (isWindows) {
+        // Windows finds a DLL's dependents through PATH; java.library.path only
+        // covers the library System.loadLibrary asks for by name.
+        environment('PATH', System.getenv('PATH') + ";$rootDir/jni/build")
+    }
 }
 
 // Remote Integration Tests
@@ -526,6 +669,7 @@ task integTestRemote(type: RestIntegTestTask) {
 }
 
 run {
+    dependsOn buildJniLib
     useCluster testClusters.integTest
 }
 
@@ -851,6 +995,13 @@ testClusters.remoteModelIntegTest {
 
     // Increase heap size to avoid memory issues
     jvmArgs("-Xms1g", "-Xmx2g")
+
+    systemProperty("java.library.path", "$rootDir/jni/build")
+    if (isWindows) {
+        // Windows finds a DLL's dependents through PATH; java.library.path only
+        // covers the library System.loadLibrary asks for by name.
+        environment('PATH', System.getenv('PATH') + ";$rootDir/jni/build")
+    }
 }
 
 // Helper tasks for manual control (optional)

@@ -36,23 +36,35 @@ public class SparseIndexEventListener implements IndexEventListener {
      */
     public void beforeIndexRemoved(IndexService indexService, IndicesClusterStateService.AllocatedIndices.IndexRemovalReason reason) {
         for (IndexShard shard : indexService) {
-            try (GatedCloseable<SegmentInfos> snapshot = shard.getSegmentInfosSnapshot()) {
+            try {
                 MapperService mapperService = shard.mapperService();
-                SegmentInfos segmentInfos = snapshot.get();
-                for (int i = 0; i < segmentInfos.size(); i++) {
-                    SegmentInfo segmentInfo = segmentInfos.info(i).info;
-                    for (MappedFieldType fieldType : mapperService.fieldTypes()) {
-                        if (fieldType instanceof SparseVectorFieldType) {
-                            String fieldName = fieldType.name();
-                            CacheKey key = new CacheKey(segmentInfo, fieldName);
-                            ForwardIndexCache.getInstance().onIndexRemoval(key);
-                            ClusteredPostingCache.getInstance().onIndexRemoval(key);
+                if (mapperService == null) {
+                    // A closed index's IndexService is built without a MapperService
+                    // (IndexService#needsMapperService), so a shard of one has no field types to
+                    // look up, and its engine is closed so a segment snapshot would throw. Its
+                    // caches were already cleared when the index was closed.
+                    continue;
+                }
+                try (GatedCloseable<SegmentInfos> snapshot = shard.getSegmentInfosSnapshot()) {
+                    SegmentInfos segmentInfos = snapshot.get();
+                    for (int i = 0; i < segmentInfos.size(); i++) {
+                        SegmentInfo segmentInfo = segmentInfos.info(i).info;
+                        for (MappedFieldType fieldType : mapperService.fieldTypes()) {
+                            if (fieldType instanceof SparseVectorFieldType) {
+                                String fieldName = fieldType.name();
+                                CacheKey key = new CacheKey(segmentInfo, fieldName);
+                                ForwardIndexCache.getInstance().onIndexRemoval(key);
+                                ClusteredPostingCache.getInstance().onIndexRemoval(key);
+                            }
                         }
                     }
                 }
             } catch (Exception e) {
+                // Never propagate: throwing here aborts IndicesService#removeIndex before it
+                // releases the shard lock, and the reopened shard then stays unassigned forever. A
+                // cache entry that outlives its index is the lesser of the two failures, and it is
+                // still evicted when its own segment closes.
                 log.error("An error occurred during remove index from cache", e);
-                throw new RuntimeException(e);
             }
         }
     }

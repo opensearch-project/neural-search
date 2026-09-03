@@ -1,17 +1,31 @@
 allprojects {
     project.apply plugin: "com.diffplug.spotless"
+
+    // Only wire the Eclipse JDT step when a spotless task is actually being run, so non-spotless
+    // Gradle invocations (test, assemble, JNI, BWC) don't provision the formatter at configuration time.
+    def runningSpotlessTask = gradle.startParameter.taskNames.any { it.toLowerCase(Locale.ROOT).contains('spotless') }
+
+    // The native build tree, the vendored nsparse submodule and the dependencies its
+    // CMake fetches (googletest, abseil) are not ours to format. They also collide
+    // with buildJniLib, which declares jni/build as a task output: spotless reading
+    // that directory without declaring the dependency fails Gradle's validation.
+    def nativeExcludes = ['jni/build/**', 'jni/third_party/**', 'jni/external/**']
+
     spotless {
         java {
             // Normally this isn't necessary, but we have Java sources in
             // non-standard places
             target '**/*.java'
+            targetExclude nativeExcludes
 
             removeUnusedImports()
-            // Resolve the Eclipse JDT formatter directly from download.eclipse.org. The prior
-            // withP2Mirrors(... -> https://ci.opensearch.org/) mirror (added in #1940) started timing
-            // out at configuration time (SocketTimeoutException), failing every task on affected
-            // runners. This aligns with the OpenSearch 3.x resolution in opensearch-project/OpenSearch#20826.
-            eclipse().configFile rootProject.file('formatter/formatterConfig.xml')
+            // Pin 4.29 explicitly: spotless 8.10.0+ ships an embedded lockfile for it, so the
+            // formatter resolves from Maven Central through the mirror below instead of querying a
+            // P2 update site at configuration time. Keep withP2Mirrors so any non-lockfile fallback
+            // still hits the ci.opensearch.org mirror rather than the eclipse.org origin.
+            if (runningSpotlessTask) {
+                eclipse('4.29').withP2Mirrors(Map.of("https://download.eclipse.org/", "https://ci.opensearch.org/")).configFile rootProject.file('formatter/formatterConfig.xml')
+            }
             trimTrailingWhitespace()
             endWithNewline();
 
@@ -24,6 +38,7 @@ allprojects {
         }
         format 'misc', {
             target '*.md', '**/*.gradle', '**/*.json', '**/*.yaml', '**/*.yml', '**/*.svg', '**/*.properties'
+            targetExclude nativeExcludes
 
             trimTrailingWhitespace()
             endWithNewline()
