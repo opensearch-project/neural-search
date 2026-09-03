@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+* [SemanticHighlighter] add `semantic_highlighter_query_enricher` a new processor similar to `neural_query_enricher` that allows to enrich the semantic highlighter model id from a search pipeline ([#1916](https://github.com/opensearch-project/neural-search/pull/1917))
 
 ### Enhancements
 - Add `model_selection` (language_option/model_type) parameter to semantic field to resolve the model id from cluster settings ([#1918](https://github.com/opensearch-project/neural-search/issues/1918))
