@@ -19,6 +19,7 @@ import org.opensearch.search.sort.SortAndFormats;
 
 import java.util.Locale;
 
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 
 /**
@@ -49,23 +50,45 @@ public class HybridCollectorFactory {
             if (docsPerGroupPerSubquery > 0) {
                 log.warn("index.neural_search.hybrid_collapse_docs_per_group_per_subquery setting is deprecated for all release versions");
             }
+            // Opt-in: collect the top numHits distinct groups per sub-query instead of the top numHits documents.
+            // The two behaviors are mutually exclusive — see HybridCollapsingTopGroupsCollector for the trade-off.
+            boolean isDistinctGroupsEnabled = HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.get(
+                searchContext.indexShard().indexSettings().getSettings()
+            );
             MappedFieldType fieldType = collapseContext.getFieldType();
+            Sort collapseSort = sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort;
             if (fieldType instanceof KeywordFieldMapper.KeywordFieldType) {
-                return HybridCollapsingTopDocsCollector.createKeyword(
-                    collapseContext.getFieldName(),
-                    fieldType,
-                    sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    numHits,
-                    hitsThresholdChecker
-                );
+                return isDistinctGroupsEnabled
+                    ? HybridCollapsingTopGroupsCollector.createKeyword(
+                        collapseContext.getFieldName(),
+                        fieldType,
+                        collapseSort,
+                        numHits,
+                        hitsThresholdChecker
+                    )
+                    : HybridCollapsingTopDocsCollector.createKeyword(
+                        collapseContext.getFieldName(),
+                        fieldType,
+                        collapseSort,
+                        numHits,
+                        hitsThresholdChecker
+                    );
             } else if (fieldType instanceof NumberFieldMapper.NumberFieldType) {
-                return HybridCollapsingTopDocsCollector.createNumeric(
-                    collapseContext.getFieldName(),
-                    fieldType,
-                    sortAndFormats == null ? new Sort(new SortField(null, SortField.Type.SCORE)) : sortAndFormats.sort,
-                    numHits,
-                    hitsThresholdChecker
-                );
+                return isDistinctGroupsEnabled
+                    ? HybridCollapsingTopGroupsCollector.createNumeric(
+                        collapseContext.getFieldName(),
+                        fieldType,
+                        collapseSort,
+                        numHits,
+                        hitsThresholdChecker
+                    )
+                    : HybridCollapsingTopDocsCollector.createNumeric(
+                        collapseContext.getFieldName(),
+                        fieldType,
+                        collapseSort,
+                        numHits,
+                        hitsThresholdChecker
+                    );
             } else {
                 throw new IllegalStateException(
                     String.format(

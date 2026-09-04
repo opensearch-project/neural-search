@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.e2e;
 
 import org.junit.Before;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
@@ -12,6 +13,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.functionscore.ScoreFunctionBuilders;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortBuilders;
 
@@ -61,8 +63,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
 
-        // For min_score=0.5005f, total hits count fused-window entries above it: one per group per shard
-        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 1);
+        // For min_score=0.5005f, it filters out 1 doc
+        testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
     }
 
     public void testCollapse_withMultipleShard_thenSuccessful() {
@@ -76,9 +78,42 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
     }
 
-    public void testCollapse_whenOneGroupOwnsMultipleTopDocs_thenDistinctGroupsReturned() {
+    @SneakyThrows
+    public void testCollapse_whenOneGroupOwnsMultipleTopDocsAndDistinctGroupsEnabled_thenDistinctGroupsReturned() {
         // Reproduces https://github.com/opensearch-project/neural-search/issues/1947
         createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_ONE);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        List<String> collapseValues = searchSkewedGroupsWithCollapse();
+
+        assertEquals("Expected `size` hits, one per distinct group, but got: " + collapseValues, 5, collapseValues.size());
+        assertEquals(
+            "Expected the 5 best distinct groups, but got: " + collapseValues,
+            Set.of("groupA", "groupB", "groupC", "groupD", "groupE"),
+            new HashSet<>(collapseValues)
+        );
+    }
+
+    public void testCollapse_whenOneGroupOwnsMultipleTopDocsByDefault_thenGroupsUnderReturned() {
+        // Default behavior (distinct groups disabled): the collector keeps the top-`size` documents per sub-query,
+        // so a group owning several top slots crowds out other groups after downstream deduplication. This test
+        // pins the by-design default agreed on in https://github.com/opensearch-project/neural-search/issues/1947.
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_ONE);
+
+        List<String> collapseValues = searchSkewedGroupsWithCollapse();
+
+        assertEquals("Expected under-returned groups by default, but got: " + collapseValues, 4, collapseValues.size());
+        assertEquals(
+            "Expected groups deduplicated from the top-`size` documents, but got: " + collapseValues,
+            Set.of("groupA", "groupB", "groupC", "groupD"),
+            new HashSet<>(collapseValues)
+        );
+    }
+
+    private List<String> searchSkewedGroupsWithCollapse() {
         var hybridQuery = new HybridQueryBuilder().add(
             QueryBuilders.functionScoreQuery(
                 QueryBuilders.matchAllQuery(),
@@ -114,13 +149,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             null
         );
 
-        List<String> collapseValues = getCollapseValues(searchResponse);
-        assertEquals("Expected `size` hits, one per distinct group, but got: " + collapseValues, 5, collapseValues.size());
-        assertEquals(
-            "Expected the 5 best distinct groups, but got: " + collapseValues,
-            Set.of("groupA", "groupB", "groupC", "groupD", "groupE"),
-            new HashSet<>(collapseValues)
-        );
+        return getCollapseValues(searchResponse);
     }
 
     private void indexDocumentsForSkewedGroupsConfiguration() {

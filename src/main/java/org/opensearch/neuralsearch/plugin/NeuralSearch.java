@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants.HIGHLIGHTER_TYPE;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
@@ -384,6 +385,7 @@ public class NeuralSearch extends Plugin
                 NEURAL_STATS_ENABLED,
                 SEMANTIC_INGEST_BATCH_SIZE,
                 HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
+                HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED,
                 NEURAL_CIRCUIT_BREAKER_LIMIT,
                 NEURAL_CIRCUIT_BREAKER_OVERHEAD,
                 SEMANTIC_MODEL_SELECTION_MODEL_ID
