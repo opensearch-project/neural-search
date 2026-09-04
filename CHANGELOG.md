@@ -29,6 +29,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Documentation
 
 ### Maintenance
+* [Hybrid Query] Add cross-plugin integration coverage for document-level security ([#1957](https://github.com/opensearch-project/neural-search/pull/1957))
 
 ### Refactoring
 * [SemanticHighlighter] Traverse the query tree with a QueryBuilderVisitor instead of a "manual" walk ([#1915](https://github.com/opensearch-project/neural-search/pull/1915))
