@@ -41,4 +41,19 @@ public interface ScalarNormalizer {
 
     /** The technique name this normalizer implements, matching the name used in the {@code fusion} config. */
     String techniqueName();
+
+    /**
+     * How this normalization step names itself in an {@code explain} response, the coordinator-side counterpart of
+     * {@link org.opensearch.neuralsearch.processor.explain.ExplainableTechnique#describe()}. The name alone is the whole
+     * description for a technique that carries no parameter, which is why that is the default; a technique that does carry
+     * one overrides this to name it, so the same request explained on either path reads the same.
+     *
+     * <p>Kept separate from {@link #techniqueName()} rather than folded into it because that name is also the key
+     * {@link ScalarNormalizers} resolves a config value against, and a description is not a lookup key.
+     *
+     * @return this normalizer's description for {@code explain}
+     */
+    default String describe() {
+        return techniqueName();
+    }
 }

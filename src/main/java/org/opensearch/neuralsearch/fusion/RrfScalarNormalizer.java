@@ -60,4 +60,16 @@ public final class RrfScalarNormalizer implements ScalarNormalizer {
     public String techniqueName() {
         return RRFNormalizationTechnique.TECHNIQUE_NAME;
     }
+
+    /**
+     * Overridden because rrf is the one technique here that carries a parameter, and the name alone would describe a
+     * normalization the request did not ask for: two queries differing only in {@code rank_constant} score differently and
+     * would otherwise explain identically. Rendered through the shared
+     * {@link RRFScoreNormalizer#describeWithRankConstant} so this reads exactly as {@link RRFNormalizationTechnique}'s
+     * {@code describe()} does for the same rank constant.
+     */
+    @Override
+    public String describe() {
+        return RRFScoreNormalizer.describeWithRankConstant(rankConstant);
+    }
 }

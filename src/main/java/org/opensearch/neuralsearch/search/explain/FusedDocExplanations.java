@@ -72,7 +72,9 @@ public final class FusedDocExplanations {
 
     /**
      * Description for each per-leg normalization node, in classic hybrid's exact wording — see
-     * {@code ExplanationUtils#getDocIdAtQueryForNormalization}, which formats {@code "%s normalization of:"}.
+     * {@code ExplanationUtils#getDocIdAtQueryForNormalization}, which formats {@code "%s normalization of:"} over the
+     * technique's own {@code describe()}, exactly as the combination node above does. {@code describe()} and not the
+     * technique's name: they differ for {@code rrf}, whose description carries the rank constant.
      */
     @Getter
     @Setter

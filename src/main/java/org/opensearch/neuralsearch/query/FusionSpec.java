@@ -220,10 +220,7 @@ public final class FusionSpec {
         if ((config.get(NORMALIZATION_CLAUSE) instanceof Map) == false) {
             return Map.of();
         }
-        Map<String, Object> normalizationClause = (Map<String, Object>) config.get(NORMALIZATION_CLAUSE);
-        return normalizationClause.get(PARAMETERS_KEY) instanceof Map
-            ? (Map<String, Object>) normalizationClause.get(PARAMETERS_KEY)
-            : Map.of();
+        return readParameters((Map<String, Object>) config.get(NORMALIZATION_CLAUSE), NORMALIZATION_CLAUSE);
     }
 
     @SuppressWarnings("unchecked")
@@ -256,12 +253,8 @@ public final class FusionSpec {
      * score-ranker-processor rejects it there ("supported parameters are [weights]"). Fused mode rejects it too, rather
      * than silently falling back to the default 60 and mis-ranking every query for a user who put it in the wrong place.
      */
-    @SuppressWarnings("unchecked")
     private static void rejectRankConstantUnderParameters(Map<String, Object> combinationClause) {
-        if ((combinationClause.get(PARAMETERS_KEY) instanceof Map) == false) {
-            return;
-        }
-        if (((Map<String, Object>) combinationClause.get(PARAMETERS_KEY)).containsKey(RANK_CONSTANT_KEY)) {
+        if (readParameters(combinationClause, COMBINATION_CLAUSE).containsKey(RANK_CONSTANT_KEY)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -365,6 +358,40 @@ public final class FusionSpec {
         throw new IllegalArgumentException(String.format(Locale.ROOT, "[%s] must be an object, got [%s]", clause, value));
     }
 
+    /**
+     * The {@code parameters} map of a {@code normalization} or {@code combination} clause, refusing a value that is present
+     * but not an object instead of reading it as absent. This is {@link #requireObjectClause}'s guard one level down, and it
+     * exists for the same reason: every reader of the map gated on {@code instanceof Map} and fell back to an empty one, so
+     * a list or a bare string put {@link #rejectUnhonoredNormalizationParameters} in front of an empty key set — nothing to
+     * report as unhonored — and the request fused with the technique's defaults at HTTP 200. That is exactly the
+     * accepted-and-ignored scoring config the guard exists to make impossible, reachable by mistyping the container rather
+     * than the parameter. An easy mistake to make, too, since the values inside are themselves lists:
+     * {@code "parameters": [{"lower_bounds": [...]}]} is one stray bracket from the honest form.
+     *
+     * <p>Reported in this file's wording rather than the one core's {@code readOptionalMap} gives the same mistake in a
+     * pipeline definition, because the two belong to different requests: a pipeline is refused at creation time, an inline
+     * {@code fusion} block at query time, and only the second can reach here. Parity of wording is worth having where one
+     * request could be answered by either path — {@link #weightsMustBeNumbers} — and not here.
+     *
+     * @param clause the {@code normalization} or {@code combination} clause to read {@code parameters} from
+     * @param clauseName that clause's name, so the error names the full path the user wrote
+     * @return the parameters map, empty when the key is absent or explicitly null
+     */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> readParameters(Map<String, Object> clause, String clauseName) {
+        Object parameters = clause.get(PARAMETERS_KEY);
+        // Null is absent, matching requireObjectClause: an explicit "parameters": null asks for nothing, which is servable.
+        if (Objects.isNull(parameters)) {
+            return Map.of();
+        }
+        if (parameters instanceof Map) {
+            return (Map<String, Object>) parameters;
+        }
+        throw new IllegalArgumentException(
+            String.format(Locale.ROOT, "[%s.%s] must be an object, got [%s]", clauseName, PARAMETERS_KEY, parameters)
+        );
+    }
+
     @SuppressWarnings("unchecked")
     private static String readNormalizationTechnique(Map<String, Object> config, String defaultTechnique) {
         if ((config.get(NORMALIZATION_CLAUSE) instanceof Map) == false) {
@@ -391,10 +418,7 @@ public final class FusionSpec {
      */
     @SuppressWarnings("unchecked")
     private static float[] readWeights(Map<String, Object> combinationClause) {
-        if ((combinationClause.get(PARAMETERS_KEY) instanceof Map) == false) {
-            return new float[0];
-        }
-        Map<String, Object> parameters = (Map<String, Object>) combinationClause.get(PARAMETERS_KEY);
+        Map<String, Object> parameters = readParameters(combinationClause, COMBINATION_CLAUSE);
         if ((parameters.get(WEIGHTS_KEY) instanceof List) == false) {
             if (parameters.containsKey(WEIGHTS_KEY)) {
                 throw weightsMustBeNumbers();

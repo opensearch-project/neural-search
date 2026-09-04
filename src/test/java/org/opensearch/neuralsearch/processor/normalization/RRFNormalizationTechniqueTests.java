@@ -9,6 +9,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
 import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
@@ -42,6 +43,26 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         // verify when parameter values are set
         normalizationTechnique = new RRFNormalizationTechnique(Map.of("rank_constant", 25), scoreNormalizationUtil);
         assertEquals("rrf, rank_constant [25]", normalizationTechnique.describe());
+    }
+
+    public void testDescribe_matchesTheCoordinatorSideNormalizer() {
+        // rrf normalizes in two places — this technique shard-side, and ScalarNormalizers' coordinator-side normalizer for a
+        // fused hybrid query — and one request explained through either path has to read the same. The fused side reported
+        // just the technique name at first, so two queries differing only in rank_constant explained identically while
+        // scoring differently. Both sides are actually constructed here, which is what makes this parity rather than a
+        // restatement of the format they now share.
+        for (int rankConstant : new int[] {
+            RRFScoreNormalizer.MIN_RANK_CONSTANT,
+            RANK_CONSTANT,
+            25,
+            RRFScoreNormalizer.MAX_RANK_CONSTANT }) {
+            Map<String, Object> parameters = Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, rankConstant);
+            assertEquals(
+                String.valueOf(rankConstant),
+                new RRFNormalizationTechnique(parameters, scoreNormalizationUtil).describe(),
+                ScalarNormalizers.forTechnique(RRFNormalizationTechnique.TECHNIQUE_NAME, parameters).describe()
+            );
+        }
     }
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {

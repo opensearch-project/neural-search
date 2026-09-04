@@ -396,9 +396,18 @@ final class HybridFusionOrchestrator {
      * to.
      *
      * <p>The descriptions are taken from the same two sources classic hybrid renders from — the combination technique's own
-     * {@link ExplainableTechnique#describe()} and the normalization technique's name — so an identical hit set produces
-     * identical wording on both paths. Classic's trailing {@code min_score} suffix has no counterpart here: fused mode does
-     * not propagate {@code min_score} to the legs, so there is no value to name.
+     * {@link ExplainableTechnique#describe()} and the normalizer's {@link ScalarNormalizer#describe()} — so an identical hit
+     * set produces identical wording on both paths, {@code rrf}'s trailing rank constant included. The normalization half
+     * read {@code techniqueName()} at first, which is right only for a technique that carries no parameter and was quietly
+     * dropping that rank constant; it is {@code describe()} for the same reason the combination half always was. Classic's
+     * trailing {@code min_score} suffix has no counterpart here: fused mode does not propagate {@code min_score} to the
+     * legs, so there is no value to name.
+     *
+     * <p>Parity holds for every technique fused mode can currently resolve, and for min_max it holds for a second reason
+     * worth knowing before changing either side: classic's min_max appends its {@code lower_bounds}/{@code upper_bounds}
+     * when they are configured, and fused mode's does not — but {@code FusionSpec} refuses those parameters outright, so no
+     * request that reaches here has them. Honoring bounds later means giving that normalizer a {@code describe()} at the
+     * same time, or the divergence this paragraph rules out becomes reachable.
      */
     private static void recordExplanations(
         final FusedDocExplanations explanations,
@@ -413,7 +422,7 @@ final class HybridFusionOrchestrator {
         }
         // Same format strings as classic: ScoreCombiner#explainByShard and ExplanationUtils#getDocIdAtQueryForNormalization.
         explanations.combinationDescription(String.format(Locale.ROOT, "%s combination of:", combination.describe()))
-            .normalizationDescription(String.format(Locale.ROOT, "%s normalization of:", normalizer.techniqueName()));
+            .normalizationDescription(String.format(Locale.ROOT, "%s normalization of:", normalizer.describe()));
         List<Map<String, Float>> legNormalizedScores = fused.legNormalizedScores();
         for (int doc = 0; doc < ranked.ids().length; doc++) {
             String key = FusedDocExplanations.documentKey(ranked.indices()[doc], ranked.ids()[doc]);

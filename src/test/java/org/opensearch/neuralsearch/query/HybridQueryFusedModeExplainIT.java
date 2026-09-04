@@ -50,8 +50,13 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
 
     /** What the combination node is called, unweighted: classic's {@code ScoreCombiner} format over the technique's describe(). */
     private static final String COMBINATION_DESCRIPTION = "arithmetic_mean combination of:";
-    /** What each per-leg node is called: classic's {@code ExplanationUtils} format over the normalization technique's name. */
+    /** What each per-leg node is called: classic's {@code ExplanationUtils} format over the normalization's describe(). */
     private static final String NORMALIZATION_DESCRIPTION = "min_max normalization of:";
+    /** The same node under rrf, where describe() and the technique name diverge — the case that made describe() necessary. */
+    private static final String RANK_CONSTANT_PARAM = "rank_constant";
+    private static final int RRF_RANK_CONSTANT = 42;
+    private static final String RRF_EXPLAIN_PIPELINE = "fused-explain-classic-rrf-pipeline";
+    private static final String RRF_NORMALIZATION_DESCRIPTION = "rrf, rank_constant [" + RRF_RANK_CONSTANT + "] normalization of:";
     /** The node inserted above the combination when the score round 2 returned is not the fused score. */
     private static final String FINAL_SCORE_DESCRIPTION = "score of the fused hybrid query as round 2 returned it, computed from:";
     /** Floats survive one JSON round trip exactly; the tolerance is for the arithmetic asserted across nodes. */
@@ -303,6 +308,39 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * The same parity claim on the one technique that can break it. min_max, z_score and l2 all describe themselves with just
+     * their name, so the test above passes whether the fused side renders the technique's description or merely its name —
+     * which is how a fused rrf came to explain itself as a bare {@code rrf}, dropping the rank constant classic names and
+     * every score in the tree below depends on. A non-default constant is used deliberately: 60 would pass against a
+     * hardcoded default.
+     */
+    @SneakyThrows
+    public void testExplainedRrfFusedHybrid_thenTheRankConstantIsNamedJustAsClassicNamesIt() {
+        ensureDataset();
+        // The score-ranker-processor helper, not createSearchPipeline: that one understands only min_max's bounds under
+        // normalization.parameters and emits an empty parameters object for anything else, so a rank_constant handed to it
+        // is silently dropped and classic ranks at 60 — which is exactly the kind of quiet default this test is about.
+        createRRFSearchPipeline(RRF_EXPLAIN_PIPELINE, List.of(), RRF_RANK_CONSTANT, true);
+
+        Map<String, Object> fused = search(explained(rrfFusedHybrid(knnLeg(WINDOW_SIZE), termLeg())));
+        Map<String, Object> classic = search(explained(classicHybrid()), RRF_EXPLAIN_PIPELINE);
+
+        List<String> fusedDescriptions = new ArrayList<>();
+        collectDescriptions(explanationOf(hits(fused).get(0)), fusedDescriptions);
+        List<String> classicDescriptions = new ArrayList<>();
+        collectDescriptions(explanationOf(hits(classic).get(0)), classicDescriptions);
+
+        assertTrue("classic names the rank constant: " + classicDescriptions, classicDescriptions.contains(RRF_NORMALIZATION_DESCRIPTION));
+        assertTrue("and so must fused: " + fusedDescriptions, fusedDescriptions.contains(RRF_NORMALIZATION_DESCRIPTION));
+        assertFalse(
+            "the bare technique name is what this used to render, and it describes a normalization the request did not ask "
+                + "for: "
+                + fusedDescriptions,
+            fusedDescriptions.contains("rrf normalization of:")
+        );
+    }
+
+    /**
      * A fused hybrid nested inside a container. The hit's score is the enclosing query's, not the hybrid's, so replacing the
      * whole tree with the fusion would describe the wrong number — the request keeps core's own explanation, which correctly
      * describes the query round 2 ran.
@@ -394,6 +432,23 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
             + windowSize
             + ",\"normalization\":{\"technique\":\"min_max\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},"
             + "\"queries\":["
+            + String.join(",", legs)
+            + "]}}";
+    }
+
+    /**
+     * rrf with a rank constant that is not the default, so the description has to come from the config. Written in the
+     * score-ranker-processor shape — {@code rank_constant} on the {@code combination} clause — which is where
+     * {@code RRFProcessorFactory} reads it, so {@link #createRRFSearchPipeline} builds classic the same config.
+     */
+    private String rrfFusedHybrid(final String... legs) {
+        return "{\"hybrid\":{\"fusion\":{\"window_size\":"
+            + WINDOW_SIZE
+            + ",\"combination\":{\"technique\":\"rrf\",\""
+            + RANK_CONSTANT_PARAM
+            + "\":"
+            + RRF_RANK_CONSTANT
+            + "}},\"queries\":["
             + String.join(",", legs)
             + "]}}";
     }

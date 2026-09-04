@@ -101,6 +101,21 @@ public final class RRFScoreNormalizer {
     }
 
     /**
+     * How a rrf normalization step names itself in an {@code explain} response, rank constant included. Here for the same
+     * reason the arithmetic is: {@link RRFNormalizationTechnique} renders this shard side and
+     * {@link org.opensearch.neuralsearch.fusion.RrfScalarNormalizer} renders it on the coordinator, and a request explained
+     * on one path has to read the same as the same request explained on the other. The rank constant belongs in the text
+     * because it changes every score in the tree below it — a description that omitted it would not identify the
+     * normalization that actually ran.
+     *
+     * @param rankConstant the rank constant this normalization was configured with
+     * @return the description, for example {@code rrf, rank_constant [60]}
+     */
+    public static String describeWithRankConstant(final int rankConstant) {
+        return String.format(Locale.ROOT, "%s, rank_constant [%s]", RRFNormalizationTechnique.TECHNIQUE_NAME, rankConstant);
+    }
+
+    /**
      * Drain a queue of results, assigning zero based ranks in the order the queue yields them. Results the
      * queue's comparator treats as equal are ranked in the order the heap happens to surface them, which is
      * not the same order a stable sort would produce, so callers must supply the queue rather than a sorted

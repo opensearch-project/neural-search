@@ -880,6 +880,47 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     /**
+     * The normalization node's wording comes from the normalizer's {@code describe()}, not its {@code techniqueName()},
+     * which for rrf are different strings: the name alone would describe a normalization the request did not ask for,
+     * since two queries differing only in {@code rank_constant} score differently. It read the name at first, so this is
+     * the assertion that would have caught it — and the one the min_max case above structurally cannot make, min_max
+     * being the technique where the two strings coincide.
+     */
+    public void testBuildFusedQuery_whenNormalizationIsRrf_thenTheDescriptionNamesTheRankConstant() {
+        int rankConstant = 25;
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.9f))),
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.6f)))
+        );
+        FusedDocExplanations explanations = new FusedDocExplanations();
+
+        HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false).explain(true),
+            ms,
+            legs,
+            rrf(rankConstant),
+            10,
+            new FusedCoordinatorTimings(),
+            explanations
+        );
+
+        assertEquals(
+            "the configured rank constant, in classic hybrid's wording",
+            "rrf, rank_constant [" + rankConstant + "] normalization of:",
+            explanations.normalizationDescription()
+        );
+        // Pinned negatively as well, because the pre-fix string is a prefix of the correct one: a contains() assertion
+        // would have passed against it.
+        assertNotEquals("rrf normalization of:", explanations.normalizationDescription());
+
+        Explanation tree = explanations.explain(FusedDocExplanations.documentKey(INDEX, "1"), Float.NaN);
+        for (Explanation legNode : tree.getDetails()) {
+            assertEquals("rrf, rank_constant [" + rankConstant + "] normalization of:", legNode.getDescription());
+        }
+    }
+
+    /**
      * A leg that did not match a document contributes no node rather than a zero one — the same choice classic hybrid
      * makes. A zero node would read as "this leg scored it at zero" when the leg never saw it.
      */

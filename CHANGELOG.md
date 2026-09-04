@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * In-query fusion in hybrid search. Count a kNN/neural leg's whole match set in `total_hits` and in every aggregation: such a leg is replaced in the non-scoring Tail by an address of the documents it returned only when `window_size` did not truncate it, so a leg with `k` above the window — or a `neural` leg that rewrites to `neural_sparse` over a semantic field, whose match set is data-defined — is now counted for real instead of silently under-counted ([#1986](https://github.com/opensearch-project/neural-search/pull/1986))
 * In-query fusion in hybrid search. Let a response processor read the hybrid a fused query replaced, so batch semantic highlighting and a `rerank` processor's `query_context.query_text_path` work in fused mode ([#1989](https://github.com/opensearch-project/neural-search/pull/1989))
 * In-query fusion in hybrid search. Gate fused mode behind an opt-in cluster setting ([#1993](https://github.com/opensearch-project/neural-search/pull/1993))
+* In-query fusion in hybrid search. Refuse a non-object fusion `parameters`, and name rrf's rank constant in explain ([#1995](https://github.com/opensearch-project/neural-search/pull/1995))
 
 ### Bug Fixes
 * [SemanticHighlighter] Fix SemanticHighlighterExtBuilder.toXContent ([#1906](https://github.com/opensearch-project/neural-search/issues/1906)) (query-insights [#651](https://github.com/opensearch-project/query-insights/issues/651))

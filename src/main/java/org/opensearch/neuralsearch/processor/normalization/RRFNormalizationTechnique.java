@@ -9,7 +9,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Locale;
 import java.util.PriorityQueue;
 import java.util.Set;
 
@@ -129,7 +128,7 @@ public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, E
 
     @Override
     public String describe() {
-        return String.format(Locale.ROOT, "%s, rank_constant [%s]", TECHNIQUE_NAME, rankConstant);
+        return RRFScoreNormalizer.describeWithRankConstant(rankConstant);
     }
 
     @Override

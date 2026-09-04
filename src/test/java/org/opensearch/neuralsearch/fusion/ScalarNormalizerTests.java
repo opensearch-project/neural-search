@@ -106,6 +106,49 @@ public class ScalarNormalizerTests extends OpenSearchTestCase {
         expectThrows(IllegalArgumentException.class, () -> ScalarNormalizers.forTechnique(null));
     }
 
+    // ---- explain descriptions ----
+
+    public void testDescribe_rendersRrfsRankConstantThroughTheSharedFormat() {
+        // Why describe() exists on this interface at all: one request explained through fused mode has to read the same as
+        // the same request explained through a pipeline, and rrf is the one technique where the name alone is not the whole
+        // description. Rendered through the format RRFNormalizationTechnique#describe() also uses, so the two cannot drift;
+        // that they agree when both are actually constructed is asserted in RRFNormalizationTechniqueTests, which sits in the
+        // package where classic's techniques are reachable, and end to end in HybridQueryFusedModeExplainIT.
+        //
+        // Swept across the range because a single value cannot tell "renders the configured constant" from "hardcodes 60".
+        for (int rankConstant : new int[] {
+            RRFScoreNormalizer.MIN_RANK_CONSTANT,
+            RRFScoreNormalizer.DEFAULT_RANK_CONSTANT,
+            25,
+            RRFScoreNormalizer.MAX_RANK_CONSTANT }) {
+            Map<String, Object> parameters = Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, rankConstant);
+            assertEquals(
+                String.valueOf(rankConstant),
+                RRFScoreNormalizer.describeWithRankConstant(rankConstant),
+                ScalarNormalizers.forTechnique("rrf", parameters).describe()
+            );
+            // Pinned literally as well, so a change to the shared format is a visible change here rather than a tautology.
+            assertEquals("rrf, rank_constant [" + rankConstant + "]", ScalarNormalizers.forTechnique("rrf", parameters).describe());
+        }
+    }
+
+    public void testDescribe_whenTechniqueTakesNoParameter_thenIsTheTechniqueName() {
+        // The interface default is the name, and that is right only while a technique carries nothing that changes its
+        // scores. Pinned so adding such a parameter — min_max's bounds being the pending one — cannot ship without also
+        // adding the override, which is how the rrf divergence shipped in the first place.
+        for (String technique : Set.of("min_max", "z_score", "l2")) {
+            ScalarNormalizer normalizer = ScalarNormalizers.forTechnique(technique);
+            assertEquals(technique, normalizer.describe());
+            assertEquals(technique, normalizer.techniqueName());
+        }
+        // rrf's description is deliberately not its lookup key: ScalarNormalizers is keyed by techniqueName(), so folding the
+        // two together would make "rrf" unresolvable.
+        ScalarNormalizer rrf = ScalarNormalizers.forTechnique("rrf");
+        assertEquals("rrf", rrf.techniqueName());
+        assertNotEquals(rrf.techniqueName(), rrf.describe());
+        assertTrue(rrf.describe(), rrf.describe().contains("rank_constant [" + RRFScoreNormalizer.DEFAULT_RANK_CONSTANT + "]"));
+    }
+
     // ---- min_max normalizer ----
 
     public void testMinMaxNormalizeLeg_matchesSharedScalarMath() {

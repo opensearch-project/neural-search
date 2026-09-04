@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -452,6 +453,80 @@ public class FusionSpecTests extends OpenSearchTestCase {
             () -> FusionSpec.fromInlineFusion(Map.of("normalization", "min_max"))
         );
         assertTrue(normalization.getMessage(), normalization.getMessage().contains("[normalization] must be an object"));
+    }
+
+    public void testFromInlineFusion_whenParametersIsNotAnObject_thenRejected() {
+        // The same guard one level down, and the mistake is the container rather than the parameter:
+        // `"parameters": [{"lower_bounds": [...]}]` is one stray bracket from the honest form. Every reader gated on
+        // instanceof Map and fell back to an empty one, so rejectUnhonoredNormalizationParameters was handed no keys to
+        // refuse and the request fused with min_max's defaults at HTTP 200 — bounds accepted and silently ignored, which is
+        // the exact outcome that guard exists to prevent.
+        for (Object malformed : List.<Object>of(List.of(Map.of("lower_bounds", List.of())), "lower_bounds", 0.5)) {
+            IllegalArgumentException e = assertThrows(
+                String.valueOf(malformed),
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(Map.of("normalization", Map.of("technique", "min_max", "parameters", malformed)))
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("[normalization.parameters] must be an object"));
+        }
+        // And on the other clause, reached through a different reader on each shape: readWeights for the
+        // normalization-processor one, rejectRankConstantUnderParameters for the score-ranker one that rrf routes to.
+        for (String combination : List.of("arithmetic_mean", "rrf")) {
+            IllegalArgumentException e = assertThrows(
+                combination,
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of("combination", Map.of("technique", combination, "parameters", List.of(Map.of("weights", List.of(0.3, 0.7)))))
+                )
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("[combination.parameters] must be an object"));
+        }
+    }
+
+    public void testFromInlineFusion_whenRrfParametersIsNotAnObject_thenTypeErrorNotRankConstantError() {
+        // rrf reads rank_constant out of this very map, so which of the two guards runs first decides what the user is told.
+        // The type error is the actionable one: nothing true can be said about a rank constant in a map that is not a map.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("normalization", Map.of("technique", "rrf", "parameters", List.of(60))))
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[normalization.parameters] must be an object"));
+        assertFalse(e.getMessage(), e.getMessage().contains("rank constant must be in the interval"));
+    }
+
+    public void testFromInlineFusion_whenParametersIsExplicitlyNull_thenTreatedAsAbsent() {
+        // An explicit null asks for nothing, which is servable — the same tolerance requireObjectClause gives a null clause.
+        // Written through HashMap because Map.of rejects null values.
+        Map<String, Object> normalization = new HashMap<>();
+        normalization.put("technique", "min_max");
+        normalization.put("parameters", null);
+        Map<String, Object> combination = new HashMap<>();
+        combination.put("technique", "arithmetic_mean");
+        combination.put("parameters", null);
+
+        FusionSpec spec = FusionSpec.fromInlineFusion(Map.of("normalization", normalization, "combination", combination));
+        assertEquals("min_max", spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        assertEquals(0, spec.weights().length);
+    }
+
+    public void testFromPipelineConfig_whenParametersIsNotAnObject_thenRejected() {
+        // A stored pipeline cannot carry this — classic's factory reads the clause through core's readOptionalMap and
+        // refuses it at pipeline creation — but the same processor shape is also how an inline fusion block is spelled, and
+        // that one is only ever parsed here. Pinned on this entry point too so the guard cannot be lost to a refactor that
+        // only keeps fromInlineFusion covered.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromPipelineConfig(
+                Map.of(
+                    "phase_results_processors",
+                    List.of(
+                        Map.of("normalization-processor", Map.of("normalization", Map.of("technique", "rrf", "parameters", List.of(60))))
+                    )
+                )
+            )
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[normalization.parameters] must be an object"));
     }
 
     private static Map<String, Object> normalizationProcessorWithRankConstant(int rankConstant) {
