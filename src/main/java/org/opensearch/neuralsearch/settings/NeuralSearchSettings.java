@@ -83,6 +83,21 @@ public final class NeuralSearchSettings {
     );
 
     /**
+     * When enabled, a hybrid query with collapse collects the top {@code size} distinct groups per sub-query
+     * (each represented by its most competitive document), so the response contains {@code size} groups whenever
+     * that many exist. When disabled (default), the collector keeps the top {@code size} documents per sub-query,
+     * which preserves score parity with the same hybrid query without collapse but can return fewer groups than
+     * {@code size} when one group owns several top-scoring documents. The two behaviors are mutually exclusive;
+     * see https://github.com/opensearch-project/neural-search/issues/1947 for the design discussion.
+     */
+    public static final Setting<Boolean> HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED = Setting.boolSetting(
+        "index.neural_search.hybrid_collapse_distinct_groups_enabled",
+        false,
+        Setting.Property.IndexScope,
+        Setting.Property.Dynamic
+    );
+
+    /**
      * A constant by which the neural memory estimations are multiplied to determine the final estimation. Default is 1.
      */
     public static final Setting<Double> NEURAL_CIRCUIT_BREAKER_OVERHEAD = Setting.doubleSetting(

@@ -10,7 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Enhancements
 
 ### Bug Fixes
-* [Hybrid Query] Fix collapse dropping valid groups when one group owns multiple top-scoring documents on a shard ([#1947](https://github.com/opensearch-project/neural-search/issues/1947))
+* [Hybrid Query] Add opt-in index setting `index.neural_search.hybrid_collapse_distinct_groups_enabled` to make collapse return top-`size` distinct groups instead of deduplicated top-`size` documents ([#1947](https://github.com/opensearch-project/neural-search/issues/1947))
 
 ### Infrastructure
 

@@ -203,12 +203,13 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(11, settings.size());
+        assertEquals(12, settings.size());
         // getSettings() folds in SparseSettings.state().getSettings() rather than
         // listing the sparse settings inline, so assert they actually arrive --
         // a bare count passes even if that call is dropped, as long as something
         // else was added in the same change.
         assertTrue(settings.containsAll(SparseSettings.state().getSettings()));
+        assertTrue(settings.contains(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED));
     }
 
     public void testRequestProcessors() {
