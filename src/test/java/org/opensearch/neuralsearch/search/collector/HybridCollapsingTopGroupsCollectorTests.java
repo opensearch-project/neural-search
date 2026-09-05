@@ -344,8 +344,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
     }
 
     /**
-     * Test sorting by score with collapse - validates HybridLeafFieldComparator wrapper
-     * This is the key test case related to the bug fix in the context transfer
+     * Test sorting by score with collapse - election reads the compound scorer's summed score
      */
     public void testCollapse_whenSortByScore_thenCorrectRanking() throws IOException {
         Directory directory = newDirectory();
@@ -360,7 +359,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
         DirectoryReader reader = DirectoryReader.open(writer);
 
-        // Sort by SCORE - this triggers the HybridLeafFieldComparator wrapper
+        // Sort by SCORE, election reads the summed score from the compound scorer
         Sort sort = new Sort(SortField.FIELD_SCORE);
         KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
 
