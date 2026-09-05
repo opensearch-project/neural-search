@@ -36,6 +36,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_ITEM = "item";
     private static final String TEST_TEXT_FIELD_CATEGORY = "category";
     private static final String TEST_FLOAT_FIELD = "price";
+    private static final String TEST_FLOAT_FIELD_RATING = "rating";
     private static final String SEARCH_PIPELINE = "test-pipeline";
     private static final int NUMBER_OF_SHARDS_FIVE = 5;
     private static final int NUMBER_OF_SHARDS_ONE = 1;
@@ -48,6 +49,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String DEFAULT_INDEX_CONFIGURATION = "default_config";
     private static final String DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET = "default_config_with_large_dataset";
     private static final String DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS = "default_config_with_skewed_groups";
+    private static final String DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS = "default_config_with_disagreeing_legs";
     private static final String KNN_INDEX_CONFIGURATION = "knn_config";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
 
@@ -150,6 +152,92 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         );
 
         return getCollapseValues(searchResponse);
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenLegsDisagreeAndDistinctGroupsEnabled_thenGroupsOrderedByFusedScore() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS, NUMBER_OF_SHARDS_ONE);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        // Two legs scoring different fields, so they rank groupA's documents differently. The elected
+        // representative must be the one with the best summed score (doc 2), and the response must order
+        // groups by their representative's fused score: groupA, groupC, groupB, groupD.
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD_RATING)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        List<String> collapseValues = getCollapseValues(searchResponse);
+        assertEquals(
+            "Expected groups ordered by fused score, but got: " + collapseValues,
+            List.of("groupA", "groupC", "groupB", "groupD"),
+            collapseValues
+        );
+    }
+
+    private void indexDocumentsForDisagreeingLegsConfiguration() {
+        // groupA owns the best document per leg individually (doc 1 by price, doc 2 by rating),
+        // but doc 2 has the best summed score and must represent the group in every leg
+        indexGroupedDocumentWithRating("1", "groupA", "100", "10");
+        indexGroupedDocumentWithRating("2", "groupA", "85", "80");
+        indexGroupedDocumentWithRating("3", "groupB", "90", "50");
+        indexGroupedDocumentWithRating("4", "groupC", "50", "90");
+        indexGroupedDocumentWithRating("5", "groupD", "20", "30");
+    }
+
+    private void indexGroupedDocumentWithRating(String docId, String group, String price, String rating) {
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            docId,
+            List.of(),
+            List.of(),
+            List.of(TEST_TEXT_FIELD_ITEM, TEST_TEXT_FIELD_CATEGORY),
+            List.of(group, "groups"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD, TEST_FLOAT_FIELD_RATING),
+            List.of(price, rating),
+            null
+        );
     }
 
     private void indexDocumentsForSkewedGroupsConfiguration() {
@@ -635,6 +723,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             case DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS:
                 indexDocumentsForSkewedGroupsConfiguration();
                 break;
+            case DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS:
+                indexDocumentsForDisagreeingLegsConfiguration();
+                break;
             default:
                 throw new IllegalArgumentException("Invalid configuration: " + configuration);
         }
@@ -832,7 +923,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private String getIndexConfiguration(String configuration, int numberOfShards) throws IOException {
         return switch (configuration) {
             case DEFAULT_INDEX_CONFIGURATION, DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET,
-                DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS -> XContentFactory.jsonBuilder()
+                DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS -> XContentFactory
+                    .jsonBuilder()
                     .startObject()
                     .startObject("settings")
                     .field("number_of_shards", numberOfShards)
@@ -847,6 +939,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
                     .field("type", "keyword")
                     .endObject()
                     .startObject(TEST_FLOAT_FIELD)
+                    .field("type", "float")
+                    .endObject()
+                    .startObject(TEST_FLOAT_FIELD_RATING)
                     .field("type", "float")
                     .endObject()
                     .endObject()
