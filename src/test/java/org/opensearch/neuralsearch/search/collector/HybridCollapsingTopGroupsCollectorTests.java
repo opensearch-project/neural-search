@@ -529,11 +529,23 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         // Should have results for all 3 sub-queries
         assertEquals(3, topDocs.size());
 
-        // Verify each sub-query has results
+        // Election is leg-independent over the summed scores, so every group's representative is an even
+        // doc (sum 1.4 beats odd docs' 1.3). Sub-queries 0 and 2 matched those representatives and report
+        // their own scores for them; sub-query 1 matched only odd docs, so its list is empty while its
+        // total hits still count the docs it matched.
+        assertTrue("Sub-query 0 should have results", topDocs.get(0).scoreDocs.length > 0);
+        assertEquals("Sub-query 1 matched no elected representative", 0, topDocs.get(1).scoreDocs.length);
+        assertTrue("Sub-query 2 should have results", topDocs.get(2).scoreDocs.length > 0);
         for (int i = 0; i < 3; i++) {
-            CollapseTopFieldDocs subQueryDocs = topDocs.get(i);
-            assertTrue("Sub-query " + i + " should have results", subQueryDocs.scoreDocs.length > 0);
-            assertTrue("Sub-query " + i + " should have total hits", subQueryDocs.totalHits.value() > 0);
+            assertEquals("Sub-query " + i + " total hits counts its own matches", 50 + (i / 2) * 50, topDocs.get(i).totalHits.value());
+        }
+
+        // Sub-queries with results emit the same representatives with their own scores
+        assertEquals(topDocs.get(0).scoreDocs.length, topDocs.get(2).scoreDocs.length);
+        for (int i = 0; i < topDocs.get(0).scoreDocs.length; i++) {
+            assertEquals(topDocs.get(0).scoreDocs[i].doc, topDocs.get(2).scoreDocs[i].doc);
+            assertEquals(0.9f, topDocs.get(0).scoreDocs[i].score, 0.001f);
+            assertEquals(0.5f, topDocs.get(2).scoreDocs[i].score, 0.001f);
         }
 
         reader.close();
@@ -854,7 +866,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
     /**
      * Test that minScores on HybridSubQueryScorer are updated when groups are evicted (sort by score).
      */
-    public void testCollapse_whenGroupsEvictedSortByScore_thenMinScoresUpdated() throws IOException {
+    public void testCollapse_whenGroupsEvictedSortByScore_thenMinScoresNotPropagated() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
@@ -890,15 +902,17 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         assertEquals(0.0f, hybridScorer.getMinScores()[0], 0.0001f);
 
         // Ascending scores: 0.1, 0.2, 0.3, ..., 1.0
-        // First 5 (0.1-0.5) fill the queue, then docs 6-10 (0.6-1.0) evict weaker entries
+        // First 5 (0.1-0.5) fill the group map, then docs 6-10 (0.6-1.0) evict weaker groups
         for (int i = 0; i < 10; i++) {
             hybridScorer.resetScores();
             hybridScorer.getSubQueryScores()[0] = 0.1f + (i * 0.1f);
             leafCollector.collect(i);
         }
 
-        // After 10 groups with numHits=5, minScores should have been updated from evictions
-        assertTrue("minScores should be > 0 after evictions", hybridScorer.getMinScores()[0] > 0.0f);
+        // Election is leg-independent, so no per-sub-query competitive threshold is propagated on eviction:
+        // a doc with a low score in one sub-query can still be a group's representative through its other
+        // sub-query scores, and a per-sub-query threshold would suppress scores the representative needs.
+        assertEquals("minScores must not be propagated by group evictions", 0.0f, hybridScorer.getMinScores()[0], 0.0001f);
 
         reader.close();
         writer.close();
@@ -1204,6 +1218,191 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      * Collects every document, deriving its score from its collapse group value rather than its doc id —
      * randomized merge policies can reorder docs, so doc-id-based scores make a test seed-dependent.
      */
+    public void testCollapse_whenLegsDisagreeWithinGroup_thenSameRepresentativeElectedAcrossLegs() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // groupA has two documents the legs rank differently; groupB has one document
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupA");
+        addKeywordDoc(writer, 2, "text2", 102, "groupB");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(2);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // Leg 0 prefers doc 0, leg 1 prefers doc 1 — the point of hybrid search. The summed
+        // (leg-independent) ranking prefers doc 0 for groupA (1.2 vs 1.0), and ranks groupB
+        // (doc 2, sum 1.3) above groupA.
+        float[][] scoresByDoc = { { 0.9f, 0.3f }, { 0.4f, 0.6f }, { 0.7f, 0.6f } };
+        for (int docId = 0; docId < scoresByDoc.length; docId++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByDoc[docId][0];
+            hybridScorer.getSubQueryScores()[1] = scoresByDoc[docId][1];
+            leafCollector.collect(docId);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(2, topDocs.size());
+
+        // Every leg must elect the same representative per group: doc 0 for groupA, doc 2 for groupB.
+        // A leg reports its own score for the elected representative.
+        for (int leg = 0; leg < 2; leg++) {
+            CollapseTopFieldDocs legDocs = topDocs.get(leg);
+            Map<Object, Integer> docIdByGroup = new HashMap<>();
+            Map<Object, Float> scoreByGroup = new HashMap<>();
+            for (int i = 0; i < legDocs.scoreDocs.length; i++) {
+                docIdByGroup.put(((BytesRef) legDocs.collapseValues[i]).utf8ToString(), legDocs.scoreDocs[i].doc);
+                scoreByGroup.put(((BytesRef) legDocs.collapseValues[i]).utf8ToString(), legDocs.scoreDocs[i].score);
+            }
+            assertEquals("leg " + leg + " must elect doc 0 for groupA", Integer.valueOf(0), docIdByGroup.get("groupA"));
+            assertEquals("leg " + leg + " must elect doc 2 for groupB", Integer.valueOf(2), docIdByGroup.get("groupB"));
+            assertEquals("leg " + leg + " must report its own score for groupA", scoresByDoc[0][leg], scoreByGroup.get("groupA"), 0.001f);
+            assertEquals("leg " + leg + " must report its own score for groupB", scoresByDoc[2][leg], scoreByGroup.get("groupB"), 0.001f);
+        }
+
+        // Emission order is leg-independent: groupB (sum 1.3) ranks above groupA (sum 1.2) in every leg.
+        for (int leg = 0; leg < 2; leg++) {
+            CollapseTopFieldDocs legDocs = topDocs.get(leg);
+            assertEquals("groupB", ((BytesRef) legDocs.collapseValues[0]).utf8ToString());
+            assertEquals("groupA", ((BytesRef) legDocs.collapseValues[1]).utf8ToString());
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenGroupStrongInOneLegOnly_thenEvictionUsesSummedScore() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        addKeywordDoc(writer, 0, "text0", 100, "groupX");
+        addKeywordDoc(writer, 1, "text1", 101, "groupY");
+        addKeywordDoc(writer, 2, "text2", 102, "groupZ");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        int topNGroups = 2;
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            topNGroups,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(2);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // groupY leads leg 1 (0.5 vs 0.0 and 0.4) but has the weakest sum, so it must be the group evicted
+        float[][] scoresByDoc = { { 0.9f, 0.0f }, { 0.1f, 0.5f }, { 0.4f, 0.4f } };
+        for (int docId = 0; docId < scoresByDoc.length; docId++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByDoc[docId][0];
+            hybridScorer.getSubQueryScores()[1] = scoresByDoc[docId][1];
+            leafCollector.collect(docId);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        for (int leg = 0; leg < 2; leg++) {
+            Set<String> survivingGroups = new HashSet<>();
+            for (Object cv : topDocs.get(leg).collapseValues) {
+                survivingGroups.add(((BytesRef) cv).utf8ToString());
+            }
+            assertFalse("groupY (sum 0.6) must be evicted in leg " + leg, survivingGroups.contains("groupY"));
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenSortByFieldAndLegsMatchDifferentDocs_thenSameRepresentativeElected() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // groupA: doc 0 has the better (lower) sort value but is matched only by leg 0; doc 1 only by leg 1
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 200, "groupA");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(new SortField(INT_FIELD_NAME, SortField.Type.INT, false));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(2);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        float[][] scoresByDoc = { { 0.7f, 0.0f }, { 0.0f, 0.8f } };
+        for (int docId = 0; docId < scoresByDoc.length; docId++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByDoc[docId][0];
+            hybridScorer.getSubQueryScores()[1] = scoresByDoc[docId][1];
+            leafCollector.collect(docId);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        // doc 0 wins the field sort, so it represents groupA everywhere: leg 0 reports it with its own
+        // score, leg 1 did not match it and emits nothing
+        assertEquals(1, topDocs.get(0).scoreDocs.length);
+        assertEquals(0, topDocs.get(0).scoreDocs[0].doc);
+        assertEquals(0.7f, topDocs.get(0).scoreDocs[0].score, 0.001f);
+        assertEquals(0, topDocs.get(1).scoreDocs.length);
+        assertEquals(1, topDocs.get(1).totalHits.value());
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
     private void collectWithGroupDerivedScores(
         LeafReaderContext context,
         LeafCollector leafCollector,
