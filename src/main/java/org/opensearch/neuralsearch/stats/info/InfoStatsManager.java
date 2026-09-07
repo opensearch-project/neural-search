@@ -280,18 +280,17 @@ public class InfoStatsManager {
         }
 
         for (Map<String, Object> mapping : indexMappings) {
-            SparseFieldCounts counts = new SparseFieldCounts();
-            countSparseVectorFields(asMap(mapping.get(PROPERTIES_KEY)), counts);
+            SparseFieldCounts counts = countSparseVectorFields(asMap(mapping.get(PROPERTIES_KEY)));
 
-            if (counts.total == 0) {
+            if (counts.total() == 0) {
                 continue;
             }
             increment(stats, InfoStatName.SPARSE_VECTOR_INDICES);
-            incrementBy(stats, InfoStatName.SPARSE_VECTOR_FIELDS, counts.total);
+            incrementBy(stats, InfoStatName.SPARSE_VECTOR_FIELDS, counts.total());
 
-            if (counts.nativeEngine > 0) {
+            if (counts.nativeEngine() > 0) {
                 increment(stats, InfoStatName.SPARSE_NATIVE_ENGINE_INDICES);
-                incrementBy(stats, InfoStatName.SPARSE_NATIVE_ENGINE_FIELDS, counts.nativeEngine);
+                incrementBy(stats, InfoStatName.SPARSE_NATIVE_ENGINE_FIELDS, counts.nativeEngine());
             }
         }
     }
@@ -300,26 +299,34 @@ public class InfoStatsManager {
      * Counts the sparse vector fields under one level of a mapping's properties, recursing into
      * object and nested fields. Multi-fields are not walked, since a sparse vector field cannot be one.
      *
+     * Recursion depth is the nesting depth of the mapping, which the mapper has already capped at
+     * {@code index.mapping.depth.limit} (20 by default) before the mapping reached cluster state.
+     *
      * @param properties the properties map of a mapping level, may be null
-     * @param counts the running counts for the index being walked, mutated
+     * @return the sparse vector fields found at this level and below
      */
-    private void countSparseVectorFields(Map<String, Object> properties, SparseFieldCounts counts) {
+    private SparseFieldCounts countSparseVectorFields(Map<String, Object> properties) {
         if (properties == null) {
-            return;
+            return SparseFieldCounts.NONE;
         }
+        long total = 0;
+        long nativeEngine = 0;
         for (Object field : properties.values()) {
             Map<String, Object> fieldConfig = asMap(field);
             if (fieldConfig == null) {
                 continue;
             }
             if (SparseVectorFieldMapper.CONTENT_TYPE.equals(asString(fieldConfig.get(TYPE_KEY)))) {
-                counts.total++;
+                total++;
                 if (isNativeEngine(fieldConfig)) {
-                    counts.nativeEngine++;
+                    nativeEngine++;
                 }
             }
-            countSparseVectorFields(asMap(fieldConfig.get(PROPERTIES_KEY)), counts);
+            SparseFieldCounts nested = countSparseVectorFields(asMap(fieldConfig.get(PROPERTIES_KEY)));
+            total += nested.total();
+            nativeEngine += nested.nativeEngine();
         }
+        return new SparseFieldCounts(total, nativeEngine);
     }
 
     /**
@@ -336,11 +343,10 @@ public class InfoStatsManager {
     }
 
     /**
-     * The sparse vector fields found in one index's mapping
+     * The sparse vector fields found in one index's mapping, and how many of them are on the native engine
      */
-    private static class SparseFieldCounts {
-        private long total;
-        private long nativeEngine;
+    private record SparseFieldCounts(long total, long nativeEngine) {
+        private static final SparseFieldCounts NONE = new SparseFieldCounts(0, 0);
     }
 
     /**
