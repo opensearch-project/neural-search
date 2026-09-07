@@ -102,7 +102,15 @@ public enum InfoStatName implements StatName {
         Version.V_3_2_0
     ),
     /** Counts agentic context processors */
-    AGENTIC_CONTEXT_PROCESSORS("agentic_context_processors", "processors.search.agentic", InfoStatType.INFO_COUNTER, Version.V_3_3_0);
+    AGENTIC_CONTEXT_PROCESSORS("agentic_context_processors", "processors.search.agentic", InfoStatType.INFO_COUNTER, Version.V_3_3_0),
+    /** Counts indices with at least one sparse_vector field */
+    SPARSE_VECTOR_INDICES("sparse_vector_indices", "index.sparse", InfoStatType.INFO_COUNTER, Version.V_3_9_0),
+    /** Counts sparse_vector fields across all indices */
+    SPARSE_VECTOR_FIELDS("sparse_vector_fields", "index.sparse", InfoStatType.INFO_COUNTER, Version.V_3_9_0),
+    /** Counts indices with at least one sparse_vector field on the native engine */
+    SPARSE_NATIVE_ENGINE_INDICES("sparse_native_engine_indices", "index.sparse", InfoStatType.INFO_COUNTER, Version.V_3_9_0),
+    /** Counts sparse_vector fields on the native engine across all indices */
+    SPARSE_NATIVE_ENGINE_FIELDS("sparse_native_engine_fields", "index.sparse", InfoStatType.INFO_COUNTER, Version.V_3_9_0);
 
     private final String nameString;
     private final String path;
