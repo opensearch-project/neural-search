@@ -27,16 +27,19 @@ import org.apache.lucene.util.Bits;
 import org.opensearch.common.lucene.Lucene;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorForwardIndex;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.cache.CacheGatedForwardIndexReader;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 import org.opensearch.neuralsearch.sparse.query.explain.SparseExplanationBuilder;
 
 import java.io.IOException;
+import java.util.Locale;
 
 import static org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil.MAX_UNSIGNED_BYTE_VALUE;
 
@@ -68,28 +71,55 @@ public class SparseQueryWeight extends Weight {
 
         SegmentInfo info = Lucene.segmentReader(context.reader()).getSegmentInfo().info;
         FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(query.getFieldName());
+        final boolean isNativeEngine = SparseEngine.NATIVE == SparseFieldUtils.getSparseEngine(fieldInfo);
+        final boolean isSeismicSegment = PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo);
 
-        if (!PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
+        // The fallback query scores FeatureFields, which a native field never writes (see
+        // SparseVectorFieldMapper#parseCreateField), so for the native engine it would explain a
+        // noMatch for a document the native scorer did score. Native explains every segment itself.
+        if (!isNativeEngine && !isSeismicSegment) {
             // Fallback to plain neural sparse query explanation
             return fallbackQueryWeight.explain(context, doc);
         }
 
-        SparseVectorReader reader = SparseVectorReader.NOOP_READER;
-        if (info != null) {
-            CacheKey key = new CacheKey(info, query.getFieldName());
-            ForwardIndexCacheItem cacheItem = forwardIndexCache.getOrCreate(key, info.maxDoc());
-            reader = getCacheGatedForwardIndexReader(cacheItem, context.reader(), query.getFieldName());
-        }
-
-        return SparseExplanationBuilder.builder()
+        SparseExplanationBuilder.SparseExplanationBuilderBuilder builder = SparseExplanationBuilder.builder()
             .context(context)
             .docId(doc)
             .query(query)
             .boost(boost)
             .fieldInfo(fieldInfo)
-            .reader(reader)
-            .build()
-            .explain();
+            .nativeEngine(isNativeEngine);
+
+        if (isNativeEngine) {
+            // The raw vectors reach disk through the delegate consumer for native fields too
+            // (BaseSparseDocValuesConsumer#addBinaryField), so the document is recomputable from doc
+            // values alone -- no need to read it back out of the native index. Deliberately not
+            // routed through the forward index cache: a native segment's index is an mmap'd file and
+            // nothing else populates that cache for it, so filling it here would charge the circuit
+            // breaker for memory no query benefits from.
+            BinaryDocValues docValues = context.reader().getBinaryDocValues(query.getFieldName());
+            if (docValues == null) {
+                return Explanation.noMatch(
+                    String.format(Locale.ROOT, "field '%s' has no doc values in this segment", query.getFieldName())
+                );
+            }
+            if (isSeismicSegment) {
+                // Scored by a quantized seismic index, so the byte-code breakdown applies.
+                builder.reader(new SparseBinaryDocValuesPassThrough(docValues, info, fieldInfo));
+            } else {
+                // Scored by nsparse's inverted index, which holds unquantized floats and computes an
+                // exact dot product, so quantizing here would explain a score nothing produced.
+                builder.reader(SparseVectorReader.NOOP_READER).rawDocValues(docValues);
+            }
+        } else if (info != null) {
+            CacheKey key = new CacheKey(info, query.getFieldName());
+            ForwardIndexCacheItem cacheItem = forwardIndexCache.getOrCreate(key, info.maxDoc());
+            builder.reader(getCacheGatedForwardIndexReader(cacheItem, context.reader(), query.getFieldName()));
+        } else {
+            builder.reader(SparseVectorReader.NOOP_READER);
+        }
+
+        return builder.build().explain();
     }
 
     @Override
@@ -97,8 +127,9 @@ public class SparseQueryWeight extends Weight {
         final SparseVectorQuery query = (SparseVectorQuery) parentQuery;
         SegmentInfo info = Lucene.segmentReader(context.reader()).getSegmentInfo().info;
         FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(query.getFieldName());
+        boolean isNativeEngine = SparseEngine.NATIVE == SparseFieldUtils.getSparseEngine(fieldInfo);
         // fallback to plain neural sparse query
-        if (!PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
+        if (!isNativeEngine && !PredicateUtils.shouldRunSeisPredicate.test(info, fieldInfo)) {
             return fallbackQueryWeight.scorerSupplier(context);
         }
         final Scorer scorer = selectScorer(query, context, info);
@@ -141,8 +172,32 @@ public class SparseQueryWeight extends Weight {
 
     @VisibleForTesting
     Scorer selectScorer(SparseVectorQuery query, LeafReaderContext context, SegmentInfo segmentInfo) throws IOException {
-        SparseVectorReader cacheGatedForwardIndexReader = SparseVectorReader.NOOP_READER;
         FieldInfo fieldInfo = context.reader().getFieldInfos().fieldInfo(query.getFieldName());
+
+        BitSetIterator filterBitIterator = null;
+        // Kept alongside the iterator: cardinality() is a scan of the bitset's words, and the exact
+        // match decision below needs the same number the iterator was built with.
+        int filterCardinality = 0;
+        if (query.getFilterResults() != null) {
+            BitSet filter = query.getFilterResults().get(context.id());
+            if (filter != null) {
+                filterCardinality = filter.cardinality();
+                filterBitIterator = new BitSetIterator(filter, filterCardinality);
+            }
+        }
+        if (SparseEngine.NATIVE == SparseFieldUtils.getSparseEngine(fieldInfo)) {
+            return new NativeIndexScorer(
+                fieldInfo,
+                query.getQueryContext(),
+                query.getRawQueryTokens(),
+                context.reader(),
+                segmentInfo,
+                context.reader().getLiveDocs(),
+                filterBitIterator,
+                boost
+            );
+        }
+        SparseVectorReader cacheGatedForwardIndexReader = SparseVectorReader.NOOP_READER;
         float rescaledBoost = boost * ByteQuantizationUtil.getCeilingValueIngest(fieldInfo) * ByteQuantizationUtil.getCeilingValueSearch(
             fieldInfo
         ) / MAX_UNSIGNED_BYTE_VALUE / MAX_UNSIGNED_BYTE_VALUE;
@@ -153,16 +208,8 @@ public class SparseQueryWeight extends Weight {
             cacheGatedForwardIndexReader = getCacheGatedForwardIndexReader(cacheItem, context.reader(), query.getFieldName());
         }
         Similarity.SimScorer simScorer = ByteQuantizationUtil.getSimScorer(rescaledBoost);
-        BitSetIterator filterBitIterator = null;
-        if (query.getFilterResults() != null) {
-            BitSet filter = query.getFilterResults().get(context.id());
-            if (filter != null) {
-                int ord = filter.cardinality();
-                filterBitIterator = new BitSetIterator(filter, ord);
-                if (ord <= query.getQueryContext().getK()) {
-                    return new ExactMatchScorer(filterBitIterator, query.getQueryVector(), cacheGatedForwardIndexReader, simScorer);
-                }
-            }
+        if (filterBitIterator != null && filterCardinality <= query.getQueryContext().getK()) {
+            return new ExactMatchScorer(filterBitIterator, query.getQueryVector(), cacheGatedForwardIndexReader, simScorer);
         }
         return new OrderedPostingWithClustersScorer(
             query.getFieldName(),

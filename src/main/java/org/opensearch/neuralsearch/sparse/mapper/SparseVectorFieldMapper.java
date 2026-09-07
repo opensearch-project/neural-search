@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.sparse.mapper;
 
 import lombok.Getter;
 import lombok.NonNull;
+import org.opensearch.Version;
 import org.apache.lucene.document.FeatureField;
 import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.DocValuesType;
@@ -19,7 +20,10 @@ import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MapperParsingException;
 import org.opensearch.index.mapper.ParametrizedFieldMapper;
 import org.opensearch.index.mapper.ParseContext;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.algorithm.SparseAlgoType;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseForwardIndex;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -27,14 +31,21 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SPARSE_NATIVE_ENGINE;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForSparseNativeEngine;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTERING_BATCH_SIZE_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ENGINE_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.FORWARD_INDEX_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.PARAMETERS_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_APPROXIMATE_THRESHOLD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_CLUSTERING_BATCH_SIZE;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_CLUSTER_RATIO;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_N_POSTINGS;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
@@ -49,9 +60,12 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
     public static final String CONTENT_TYPE = "sparse_vector";
 
     public static final String METHOD = "method";
+
+    /** The {@code method.parameters} entries that came in with the native engine. */
+    private static final List<String> NATIVE_ENGINE_PARAMETERS = List.of(FORWARD_INDEX_FIELD, CLUSTERING_BATCH_SIZE_FIELD);
+
     @NonNull
     private final SparseMethodContext sparseMethodContext;
-    private FieldType tokenFieldType;
 
     private SparseVectorFieldMapper(
         String simpleName,
@@ -66,14 +80,19 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
         this.fieldType.setDocValuesType(DocValuesType.BINARY);
         setFieldTypeAttributes(this.fieldType, sparseMethodContext);
         this.fieldType.freeze();
-
-        this.tokenFieldType = new FieldType(Defaults.TOKEN_FIELD_TYPE);
-        setFieldTypeAttributes(this.tokenFieldType, sparseMethodContext);
-        this.tokenFieldType.freeze();
     }
 
     private static SparseVectorFieldType ft(FieldMapper in) {
         return ((SparseVectorFieldMapper) in).fieldType();
+    }
+
+    /**
+     * The Lucene field type documents are indexed with, carrying the attributes
+     * {@link #setFieldTypeAttributes} resolved from the method context. Distinct from
+     * {@link #fieldType()}, which returns the mapped (query-side) field type.
+     */
+    public FieldType getLuceneFieldType() {
+        return this.fieldType;
     }
 
     public static class Builder extends ParametrizedFieldMapper.Builder {
@@ -137,6 +156,14 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
             throw new IllegalArgumentException("[" + CONTENT_TYPE + "] fields can't be used in multi-fields");
         }
 
+        // Reject the document rather than write a native field the cluster cannot read back. The
+        // engine check comes first so a non-native field never reads cluster settings per document.
+        if (isNativeEngine(sparseMethodContext) && SparseSettings.state().isNativeEngineEnabled() == false) {
+            throw new IllegalArgumentException(
+                "[" + CONTENT_TYPE + "] field [" + name() + "] cannot be indexed: " + SparseSettings.NATIVE_ENGINE_DISABLED_REASON
+            );
+        }
+
         if (context.parser().currentToken() != XContentParser.Token.START_OBJECT) {
             throw new IllegalArgumentException(
                 "[" + CONTENT_TYPE + "] fields must be json objects, expected a START_OBJECT but got: " + context.parser().currentToken()
@@ -165,8 +192,10 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
                                 + "] in the same document"
                         );
                     }
-                    FeatureField featureField = new FeatureField(name(), feature, value);
-                    context.doc().addWithKey(key, featureField);
+                    if (!SparseEngine.NATIVE.getName().equalsIgnoreCase(sparseMethodContext.getSparseEngine())) {
+                        FeatureField featureField = new FeatureField(name(), feature, value);
+                        context.doc().addWithKey(key, featureField);
+                    }
 
                     try {
                         int tokenIndex = Integer.parseInt(feature);
@@ -213,6 +242,9 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
             fieldType.putAttribute(APPROXIMATE_THRESHOLD_FIELD, String.valueOf(algoTriggerThreshold));
             fieldType.putAttribute(QUANTIZATION_CEILING_INGEST_FIELD, String.valueOf(quantizationCeilIngest));
             fieldType.putAttribute(QUANTIZATION_CEILING_SEARCH_FIELD, String.valueOf(quantizationCeilSearch));
+            fieldType.putAttribute(ENGINE_FIELD, sparseMethodContext.getSparseEngine());
+            fieldType.putAttribute(FORWARD_INDEX_FIELD, forwardIndexOf(sparseMethodContext));
+            fieldType.putAttribute(CLUSTERING_BATCH_SIZE_FIELD, clusteringBatchSizeOf(sparseMethodContext));
         }
     }
 
@@ -221,17 +253,11 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
      */
     public static class Defaults {
         public static final FieldType FIELD_TYPE = new FieldType();
-        public static final FieldType TOKEN_FIELD_TYPE = new FieldType();
         static {
             FIELD_TYPE.setTokenized(false);
             FIELD_TYPE.setIndexOptions(IndexOptions.NONE);
             FIELD_TYPE.putAttribute(SparseVectorField.SPARSE_FIELD, "true"); // This attribute helps to determine knn field type
             FIELD_TYPE.freeze();
-            TOKEN_FIELD_TYPE.setTokenized(false);
-            TOKEN_FIELD_TYPE.setOmitNorms(true);
-            TOKEN_FIELD_TYPE.setIndexOptions(IndexOptions.DOCS_AND_FREQS);
-            TOKEN_FIELD_TYPE.putAttribute(SparseVectorField.SPARSE_FIELD, "true"); // This attribute helps to determine knn field type
-            TOKEN_FIELD_TYPE.freeze();
         }
     }
 
@@ -242,6 +268,8 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
 
         @Override
         public Mapper.Builder<?> parse(String name, Map<String, Object> node, ParserContext parserContext) throws MapperParsingException {
+            // Before the builder consumes the node: it removes the entries it recognizes as it parses.
+            rejectNativeEngineParametersOnAnOlderIndex(node, parserContext.indexVersionCreated());
             Builder builder = new Builder(name);
             builder.parse(name, parserContext, node);
             SparseMethodContext context = builder.sparseMethodContext.getValue();
@@ -255,7 +283,90 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
             if (exception != null) {
                 throw new MapperParsingException(exception.getMessage());
             }
+            if (isNativeEngine(context) && SparseSettings.state().isNativeEngineEnabled() == false) {
+                throw new MapperParsingException("[" + ENGINE_FIELD + "]: " + SparseSettings.NATIVE_ENGINE_DISABLED_REASON);
+            }
+            if (isNativeEngine(context) == false) {
+                // Only the native engine lays out a forward index or clusters in batches; accepting a
+                // non-default value on any other engine would silently do nothing.
+                rejectOnNonNativeEngine(FORWARD_INDEX_FIELD, forwardIndexOf(context), SparseForwardIndex.DEFAULT.getName());
+                rejectOnNonNativeEngine(
+                    CLUSTERING_BATCH_SIZE_FIELD,
+                    clusteringBatchSizeOf(context),
+                    String.valueOf(DEFAULT_CLUSTERING_BATCH_SIZE)
+                );
+            }
             return builder;
         }
+
+        /**
+         * Rejects the mapping parameters that arrived with the native engine unless every node in the
+         * cluster can read them. {@code index.version.created} is what records that: OpenSearch sets it
+         * to the smallest node version in the cluster when the index is created, so an index created
+         * while an older node was around is refused. The live cluster min version is not an option --
+         * mapping parsing also runs inside a cluster state applier on the node receiving the mapping,
+         * where reading the applied state is illegal and kills the node -- and the same reasoning is
+         * why {@code KNNVectorFieldMapper} gates {@code mode} and {@code compression_level} on the
+         * index created version rather than on the cluster.
+         *
+         * Presence is what is checked, not the value: a node that predates a parameter fails on the
+         * key itself, whatever it is set to.
+         */
+        private static void rejectNativeEngineParametersOnAnOlderIndex(Map<String, Object> node, Version indexCreatedVersion) {
+            if (isVersionOnOrAfterMinReqVersionForSparseNativeEngine(indexCreatedVersion)) {
+                return;
+            }
+            // A malformed or absent method is left to the parsing below to report
+            if (node.get(METHOD) instanceof Map == false) {
+                return;
+            }
+            Map<?, ?> method = (Map<?, ?>) node.get(METHOD);
+            if (method.containsKey(ENGINE_FIELD)) {
+                rejectOnAnOlderIndex(ENGINE_FIELD);
+            }
+            if (method.get(PARAMETERS_FIELD) instanceof Map) {
+                Map<?, ?> parameters = (Map<?, ?>) method.get(PARAMETERS_FIELD);
+                for (String parameter : NATIVE_ENGINE_PARAMETERS) {
+                    if (parameters.containsKey(parameter)) {
+                        rejectOnAnOlderIndex(parameter);
+                    }
+                }
+            }
+        }
+
+        private static void rejectOnAnOlderIndex(String parameter) {
+            throw new MapperParsingException(
+                "["
+                    + parameter
+                    + "] can only be used on indices created on or after version "
+                    + MINIMAL_SUPPORTED_VERSION_SPARSE_NATIVE_ENGINE
+            );
+        }
+
+        private static void rejectOnNonNativeEngine(String parameter, String value, String defaultValue) {
+            if (defaultValue.equals(value) == false) {
+                throw new MapperParsingException(
+                    "[" + parameter + "]: " + value + " is only supported with the " + SparseEngine.NATIVE.getName() + " engine"
+                );
+            }
+        }
+    }
+
+    private static boolean isNativeEngine(SparseMethodContext sparseMethodContext) {
+        return SparseEngine.NATIVE.getName().equalsIgnoreCase(sparseMethodContext.getSparseEngine());
+    }
+
+    /**
+     * The two native-only knobs live in {@code method.parameters} alongside the algorithm's, and are
+     * read as strings: that is what a field attribute holds, and it lets a value the mapping wrote as
+     * a string compare equal to the default it names. {@link SparseAlgoType#validateMethod} has
+     * already rejected anything unparseable by the time either is used.
+     */
+    private static String forwardIndexOf(SparseMethodContext context) {
+        return String.valueOf(context.getMethodComponentContext().getParameter(FORWARD_INDEX_FIELD, SparseForwardIndex.DEFAULT.getName()));
+    }
+
+    private static String clusteringBatchSizeOf(SparseMethodContext context) {
+        return String.valueOf(context.getMethodComponentContext().getParameter(CLUSTERING_BATCH_SIZE_FIELD, DEFAULT_CLUSTERING_BATCH_SIZE));
     }
 }

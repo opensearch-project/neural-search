@@ -10,6 +10,7 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -130,7 +131,6 @@ import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder;
 import org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
@@ -169,10 +169,10 @@ import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.DEFAULT_INDEX_THREAD_QTY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_NAME;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_MODEL_SELECTION_MODEL_ID;
 
 /**
  * Neural Search plugin class
@@ -258,6 +258,9 @@ public class NeuralSearch extends Plugin
         // Create and provide the Hybrid query converter for gRPC transport
         HybridQueryBuilderProtoConverter hybridQueryConverter = new HybridQueryBuilderProtoConverter();
 
+        // initialize SparseSettings
+        SparseSettings.state().initialize(clusterService, environment.settings());
+
         return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager, hybridQueryConverter);
     }
 
@@ -310,7 +313,7 @@ public class NeuralSearch extends Plugin
             new FixedExecutorBuilder(
                 settings,
                 SparseConstants.THREAD_POOL_NAME,
-                DEFAULT_INDEX_THREAD_QTY,
+                SparseSettings.DEFAULT_INDEX_THREAD_QTY,
                 -1,
                 SparseConstants.THREAD_POOL_NAME,
                 false
@@ -371,17 +374,23 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(
-            RERANKER_MAX_DOC_FIELDS,
-            NEURAL_STATS_ENABLED,
-            SEMANTIC_INGEST_BATCH_SIZE,
-            HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
-            SparseSettings.IS_SPARSE_INDEX_SETTING,
-            NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
-            NEURAL_CIRCUIT_BREAKER_LIMIT,
-            NEURAL_CIRCUIT_BREAKER_OVERHEAD,
-            NeuralSearchSettings.SEMANTIC_MODEL_SELECTION_MODEL_ID
+        // The sparse settings are contributed by SparseSettings.state() below rather
+        // than listed here, so the set can depend on whether the native engine is
+        // available. SEMANTIC_MODEL_SELECTION_MODEL_ID is unrelated and stays static.
+        List<Setting<?>> settings = new ArrayList<>();
+        settings.addAll(
+            Arrays.asList(
+                RERANKER_MAX_DOC_FIELDS,
+                NEURAL_STATS_ENABLED,
+                SEMANTIC_INGEST_BATCH_SIZE,
+                HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
+                NEURAL_CIRCUIT_BREAKER_LIMIT,
+                NEURAL_CIRCUIT_BREAKER_OVERHEAD,
+                SEMANTIC_MODEL_SELECTION_MODEL_ID
+            )
         );
+        settings.addAll(SparseSettings.state().getSettings());
+        return Collections.unmodifiableList(settings);
     }
 
     @Override

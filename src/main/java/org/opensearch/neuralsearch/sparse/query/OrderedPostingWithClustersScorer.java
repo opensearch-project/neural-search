@@ -26,6 +26,7 @@ public class OrderedPostingWithClustersScorer extends SeismicBaseScorer {
 
     private final Similarity.SimScorer simScorer;
     private final DocIdSetIterator conjunctionDisi;
+    private final ResultsDocValueIterator<Integer> resultsIterator;
 
     /**
      * Creates scorer with upfront search results and optional filtering.
@@ -43,7 +44,7 @@ public class OrderedPostingWithClustersScorer extends SeismicBaseScorer {
         super(leafReader, fieldName, sparseQueryContext, leafReader.maxDoc(), queryVector, reader, acceptedDocs);
         this.simScorer = simScorer;
         List<Pair<Integer, Integer>> results = searchUpfront(sparseQueryContext.getK());
-        ResultsDocValueIterator resultsIterator = new ResultsDocValueIterator(results);
+        resultsIterator = new ResultsDocValueIterator<>(results);
         if (filterBitSetIterator != null) {
             conjunctionDisi = ConjunctionUtils.intersectIterators(List.of(resultsIterator, filterBitSetIterator));
         } else {
@@ -74,6 +75,6 @@ public class OrderedPostingWithClustersScorer extends SeismicBaseScorer {
      */
     @Override
     public float score() throws IOException {
-        return this.simScorer.score(conjunctionDisi.cost(), 0);
+        return this.simScorer.score(resultsIterator.score(), 0);
     }
 }

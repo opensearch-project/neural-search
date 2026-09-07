@@ -18,11 +18,7 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NeuralSearchSettings {
 
-    public static final String SPARSE_ALGO_PARAM_INDEX_THREAD_QTY = "plugins.neural_search.sparse.algo_param.index_thread_qty";
     public static final String NEURAL_CIRCUIT_BREAKER_NAME = "neural_search";
-    public static final int DEFAULT_INDEX_THREAD_QTY = 1; // Choosing 1 as default value to protect safety
-    public static final int MINIMUM_INDEX_THREAD_QTY = 1;
-    public static final int MAXIMUM_INDEX_THREAD_QTY = 1024;
 
     /**
      * Specifies the initial memory limit for the parent circuit breaker.
@@ -84,15 +80,6 @@ public final class NeuralSearchSettings {
         Setting.Property.IndexScope,
         Setting.Property.Dynamic,
         Setting.Property.Deprecated
-    );
-
-    public static Setting<Integer> SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING = Setting.intSetting(
-        SPARSE_ALGO_PARAM_INDEX_THREAD_QTY,
-        DEFAULT_INDEX_THREAD_QTY,
-        MINIMUM_INDEX_THREAD_QTY,
-        MAXIMUM_INDEX_THREAD_QTY,
-        Setting.Property.NodeScope,
-        Setting.Property.Dynamic
     );
 
     /**

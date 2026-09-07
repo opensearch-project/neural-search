@@ -20,6 +20,7 @@
 
 #include "common.h"
 
+using neural_search_jni::freeVectors;
 using neural_search_jni::transferVectors;
 
 namespace {
@@ -173,4 +174,50 @@ TEST(TransferVectorsTest, LeadingZeroOnlyFirstCallDoesNotDoubleCount) {
                     tok.size(), w.data(), w.size());
 
     EXPECT_EQ(*off.indices(), (std::vector<int32_t>{0, 3, 7}));
+}
+
+TEST(FreeVectorsTest, FreesAndZeroesEveryAddress) {
+    // No OffHeap owner here: freeVectors is the owner under test, and letting the
+    // RAII destructor also delete would be the double free the zeroing prevents.
+    int64_t addr[3] = {0, 0, 0};
+    std::vector<int32_t> indptr = {0, 2};
+    std::vector<int32_t> tokens = {5, 9};
+    std::vector<float> weights = {1.0f, 2.0f};
+    transferVectors(addr, indptr.data(), indptr.size(), tokens.data(),
+                    tokens.size(), weights.data(), weights.size());
+    ASSERT_NE(addr[0], 0);
+
+    freeVectors(addr);
+
+    EXPECT_EQ(addr[0], 0);
+    EXPECT_EQ(addr[1], 0);
+    EXPECT_EQ(addr[2], 0);
+}
+
+TEST(FreeVectorsTest, SecondCallFreesNothing) {
+    // close() may run after the vectors were handed to insertToIndex, so freeing
+    // twice has to be a no-op rather than a double free. ASan is what proves it.
+    int64_t addr[3] = {0, 0, 0};
+    std::vector<int32_t> indptr = {0, 1};
+    std::vector<int32_t> tokens = {5};
+    std::vector<float> weights = {1.0f};
+    transferVectors(addr, indptr.data(), indptr.size(), tokens.data(),
+                    tokens.size(), weights.data(), weights.size());
+
+    freeVectors(addr);
+    freeVectors(addr);
+
+    EXPECT_EQ(addr[0], 0);
+}
+
+TEST(FreeVectorsTest, NothingTransferredIsANoOp) {
+    // A segment with no documents for the field never transfers, so close() sees
+    // three zero addresses and must not try to delete them.
+    int64_t addr[3] = {0, 0, 0};
+
+    freeVectors(addr);
+
+    EXPECT_EQ(addr[0], 0);
+    EXPECT_EQ(addr[1], 0);
+    EXPECT_EQ(addr[2], 0);
 }

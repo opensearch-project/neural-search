@@ -78,6 +78,23 @@ inline void transferVectors(
     weightsVec->insert(weightsVec->end(), weights, weights + weightsLen);
 }
 
+/**
+ * Release vectors that were transferred but never inserted into an index.
+ *
+ * insertToIndex is the only other routine that frees them, so this is what a
+ * caller abandoning the transfer has to call instead. Each address is zeroed as
+ * it is freed, which both tells Java there is nothing left to release and makes
+ * a second call a no-op -- closing a buffer twice must not double free.
+ */
+inline void freeVectors(int64_t* memoryAddresses) {
+    delete reinterpret_cast<std::vector<int32_t>*>(memoryAddresses[0]);
+    memoryAddresses[0] = 0;
+    delete reinterpret_cast<std::vector<int32_t>*>(memoryAddresses[1]);
+    memoryAddresses[1] = 0;
+    delete reinterpret_cast<std::vector<float>*>(memoryAddresses[2]);
+    memoryAddresses[2] = 0;
+}
+
 }  // namespace neural_search_jni
 
 #endif // __OPENSEARCH_NEURALSEARCH_JNI_COMMON_H__

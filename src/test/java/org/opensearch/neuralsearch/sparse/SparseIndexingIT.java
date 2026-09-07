@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import org.junit.Before;
 import org.opensearch.client.Request;
 import org.opensearch.client.Response;
@@ -13,9 +14,12 @@ import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
+import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -37,6 +41,15 @@ public class SparseIndexingIT extends SparseBaseIT {
     private static final String TEST_TEXT_FIELD_NAME = "text";
     private static final String PIPELINE_NAME = "seismic_test_pipeline";
     private static final List<String> TEST_TOKENS = List.of("1000", "2000", "3000", "4000", "5000");
+
+    @ParametersFactory(argumentFormatting = "engine=%s")
+    public static Collection<Object[]> parameters() {
+        return allEngines();
+    }
+
+    public SparseIndexingIT(SparseEngine engine) {
+        super(engine);
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -64,6 +77,20 @@ public class SparseIndexingIT extends SparseBaseIT {
         Map<String, Object> indexSettingsMap = (Map<String, Object>) settingsMap.get("index");
 
         assertEquals("true", indexSettingsMap.get("sparse"));
+
+        // The default engine is left out of the mapping the cluster returns, which is what keeps a
+        // pre-3.9 index's mapping source stable across an upgrade; see SparseMethodContext#toXContent.
+        Object engineInMapping = getSparseMethodConfig(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME).get(SparseConstants.ENGINE_FIELD);
+        assertEquals(engine == SparseEngine.DEFAULT ? null : engine.getName(), engineInMapping);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> getSparseMethodConfig(String indexName, String fieldName) {
+        Map<String, Object> indexMapping = getIndexMapping(indexName);
+        Map<String, Object> mappings = (Map<String, Object>) ((Map<String, Object>) indexMapping.get(indexName)).get("mappings");
+        Map<String, Object> properties = (Map<String, Object>) mappings.get("properties");
+        Map<String, Object> fieldConfig = (Map<String, Object>) properties.get(fieldName);
+        return (Map<String, Object>) fieldConfig.get("method");
     }
 
     /**
@@ -194,6 +221,7 @@ public class SparseIndexingIT extends SparseBaseIT {
             .field("type", SparseVectorFieldMapper.CONTENT_TYPE)
             .startObject("method")
             .field("name", ALGO_NAME)
+            .field(SparseConstants.ENGINE_FIELD, engine.getName())
             .startObject("parameters")
             .field("n_postings", 100) // Integer: length of posting list
             .field("summary_prune_ratio", 0.1f) // Float: alpha-prune ration for summary
@@ -332,6 +360,50 @@ public class SparseIndexingIT extends SparseBaseIT {
         assertEquals(7, getHitCount(searchResults));
         Set<String> actualIds = new HashSet<>(getDocIDs(searchResults));
         assertEquals(Set.of("2", "3", "4", "5", "6", "7", "8"), actualIds);
+    }
+
+    /**
+     * Deleting the top scoring documents must not cost the query any of its k results: both engines
+     * have to reach past the deleted docs rather than let them consume result slots.
+     */
+    public void testSeismicIndexWithDeletedTopHitsDoesNotShrinkK() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 8, 0.4f, 0.5f, 8);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            )
+        );
+
+        // Docs 8 and 7 score highest, so with k = 3 they occupy the result slots until deleted.
+        deleteDocById(TEST_INDEX_NAME, "8");
+        deleteDocById(TEST_INDEX_NAME, "7");
+
+        NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+            TEST_SPARSE_FIELD_NAME,
+            2,
+            1.0f,
+            3,
+            Map.of("1000", 0.1f, "2000", 0.2f)
+        );
+
+        Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+        // The count is the point: if deleted docs consumed result slots this would come back short of
+        // k. Which live docs fill the slots is deliberately not asserted -- nsparse seeds its k-means
+        // from std::random_device, so the native approximate ranking varies per index build.
+        assertEquals(3, getHitCount(searchResults));
+        List<String> actualIds = getDocIDs(searchResults);
+        assertFalse("deleted docs must not be returned, got " + actualIds, actualIds.contains("7") || actualIds.contains("8"));
     }
 
     public void testSeismicIndexWithDocUpdate() throws Exception {

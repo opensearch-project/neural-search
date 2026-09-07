@@ -59,6 +59,22 @@ public class NativeLibrary {
         int threadCount
     );
 
+    /**
+     * Builds the index at {@code indexAddress} from a CSR file and the id file mapping each of its
+     * rows to a doc id, via {@code IDMapIndex::read_csr_and_ids} with mmap residency: the vectors
+     * stay borrowed from the CSR file, so both files must outlive {@link #writeIndex}. The index
+     * address is not consumed, unlike {@link #insertToIndex}.
+     *
+     * The index must have been created with {@code idmap: true}, and its delegate must accept mmap
+     * residency -- which the scalar-quantized layouts do not.
+     *
+     * @param indexAddress the index from {@link #initIndex}
+     * @param csrPath      filesystem path of the CSR file, in nsparse's native layout
+     * @param idPath       filesystem path of the id file, row-aligned with the CSR
+     * @param threadCount  build parallelism
+     */
+    public static native void readCsrAndIdsToIndex(long indexAddress, String csrPath, String idPath, int threadCount);
+
     public static native void writeIndex(long indexAddress, IndexOutputWrapper output);
 
     public static native long loadIndex(String indexPath);
@@ -85,4 +101,11 @@ public class NativeLibrary {
 
     // common functions
     public static native void transferVectors(long memoryAddresses[], int indices[], int tokens[], float weights[]);
+
+    /**
+     * Frees vectors from {@link #transferVectors} that were never handed to
+     * {@link #insertToIndex}, which is the only other routine that frees them. Each address is
+     * zeroed as it is freed, so a second call frees nothing.
+     */
+    public static native void freeVectors(long memoryAddresses[]);
 }

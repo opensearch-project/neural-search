@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.query;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.FieldInfos;
 import org.apache.lucene.index.IndexOptions;
@@ -23,6 +24,7 @@ import org.apache.lucene.search.ScorerSupplier;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.util.BitSet;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
 import org.junit.Before;
 import org.mockito.Mock;
@@ -30,6 +32,7 @@ import org.mockito.MockitoAnnotations;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
@@ -51,6 +54,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ENGINE_FIELD;
 
 public class SparseQueryWeightTests extends AbstractSparseTestBase {
 
@@ -405,5 +410,77 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
         assertTrue(scorer instanceof OrderedPostingWithClustersScorer);
         verify(mockForwardIndexCache, never()).getOrCreate(any(), anyInt());
         assertSame(SparseVectorReader.NOOP_READER, ((OrderedPostingWithClustersScorer) scorer).getReader());
+    }
+
+    // ---- native engine explain ----
+
+    /**
+     * A native seismic segment is explained from doc values rather than from the native index -- the
+     * raw vectors reach disk through the delegate consumer for native fields too.
+     */
+    public void testExplain_NativeEngineSeismicSegmentUsesQuantizedBreakdown() throws IOException {
+        useNativeEngineField(nativeSeismicAttributes());
+        SparseBinaryDocValuesPassThrough mockDocValues = mock(SparseBinaryDocValuesPassThrough.class);
+        when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(mockDocValues);
+
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
+
+        Explanation explanation = weight.explain(leafReaderContext, 0);
+
+        assertNotNull(explanation);
+        // Not the fallback: the fallback scores FeatureFields, which a native field never writes
+        verify(mockBooleanQueryWeight, never()).explain(any(LeafReaderContext.class), anyInt());
+        // Nothing charges the forward index cache for a native segment's mmap'd index
+        verify(mockForwardIndexCache, never()).getOrCreate(any(), anyInt());
+    }
+
+    /**
+     * Below the approximate threshold nsparse uses its inverted index, which scores unquantized
+     * floats, so the explanation must take the exact path instead of the byte-code breakdown.
+     */
+    public void testExplain_NativeEngineBelowThresholdExplainsExactScore() throws IOException {
+        // A threshold above the segment's maxDoc keeps the segment out of seismic
+        Map<String, String> attributes = nativeSeismicAttributes();
+        attributes.put(APPROXIMATE_THRESHOLD_FIELD, String.valueOf(Integer.MAX_VALUE));
+        useNativeEngineField(attributes);
+
+        BinaryDocValues docValues = mock(BinaryDocValues.class);
+        when(docValues.advanceExact(anyInt())).thenReturn(true);
+        when(docValues.binaryValue()).thenReturn(new BytesRef(new byte[0]));
+        when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(docValues);
+        when(sparseVectorQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f));
+
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
+
+        Explanation explanation = weight.explain(leafReaderContext, 0);
+
+        assertNotNull(explanation);
+        assertTrue(
+            "Should take the exact float path: " + explanation.getDescription(),
+            explanation.getDescription().contains("exact scoring, segment below approximate_threshold")
+        );
+    }
+
+    public void testExplain_NativeEngineWithoutDocValues() throws IOException {
+        useNativeEngineField(nativeSeismicAttributes());
+        when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(null);
+
+        SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
+
+        Explanation explanation = weight.explain(leafReaderContext, 0);
+
+        assertFalse("Cannot recompute a score without the vectors", explanation.isMatch());
+        assertTrue(explanation.getDescription().contains("has no doc values in this segment"));
+    }
+
+    private Map<String, String> nativeSeismicAttributes() {
+        Map<String, String> attributes = prepareAttributes(true, 5, 1.0f, 10, 1.0f);
+        attributes.put(ENGINE_FIELD, SparseEngine.NATIVE.getName());
+        return attributes;
+    }
+
+    private void useNativeEngineField(Map<String, String> attributes) {
+        when(sparseFieldInfo.attributes()).thenReturn(attributes);
+        when(sparseFieldInfo.getAttribute(ENGINE_FIELD)).thenReturn(attributes.get(ENGINE_FIELD));
     }
 }

@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.junit.Before;
@@ -18,6 +19,7 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.neuralsearch.SparseTestCommon;
 import org.opensearch.neuralsearch.processor.SparseEncodingProcessor;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.query.SparseAnnQueryBuilder;
 import org.apache.lucene.search.join.ScoreMode;
 
@@ -25,6 +27,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -43,6 +46,15 @@ public class SparseSearchingIT extends SparseBaseIT {
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
     private static final String TEST_TEXT_FIELD_NAME = "text";
     private static final String PIPELINE_NAME = "seismic_test_pipeline";
+
+    @ParametersFactory(argumentFormatting = "engine=%s")
+    public static Collection<Object[]> parameters() {
+        return allEngines();
+    }
+
+    public SparseSearchingIT(SparseEngine engine) {
+        super(engine);
+    }
 
     @Before
     public void setUp() throws Exception {
@@ -327,11 +339,20 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         Map<String, Object> searchResults = search(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
         assertNotNull(searchResults);
-        assertEquals(3, getHitCount(searchResults));
         List<String> actualIds = getDocIDs(searchResults);
-        // results with k = 4 are 5, 6, 7, 8, filter results are 1, 2, 3, 4, 5, 6, 7
-        // intersection of both are 5, 6, 7
-        assertEquals(List.of("7", "6", "5"), actualIds);
+        if (SparseEngine.NATIVE == engine) {
+            // Native pushes the filter down into nsparse, so it ranks within the filtered 1..7 and
+            // returns a full k = 4. Neither which 4 nor their order is fixed: nsparse seeds its k-means
+            // from std::random_device, so the clustering -- and with it the approximate ranking --
+            // differs per index build. What must hold is the count and that doc 8 was filtered out.
+            assertEquals(4, getHitCount(searchResults));
+            assertTrue("doc 8 should be filtered out, got " + actualIds, Set.of("1", "2", "3", "4", "5", "6", "7").containsAll(actualIds));
+        } else {
+            // The Lucene engine post-filters: results with k = 4 are 5, 6, 7, 8, filter results are
+            // 1, 2, 3, 4, 5, 6, 7, and the intersection of both is 5, 6, 7.
+            assertEquals(3, getHitCount(searchResults));
+            assertEquals(List.of("7", "6", "5"), actualIds);
+        }
     }
 
     public void testSearchDocumentsRankFeaturesWithFiltering() throws Exception {
@@ -570,6 +591,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
     @SneakyThrows
     public void testSearchWithCustomizedQuantizationCeil() {
+        assumeLuceneEngine(QUANTIZATION_IS_LUCENE_ONLY);
         Settings indexSettings = Settings.builder()
             .put("index.number_of_shards", 1)
             .put("index.number_of_replicas", 0)
@@ -990,7 +1012,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         createPipelineProcessor(pipelineConfiguration, pipelineName, "", null);
 
-        String indexMappings = SparseTestCommon.prepareMixedNestedFieldsIndexMapping(
+        String indexMappings = prepareMixedNestedFieldsIndexMapping(
             sparseAnnParentField,
             plainNeuralSparseParentField,
             nestedChunkField,
@@ -1111,15 +1133,7 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         createPipelineProcessor(pipelineConfiguration, pipelineName, "", null);
 
-        String indexMappings = SparseTestCommon.prepareMixedFieldTypeIndexMapping(
-            parentField,
-            rankFeaturesField,
-            sparseVectorField,
-            4,
-            0.4f,
-            0.5f,
-            8
-        );
+        String indexMappings = prepareMixedFieldTypeIndexMapping(parentField, rankFeaturesField, sparseVectorField, 4, 0.4f, 0.5f, 8);
 
         String indexSettings = prepareIndexSettings(1, 0);
         Request request = new Request("PUT", "/" + TEST_INDEX_NAME);
@@ -1255,6 +1269,7 @@ public class SparseSearchingIT extends SparseBaseIT {
             Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
 
             assertExplanationContains(explanation, "query token pruning", "raw dot product score", "quantization rescaling");
+            assertExplanationScoreMatchesHit(hit);
         }
     }
 
@@ -1291,8 +1306,84 @@ public class SparseSearchingIT extends SparseBaseIT {
 
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
-            assertExplanationNotContains(explanation, "query token pruning", "raw dot product score", "quantization rescaling");
+            if (SparseEngine.NATIVE == engine) {
+                // Native has no rank_features to fall back to -- it never writes FeatureFields -- so it
+                // explains the exact float dot product nsparse's inverted index scored the segment with.
+                assertExplanationContains(explanation, "query token pruning", "dot product score (exact)");
+                assertExplanationNotContains(explanation, "quantization rescaling");
+                assertExplanationScoreMatchesHit(hit);
+            } else {
+                assertExplanationNotContains(explanation, "query token pruning", "raw dot product score", "quantization rescaling");
+            }
         }
+    }
+
+    /**
+     * A boost has to reach the score on both engines. The native path returns nsparse's decoded
+     * score directly, so it is the one place a boost can be silently dropped -- and explain
+     * recomputes the score independently, so a boost applied in only one of the two shows up as a
+     * mismatch rather than as a plausible-looking number.
+     */
+    @SuppressWarnings("unchecked")
+    public void testSearchWithExplain_BoostIsAppliedAndExplained() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 4);
+
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(
+                Map.of("1000", 0.1f, "2000", 0.1f),
+                Map.of("1000", 0.2f, "2000", 0.2f),
+                Map.of("1000", 0.3f, "2000", 0.3f),
+                Map.of("1000", 0.4f, "2000", 0.4f),
+                Map.of("1000", 0.5f, "2000", 0.5f),
+                Map.of("1000", 0.6f, "2000", 0.6f),
+                Map.of("1000", 0.7f, "2000", 0.7f),
+                Map.of("1000", 0.8f, "2000", 0.8f)
+            )
+        );
+
+        final float boost = 3.0f;
+        Map<String, Float> queryTokens = Map.of("1000", 0.1f, "2000", 0.2f);
+        Map<String, Object> unboosted = searchWithExplain(
+            TEST_INDEX_NAME,
+            getNeuralSparseQueryBuilder(TEST_SPARSE_FIELD_NAME, 2, 1.0f, 10, queryTokens),
+            10
+        );
+        Map<String, Object> boosted = searchWithExplain(
+            TEST_INDEX_NAME,
+            getNeuralSparseQueryBuilder(TEST_SPARSE_FIELD_NAME, 2, 1.0f, 10, queryTokens).boost(boost),
+            10
+        );
+
+        Map<String, Float> unboostedScores = scoresByDocId(unboosted);
+        List<Map<String, Object>> boostedHits = (List<Map<String, Object>>) ((Map<String, Object>) boosted.get("hits")).get("hits");
+        assertFalse("expected hits to boost", boostedHits.isEmpty());
+
+        for (Map<String, Object> hit : boostedHits) {
+            String docId = hit.get("_id").toString();
+            float boostedScore = Float.parseFloat(hit.get("_score").toString());
+            Float unboostedScore = unboostedScores.get(docId);
+            assertNotNull("doc " + docId + " should also match the unboosted query", unboostedScore);
+            assertEquals(
+                "boost should scale the score for doc " + docId,
+                unboostedScore * boost,
+                boostedScore,
+                Math.max(1e-4f, unboostedScore * boost * 1e-3f)
+            );
+            assertExplanationScoreMatchesHit(hit);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Float> scoresByDocId(Map<String, Object> searchResults) {
+        Map<String, Float> scores = new java.util.HashMap<>();
+        List<Map<String, Object>> hits = (List<Map<String, Object>>) ((Map<String, Object>) searchResults.get("hits")).get("hits");
+        for (Map<String, Object> hit : hits) {
+            scores.put(hit.get("_id").toString(), Float.parseFloat(hit.get("_score").toString()));
+        }
+        return scores;
     }
 
     @SuppressWarnings("unchecked")
@@ -1341,6 +1432,7 @@ public class SparseSearchingIT extends SparseBaseIT {
         for (Map<String, Object> hit : hitsList) {
             Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
             assertExplanationContains(explanation, "exact search mode", "4 documents <= k=10");
+            assertExplanationScoreMatchesHit(hit);
         }
     }
 

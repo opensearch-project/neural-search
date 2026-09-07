@@ -53,6 +53,7 @@ import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.ContentPath;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
@@ -468,6 +469,10 @@ public class TestsPrepareUtils {
     }
 
     public static DirectoryReader prepareIndexReaderWithSparseField(int docNumbers) throws IOException {
+        return prepareIndexReaderWithSparseField(docNumbers, SparseEngine.DEFAULT);
+    }
+
+    public static DirectoryReader prepareIndexReaderWithSparseField(int docNumbers, SparseEngine engine) throws IOException {
         Directory directory = new ByteBuffersDirectory();
         IndexWriterConfig config = new IndexWriterConfig(new MockAnalyzer(random()));
         IndexWriter writer = new IndexWriter(directory, config);
@@ -482,6 +487,7 @@ public class TestsPrepareUtils {
         // Add required attributes for sparse field
         sparseFieldType.putAttribute(SparseVectorField.SPARSE_FIELD, "true");
         sparseFieldType.putAttribute(SparseConstants.APPROXIMATE_THRESHOLD_FIELD, "10");
+        sparseFieldType.putAttribute(SparseConstants.ENGINE_FIELD, engine.getName());
         sparseFieldType.freeze();
 
         // Create documents with sparse field

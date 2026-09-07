@@ -153,6 +153,20 @@ Java_org_opensearch_neuralsearch_jni_NativeLibrary_insertToIndex(
 }
 
 JNIEXPORT void JNICALL
+Java_org_opensearch_neuralsearch_jni_NativeLibrary_readCsrAndIdsToIndex(
+    JNIEnv* env, jclass cls, jlong indexAddress, jstring csrPath,
+    jstring idPath, jint threadCount) {
+    try {
+        std::string csr = neural_search_jni::ScopedStringChars(env, csrPath).toString();
+        std::string ids = neural_search_jni::ScopedStringChars(env, idPath).toString();
+        neural_search_jni::nsparse_wrapper::readCsrAndIdsToIndex(
+            indexAddress, csr, ids, threadCount);
+    } catch (...) {
+        neural_search_jni::CatchCppExceptionAndThrowJava(env);
+    }
+}
+
+JNIEXPORT void JNICALL
 Java_org_opensearch_neuralsearch_jni_NativeLibrary_writeIndex(
     JNIEnv* env, jclass cls, jlong indexAddress, jobject output) {
     try {
@@ -269,6 +283,20 @@ Java_org_opensearch_neuralsearch_jni_NativeLibrary_transferVectors(
             reinterpret_cast<const int32_t*>(indices.data()), indices.length(),
             reinterpret_cast<const int32_t*>(tokens.data()), tokens.length(),
             weights.data(), weights.length());
+    } catch (...) {
+        neural_search_jni::CatchCppExceptionAndThrowJava(env);
+    }
+}
+
+JNIEXPORT void JNICALL
+Java_org_opensearch_neuralsearch_jni_NativeLibrary_freeVectors(
+    JNIEnv* env, jclass cls, jlongArray jmemoryAddresses) {
+    try {
+        // Release mode 0: freeVectors zeroes each address as it frees it, and Java
+        // reads those zeroes back to know the buffer no longer owns anything.
+        neural_search_jni::ScopedLongArray memAddrs(env, jmemoryAddresses, 0);
+        neural_search_jni::freeVectors(
+            reinterpret_cast<int64_t*>(memAddrs.data()));
     } catch (...) {
         neural_search_jni::CatchCppExceptionAndThrowJava(env);
     }

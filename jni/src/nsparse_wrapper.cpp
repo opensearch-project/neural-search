@@ -20,6 +20,8 @@
 
 #include "jni_util.h"
 #include "nsparse/disk_seismic_index.h"
+#include "nsparse/disk_seismic_scalar_quantized_index.h"
+#include "nsparse/id_map_index.h"
 #include "nsparse/id_selector.h"
 #include "nsparse/index.h"
 #include "nsparse/index_factory.h"
@@ -78,6 +80,8 @@ bool jobject_to_bool(JNIEnv* env, jobject obj) {
  *   "lambda"    -> Number  (int)
  *   "beta"      -> Number  (float -> int)
  *   "alpha"     -> Number  (float)
+ *   "inverted_list_batch_size" -> Number (int)
+ *   "batch_file_output_path"   -> String
  *
  * Produces e.g.:
  * "idmap,seismic_sq,quantizer=8bit|vmin=0.0|vmax=1.0|lambda=10|beta=5|alpha=0.4"
@@ -133,6 +137,18 @@ std::string buildDescription(const std::map<std::string, jobject>& params,
     if (it != params.end()) {
         appendParam("alpha", std::to_string(jobject_to_float(env, it->second)));
     }
+    // A window count and the directory to spill each window into. index_factory
+    // ignores either without the other, so both are forwarded or neither is.
+    it = params.find("inverted_list_batch_size");
+    if (it != params.end()) {
+        appendParam("inverted_list_batch_size",
+                    std::to_string(jobject_to_int(env, it->second)));
+    }
+    it = params.find("batch_file_output_path");
+    if (it != params.end()) {
+        appendParam("batch_file_output_path",
+                    jstring_to_string(env, it->second));
+    }
 
     if (!paramStr.empty()) {
         desc += "," + paramStr;
@@ -146,14 +162,15 @@ std::string buildDescription(const std::map<std::string, jobject>& params,
  *
  * The subtype is inferred from which keys are present, because the index type is
  * not visible here:
- *   "k_prime"      -> DiskSeismicSearchParameters (disk_seismic)
- *   "vmin"+"vmax"  -> SeismicSQSearchParameters   (seismic_sq)
- *   otherwise      -> SeismicSearchParameters
+ *   "k_prime"+"vmin"+"vmax" -> DiskSeismicSQSearchParameters (disk_seismic_sq)
+ *   "k_prime"               -> DiskSeismicSearchParameters   (disk_seismic)
+ *   "vmin"+"vmax"           -> SeismicSQSearchParameters     (seismic_sq)
+ *   otherwise               -> SeismicSearchParameters
  *
  * Each index dynamic_casts to the type it wants and ignores the rest, so an
- * over-specific subtype is safe: DiskSeismicSearchParameters derives from
- * SeismicSearchParameters, and a plain SeismicIndex still reads cut/heap_factor
- * off it.
+ * over-specific subtype is safe: DiskSeismicSQSearchParameters derives from
+ * DiskSeismicSearchParameters derives from SeismicSearchParameters, and a plain
+ * SeismicIndex still reads cut/heap_factor off any of them.
  */
 std::unique_ptr<nsparse::SearchParameters> buildSearchParameters(
     const std::map<std::string, jobject>& params, JNIEnv* env) {
@@ -169,20 +186,32 @@ std::unique_ptr<nsparse::SearchParameters> buildSearchParameters(
         heapFactor = jobject_to_float(env, it->second);
     }
 
-    // k_prime is the block budget DiskSeismicIndex reads, and it only exists on
-    // DiskSeismicSearchParameters. Without this branch the index silently falls
+    auto vminIt = params.find("vmin");
+    auto vmaxIt = params.find("vmax");
+    const bool hasRange = vminIt != params.end() && vmaxIt != params.end();
+
+    // k_prime is the block budget the DiskSeismic indexes read, and it only exists
+    // on DiskSeismicSearchParameters. Without this branch the index silently falls
     // back to kDefaultBlockBudget, leaving its main recall/latency knob unusable
-    // from Java. DiskSeismicIndex ignores heap_factor by design.
+    // from Java. Both ignore heap_factor by design.
     auto kPrimeIt = params.find("k_prime");
     if (kPrimeIt != params.end()) {
         int kPrime = jobject_to_int(env, kPrimeIt->second);
+        // Only DiskSeismicSQSearchParameters carries a query range into a
+        // disk_seismic_sq index, and it is read twice: once to encode the query and
+        // again to decode the integer dot products. Handing that index a range-less
+        // DiskSeismicSearchParameters makes it fall back to its build-time range, so
+        // the query is quantized at the ingest ceiling and the scores are unscaled.
+        if (hasRange) {
+            return std::make_unique<nsparse::DiskSeismicSQSearchParameters>(
+                jobject_to_float(env, vminIt->second),
+                jobject_to_float(env, vmaxIt->second), cut, kPrime);
+        }
         return std::make_unique<nsparse::DiskSeismicSearchParameters>(cut, kPrime);
     }
 
     // If vmin/vmax are present, this is a SeismicSQ query
-    auto vminIt = params.find("vmin");
-    auto vmaxIt = params.find("vmax");
-    if (vminIt != params.end() && vmaxIt != params.end()) {
+    if (hasRange) {
         float vmin = jobject_to_float(env, vminIt->second);
         float vmax = jobject_to_float(env, vmaxIt->second);
         return std::make_unique<nsparse::SeismicSQSearchParameters>(
@@ -291,6 +320,31 @@ void insertToIndex(int64_t indexAddress, const int32_t* ids, int numIds,
                         reinterpret_cast<const nsparse::idx_t*>(ids));
 
     index->build();
+}
+
+void readCsrAndIdsToIndex(int64_t indexAddress, const std::string& csrPath,
+                          const std::string& idPath, int threadCount) {
+    auto* idMapIndex =
+        dynamic_cast<nsparse::IDMapIndex*>(
+            reinterpret_cast<nsparse::Index*>(indexAddress));
+    // read_csr_and_ids lives on IDMapIndex rather than on Index, because the
+    // row-to-doc-id map it reads has nowhere to go without one.
+    if (idMapIndex == nullptr) {
+        throw std::invalid_argument(
+            "building from a CSR file requires an idmap index");
+    }
+
+    omp_set_num_threads(threadCount);
+    // Mapped, not copied: the vectors stay borrowed from csrPath until the index
+    // is freed, so the caller has to keep the file alive across writeIndex.
+    //
+    // read_csr_and_ids validates the id file before it lets the delegate touch
+    // the CSR, and cross-checks the two row counts afterwards, so a mismatch
+    // throws here rather than mis-mapping doc ids at search time. It does not
+    // build, unlike add_with_ids.
+    idMapIndex->read_csr_and_ids(csrPath.c_str(), idPath.c_str(),
+                                 nsparse::Residency::kMmap);
+    idMapIndex->build();
 }
 
 /**

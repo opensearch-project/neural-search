@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+* [Sparse ANN] Add a native sparse ANN engine backed by the neural-sparse-cpp library, selectable per index behind a feature flag ([#1802](https://github.com/opensearch-project/neural-search/issues/1802))
 
 ### Enhancements
 - Add `model_selection` (language_option/model_type) parameter to semantic field to resolve the model id from cluster settings ([#1918](https://github.com/opensearch-project/neural-search/issues/1918))

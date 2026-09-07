@@ -56,6 +56,7 @@ public class SparseVectorQuery extends Query {
     private final Query fallbackQuery;
     private final Query filter;
     private Map<Object, BitSet> filterResults;
+    private final Map<Integer, Float> rawQueryTokens;
 
     @Override
     public String toString(String field) {

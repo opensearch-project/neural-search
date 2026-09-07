@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import lombok.SneakyThrows;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.After;
@@ -14,7 +15,9 @@ import org.opensearch.client.ResponseException;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.neuralsearch.SparseTestCommon;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -22,13 +25,26 @@ import java.util.Objects;
 import static org.opensearch.neuralsearch.util.TestUtils.DELTA_FOR_SCORE_ASSERTION;
 
 /**
- * Integration tests for neural sparse cache operations (warm up and clear cache)
+ * Integration tests for neural sparse cache operations (warm up and clear cache).
+ *
+ * <p>Lucene engine only: warm up and clear cache operate on the sparse cache, which the native
+ * engine bypasses in favour of an mmap'd index file. That both APIs skip a native-engine index
+ * instead of failing on it is covered by {@link NeuralSparseNativeCacheOperationIT}.
  */
 public class NeuralSparseCacheOperationIT extends SparseBaseIT {
 
     private static final String TEST_INDEX_NAME = "test-sparse-cache-index";
     private static final String TEST_TEXT_FIELD_NAME = "text";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
+
+    @ParametersFactory(argumentFormatting = "engine=%s")
+    public static Collection<Object[]> parameters() {
+        return luceneEngineOnly();
+    }
+
+    public NeuralSparseCacheOperationIT(SparseEngine engine) {
+        super(engine);
+    }
 
     @Before
     public void setUp() throws Exception {
