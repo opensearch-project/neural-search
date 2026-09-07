@@ -36,8 +36,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_BLOCK_BUDGET;
-
 /**
  * Scores one segment against the native engine index.
  *
@@ -259,11 +257,12 @@ public class NativeIndexScorer extends Scorer {
             searchParameters.put("vmin", 0.0f);
             searchParameters.put("vmax", ByteQuantizationUtil.getCeilingValueSearch(fieldInfo));
             if (SparseFieldUtils.getSparseForwardIndex(fieldInfo) == SparseForwardIndex.PER_BLOCK) {
-                // k_prime is what makes the range above land on DiskSeismicSQSearchParameters,
-                // the only subtype a disk_seismic_sq index reads a query range from. Pinned to
-                // nsparse's own default until it is exposed as a query parameter, so a per_block
-                // field quantizes like a shared one instead of at its ingest ceiling.
-                searchParameters.put("k_prime", DEFAULT_BLOCK_BUDGET);
+                // k_prime is what makes the range above land on DiskSeismicSQSearchParameters, the
+                // only subtype a disk_seismic_sq index reads a query range from, so it must always
+                // be present for a per_block field. It is also the recall/latency budget: derive it
+                // from the query's heap_factor so a single user-facing knob drives both the disk and
+                // the in-memory paths, instead of the native default that ignored heap_factor.
+                searchParameters.put("k_prime", DiskSeismicKPrime.fromHeapFactor(sparseQueryContext.getHeapFactor()));
             }
         }
         return searchParameters;

@@ -44,9 +44,5 @@ public final class SparseConstants {
         public static final int MAX_CLUSTERING_BATCH_SIZE = 10000;
         public static final float DEFAULT_QUANTIZATION_CEILING_INGEST = 3.0f;
         public static final float DEFAULT_QUANTIZATION_CEILING_SEARCH = 16.0f;
-        // Mirrors nsparse's kDefaultBlockBudget: how many blocks a per_block forward index reads
-        // per query. Sent explicitly only so the query's quantization range reaches the index --
-        // there is no query parameter for it yet.
-        public static final int DEFAULT_BLOCK_BUDGET = 50;
     }
 }
