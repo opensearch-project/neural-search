@@ -93,6 +93,30 @@ public class InfoStatsManagerTests extends OpenSearchTestCase {
         assertEquals(0L, getCountable(stats, InfoStatName.SPARSE_VECTOR_FIELDS));
     }
 
+    public void test_getStats_ignoresMalformedMappingEntries() {
+        // A properties value that is not a map, and a sparse vector field with no method, are both
+        // shapes the mapper rejects, so they only reach here if cluster state holds something odd
+        when(mockClusterUtil.getAllIndexMappings()).thenReturn(
+            List.of(mappingOf(Map.of("not_a_field", "text", "no_method_field", Map.of("type", "sparse_vector"))))
+        );
+
+        Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));
+
+        assertEquals(1L, getCountable(stats, InfoStatName.SPARSE_VECTOR_INDICES));
+        assertEquals(1L, getCountable(stats, InfoStatName.SPARSE_VECTOR_FIELDS));
+        assertEquals(0L, getCountable(stats, InfoStatName.SPARSE_NATIVE_ENGINE_INDICES));
+        assertEquals(0L, getCountable(stats, InfoStatName.SPARSE_NATIVE_ENGINE_FIELDS));
+    }
+
+    public void test_getStats_whenIndexMappingsUnavailable_thenNoSparseFieldStats() {
+        when(mockClusterUtil.getAllIndexMappings()).thenReturn(null);
+
+        Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));
+
+        assertEquals(0L, getCountable(stats, InfoStatName.SPARSE_VECTOR_INDICES));
+        assertEquals(0L, getCountable(stats, InfoStatName.SPARSE_VECTOR_FIELDS));
+    }
+
     public void test_getStats_returnsAllStats() {
         Map<InfoStatName, StatSnapshot<?>> stats = infoStatsManager.getStats(EnumSet.allOf(InfoStatName.class));
         Set<InfoStatName> allStatNames = EnumSet.allOf(InfoStatName.class);
