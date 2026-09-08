@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Enhancements
 - Add `model_selection` (language_option/model_type) parameter to semantic field to resolve the model id from cluster settings ([#1918](https://github.com/opensearch-project/neural-search/issues/1918))
+- [Sparse ANN] Report sparse vector field adoption in the neural stats API, counting the indices and fields that use a sparse vector field and how many of them are on the native engine ([#1802](https://github.com/opensearch-project/neural-search/issues/1802))
 
 ### Bug Fixes
 * [Neural Query] Expose embedded filters to `QueryBuilderVisitor` traversal ([#1992](https://github.com/opensearch-project/neural-search/pull/1992))
