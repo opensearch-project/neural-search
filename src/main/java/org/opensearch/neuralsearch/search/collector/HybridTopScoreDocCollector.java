@@ -143,6 +143,9 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
             ensureSubQueryScoreQueues();
             // Increment total hit count which represents unique doc found on the shard
             totalHits++;
+            // Drives isThresholdReached() below, which gates when it becomes safe to let the
+            // bulk scorer start skipping non-competitive docs (see minScoreThresholds update below).
+            hitsThresholdChecker.incrementHitCount();
             float[] scores = compoundQueryScorer.getSubQueryScores();
             int docWithBase = doc + docBase;
             for (int subQueryIndex = 0; subQueryIndex < scores.length; subQueryIndex++) {
@@ -161,7 +164,11 @@ public class HybridTopScoreDocCollector implements HybridSearchCollector {
                 // this way we're inserting into heap and do nothing else unless we reach the capacity
                 // after that we pull out the lowest score element on each insert
                 ScoreDoc evictedScoreDoc = pq.insertWithOverflow(currentDoc);
-                if (Objects.nonNull(evictedScoreDoc)) {
+                // Only start feeding the eviction score back into minCompetitiveScore (used by the
+                // bulk scorer to skip non-competitive docs) once we've reached the total hits threshold.
+                // Otherwise the heap fills up after just `numHits` (page size) docs and pruning kicks in
+                // long before track_total_hits' accuracy threshold is satisfied, undercounting totalHits.
+                if (Objects.nonNull(evictedScoreDoc) && hitsThresholdChecker.isThresholdReached()) {
                     float newThresholdScore = evictedScoreDoc.score;
                     minScoreThresholds[subQueryIndex] = Math.max(minScoreThresholds[subQueryIndex], newThresholdScore);
                     compoundQueryScorer.getMinScores()[subQueryIndex] = Math.max(
