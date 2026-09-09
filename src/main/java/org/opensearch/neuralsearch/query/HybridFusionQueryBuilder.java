@@ -407,7 +407,12 @@ public class HybridFusionQueryBuilder extends AbstractQueryBuilder<HybridFusionQ
         // Tail: all leg matches as a non-scoring filter -> total hits and aggregations cover the full match set, and
         // highlighting has the sub-queries' terms available. A doc outside the window matches no Top clause — including
         // a doc in another index that shares a window doc's _id, which is why the Top is _index-qualified — so it scores
-        // 0 and sorts below the window, and a request with size <= window_size returns exactly the fused window.
+        // 0 and sorts below the window, so a request with size <= window_size returns exactly the fused window. A doc
+        // matching only the Tail is therefore in the MATCH set but not the RANKED set, which makes fused mode the one
+        // query here whose match set is wider than what it ranks — the Tail is load-bearing for total_hits,
+        // aggregations and highlighting, so it cannot be narrowed. For a rescore that asymmetry is closed downstream
+        // by FusedWindowGuardRescorer, which demotes the Tail-only documents below every ranked one after the request's
+        // own rescorers have run, rather than by removing them from the pool.
         if (tailQueries.isEmpty() == false) {
             BoolQueryBuilder tail = new BoolQueryBuilder();
             for (QueryBuilder q : tailQueries) {

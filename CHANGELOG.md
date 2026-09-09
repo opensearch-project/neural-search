@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * In-query fusion in hybrid search. Let a response processor read the hybrid a fused query replaced, so batch semantic highlighting and a `rerank` processor's `query_context.query_text_path` work in fused mode ([#1989](https://github.com/opensearch-project/neural-search/pull/1989))
 * In-query fusion in hybrid search. Gate fused mode behind an opt-in cluster setting ([#1993](https://github.com/opensearch-project/neural-search/pull/1993))
 * In-query fusion in hybrid search. Refuse a non-object fusion `parameters`, and name rrf's rank constant in explain ([#1995](https://github.com/opensearch-project/neural-search/pull/1995))
+* In-query fusion in hybrid search. Keep a rescore from returning documents the fusion did not rank ([#1999](https://github.com/opensearch-project/neural-search/pull/1999))
 
 ### Bug Fixes
 * [SemanticHighlighter] Fix SemanticHighlighterExtBuilder.toXContent ([#1906](https://github.com/opensearch-project/neural-search/issues/1906)) (query-insights [#651](https://github.com/opensearch-project/query-insights/issues/651))

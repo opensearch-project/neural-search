@@ -9,6 +9,7 @@ import java.util.Objects;
 
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
+import org.opensearch.search.SearchHits;
 import org.opensearch.search.aggregations.InternalAggregations;
 import org.opensearch.search.internal.InternalSearchResponse;
 import org.opensearch.search.profile.ProfileShardResult;
@@ -40,24 +41,24 @@ import lombok.NoArgsConstructor;
 public final class FusedResponseRebuilder {
 
     /**
-     * {@code response} with the given overrides applied, or {@code response} itself when neither changes anything.
+     * As {@link #rebuild(SearchResponse, SearchProfileShardResults, boolean)}, additionally substituting the response's
+     * {@link SearchHits}. Needed because {@code SearchHits.maxScore} is {@code final}: everything else about a hit can be
+     * corrected in place, but a page whose reported max score has to change can only be replaced.
      *
-     * @param response       the response as the search phases built it
-     * @param profileResults the profile section to substitute, or {@code null} to keep the response's own
-     * @param timedOut       the value {@code timed_out} should carry — callers pass the OR of the response's own flag and
-     *                       whatever they are contributing, never a bare {@code false} that would clear it
+     * @param hits the hits to substitute, or {@code null} to keep the response's own
      */
     public static SearchResponse rebuild(
         final SearchResponse response,
         final SearchProfileShardResults profileResults,
-        final boolean timedOut
+        final boolean timedOut,
+        final SearchHits hits
     ) {
         SearchResponseSections sections = response.getInternalResponse();
-        if (Objects.isNull(profileResults) && timedOut == sections.timedOut()) {
+        if (Objects.isNull(profileResults) && Objects.isNull(hits) && timedOut == sections.timedOut()) {
             return response;
         }
         InternalSearchResponse rebuilt = new InternalSearchResponse(
-            sections.hits(),
+            Objects.nonNull(hits) ? hits : sections.hits(),
             (InternalAggregations) sections.aggregations(),
             sections.suggest(),
             Objects.nonNull(profileResults) ? profileResults : ownProfileResults(sections),
@@ -79,6 +80,25 @@ public final class FusedResponseRebuilder {
             response.getClusters(),
             response.pointInTimeId()
         );
+    }
+
+    /**
+     * {@code response} with the given overrides applied, or {@code response} itself when neither changes anything.
+     *
+     * <p>Delegates to the four-argument form with no hits override, so that the argument list this class exists to keep
+     * correct is written down exactly once.
+     *
+     * @param response       the response as the search phases built it
+     * @param profileResults the profile section to substitute, or {@code null} to keep the response's own
+     * @param timedOut       the value {@code timed_out} should carry — callers pass the OR of the response's own flag and
+     *                       whatever they are contributing, never a bare {@code false} that would clear it
+     */
+    public static SearchResponse rebuild(
+        final SearchResponse response,
+        final SearchProfileShardResults profileResults,
+        final boolean timedOut
+    ) {
+        return rebuild(response, profileResults, timedOut, null);
     }
 
     /**

@@ -36,6 +36,7 @@ import org.opensearch.action.ActionRequest;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridFusionQueryBuilder;
+import org.opensearch.neuralsearch.query.FusedWindowGuardRescorerBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
@@ -159,6 +160,7 @@ import org.opensearch.rest.RestHandler;
 import org.opensearch.script.ScriptService;
 import org.opensearch.search.fetch.subphase.highlight.Highlighter;
 import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
+import org.opensearch.search.rescore.RescorerBuilder;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 import org.opensearch.search.pipeline.SystemGeneratedProcessor;
@@ -259,6 +261,29 @@ public class NeuralSearch extends Plugin
             new QuerySpec<>(NeuralKNNQueryBuilder.NAME, NeuralKNNQueryBuilder::new, NeuralKNNQueryBuilder::fromXContent),
             new QuerySpec<>(AgenticSearchQueryBuilder.NAME, AgenticSearchQueryBuilder::new, AgenticSearchQueryBuilder::fromXContent),
             new QuerySpec<>(HybridFusionQueryBuilder.NAME, HybridFusionQueryBuilder::new, HybridFusionQueryBuilder::fromXContent)
+        );
+    }
+
+    /**
+     * The fused-mode rescore guard's wire form, and deliberately ONLY its wire form.
+     *
+     * <p>{@link FusedWindowGuardRescorerBuilder} wraps the request's own rescorer chain so that a rescore cannot change
+     * which documents a fused hybrid is allowed to return. The coordinator installs it during the fused rewrite, so the
+     * shard has to be able to deserialize it — but no user should be able to write it. Registering it here, as a named
+     * writeable under the {@link RescorerBuilder} category, gives the shard exactly that and nothing more.
+     *
+     * <p>The alternative, {@code SearchPlugin#getRescorers()}, would also add a {@code NamedXContentRegistry} entry in
+     * the same call, and that entry is what makes a rescorer name parseable from a request body — turning an internal
+     * wrapper into public request syntax the plugin would then have to support.
+     */
+    @Override
+    public List<NamedWriteableRegistry.Entry> getNamedWriteables() {
+        return List.of(
+            new NamedWriteableRegistry.Entry(
+                RescorerBuilder.class,
+                FusedWindowGuardRescorerBuilder.NAME,
+                FusedWindowGuardRescorerBuilder::new
+            )
         );
     }
 

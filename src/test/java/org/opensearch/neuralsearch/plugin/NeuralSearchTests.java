@@ -50,6 +50,9 @@ import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFacto
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.neuralsearch.query.FusedWindowGuardRescorerBuilder;
+import org.opensearch.search.rescore.RescorerBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -147,6 +150,29 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         );
 
         assertEquals(4, components.size());
+    }
+
+    /**
+     * The fused rescore guard is registered as a named WRITEABLE and deliberately NOT as a rescorer spec: a
+     * {@code getRescorers()} registration would also add an XContent entry, which is what makes a rescorer name
+     * parseable from a request body — turning an internal wrapper into public request syntax. The shard needs the
+     * writeable to deserialize the builder the coordinator installs; nothing needs the parser.
+     */
+    public void testNamedWriteables_registerTheFusedRescoreGuardWithoutMakingItRequestSyntax() {
+        List<NamedWriteableRegistry.Entry> entries = plugin.getNamedWriteables();
+
+        assertNotNull(entries);
+        assertTrue(
+            "the guard's wire form must be registered under the RescorerBuilder category",
+            entries.stream()
+                .anyMatch(
+                    entry -> RescorerBuilder.class.equals(entry.categoryClass) && FusedWindowGuardRescorerBuilder.NAME.equals(entry.name)
+                )
+        );
+        assertTrue(
+            "the guard must not be registered as a rescorer spec, which would make its name user-typeable",
+            plugin.getRescorers().stream().noneMatch(spec -> FusedWindowGuardRescorerBuilder.NAME.equals(spec.getName().getPreferredName()))
+        );
     }
 
     public void testQuerySpecs() {
