@@ -81,7 +81,23 @@ public class SparseTestCommon {
         float clusterRatio,
         int approximateThreshold
     ) throws IOException {
-        String indexSettings = prepareIndexSettings(1, 0);
+        createSparseIndex(client, engine, forwardIndex, indexName, fieldName, nPostings, alpha, clusterRatio, approximateThreshold, 1, 0);
+    }
+
+    public static void createSparseIndex(
+        RestClient client,
+        SparseEngine engine,
+        SparseForwardIndex forwardIndex,
+        String indexName,
+        String fieldName,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold,
+        int shards,
+        int replicas
+    ) throws IOException {
+        String indexSettings = prepareIndexSettings(shards, replicas);
         String indexMappings = prepareIndexMapping(
             engine,
             forwardIndex,
