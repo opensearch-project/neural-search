@@ -41,7 +41,12 @@ buildscript {
 
     dependencies {
         classpath "${opensearch_group}.gradle:build-tools:${opensearch_version}"
-        classpath "com.diffplug.spotless:spotless-plugin-gradle:8.10.1"
+        // Spotless 8.10.x requires a Java 17+ runtime to resolve its plugin. Only put it on the
+        // buildscript classpath on Java 17+ so the Java 11 CI matrix doesn't fail resolving it.
+        // formatting.gradle applies it (also gated to Java 17+) only when it is available.
+        if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
+            classpath "com.diffplug.spotless:spotless-plugin-gradle:8.10.1"
+        }
         classpath "io.freefair.gradle:lombok-plugin:8.4"
 
         configurations.all {
@@ -62,7 +67,6 @@ apply plugin: 'idea'
 apply plugin: 'opensearch.opensearchplugin'
 apply plugin: 'opensearch.pluginzip'
 apply plugin: 'jacoco'
-apply plugin: "com.diffplug.spotless"
 apply plugin: 'io.freefair.lombok'
 apply from: 'gradle/formatting.gradle'
 
@@ -304,7 +308,11 @@ project.tasks.delombok.dependsOn(extractKnnJar)
 
 compileJava {
     dependsOn extractKnnJar
-    dependsOn spotlessApply
+    // spotless is only applied on Java 17+ (see gradle/formatting.gradle); guard the wiring so
+    // configuration doesn't fail on Java 11 where the task does not exist.
+    if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
+        dependsOn spotlessApply
+    }
     options.compilerArgs.addAll(["-processor", 'lombok.launch.AnnotationProcessorHider$AnnotationProcessor'])
 }
 compileTestJava {
@@ -450,7 +458,11 @@ jacocoTestReport {
     }
 }
 
-check.dependsOn spotlessCheck
+// spotless is only applied on Java 17+ (see gradle/formatting.gradle); guard the wiring so
+// configuration doesn't fail on Java 11 where the task does not exist.
+if (JavaVersion.current().isCompatibleWith(JavaVersion.VERSION_17)) {
+    check.dependsOn spotlessCheck
+}
 check.dependsOn jacocoTestCoverageVerification
 jacocoTestCoverageVerification.dependsOn jacocoTestReport
 
