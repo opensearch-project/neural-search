@@ -82,10 +82,11 @@ public class SemanticHighlighter implements Highlighter {
 
         EventStatsManager.increment(EventStatName.SEMANTIC_HIGHLIGHTING_REQUEST_COUNT);
 
-        String fieldText = HighlightExtractorUtils.getFieldText(fieldContext);
-        if (fieldText == null) {
+        java.util.List<String> fieldTexts = HighlightExtractorUtils.getFieldTexts(fieldContext);
+        if (fieldTexts == null || fieldTexts.isEmpty()) {
             return null;
         }
+        String joinedText = org.opensearch.neuralsearch.highlight.utils.HighlightValueUtils.joinElements(fieldTexts);
 
         String modelId = HighlightExtractorUtils.getModelId(fieldContext.field.fieldOptions().options());
         String originalQueryText = semanticHighlighterEngine.extractOriginalQuery(fieldContext.query, fieldContext.fieldName);
@@ -98,21 +99,32 @@ public class SemanticHighlighter implements Highlighter {
         String[] postTags = fieldContext.field.fieldOptions().postTags();
         String preTag = preTags[0];
         String postTag = postTags[0];
+        String encoder = extractEncoder(options);
 
-        String highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
-            modelId,
-            originalQueryText,
-            fieldText,
-            preTag,
-            postTag
-        );
+        // Highlight per element so lists yield one fragment per array element,
+        // matching the built-in highlighters.
+        java.util.List<String> fragments = new java.util.ArrayList<>(fieldTexts.size());
+        for (String elementText : fieldTexts) {
+            String highlightedResponse = semanticHighlighterEngine.getHighlightedSentences(
+                modelId,
+                originalQueryText,
+                elementText,
+                preTag,
+                postTag
+            );
+            if (highlightedResponse == null || highlightedResponse.isEmpty()) continue;
+            if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
+                highlightedResponse = HighlightEncoders.htmlEncodePreservingTags(highlightedResponse, preTag, postTag);
+            }
+            fragments.add(highlightedResponse);
+        }
 
-        if (highlightedResponse == null || highlightedResponse.isEmpty()) {
+        if (fragments.isEmpty()) {
             // no_match_size: emit first N chars when model returns no spans.
             int noMatchSize = extractNoMatchSize(options);
-            if (noMatchSize > 0 && !fieldText.isEmpty()) {
-                String snippet = fieldText.length() <= noMatchSize ? fieldText : fieldText.substring(0, noMatchSize);
-                if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(extractEncoder(options))) {
+            if (noMatchSize > 0 && !joinedText.isEmpty()) {
+                String snippet = joinedText.length() <= noMatchSize ? joinedText : joinedText.substring(0, noMatchSize);
+                if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
                     snippet = HighlightEncoders.htmlEscape(snippet);
                 }
                 return new HighlightField(fieldContext.fieldName, new Text[] { new Text(snippet) });
@@ -121,11 +133,11 @@ public class SemanticHighlighter implements Highlighter {
             return null;
         }
 
-        if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(extractEncoder(options))) {
-            highlightedResponse = HighlightEncoders.htmlEncodePreservingTags(highlightedResponse, preTag, postTag);
+        Text[] texts = new Text[fragments.size()];
+        for (int i = 0; i < fragments.size(); i++) {
+            texts[i] = new Text(fragments.get(i));
         }
-
-        return new HighlightField(fieldContext.fieldName, new Text[] { new Text(highlightedResponse) });
+        return new HighlightField(fieldContext.fieldName, texts);
     }
 
     private static boolean isExtBatchEnabled(FieldHighlightContext fieldContext) {
