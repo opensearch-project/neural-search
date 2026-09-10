@@ -309,6 +309,49 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * The bucket case the test above cannot see, because it asks a bucket for exactly as many hits as the fusion ranked.
+     * Ask for more and the bucket must show unranked documents — that is what an aggregation is for — and every one of
+     * them goes through the guard's demotion inside the bucket, at the request's own ordinary weights. So this is where
+     * the guard's internal band would reach a user if the coordinator decoded only the top-level page: the bucket would
+     * report {@code _score: -3.4028235E38} for documents 6-10.
+     *
+     * <p>What it must report instead is {@code 0.0}, the score those documents have in the same request with no rescore
+     * at all — the same contract as the page, one level down.
+     */
+    @SneakyThrows
+    public void testTopHitsBucketsWiderThanTheFusedWindow_reportTheUnrankedScoreAndNotTheBand() {
+        ensureDatasets();
+
+        int bucketSize = WINDOW_SIZE * 2;
+        String body = "{\"size\":0,\"aggs\":{\"all\":{\"filter\":{\"match_all\":{}},\"aggs\":{\"top\":{\"top_hits\":{\"size\":"
+            + bucketSize
+            + "}}}}},\"query\":"
+            + fusedHybrid(WINDOW_SIZE)
+            + ",\"rescore\":{\"window_size\":20,\"query\":{\"rescore_query\":{\"range\":{\""
+            + SCORE_FIELD
+            + "\":{\"lte\":"
+            + (SCORE_BASE - WINDOW_SIZE)
+            + "}}},\"query_weight\":1.0,\"rescore_query_weight\":10.0,\"score_mode\":\"total\"}}}";
+        List<Map<String, Object>> bucketHits = bucketTopHits(searchForHits(INDEX_ONE_SHARD, body), "all", "top");
+
+        assertEquals(bucketSize, bucketHits.size());
+        List<Double> scores = scoresOf(bucketHits);
+        for (int i = 0; i < scores.size(); i++) {
+            assertTrue(
+                "no bucket hit may report the guard's band: " + idsOf(bucketHits).get(i) + " at " + scores.get(i),
+                scores.get(i) >= 0.0
+            );
+        }
+        // The five ranked documents keep the page's own arithmetic; the five the fusion never ranked report the score they
+        // would have had with no rescore in the request.
+        assertEquals(List.of("5", "1", "2", "3", "4"), idsOf(bucketHits).subList(0, WINDOW_SIZE));
+        assertTrue("a ranked bucket hit still outranks an unranked one", scores.get(WINDOW_SIZE - 1) > 0.0);
+        for (int i = WINDOW_SIZE; i < bucketSize; i++) {
+            assertEquals("an unranked bucket hit reports 0.0", 0.0, scores.get(i), 0.0);
+        }
+    }
+
+    /**
      * A ranked document whose fused score is exactly {@code 0.0}, with no rescore anywhere in the request. The Top scores
      * and the Tail does not, which is the entire mechanism separating the fused window from everything else — and a ranked
      * document at {@code 0.0} ties every Tail-only document instead of outranking it. Lucene breaks that tie by ascending

@@ -173,6 +173,16 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
             "the guard must not be registered as a rescorer spec, which would make its name user-typeable",
             plugin.getRescorers().stream().noneMatch(spec -> FusedWindowGuardRescorerBuilder.NAME.equals(spec.getName().getPreferredName()))
         );
+        // Route-agnostic, because the assertion above can only ever pass: the plugin does not override getRescorers(), so
+        // it walks an empty list. What actually has to hold is that NO registration route contributes an XContent entry for
+        // the name — getRescorers() is one route, Plugin#getNamedXContent() is another into the very same registry that
+        // parses search bodies.
+        assertTrue(
+            "no registration route may make the guard's name parseable from a request body",
+            plugin.getNamedXContent()
+                .stream()
+                .noneMatch(entry -> FusedWindowGuardRescorerBuilder.NAME.equals(entry.name.getPreferredName()))
+        );
     }
 
     public void testQuerySpecs() {

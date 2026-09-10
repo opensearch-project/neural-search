@@ -32,6 +32,10 @@ public final class MinClusterVersionUtil {
     public static final Version MINIMAL_SUPPORTED_VERSION_METRICS_STATS = Version.V_3_3_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER = Version.V_3_0_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_AGENTIC_EMBEDDING_MODEL_ID = Version.V_3_6_0;
+    // Placeholder until the feature branch merges: 3.8.0 is released and contains no fused-mode code, so this has to name
+    // the release that actually ships the feature before either the hybrid_fusion query or the fused rescore guard can
+    // reach a mixed-version cluster. Tracked by https://github.com/opensearch-project/neural-search/issues/2002 and held
+    // to by HybridQueryFusedFanOutTests#testFusedModeMinimumVersion_isNotBehindTheVersionUnderDevelopment.
     public static final Version MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY = Version.V_3_8_0;
 
     // Constant for neural_knn_query version check

@@ -213,8 +213,17 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         // nested reaches here with no merger attached at all, since explain deliberately declines a hybrid that is not the
         // request's own query. Hand the caller's listener back untouched rather than wrapping it to do nothing.
         // The guard is installed only for a fused hybrid that IS the request's own query — the position guard in
-        // HybridQueryBuilder refuses a rescore alongside any other shape — so that identity test is also the exact
-        // condition under which a sentinel can appear in the hits.
+        // HybridQueryBuilder refuses a rescore alongside any other shape — so that identity test is the condition under
+        // which a sentinel can appear in the hits.
+        //
+        // It is exact only given something core does not guarantee. This filter reads the source as SUBMITTED, while the
+        // guard is installed during the rewrite, and search request processors run in between: TransportSearchAction calls
+        // transformRequest first and rewrites only inside its callback. A processor that ADDED a rescore to a request
+        // carrying none would install a guard this gate had already declined to normalize for, and the band would reach
+        // the response undecoded. No shipped processor does — the only one that adds a rescorer is
+        // neural_sparse_two_phase_processor, whose collection walks bool and neural clauses and never enters a hybrid, so
+        // it cannot fire on a request whose query is a fused hybrid. A processor that REPLACES the source disarms the
+        // install too, which fails safe. Re-check this whenever a request processor learns to touch source.rescores().
         final boolean normalizeSentinel = rescored && finder.found.get(0) == source.query();
         if (Objects.isNull(legProfileMerger)
             && Objects.isNull(timeoutMerger)

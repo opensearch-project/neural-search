@@ -863,6 +863,33 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
     }
 
     /**
+     * The constant itself, not the gate built on it. Every mixed-cluster protection fused mode has — the coordinator's
+     * refusal, and the {@code fusion} presence flag {@code HybridQueryBuilder#doWriteTo} writes on the shard wire — is
+     * only as good as {@code MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY} naming a release that actually
+     * contains fused mode. While it does not ship, the only version that can be true of is the one under development, so
+     * the constant must not fall behind {@code Version.CURRENT}: a released version below it is a version whose nodes
+     * pass the gate, cannot resolve {@code hybrid_fusion} or {@code hybrid_fused_window_guard}, and — because the
+     * presence flag is written whether or not the query uses fused mode — cannot read a plain classic {@code hybrid}
+     * off the wire either.
+     *
+     * <p>Deliberately fails when the branch's core version moves past the constant, which is the moment the constant
+     * has to be raised with it — the decision itself is tracked by
+     * <a href="https://github.com/opensearch-project/neural-search/issues/2002">issue 2002</a> and taken when the feature
+     * branch merges. Delete this test in the release that actually ships fused mode: from then on the constant names a
+     * real released version and {@code Version.CURRENT} is legitimately ahead of it.
+     */
+    public void testFusedModeMinimumVersion_isNotBehindTheVersionUnderDevelopment() {
+        assertTrue(
+            "["
+                + MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY
+                + "] is behind the version under development ["
+                + Version.CURRENT
+                + "], so it names a release that cannot contain fused mode",
+            MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY.onOrAfter(Version.CURRENT)
+        );
+    }
+
+    /**
      * The refusal sits above the {@code SearchRequest} cast on purpose. {@code _explain} and {@code _validate/query} rewrite
      * on the coordinator with an {@code ExplainRequest}/{@code ValidateQueryRequest} and are then dispatched <i>still
      * fused</i> to the node holding the document — where the {@code fusion} field is gated off the wire, so an old node

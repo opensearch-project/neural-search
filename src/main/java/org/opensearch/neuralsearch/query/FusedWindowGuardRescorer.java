@@ -61,8 +61,10 @@ import org.opensearch.search.rescore.Rescorer;
  * already saturated, and it is the same two constants on every shard, so the coordinator's merge — which compares raw
  * floats and breaks ties by (shard, doc id) — sees one consistent band boundary rather than a per-shard one.
  *
- * <p>The sentinel is an internal encoding, not a score the user asked for; {@code FusedRescoreScope} normalises it back
- * to {@code 0.0f} on the coordinator so the response is what the same request without a rescore would return.
+ * <p>Both band values are an internal encoding, not scores the user asked for; {@code FusedRescoreScoreNormalizer}
+ * decodes them on the coordinator — the unranked sentinel to {@code 0.0f} and the ranked floor to
+ * {@link FusedWindowGuardRescorerBuilder#RANKED_FLOOR_NORMALIZED} — so the response reports what the same request
+ * without a rescore would return.
  */
 class FusedWindowGuardRescorer implements Rescorer {
 
@@ -90,6 +92,12 @@ class FusedWindowGuardRescorer implements Rescorer {
         // to MIN_RANKED_SCORE, and a Tail-only document carries exactly 0.0f. The test is exact rather than heuristic —
         // the hybrid query refuses any boost other than 1.0 and indices_boost is rejected for fused mode, so nothing
         // attenuates the floor before this point.
+        //
+        // One site hands over a pool round 2 did not score: a `global` aggregation's top_hits, which core collects in a
+        // separate match_all pass, so every document arrives at 1.0f. The inference is vacuous there rather than wrong —
+        // nothing reads as unranked, the separation below is skipped, and the bucket gets exactly what it would without
+        // the guard, which is what `global` means (it is defined to ignore the query, so its documents are not the
+        // hybrid's hits and there is no fused ranking to preserve).
         Set<Integer> unranked = new HashSet<>();
         for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
             if (scoreDoc.score <= 0.0f) {
@@ -102,11 +110,27 @@ class FusedWindowGuardRescorer implements Rescorer {
             rescored = delegate.rescorer().rescore(rescored, searcher, delegate);
         }
 
-        if (unranked.isEmpty()) {
+        if (unranked.isEmpty() && needsTheRankedFloor(rescored) == false) {
             // Nothing to separate: every document in the pool was ranked, so the user's rescore stands as it is.
             return rescored;
         }
         return separate(rescored, unranked);
+    }
+
+    /**
+     * Whether any score still has to be clamped even though there is no band to separate. A pool of nothing but ranked
+     * documents still reaches the coordinator through this method, and a delegate can have driven one of those scores to
+     * NaN or past {@link #UNRANKED} — NaN would render as a null {@code _score} and sort to the top of the page, and a
+     * saturated score would tie the sentinel a later shard is about to report. Checking is a scan of an array the
+     * delegates just rewrote; the alternative is rebuilding and re-sorting it for nothing on the common path.
+     */
+    private static boolean needsTheRankedFloor(final TopDocs rescored) {
+        for (ScoreDoc scoreDoc : rescored.scoreDocs) {
+            if (Float.isNaN(scoreDoc.score) || scoreDoc.score <= UNRANKED) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

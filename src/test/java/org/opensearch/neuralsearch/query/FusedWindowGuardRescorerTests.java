@@ -129,6 +129,32 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
         assertEquals("no document is demoted when none was unranked", 0.25f, result.scoreDocs[1].score, 0.0f);
     }
 
+    /**
+     * The all-ranked pool still has to be clamped. There is no band to separate, but the delegates can have driven a
+     * ranked score past {@code -Float.MAX_VALUE} or to NaN, and returning that verbatim reaches the coordinator raw: NaN
+     * is the largest value under {@code Float.compare} so it would float to rank 1 and render as a null {@code _score},
+     * and a saturated score would tie the sentinel a shard holding Tail matches is about to report for a document this
+     * one outranks.
+     */
+    public void testRescore_whenEverythingWasRankedButAScoreSaturated_thenItIsStillClamped() throws IOException {
+        TopDocs pool = poolOf(new ScoreDoc(1, 0.9f), new ScoreDoc(2, 0.4f));
+
+        TopDocs result = guard(flattenTo(Float.NEGATIVE_INFINITY)).rescore(pool, null, context());
+
+        assertEquals(RANKED_FLOOR, result.scoreDocs[0].score, 0.0f);
+        assertEquals(RANKED_FLOOR, result.scoreDocs[1].score, 0.0f);
+    }
+
+    /** Same path for NaN, which is the value that would otherwise be sorted to the top of the page. */
+    public void testRescore_whenEverythingWasRankedButAScoreWentNaN_thenItIsStillClamped() throws IOException {
+        TopDocs pool = poolOf(new ScoreDoc(1, 0.9f), new ScoreDoc(2, 0.4f));
+
+        TopDocs result = guard(flattenTo(Float.NaN)).rescore(pool, null, context());
+
+        assertFalse("NaN must not reach the coordinator", Float.isNaN(result.scoreDocs[0].score));
+        assertEquals(RANKED_FLOOR, result.scoreDocs[0].score, 0.0f);
+    }
+
     /** A pool that is entirely Tail-only still comes back at full length — the case that made pruning impossible. */
     public void testRescore_whenNothingWasRanked_thenTheLengthIsStillPreserved() throws IOException {
         TopDocs pool = poolOf(new ScoreDoc(4, 0.0f), new ScoreDoc(1, 0.0f));

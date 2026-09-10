@@ -53,8 +53,9 @@ import org.opensearch.search.rescore.RescorerBuilder;
  * for any weights.
  *
  * <p>The guard demotes rather than removes, and that is not a preference: core's {@code RescoreProcessor} reads
- * {@code scoreDocs[0].score} on the rescorer's <i>output</i> with no length check, so a rescorer that returned a shorter
- * array would raise an {@code ArrayIndexOutOfBoundsException} as a shard failure. Demotion also costs the paradigm
+ * {@code scoreDocs[0].score} on the rescorer's <i>output</i> with no length check, so a rescorer that returned an
+ * <b>empty</b> array would raise an {@code ArrayIndexOutOfBoundsException} as a shard failure. Empty is the whole hazard —
+ * index 0 is the only one read, so a shorter but non-empty return trips nothing. Demotion also costs the paradigm
  * nothing on its own terms — nothing leaves the pool, so {@code total_hits} and aggregations, computed over the full leg
  * union, cannot be affected at all.
  *
