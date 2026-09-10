@@ -172,6 +172,24 @@ public class OffHeapVectorOwnershipTests extends AbstractSparseTestBase {
         );
     }
 
+    /**
+     * A single flush's relative indptr is a plain int, so its running non-zero count must fit one.
+     * The cumulative offset is widened to 64-bit on the native side, but overflowing an int here would
+     * wrap the indptr negative and silently corrupt what nsparse maps -- so the buffer refuses it.
+     * Checked directly rather than by adding INT_MAX non-zeros, which no test heap could stage.
+     */
+    public void testPerFlushNnzOverflowIsRejected() {
+        // Well within an int: the common case, where the guard does nothing.
+        OffHeapSparseVectorsBuffer.requirePerFlushNnzFitsInt(1_000_000, 200);
+
+        // The boundary: a running count that a further batch pushes past Integer.MAX_VALUE.
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> OffHeapSparseVectorsBuffer.requirePerFlushNnzFitsInt(Integer.MAX_VALUE - 1, 2)
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("Integer.MAX_VALUE non-zeros"));
+    }
+
     /** {@link #ATTEMPTS_PER_BATCH} writes that stream every document off-heap and then fail. */
     private void runFailingWrites(int firstSegment) {
         for (int attempt = 0; attempt < ATTEMPTS_PER_BATCH; attempt++) {
