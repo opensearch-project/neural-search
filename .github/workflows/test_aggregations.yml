@@ -19,6 +19,7 @@ jobs:
   Check-neural-search-linux:
     needs: Get-CI-Image-Tag
     strategy:
+      fail-fast: false
       matrix:
         java: [21]
         os: [ubuntu-latest]
@@ -53,6 +54,7 @@ jobs:
 
   Check-neural-search-windows:
     strategy:
+      fail-fast: false
       matrix:
         java: [21]
         os: [windows-latest]
