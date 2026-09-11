@@ -143,9 +143,12 @@ public class FusedRescoreScopeTests extends OpenSearchTestCase {
         scope.resolve(fusedOver("1"));
 
         SearchSourceBuilder dispatched = coreRewriteToFixedPoint(source);
-        assertEquals(2, dispatched.rescores().size());
+        assertEquals("the chain is carried inside one guard element", 1, dispatched.rescores().size());
+        assertEquals(2, ((FusedWindowGuardRescorerBuilder) dispatched.rescores().get(0)).delegates().size());
+        // Both of the user's rescorers, not both list elements: after the wrap there is one element and the chain lives
+        // inside it, so the loop walks the guard's delegates.
         for (int i = 0; i < 2; i++) {
-            BoolQueryBuilder confined = (BoolQueryBuilder) ((QueryRescorerBuilder) dispatched.rescores().get(i)).getRescoreQuery();
+            BoolQueryBuilder confined = (BoolQueryBuilder) rescorerOf(dispatched, i).getRescoreQuery();
             assertAddressedTo(confined.filter().get(0), INDEX, "1");
         }
     }
@@ -266,7 +269,7 @@ public class FusedRescoreScopeTests extends OpenSearchTestCase {
 
         FusedRescoreScope scope = FusedRescoreScope.install(source);
         // Only the first rescorer is offered to core, which is what a partially-copied source would look like.
-        ((QueryRescorerBuilder) source.rescores().get(0)).getRescoreQuery().rewrite(rewriteContext());
+        rescorerOf(source, 0).getRescoreQuery().rewrite(rewriteContext());
         scope.resolve(fusedOver("1"));
 
         expectThrows(IllegalStateException.class, scope::requireReachedTheExecutedRequest);
@@ -393,7 +396,19 @@ public class FusedRescoreScopeTests extends OpenSearchTestCase {
     }
 
     private QueryRescorerBuilder rescorerOf(SearchSourceBuilder source) {
-        return (QueryRescorerBuilder) source.rescores().get(0);
+        return rescorerOf(source, 0);
+    }
+
+    /**
+     * The {@code index}-th of the user's rescorers as it was installed. After {@code install} the request carries ONE
+     * element — the {@link FusedWindowGuardRescorerBuilder} — holding the window-confined chain in the user's order, so a
+     * test that wants the user's rescorer has to go through the guard. See {@code FusedWindowGuardRescorer} for why the
+     * chain collapses to one element rather than being wrapped element by element.
+     */
+    private QueryRescorerBuilder rescorerOf(SearchSourceBuilder source, int index) {
+        assertEquals("install leaves exactly one rescorer, the guard", 1, source.rescores().size());
+        FusedWindowGuardRescorerBuilder guard = (FusedWindowGuardRescorerBuilder) source.rescores().get(0);
+        return guard.delegates().get(index);
     }
 
     private BoolQueryBuilder confinedQueryOf(SearchSourceBuilder source) {

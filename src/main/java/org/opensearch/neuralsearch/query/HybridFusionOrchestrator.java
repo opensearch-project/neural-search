@@ -105,11 +105,22 @@ final class HybridFusionOrchestrator {
      * less extreme). So this is a bound, not a promise, and it is deliberately not enforced: the attenuating values are
      * legal core parameters, and refusing them to protect an internal floor would cost more than it buys.
      *
-     * <p>What the residual exposure actually is, stated narrowly: only a document fusion scored <i>at or below</i> this
-     * floor can be annihilated, because everything else is orders of magnitude larger and attenuates to a value that is
-     * still positive. Reaching the floor at all takes a {@code weights} entry of {@code 0.0} or {@code l2} over a
-     * zero-norm leg (see {@link #scoreAboveTail}), so the exposure is the original Tail tie, confined to documents fusion
-     * ranked at effectively no score, and only under attenuation this extreme. Pinned by
+     * <p>What the residual exposure actually is. Under <i>attenuation</i> — the compounding multiplication described
+     * above — it is narrow: only a document fusion scored at or below this floor is annihilated, because everything else
+     * is orders of magnitude larger and attenuates to a value that is still positive, and reaching the floor at all takes
+     * a {@code weights} entry of {@code 0.0} or {@code l2} over a zero-norm leg (see {@link #scoreAboveTail}).
+     *
+     * <p><b>It is not narrow for every route, and an earlier version of this note wrongly said it was.</b> A weighting
+     * that multiplies by exactly zero annihilates <i>any</i> score, floor or not: {@code query_weight: 0} collapses every
+     * document in the rescore window, and {@code score_mode} {@code multiply}/{@code min} with a zero weighted rescore
+     * term collapses every document the rescore query matched — MEASURED evicting a document fusion ranked at an ordinary
+     * score of {@code 0.5}. A negative {@code query_weight} goes further and inverts the page outright, since Tail-only
+     * documents sit at {@code -0.0f} and {@code Float.compare} orders that above every negative. So the floor's value is
+     * load-bearing only against attenuation; against a zero or negative multiplier no floor can help, which is why the
+     * ranked/unranked distinction is not left to the score alone for a rescore: {@link FusedWindowGuardRescorer} records
+     * membership from the pool <i>before</i> the request's rescorers run, and afterwards re-separates the two groups into
+     * disjoint score bands, so no arithmetic can promote an unranked document however it scored it. The floor still
+     * matters for every other consumer of round 2's scores. Pinned by
      * {@code HybridFusionOrchestratorTests#testMinRankedScore_attenuationBoundIsPerFactorAndDoesNotCompose}.
      */
     static final float MIN_RANKED_SCORE = 1e-30f;

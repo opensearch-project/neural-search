@@ -49,6 +49,39 @@ public class FusedResponseRebuilderTests extends OpenSearchTestCase {
     private static final String SHARD_KEY = "[node][index][0]";
 
     /** The cheap path: a request that collected nothing and did not time out gets its own response straight back. */
+    /**
+     * The 4-arg overload exists for the one field that cannot be corrected in place — {@code SearchHits.maxScore} is
+     * {@code final} — so a {@code null} hits override has to behave exactly like the 3-arg form, including its
+     * nothing-changed short circuit.
+     */
+    public void testRebuild_withHitsOverride_whenNothingChanges_thenTheSameResponseIsReturned() {
+        SearchResponse completed = responseWithProfile(Map.of(SHARD_KEY, shardResult(1)));
+
+        assertSame(
+            "a null hits override plus an unchanged timeout flag is a no-op",
+            completed,
+            FusedResponseRebuilder.rebuild(completed, null, false, null)
+        );
+    }
+
+    /** And when hits ARE supplied they replace the response's own, with every other section carried across. */
+    public void testRebuild_withHitsOverride_thenTheHitsAreSubstitutedAndTheRestPreserved() {
+        SearchResponse response = responseWithProfile(Map.of(SHARD_KEY, shardResult(1)));
+        SearchHits replacement = new SearchHits(
+            new SearchHit[0],
+            new org.apache.lucene.search.TotalHits(7, org.apache.lucene.search.TotalHits.Relation.EQUAL_TO),
+            0.0f
+        );
+
+        SearchResponse rebuilt = FusedResponseRebuilder.rebuild(response, null, response.isTimedOut(), replacement);
+
+        assertNotSame(response, rebuilt);
+        assertSame("the supplied hits are the ones carried", replacement, rebuilt.getInternalResponse().hits());
+        assertEquals(7, rebuilt.getInternalResponse().hits().getTotalHits().value());
+        assertEquals("the point in time id survives the substitution", response.pointInTimeId(), rebuilt.pointInTimeId());
+        assertEquals(response.getTotalShards(), rebuilt.getTotalShards());
+    }
+
     public void testRebuild_whenNeitherOverrideChangesAnything_thenTheSameResponseIsReturned() {
         SearchResponse timedOut = responseWithEverything("scroll-id", null);
         assertSame(

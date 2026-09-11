@@ -25,8 +25,39 @@ import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescorerBuilder;
 
 /**
- * Confines every {@code rescore} in a fused-mode request to the fused window, so a rescore can reorder the hybrid's hits
- * but never add to them.
+ * Confines every {@code rescore} in a fused-mode request to the fused window, so a rescore query cannot match a document
+ * the fusion never ranked and therefore cannot lift one above the documents it did rank.
+ *
+ * <p><b>What this does not do, stated first because the distinction is easy to lose.</b> It bounds what the rescore
+ * query can <b>match</b>. It does not bound the arithmetic core applies to the scores afterwards, and ranked documents
+ * are separated from the non-scoring Tail by nothing but {@link HybridFusionOrchestrator#MIN_RANKED_SCORE}. Core's
+ * {@code QueryRescorer} multiplies the first-pass score of every document in the rescore window by
+ * {@code query_weight} whether the rescore query matched it or not, does the same beyond that window, and then
+ * re-sorts with a comparator whose score ties break by <b>ascending Lucene doc id</b>. So a request whose own weights
+ * land a ranked document on exactly {@code 0.0f} makes it indistinguishable from a Tail-only document, and the page
+ * can contain documents fusion did not rank — MEASURED at 20 shards with no window named anywhere in the request:
+ * {@code query_weight: 0} returned two documents from outside a default 100-document window on a six-hit page, and
+ * {@code query_weight: -1} returned a page of which none were ranked. The same request on one shard was unaffected,
+ * because the exposure is the per-shard shortfall: core sizes the rescore window from the shard's own reader while the
+ * fused window is coordinator-global.
+ *
+ * <p><b>Where that is closed.</b> Not here, and not by refusing the weights — they are legal core parameters and core
+ * applies the identical arithmetic to an ordinary non-hybrid query (measured: a plain {@code function_score} at 20
+ * shards returns mid-ranked documents for {@code query_weight: 0} and low-ranked ones for {@code -1}). It is closed one
+ * layer down, on the shard, by {@link FusedWindowGuardRescorer}: it reads which documents fusion ranked from the pristine
+ * pool, lets the request's own rescorers run over that pool untouched, and then <b>demotes</b> the unranked ones into a
+ * score band strictly below every ranked document — so no arithmetic the request chose can order one above the window.
+ * {@code FusedRescoreScoreNormalizer} maps that band's sentinel back to {@code 0.0} on the coordinator, the score those
+ * documents already carry without a rescore, so the band never reaches the response. This class therefore bounds what the
+ * rescore query can <b>match</b> and the guard bounds what it can <b>promote</b>; together they make the guarantee hold
+ * for any weights.
+ *
+ * <p>The guard demotes rather than removes, and that is not a preference: core's {@code RescoreProcessor} reads
+ * {@code scoreDocs[0].score} on the rescorer's <i>output</i> with no length check, so a rescorer that returned an
+ * <b>empty</b> array would raise an {@code ArrayIndexOutOfBoundsException} as a shard failure. Empty is the whole hazard —
+ * index 0 is the only one read, so a shorter but non-empty return trips nothing. Demotion also costs the paradigm
+ * nothing on its own terms — nothing leaves the pool, so {@code total_hits} and aggregations, computed over the full leg
+ * union, cannot be affected at all.
  *
  * <p><b>Why this is needed at all.</b> {@code rescore} is {@link CandidateScope.Disposition#NOT_PROPAGATED} — it is never
  * pushed down to a leg, because a leg is a plain search whose scores are about to be normalized away. So it runs where
@@ -112,9 +143,13 @@ final class FusedRescoreScope {
             confined.add(scope.confined(requireQueryRescorer(declared)));
         }
         // Written back only once the whole chain has been accepted, so a refusal leaves the request's own rescore list as
-        // the user wrote it rather than half-replaced with placeholders that can never resolve.
-        for (int i = 0; i < confined.size(); i++) {
-            rescores.set(i, confined.get(i));
+        // the user wrote it rather than half-replaced with placeholders that can never resolve. The whole chain collapses
+        // to ONE element — the guard — which applies the confined delegates in order and then restores the
+        // ranked/unranked separation their arithmetic can destroy; see FusedWindowGuardRescorer for why the guard has to
+        // read membership once, ahead of the chain, rather than once per element.
+        rescores.set(0, new FusedWindowGuardRescorerBuilder(confined));
+        while (rescores.size() > 1) {
+            rescores.remove(rescores.size() - 1);
         }
         return scope;
     }

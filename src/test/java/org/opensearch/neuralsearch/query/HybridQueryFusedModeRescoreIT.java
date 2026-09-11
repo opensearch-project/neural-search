@@ -309,6 +309,49 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * The bucket case the test above cannot see, because it asks a bucket for exactly as many hits as the fusion ranked.
+     * Ask for more and the bucket must show unranked documents — that is what an aggregation is for — and every one of
+     * them goes through the guard's demotion inside the bucket, at the request's own ordinary weights. So this is where
+     * the guard's internal band would reach a user if the coordinator decoded only the top-level page: the bucket would
+     * report {@code _score: -3.4028235E38} for documents 6-10.
+     *
+     * <p>What it must report instead is {@code 0.0}, the score those documents have in the same request with no rescore
+     * at all — the same contract as the page, one level down.
+     */
+    @SneakyThrows
+    public void testTopHitsBucketsWiderThanTheFusedWindow_reportTheUnrankedScoreAndNotTheBand() {
+        ensureDatasets();
+
+        int bucketSize = WINDOW_SIZE * 2;
+        String body = "{\"size\":0,\"aggs\":{\"all\":{\"filter\":{\"match_all\":{}},\"aggs\":{\"top\":{\"top_hits\":{\"size\":"
+            + bucketSize
+            + "}}}}},\"query\":"
+            + fusedHybrid(WINDOW_SIZE)
+            + ",\"rescore\":{\"window_size\":20,\"query\":{\"rescore_query\":{\"range\":{\""
+            + SCORE_FIELD
+            + "\":{\"lte\":"
+            + (SCORE_BASE - WINDOW_SIZE)
+            + "}}},\"query_weight\":1.0,\"rescore_query_weight\":10.0,\"score_mode\":\"total\"}}}";
+        List<Map<String, Object>> bucketHits = bucketTopHits(searchForHits(INDEX_ONE_SHARD, body), "all", "top");
+
+        assertEquals(bucketSize, bucketHits.size());
+        List<Double> scores = scoresOf(bucketHits);
+        for (int i = 0; i < scores.size(); i++) {
+            assertTrue(
+                "no bucket hit may report the guard's band: " + idsOf(bucketHits).get(i) + " at " + scores.get(i),
+                scores.get(i) >= 0.0
+            );
+        }
+        // The five ranked documents keep the page's own arithmetic; the five the fusion never ranked report the score they
+        // would have had with no rescore in the request.
+        assertEquals(List.of("5", "1", "2", "3", "4"), idsOf(bucketHits).subList(0, WINDOW_SIZE));
+        assertTrue("a ranked bucket hit still outranks an unranked one", scores.get(WINDOW_SIZE - 1) > 0.0);
+        for (int i = WINDOW_SIZE; i < bucketSize; i++) {
+            assertEquals("an unranked bucket hit reports 0.0", 0.0, scores.get(i), 0.0);
+        }
+    }
+
+    /**
      * A ranked document whose fused score is exactly {@code 0.0}, with no rescore anywhere in the request. The Top scores
      * and the Tail does not, which is the entire mechanism separating the fused window from everything else — and a ranked
      * document at {@code 0.0} ties every Tail-only document instead of outranking it. Lucene breaks that tie by ascending
@@ -515,33 +558,123 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * {@code query_weight: 0} — the one request shape the confinement cannot fully repair, pinned here so that what it does
-     * and does not guarantee is a tested statement rather than a claim in a design note.
+     * {@code query_weight: 0} and a negative {@code query_weight} — the two shapes that multiply the ranked/Tail
+     * separation away — now return only documents fusion ranked, because the rescore pool is limited to them before the
+     * rescore runs.
      *
-     * <p>A weight of zero multiplies away <i>all</i> first-pass information, so every document the rescore query did not match
-     * arrives at {@code 0.0} regardless of whether fusion ranked it, and Lucene orders that block by ascending doc id. No
-     * floor can survive being multiplied by zero, and nothing about the rescore query changes what happens to documents it
-     * does not match — this is core's arithmetic, and the request asked for it.
+     * <p>History, because this test has asserted three different things and the reason matters. Limiting the rescore
+     * <i>query</i> makes a Tail-only document unmatchable, which was originally taken to mean a rescore could not return
+     * one. It does not: core's {@code QueryRescorer} multiplies the first-pass score of every document in the rescore
+     * window by {@code query_weight} whether the rescore query matched it or not, then breaks score ties by ascending
+     * Lucene doc id — so any weighting that lands a ranked document on exactly {@code 0.0f} makes it indistinguishable
+     * from a Tail-only one. MEASURED, on a 300-document index at 20 shards with no window named anywhere in the request:
+     * {@code query_weight: 0} returned two documents from outside a default 100-document window, and
+     * {@code query_weight: -1} returned a page of which none were ranked.
      *
-     * <p>What the confinement still guarantees, and what this asserts: the <b>top</b> of the page is exactly right. Only a
-     * document inside the fused window can match the rescore query, so only a document fusion ranked can be lifted above the
-     * collapsed block. Document 5 is in the window and comes first; document 6 matches the user's {@code ids} query just as
-     * well, is not in the window, and stays out of the page. Below the lifted document the order is doc id, not fused rank —
-     * which on this dataset coincides with the fused order, so the second assertion reads it off the scores instead: hit 2
-     * comes back at exactly {@code 0.0}, the collapse itself.
+     * <p>Fixed by demoting, not by refusing: {@link org.opensearch.neuralsearch.query.FusedWindowGuardRescorer} records
+     * which documents fusion ranked from the pool as it arrives — {@code score <= 0.0f} means Tail-only — then applies the
+     * request's own rescorers and afterwards separates the two groups into disjoint score bands, so an unranked document
+     * cannot be ordered above a ranked one however the request's arithmetic scored it. The weights stay legal — they are
+     * core's own parameters and they wreck a plain {@code function_score} identically — and {@code total_hits} and
+     * aggregations are untouched because nothing ever leaves the pool, which the totals assertion below pins.
+     *
+     * <p>It demotes rather than prunes because core's {@code RescoreProcessor} reads {@code scoreDocs[0].score} on the
+     * rescorer's output with no length check, so returning a shorter array is an {@code ArrayIndexOutOfBoundsException}
+     * shard failure. The demoted band's sentinel is mapped back to {@code 0.0} on the coordinator by
+     * {@code FusedRescoreScoreNormalizer} — the score those documents carry without a rescore — so the scores asserted
+     * below are the ones a user sees, not the internal band.
+     *
+     * <p><b>Both weight parameters are covered, and neither is validated by core.</b> {@code query_weight} and
+     * {@code rescore_query_weight} are each parsed with a bare {@code declareFloat} and set by bare assignment — the only
+     * validations anywhere in core's rescore package are a null {@code rescore_query}, an unknown field, and an illegal
+     * {@code score_mode} — so zero and negative values for both are legal input that has to be answered, not rejected.
+     * They reach the ranked documents differently, which is why the rows differ: {@code query_weight} multiplies the
+     * first-pass score of every document in the rescore window whether the rescore query matched it or not, while a zero
+     * or negative {@code rescore_query_weight} only reaches the documents it did match. MEASURED across all five score
+     * modes on a 300-document, 20-shard index: with the guard in place none of the 20 combinations returned a document
+     * outside the fused window.
+     *
+     * <p>The fixture matters. {@code fusedHybrid}'s window is documents 1-5, the five lowest doc ids in the index, so it
+     * wins every {@code 0.0} tie and cannot show the effect at any shard count — which is also why
+     * {@link #testDefaultRescoreWindowAtHighShardCount_admitsNothingUnranked} passed while the defect was live.
+     * {@code fusedWithAZeroWeightedLeg}'s window is {@code [1, 2, 3, 4, 5, 26]}: document 26 is ranked with a HIGH doc
+     * id and documents 6-25 are Tail-only with lower ones, so any assertion about membership has to use that one.
      */
     @SneakyThrows
-    public void testQueryWeightZero_collapsesTheScaleButStillCannotLiftAnUnrankedDocument() {
+    public void testFlatteningWeightsCannotAdmitAnUnrankedDocument() {
         ensureDatasets();
 
-        Map<String, Object> response = searchForHits(
+        // The top of the page is still exactly right: only a ranked document can be lifted.
+        Map<String, Object> lifted = searchForHits(
             INDEX_ONE_SHARD,
             rescoredSearch("{\"ids\":{\"values\":[\"5\",\"6\"]}}", 20, 10.0f).replace("\"query_weight\":1.0", "\"query_weight\":0.0")
         );
+        assertEquals("document 6 cannot be lifted", List.of("5", "1", "2", "3", "4"), hitIds(lifted));
+        assertEquals("the only document both in the window and matched by the rescore query", 10.0, hitScores(lifted).get(0), 0.01);
 
-        assertEquals("document 6 is unliftable; the rest of the page is doc id order", List.of("5", "1", "2", "3", "4"), hitIds(response));
-        assertEquals("the only document both in the window and matched by the rescore query", 10.0, hitScores(response).get(0), 0.01);
-        assertEquals("query_weight 0 collapses every unmatched document, ranked or not, onto 0.0", 0.0, hitScores(response).get(1), 0.0);
+        // Membership now holds over a window whose ranked documents are NOT doc-id-minimal. Each row below is chosen so
+        // that it individually flattens or inverts document 26 — the one ranked document with a HIGH doc id — because a
+        // row that only flattens document 1 is not discriminating: document 1 holds the lowest doc id in the index and
+        // wins every 0.0 tie whether the guard demoted anything or not. Both the `query_weight` and the `rescore_query_weight`
+        // sides are covered; the expected page for every row is the window and nothing else.
+        List<String> window = List.of("1", "2", "3", "4", "5", "26");
+        Map<String, String> flattening = new LinkedHashMap<>();
+        // query_weight side: zero and negative multiply away the first-pass score of EVERY document in the window,
+        // matched or not, so they need no particular rescore target.
+        flattening.put(
+            "query_weight=0",
+            "{\"ids\":{\"values\":[\"1\"]}}|\"query_weight\":0.0,\"rescore_query_weight\":10.0,\"score_mode\":\"total\""
+        );
+        flattening.put(
+            "query_weight=-1",
+            "{\"ids\":{\"values\":[\"999\"]}}|\"query_weight\":-1.0,\"rescore_query_weight\":10.0,\"score_mode\":\"total\""
+        );
+        // rescore_query_weight side: a zero or negative secondary only reaches the documents the rescore query MATCHED,
+        // so each of these has to point at document 26 to be discriminating.
+        flattening.put(
+            "multiply, rescore_query_weight=0",
+            "{\"ids\":{\"values\":[\"26\"]}}|\"query_weight\":1.0,\"rescore_query_weight\":0.0,\"score_mode\":\"multiply\""
+        );
+        flattening.put(
+            "min, rescore_query_weight=0",
+            "{\"ids\":{\"values\":[\"26\"]}}|\"query_weight\":1.0,\"rescore_query_weight\":0.0,\"score_mode\":\"min\""
+        );
+        flattening.put(
+            "total, both weights negative",
+            "{\"ids\":{\"values\":[\"26\"]}}|\"query_weight\":-1.0,\"rescore_query_weight\":-5.0,\"score_mode\":\"total\""
+        );
+        flattening.put(
+            "multiply, both weights negative",
+            "{\"ids\":{\"values\":[\"26\"]}}|\"query_weight\":-1.0,\"rescore_query_weight\":-5.0,\"score_mode\":\"multiply\""
+        );
+
+        List<String> mismatches = new ArrayList<>();
+        for (Map.Entry<String, String> shape : flattening.entrySet()) {
+            String[] parts = shape.getValue().split("\\|", 2);
+            Map<String, Object> response = searchForHits(
+                INDEX_ONE_SHARD,
+                "{\"size\":6,\"query\":"
+                    + fusedWithAZeroWeightedLeg(6)
+                    + ",\"rescore\":{\"window_size\":20,\"query\":{\"rescore_query\":"
+                    + parts[0]
+                    + ","
+                    + parts[1]
+                    + "}}}"
+            );
+            List<String> ids = hitIds(response);
+            for (String id : ids) {
+                if (window.contains(id) == false) {
+                    mismatches.add(shape.getKey() + ": returned unranked document " + id + " (page " + ids + ")");
+                }
+            }
+            if (ids.contains("26") == false) {
+                mismatches.add(shape.getKey() + ": ranked document 26 lost its slot (page " + ids + ")");
+            }
+            if (totalHits(response) != TOTAL_DOCS) {
+                mismatches.add(shape.getKey() + ": total_hits must still count the whole leg union, was " + totalHits(response));
+            }
+        }
+        assertEquals("no weighting may admit a document fusion did not rank", List.of(), mismatches);
     }
 
     // ------------------------------------------------ bodies ------------------------------------------------

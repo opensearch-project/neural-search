@@ -25,6 +25,7 @@ import org.opensearch.action.support.ActionFilterChain;
 import org.opensearch.core.action.ActionResponse;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
+import org.opensearch.neuralsearch.query.FusedWindowGuardRescorerBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.search.explain.FusedExplanationMerger;
 import org.opensearch.neuralsearch.search.profile.FusedLegProfileMerger;
@@ -167,7 +168,10 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         boolean mayTimeOut = mayHitASoftTimeout(source);
         // explain() is a nullable Boolean on the source — unset means "not explained", so it cannot be unboxed.
         boolean explained = Boolean.TRUE.equals(source.explain());
-        if (profiled == false && mayTimeOut == false && explained == false) {
+        // A fused request carrying a rescore reaches the coordinator with unranked documents demoted to the guard's
+        // sentinel score; that has to be mapped back before the response is handed on. See FusedRescoreScoreNormalizer.
+        boolean rescored = Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false;
+        if (profiled == false && mayTimeOut == false && explained == false && rescored == false) {
             return listener;
         }
         FusedHybridFinder finder = new FusedHybridFinder();
@@ -208,7 +212,23 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         // Passing the gate above is not the same as having something to report: an explained request whose fused hybrid is
         // nested reaches here with no merger attached at all, since explain deliberately declines a hybrid that is not the
         // request's own query. Hand the caller's listener back untouched rather than wrapping it to do nothing.
-        if (Objects.isNull(legProfileMerger) && Objects.isNull(timeoutMerger) && Objects.isNull(explanationMerger)) {
+        // The guard is installed only for a fused hybrid that IS the request's own query — the position guard in
+        // HybridQueryBuilder refuses a rescore alongside any other shape — so that identity test is the condition under
+        // which a sentinel can appear in the hits.
+        //
+        // It is exact only given something core does not guarantee. This filter reads the source as SUBMITTED, while the
+        // guard is installed during the rewrite, and search request processors run in between: TransportSearchAction calls
+        // transformRequest first and rewrites only inside its callback. A processor that ADDED a rescore to a request
+        // carrying none would install a guard this gate had already declined to normalize for, and the band would reach
+        // the response undecoded. No shipped processor does — the only one that adds a rescorer is
+        // neural_sparse_two_phase_processor, whose collection walks bool and neural clauses and never enters a hybrid, so
+        // it cannot fire on a request whose query is a fused hybrid. A processor that REPLACES the source disarms the
+        // install too, which fails safe. Re-check this whenever a request processor learns to touch source.rescores().
+        final boolean normalizeSentinel = rescored && finder.found.get(0) == source.query();
+        if (Objects.isNull(legProfileMerger)
+            && Objects.isNull(timeoutMerger)
+            && Objects.isNull(explanationMerger)
+            && normalizeSentinel == false) {
             return listener;
         }
         final FusedLegProfileMerger profiles = legProfileMerger;
@@ -234,6 +254,11 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             // actually returned. It passes the SearchHits through by reference, so this reaches the same hit instances.
             if (Objects.nonNull(explanations)) {
                 merged = explanations.getMergedResponse(merged);
+            }
+            // Last, and on the response that is actually returned: the steps above can replace the response around the
+            // hits, and the sentinel has to be gone from the one the caller sees.
+            if (normalizeSentinel) {
+                merged = FusedRescoreScoreNormalizer.normalize(merged, FusedWindowGuardRescorerBuilder.UNRANKED_SCORE);
             }
             listener.onResponse((Response) merged);
         }, listener::onFailure);

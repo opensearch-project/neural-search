@@ -52,6 +52,8 @@ import org.opensearch.search.profile.SearchProfileShardResults;
 import org.opensearch.search.profile.aggregation.AggregationProfileShardResult;
 import org.opensearch.search.profile.fetch.FetchProfileShardResult;
 import org.opensearch.tasks.Task;
+import org.opensearch.search.rescore.QueryRescorerBuilder;
+import org.opensearch.neuralsearch.query.FusedWindowGuardRescorerBuilder;
 
 public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase {
 
@@ -94,6 +96,81 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         assertThat(
             exceptionCaptor.getValue().getMessage(),
             containsString("hybrid query does not support search_type [dfs_query_then_fetch]")
+        );
+    }
+
+    /**
+     * The wiring that makes the fused rescore guard invisible to a user: a fused hybrid carrying a {@code rescore} comes
+     * back from the shards with unranked documents demoted to {@code FusedWindowGuardRescorerBuilder.UNRANKED_SCORE}, and
+     * this filter's response wrap maps that back to {@code 0.0} — the score those documents carry when the same request
+     * has no rescore. Driven through the real listener the filter hands the chain, because the normalisation happens on
+     * the response path.
+     */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenFusedHybridWithARescore_thenTheGuardSentinelIsNormalisedOutOfTheResponse() {
+        HybridQueryBuilder fused = new HybridQueryBuilder();
+        fused.add(new MatchQueryBuilder("field", "value"));
+        fused.add(new MatchAllQueryBuilder());
+        fused.fusion(new java.util.HashMap<>(java.util.Map.of("normalization", java.util.Map.of("technique", "min_max"))));
+
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(fused).addRescorer(new QueryRescorerBuilder(new MatchAllQueryBuilder())));
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        ArgumentCaptor<ActionListener<ActionResponse>> wrapped = ArgumentCaptor.forClass(ActionListener.class);
+        verify(chain).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), wrapped.capture());
+        assertNotSame("a fused request with a rescore must get a wrapped listener", listener, wrapped.getValue());
+
+        wrapped.getValue().onResponse(responseWithScores(FusedWindowGuardRescorerBuilder.UNRANKED_SCORE, 3.0f));
+
+        ArgumentCaptor<ActionResponse> delivered = ArgumentCaptor.forClass(ActionResponse.class);
+        verify(listener).onResponse(delivered.capture());
+        SearchHit[] hits = ((SearchResponse) delivered.getValue()).getInternalResponse().hits().getHits();
+        assertEquals("the sentinel must never reach a response", 0.0f, hits[0].getScore(), 0.0f);
+        assertEquals("a ranked score is untouched", 3.0f, hits[1].getScore(), 0.0f);
+    }
+
+    /** A fused hybrid with no rescore has no sentinel to normalise, so the caller's listener is handed straight through. */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenFusedHybridWithoutARescore_thenTheListenerIsNotWrappedForNormalisation() {
+        HybridQueryBuilder fused = new HybridQueryBuilder();
+        fused.add(new MatchAllQueryBuilder());
+        fused.fusion(new java.util.HashMap<>(java.util.Map.of("normalization", java.util.Map.of("technique", "min_max"))));
+
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(fused));
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        verify(chain).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
+    }
+
+    private SearchResponse responseWithScores(final float... scores) {
+        SearchHit[] hits = new SearchHit[scores.length];
+        for (int i = 0; i < scores.length; i++) {
+            hits[i] = new SearchHit(i, String.valueOf(i), null, null);
+            hits[i].score(scores[i]);
+        }
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(scores.length, TotalHits.Relation.EQUAL_TO), scores[0]);
+        return new SearchResponse(
+            new InternalSearchResponse(searchHits, null, null, null, false, null, 1),
+            null,
+            1,
+            1,
+            0,
+            1L,
+            new ShardSearchFailure[0],
+            null,
+            null
         );
     }
 
