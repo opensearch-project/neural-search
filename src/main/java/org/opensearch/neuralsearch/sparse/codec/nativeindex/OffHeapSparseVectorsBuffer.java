@@ -50,6 +50,7 @@ public class OffHeapSparseVectorsBuffer implements Closeable {
     }
 
     public void addVector(int[] vectorTokens, float[] vectorValues) {
+        requirePerFlushNnzFitsInt(nnzSize, vectorTokens.length);
         ensureNnzCapacity(nnzSize + vectorTokens.length);
         System.arraycopy(vectorTokens, 0, tokens, nnzSize, vectorTokens.length);
         System.arraycopy(vectorValues, 0, values, nnzSize, vectorValues.length);
@@ -99,6 +100,23 @@ public class OffHeapSparseVectorsBuffer implements Closeable {
         if (minCapacity > indices.length) {
             int newCapacity = Math.max(indices.length * 2, minCapacity);
             indices = Arrays.copyOf(indices, newCapacity);
+        }
+    }
+
+    /**
+     * The indptr here is a per-flush RELATIVE offset: it resets to 0 on every {@link #flush()}, and
+     * the cumulative (whole-segment) offset is accumulated 64-bit on the native side
+     * ({@link NativeLibrary#transferVectors} stores it as {@code offset_t = int64}). So this running
+     * {@code nnzSize} only has to hold one flush's non-zeros, which {@code byteSizeLimit} (1% of the
+     * heap) bounds well below {@code INT_MAX} at any real heap. Fail fast rather than let the int add
+     * wrap negative and silently corrupt the indptr handed to nsparse.
+     */
+    static void requirePerFlushNnzFitsInt(int currentNnz, int addedNnz) {
+        if ((long) currentNnz + addedNnz > Integer.MAX_VALUE) {
+            throw new IllegalStateException(
+                "a single streaming flush exceeded Integer.MAX_VALUE non-zeros; flush more often (the "
+                    + "cumulative offset is 64-bit, but one flush's relative indptr must fit an int)"
+            );
         }
     }
 

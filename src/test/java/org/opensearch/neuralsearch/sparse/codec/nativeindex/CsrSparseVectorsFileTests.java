@@ -65,9 +65,10 @@ public class CsrSparseVectorsFileTests extends AbstractSparseTestBase {
         assertEquals("cols", 65536L, buffer.getLong());
         assertEquals("nnz", 3L, buffer.getLong());
 
-        assertEquals("indptr[0]", 0, buffer.getInt());
-        assertEquals("indptr[1]", 2, buffer.getInt());
-        assertEquals("indptr[2]", 3, buffer.getInt());
+        // indptr is offset_t (int64): the cumulative nnz offset nsparse maps in place is 8 bytes/entry.
+        assertEquals("indptr[0]", 0L, buffer.getLong());
+        assertEquals("indptr[1]", 2L, buffer.getLong());
+        assertEquals("indptr[2]", 3L, buffer.getLong());
 
         // Tokens keep the order the doc values stored them in, and 65535 has to survive as uint16
         // rather than wrapping to -1.
@@ -101,10 +102,10 @@ public class CsrSparseVectorsFileTests extends AbstractSparseTestBase {
         assertEquals("padding before the values", 0, CsrSparseVectorsFile.paddingBytes(2));
         assertEquals(
             "native_file_size(indptr_size = 2, nnz = 2, element_size = 1)",
-            CsrSparseVectorsFile.HEADER_BYTES + 2 * Integer.BYTES + 2 * Short.BYTES + 2 * CsrSparseVectorsFile.QUANTIZED_VALUE_BYTES,
+            CsrSparseVectorsFile.HEADER_BYTES + 2 * Long.BYTES + 2 * Short.BYTES + 2 * CsrSparseVectorsFile.QUANTIZED_VALUE_BYTES,
             contents.length
         );
-        int valuesOffset = CsrSparseVectorsFile.HEADER_BYTES + 2 * Integer.BYTES + 2 * Short.BYTES;
+        int valuesOffset = CsrSparseVectorsFile.HEADER_BYTES + 2 * Long.BYTES + 2 * Short.BYTES;
         assertEquals(255, contents[valuesOffset] & 0xFF);
         assertEquals(128, contents[valuesOffset + 1] & 0xFF);
     }
@@ -130,7 +131,7 @@ public class CsrSparseVectorsFileTests extends AbstractSparseTestBase {
             contents = readFile(csrFile.resolveCsrPath());
         }
 
-        int valuesOffset = CsrSparseVectorsFile.HEADER_BYTES + 2 * Integer.BYTES + 3 * Short.BYTES + CsrSparseVectorsFile.paddingBytes(3);
+        int valuesOffset = CsrSparseVectorsFile.HEADER_BYTES + 2 * Long.BYTES + 3 * Short.BYTES + CsrSparseVectorsFile.paddingBytes(3);
         assertEquals("a weight above the ceiling clamps to 255", 255, contents[valuesOffset] & 0xFF);
         assertEquals("a negative weight clamps to 0", 0, contents[valuesOffset + 1] & 0xFF);
         assertEquals("0.5 of the ceiling rounds to 128", 128, contents[valuesOffset + 2] & 0xFF);

@@ -479,7 +479,7 @@ TEST_F(NsparseWrapperTest, WriteIndexProducesDeserializableBytes) {
     int k = 2;
     std::vector<float> distances(k, 0.0f);
     std::vector<nsparse::idx_t> labels(k, -1);
-    nsparse::idx_t qIndptr[2] = {0, 1};
+    nsparse::offset_t qIndptr[2] = {0, 1};
     std::vector<nsparse::term_t> qTokens = {2};
     std::vector<float> qWeights = {1.0f};
     loaded->search(1, qIndptr, qTokens.data(), qWeights.data(), k,
@@ -502,7 +502,7 @@ TEST_F(NsparseWrapperTest, LoadIndexAndQuerySingleLevel) {
     // Build a single-level inverted index directly (add(), not add_with_ids)
     // and persist it via nsparse's file writer.
     nsparse::Index* idx = nsparse::index_factory(16, "inverted");
-    nsparse::idx_t indptr[3] = {0, 2, 4};
+    nsparse::offset_t indptr[3] = {0, 2, 4};
     std::vector<nsparse::term_t> tok = {1, 2, 2, 3};
     std::vector<float> w = {1.0f, 1.0f, 1.0f, 1.0f};
     idx->add(2, indptr, tok.data(), w.data());
