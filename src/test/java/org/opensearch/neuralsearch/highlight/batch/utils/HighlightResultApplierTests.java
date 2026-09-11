@@ -284,6 +284,39 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         assertTrue(e.getMessage(), e.getMessage().contains("Batch results size"));
     }
 
+    public void testAppliesListFieldAsPerElementFragments() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"alpha\",\"beta\",\"gamma\"]}");
+        // Joined "alpha beta gamma", beta is [6,10)
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(List.of(Map.of("start", 6, "end", 10))),
+            List.of("body"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        HighlightField field = hit.getHighlightFields().get("body");
+        assertNotNull(field);
+        assertEquals(1, field.fragments().length);
+        assertEquals("<em>beta</em>", field.fragments()[0].string());
+    }
+
+    public void testAppliesScalarNumberField() {
+        SearchHit hit = hitWithRawJson("{\"count\":42}");
+        // Joined "42" is [0,2)
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(List.of(Map.of("start", 0, "end", 2))),
+            List.of("count"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        assertEquals("<em>42</em>", highlightedValue(hit, "count"));
+    }
+
     private static SearchHit hitWithSource(Map<String, Object> source) {
         SearchHit hit = new SearchHit(0, "_id", new HashMap<>(), new HashMap<>());
         StringBuilder sb = new StringBuilder("{");
@@ -296,6 +329,12 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         sb.append('}');
         BytesReference src = new BytesArray(sb.toString());
         hit.sourceRef(src);
+        return hit;
+    }
+
+    private static SearchHit hitWithRawJson(String json) {
+        SearchHit hit = new SearchHit(0, "_id", new HashMap<>(), new HashMap<>());
+        hit.sourceRef(new BytesArray(json));
         return hit;
     }
 

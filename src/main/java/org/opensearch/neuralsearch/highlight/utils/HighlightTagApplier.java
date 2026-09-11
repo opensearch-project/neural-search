@@ -36,6 +36,27 @@ public class HighlightTagApplier {
             return null;
         }
 
+        List<int[]> spans = parseAndValidateSpans(highlights, text.length());
+
+        int resultSize = text.length() + (preTag.length() + postTag.length()) * spans.size();
+        StringBuilder result = new StringBuilder(resultSize);
+        int currentPos = 0;
+        for (int[] span : spans) {
+            if (span[0] > currentPos) {
+                result.append(text, currentPos, span[0]);
+            }
+            result.append(preTag);
+            result.append(text, span[0], span[1]);
+            result.append(postTag);
+            currentPos = span[1];
+        }
+        if (currentPos < text.length()) {
+            result.append(text, currentPos, text.length());
+        }
+        return result.toString();
+    }
+
+    static List<int[]> parseAndValidateSpans(final List<Map<String, Object>> highlights, final int textLength) {
         List<int[]> spans = new ArrayList<>(highlights.size());
         for (Map<String, Object> highlight : highlights) {
             Object startObj = highlight.get(SemanticHighlightingConstants.START_KEY);
@@ -52,14 +73,14 @@ public class HighlightTagApplier {
             }
             int start = ((Number) startObj).intValue();
             int end = ((Number) endObj).intValue();
-            if (start < 0 || end > text.length() || start >= end) {
+            if (start < 0 || end > textLength || start >= end) {
                 throw new OpenSearchException(
                     String.format(
                         Locale.ROOT,
                         "Invalid highlight positions: start=%d, end=%d, textLength=%d. Positions must satisfy: 0 <= start < end <= textLength",
                         start,
                         end,
-                        text.length()
+                        textLength
                     )
                 );
             }
@@ -92,21 +113,6 @@ public class HighlightTagApplier {
             }
         }
 
-        int resultSize = text.length() + (preTag.length() + postTag.length()) * spans.size();
-        StringBuilder result = new StringBuilder(resultSize);
-        int currentPos = 0;
-        for (int[] span : spans) {
-            if (span[0] > currentPos) {
-                result.append(text, currentPos, span[0]);
-            }
-            result.append(preTag);
-            result.append(text, span[0], span[1]);
-            result.append(postTag);
-            currentPos = span[1];
-        }
-        if (currentPos < text.length()) {
-            result.append(text, currentPos, text.length());
-        }
-        return result.toString();
+        return spans;
     }
 }

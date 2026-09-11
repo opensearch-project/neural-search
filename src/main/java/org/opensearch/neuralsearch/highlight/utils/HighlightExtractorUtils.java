@@ -36,32 +36,38 @@ public class HighlightExtractorUtils {
      * Gets the field text from the document in FieldHighlightContext
      *
      * @param fieldContext The field highlight context
-     * @return The field text, or null if the field is not found, empty, or not a string
+     * @return The field text, or null if the field is not found, empty, or not highlightable
      */
     public static String getFieldText(FieldHighlightContext fieldContext) {
+        List<String> elements = getFieldTexts(fieldContext);
+        if (elements == null || elements.isEmpty()) return null;
+        if (elements.size() == 1) return elements.get(0);
+        return HighlightValueUtils.joinElements(elements);
+    }
+
+    /**
+     * Gets the highlightable text elements from the document in FieldHighlightContext.
+     * Lists yield one entry per element and scalars are coerced to strings,
+     * matching the built-in highlighters which emit one fragment per array element.
+     *
+     * @param fieldContext The field highlight context
+     * @return List of non-empty texts, empty when the field is missing or not highlightable
+     */
+    public static List<String> getFieldTexts(FieldHighlightContext fieldContext) {
         if (fieldContext.hitContext == null || fieldContext.hitContext.sourceLookup() == null) {
             log.debug("Hit context or source lookup is null for field {}", fieldContext.fieldName);
-            return null;
+            return List.of();
         }
         Object fieldTextObject = fieldContext.hitContext.sourceLookup().extractValue(fieldContext.fieldName, null);
         if (fieldTextObject == null) {
             log.debug("Field {} is not found in the document", fieldContext.fieldName);
-            return null;
+            return List.of();
         }
-        if (fieldTextObject instanceof String == false) {
-            log.debug(
-                "Field {} must be a string for highlighting, but was {}",
-                fieldContext.fieldName,
-                fieldTextObject.getClass().getSimpleName()
-            );
-            return null;
+        List<String> elements = HighlightValueUtils.toTextElements(fieldTextObject);
+        if (elements.isEmpty()) {
+            log.debug("Field {} is empty or not highlightable", fieldContext.fieldName);
         }
-        String fieldTextString = (String) fieldTextObject;
-        if (fieldTextString.isEmpty()) {
-            log.debug("Field {} is empty", fieldContext.fieldName);
-            return null;
-        }
-        return fieldTextString;
+        return elements;
     }
 
     /**

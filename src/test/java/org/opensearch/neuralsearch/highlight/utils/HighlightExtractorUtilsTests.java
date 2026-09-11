@@ -55,14 +55,14 @@ public class HighlightExtractorUtilsTests extends OpenSearchTestCase {
         assertNull(HighlightExtractorUtils.getFieldText(fieldContext));
     }
 
-    public void testGetFieldTextReturnsNullWhenFieldNotString() {
+    public void testGetFieldTextReturnsTextWhenFieldIsNumber() {
         FetchSubPhase.HitContext hitContext = mock(FetchSubPhase.HitContext.class);
         SourceLookup sourceLookup = mock(SourceLookup.class);
         when(hitContext.sourceLookup()).thenReturn(sourceLookup);
         when(sourceLookup.extractValue("test_field", null)).thenReturn(42);
 
         FieldHighlightContext fieldContext = createFieldContext("test_field", hitContext);
-        assertNull(HighlightExtractorUtils.getFieldText(fieldContext));
+        assertEquals("42", HighlightExtractorUtils.getFieldText(fieldContext));
     }
 
     public void testGetFieldTextReturnsNullWhenFieldEmpty() {
@@ -83,5 +83,16 @@ public class HighlightExtractorUtilsTests extends OpenSearchTestCase {
 
         FieldHighlightContext fieldContext = createFieldContext("test_field", hitContext);
         assertEquals("some text content", HighlightExtractorUtils.getFieldText(fieldContext));
+    }
+
+    public void testGetFieldTextsReturnsPerElementForList() {
+        FetchSubPhase.HitContext hitContext = mock(FetchSubPhase.HitContext.class);
+        SourceLookup sourceLookup = mock(SourceLookup.class);
+        when(hitContext.sourceLookup()).thenReturn(sourceLookup);
+        when(sourceLookup.extractValue("test_field", null)).thenReturn(java.util.List.of("alpha", "beta"));
+
+        FieldHighlightContext fieldContext = createFieldContext("test_field", hitContext);
+        assertEquals(java.util.List.of("alpha", "beta"), HighlightExtractorUtils.getFieldTexts(fieldContext));
+        assertEquals("alpha beta", HighlightExtractorUtils.getFieldText(fieldContext));
     }
 }

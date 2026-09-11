@@ -12,6 +12,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
+import org.opensearch.neuralsearch.highlight.utils.HighlightValueUtils;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -140,7 +141,9 @@ public class HighlightContextBuilder {
     /**
      * Reads a string value from a hit's {@code _source} under {@code fieldName}.
      * Falls back to the leaf name when the dotted path is absent, because inner
-     * hit sources key by leaf, not the fully qualified name.
+     * hit sources key by leaf, not the fully qualified name. Lists are joined
+     * with spaces and scalars are coerced via toString, matching the per-element
+     * handling in {@link HighlightValueUtils}. Objects are skipped.
      */
     private static String extractSourceText(SearchHit hit, String fieldName) {
         if (hit == null) return null;
@@ -152,17 +155,10 @@ public class HighlightContextBuilder {
             if (dot >= 0) value = source.get(fieldName.substring(dot + 1));
             if (value == null) return null;
         }
-        if (value instanceof String) return (String) value;
-        if (value instanceof List) {
-            StringBuilder sb = new StringBuilder();
-            for (Object v : (List<?>) value) {
-                if (v == null) continue;
-                if (sb.length() > 0) sb.append(' ');
-                sb.append(v);
-            }
-            return sb.toString();
-        }
-        return value.toString();
+        java.util.List<String> elements = HighlightValueUtils.toTextElements(value);
+        if (elements.isEmpty()) return null;
+        if (elements.size() == 1) return elements.get(0);
+        return HighlightValueUtils.joinElements(elements);
     }
 
     private static String stripNestedPrefix(String fieldName, String path) {
