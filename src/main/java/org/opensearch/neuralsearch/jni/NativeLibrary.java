@@ -17,11 +17,23 @@ import java.util.Map;
 @Log4j2
 public class NativeLibrary {
 
+    /**
+     * Why the load failed, or null once a variant has been loaded.
+     * <p>
+     * The message and not the {@link UnsatisfiedLinkError} itself, deliberately.
+     * ExceptionsHelper.maybeDieOnAnotherThread unwraps causes and suppressed exceptions looking
+     * for an {@code Error} and rethrows any it finds on a fresh thread, so keeping the link error
+     * reachable from what {@link #ensureLoaded()} throws would halt the node just as surely as
+     * throwing it directly. The message carries the whole diagnosis, and the static initializer
+     * below logs the error with its stack once, at load time.
+     */
+    private static final String LOAD_FAILURE;
+
     static {
-        String loaded = AccessController.doPrivileged((PrivilegedAction<String>) () -> {
+        LOAD_FAILURE = AccessController.doPrivileged((PrivilegedAction<String>) () -> {
             // Report every attempt. Only one variant is ever present, so failures for the
             // other candidates are expected and say nothing; the interesting case is a
-            // library that IS on disk but will not link (a missing libomp, say). Rethrowing
+            // library that IS on disk but will not link (a missing libomp, say). Reporting
             // only the last error reports "not found" for the unsuffixed name and buries the
             // real cause, which makes a broken native install very hard to diagnose.
             List<String> candidates = NativeLibraryCandidates.candidates();
@@ -29,11 +41,17 @@ public class NativeLibrary {
             for (String candidate : candidates) {
                 try {
                     System.loadLibrary(candidate);
-                    return candidate;
+                    log.info("Loaded library: {}", candidate);
+                    return null;
                 } catch (UnsatisfiedLinkError e) {
                     failures.add(candidate + ": " + e.getMessage());
                 }
             }
+            // plugins/opensearch-neural-search/lib is on java.library.path only because whoever
+            // starts the node put it there -- opensearch-build's tar and zip startup scripts do,
+            // and the deb/rpm service environment and the release Docker images have to as well,
+            // the same way they already do for opensearch-knn/lib. Nothing here can substitute for
+            // that, so say plainly where the library was looked for.
             UnsatisfiedLinkError error = new UnsatisfiedLinkError(
                 "Could not load the native sparse library. Tried "
                     + candidates
@@ -42,10 +60,26 @@ public class NativeLibrary {
                     + ". Attempts: "
                     + String.join("; ", failures)
             );
-            log.error(error.getMessage());
-            throw error;
+            // The only place the link error itself is reported: everything after this point sees
+            // the message alone, so nothing can rethrow an Error onto a node thread.
+            log.error(error.getMessage(), error);
+            return error.getMessage();
         });
-        log.info("Loaded library: {}", loaded);
+    }
+
+    /**
+     * Fails the caller when the native library is not loaded, so that the native methods below are
+     * never reached unlinked.
+     * <p>
+     * The static initializer records the failure instead of throwing it: an {@code Error} out of
+     * either the initializer or an unlinked native method halts the whole node (see
+     * {@link NativeLibraryUnavailableException}). Every entry point into the native engine calls
+     * this first, which turns the same broken install into a failed shard or query.
+     */
+    public static void ensureLoaded() {
+        if (LOAD_FAILURE != null) {
+            throw new NativeLibraryUnavailableException(LOAD_FAILURE);
+        }
     }
 
     public static native long initIndex(long numDocs, int dim, Map<String, Object> parameters);
