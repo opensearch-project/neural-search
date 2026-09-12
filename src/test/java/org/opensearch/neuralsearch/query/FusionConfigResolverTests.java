@@ -200,4 +200,89 @@ public class FusionConfigResolverTests extends OpenSearchTestCase {
 
         assertNull(FusionConfigResolver.resolve(new SearchRequest("idx-a", "idx-b")));
     }
+
+    // ---- resolvedPipelineHasResponseProcessors ----
+
+    private PipelineConfiguration pipelineWithResponseProcessor(String id) throws Exception {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("response_processors")
+            .startObject()
+            .startObject("rename_field")
+            .field("field", "a")
+            .field("target_field", "b")
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+        return new PipelineConfiguration(id, BytesReference.bytes(builder), MediaTypeRegistry.JSON);
+    }
+
+    public void testResolvedPipelineHasResponseProcessors_whenNamedPipelineDeclaresOne_thenTrue() throws Exception {
+        initClusterUtil(new SearchPipelineMetadata(Map.of("rp", pipelineWithResponseProcessor("rp"), "mm", minMaxPipeline("mm"))), null);
+        assertTrue(FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("rp")));
+        assertFalse(
+            "a pipeline with only phase-results processors has none",
+            FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("mm"))
+        );
+        assertFalse("_none", FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("_none")));
+        assertFalse("no pipeline resolved at all", FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx")));
+        assertFalse(
+            "unknown id resolves to nothing",
+            FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("missing"))
+        );
+    }
+
+    public void testResolvedPipelineHasResponseProcessors_whenIndexDefaultDeclaresOne_thenTrue() throws Exception {
+        initClusterUtil(
+            new SearchPipelineMetadata(Map.of("rp", pipelineWithResponseProcessor("rp"))),
+            indexSettingsWithDefaultPipeline("rp")
+        );
+        assertTrue(FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx")));
+    }
+
+    public void testResolvedPipelineHasResponseProcessors_whenInlineBodyOrNoClusterService_thenFailsClosed() {
+        assertTrue(
+            "an inline body may have been drained — cannot tell, so assume yes",
+            FusionConfigResolver.resolvedPipelineHasResponseProcessors(requestWithInlinePipeline(Map.of()))
+        );
+        NeuralSearchClusterUtil.instance().initialize(null, null);
+        assertTrue(
+            "no cluster state → assume yes",
+            FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("rp"))
+        );
+    }
+
+    public void testResolvedPipelineHasResponseProcessors_whenTheListIsEmptyOrAbsent_thenFalse() throws Exception {
+        XContentBuilder builder = XContentFactory.jsonBuilder().startObject().startArray("response_processors").endArray().endObject();
+        PipelineConfiguration empty = new PipelineConfiguration("empty", BytesReference.bytes(builder), MediaTypeRegistry.JSON);
+        initClusterUtil(new SearchPipelineMetadata(Map.of("empty", empty, "mm", minMaxPipeline("mm"))), null);
+        assertFalse(
+            "an empty response_processors list",
+            FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("empty"))
+        );
+        assertFalse(
+            "no response_processors key at all",
+            FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("mm"))
+        );
+    }
+
+    public void testResolvedPipelineHasResponseProcessors_whenTheIndexDefaultIsNone_thenFalse() throws Exception {
+        initClusterUtil(
+            new SearchPipelineMetadata(Map.of("rp", pipelineWithResponseProcessor("rp"))),
+            indexSettingsWithDefaultPipeline("_none")
+        );
+        assertFalse(FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx")));
+    }
+
+    public void testResolvedPipelineHasResponseProcessors_readsTheNamedPipelineWhetherOrNotTheRequestHasASource() throws Exception {
+        initClusterUtil(new SearchPipelineMetadata(Map.of("rp", pipelineWithResponseProcessor("rp"))), null);
+        assertTrue("no source at all", FusionConfigResolver.resolvedPipelineHasResponseProcessors(new SearchRequest("idx").pipeline("rp")));
+        assertTrue(
+            "a source without an inline pipeline body",
+            FusionConfigResolver.resolvedPipelineHasResponseProcessors(
+                new SearchRequest("idx").source(new SearchSourceBuilder()).pipeline("rp")
+            )
+        );
+    }
 }

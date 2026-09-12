@@ -67,6 +67,7 @@ import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.search.FusedLegTimeoutMerger;
+import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.explain.FusedExplanationMerger;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
@@ -172,6 +173,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * absent from {@link #doEquals}/{@link #doHashCode}.
      */
     private FusedLegTimeoutMerger.LegTimeoutConsumer legTimeoutConsumer;
+
+    /**
+     * Where to report the {@code hits.total} the fused rewrite derived from its legs, when that let round 2 run without the
+     * Tail — see {@code HybridFusionOrchestrator#totalHitsFromLegs}. Attached by {@code HybridQuerySearchRequestFilter}
+     * only when this hybrid is the request's own query and the request wants a count beyond the window: nested, the legs'
+     * union is not what an enclosing clause would count. Its presence is what permits dropping the Tail for totals —
+     * {@code null} keeps the Tail exactly as before, so where the filter is not registered nothing changes. Never parsed,
+     * never serialized, absent from {@link #doEquals}/{@link #doHashCode}.
+     */
+    private FusedTotalHitsMerger.TotalHitsConsumer fusedTotalHitsConsumer;
 
     /**
      * Where to publish the per-leg breakdown behind each fused score. The counterpart of {@link #legProfileConsumer} for
@@ -487,6 +498,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return compoundQueryBuilder;
     }
 
+    /**
+     * Whether a request of this shape could have its {@code hits.total} derived from a fused hybrid's legs instead of round
+     * 2's Tail — the source-only part of that decision, for callers outside this package
+     * ({@code HybridQuerySearchRequestFilter}). See {@code HybridFusionOrchestrator#requestShapeAllowsDerivedTotalHits}.
+     */
+    public static boolean requestShapeAllowsDerivedTotalHits(final SearchSourceBuilder source) {
+        return HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(source);
+    }
+
     protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
         // Resolver (fused) mode self-erases at the coordinator into a standard query (see doRewriteFused). Classic mode
         // keeps the existing per-sub-query rewrite below.
@@ -648,6 +668,22 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             candidateScope.enableLegExplain();
         }
 
+        // And for totals: with a consumer attached this hybrid is the request's query, its shape leaves the Tail nothing to
+        // do but count, and the request wants a count beyond the window — so the legs count up to the threshold, the one
+        // input that can let round 2 drop its Tail (see HybridFusionOrchestrator#totalHitsFromLegs). The count is armed
+        // only where it can be used: nothing to count toward (totals off, exact, or a threshold inside the window), a page
+        // that reaches past the window (the ranked count is at most the window, so such a page keeps the Tail whatever the
+        // legs report), or a search pipeline with response processors (they run before the derived count could reach the
+        // response, and would read round 2's window-sized total instead) all leave the legs as they were.
+        if (Objects.nonNull(fusedTotalHitsConsumer)) {
+            Integer legTotalHitsThreshold = HybridFusionOrchestrator.legTotalHitsThreshold(searchRequest.source(), window);
+            if (Objects.nonNull(legTotalHitsThreshold)
+                && HybridFusionOrchestrator.requestedPageEnd(searchRequest.source()) <= window
+                && FusionConfigResolver.resolvedPipelineHasResponseProcessors(searchRequest) == false) {
+                candidateScope.enableLegTotalHits(legTotalHitsThreshold);
+            }
+        }
+
         // Always measured, published only when something asked for it. The spans are a handful of nanoTime calls against a
         // fan-out that costs milliseconds, so gating the measurement would buy nothing and would make the profiled and
         // unprofiled code paths differ in more than what they report.
@@ -689,7 +725,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         window,
                         timings,
                         explanations,
-                        this
+                        this,
+                        fusedTotalHitsConsumer
                     );
                     // Hand the now-known window to the placeholders installed above. Mutates nothing the request holds:
                     // the placeholders are already in it, and core rewrites them into the window on its next pass.

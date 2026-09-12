@@ -1345,4 +1345,122 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         );
         NeuralSearchClusterUtil.instance().initialize(clusterService, failing);
     }
+
+    // ---------------------------------------- hits.total from the legs: arming ----------------------------------------
+
+    /** The leg requests the rewrite fans out for {@code request}, with a totals consumer attached when {@code consumer} is. */
+    @SneakyThrows
+    private List<SearchRequest> legRequestsFor(final SearchRequest request, final HybridQueryBuilder hybrid, final TotalHits[] derivedOut) {
+        if (Objects.nonNull(derivedOut)) {
+            hybrid.fusedTotalHitsConsumer(derived -> derivedOut[0] = derived);
+        }
+        List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+        hybrid.rewrite(coordinatorContext(request, registered));
+        assertEquals("one fan-out", 1, registered.size());
+        List<MultiSearchRequest> multiSearches = new ArrayList<>();
+        Client client = mock(Client.class);
+        doAnswer(invocation -> {
+            MultiSearchRequest multiSearchRequest = invocation.getArgument(0);
+            multiSearches.add(multiSearchRequest);
+            // answer every leg past the default threshold, so a consumer that is attached receives a derived total
+            MultiSearchResponse.Item[] items = new MultiSearchResponse.Item[multiSearchRequest.requests().size()];
+            for (int leg = 0; leg < items.length; leg++) {
+                SearchHit[] hits = new SearchHit[] { hit(0, "1", 0.9f), hit(1, "2", 0.5f) };
+                SearchHits searchHits = new SearchHits(hits, new TotalHits(10_000, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO), 0.9f);
+                SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+                items[leg] = new MultiSearchResponse.Item(new SearchResponse(sections, null, 1, 1, 0, 10, null, null), null);
+            }
+            ActionListener<MultiSearchResponse> listener = invocation.getArgument(1);
+            listener.onResponse(new MultiSearchResponse(items, 10L));
+            return null;
+        }).when(client).multiSearch(any(), any());
+        registered.getFirst().accept(client, ActionListener.wrap(response -> {}, e -> fail("leg fan-out failed: " + e.getMessage())));
+        return multiSearches.getFirst().requests();
+    }
+
+    private static List<Integer> trackTotalHitsOf(final List<SearchRequest> legs) {
+        return legs.stream().map(leg -> leg.source().trackTotalHitsUpTo()).toList();
+    }
+
+    /** With a consumer attached and default totals, every leg counts up to core's default threshold, and the total the legs
+     *  prove reaches the consumer once the legs have answered. */
+    @SneakyThrows
+    public void testRewrite_whenTotalsConsumerAttachedAndDefaultTotals_thenLegsCountToTheThresholdAndTheTotalIsDerived() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        TotalHits[] derived = new TotalHits[1];
+
+        List<SearchRequest> legs = legRequestsFor(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(hybrid).size(2)),
+            hybrid,
+            derived
+        );
+
+        assertEquals(List.of(10_000, 10_000), trackTotalHitsOf(legs));
+        assertNotNull("both legs came back capped, so the count is proven", derived[0]);
+        assertEquals(10_000L, derived[0].value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+    }
+
+    /** An integer threshold above the window is what the legs count to. */
+    @SneakyThrows
+    public void testRewrite_whenIntegerThresholdAboveTheWindow_thenLegsCountToIt() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        List<SearchRequest> legs = legRequestsFor(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(hybrid).size(2).trackTotalHitsUpTo(500)),
+            hybrid,
+            new TotalHits[1]
+        );
+        assertEquals(List.of(500, 500), trackTotalHitsOf(legs));
+    }
+
+    /** Nothing to count toward, or a shape that keeps the Tail regardless: the legs run with totals off, as before. */
+    @SneakyThrows
+    public void testRewrite_whenCountingCannotBeUsed_thenLegsDoNotCount() {
+        List<SearchSourceBuilder> shapes = List.of(
+            new SearchSourceBuilder().size(2).trackTotalHits(false),                 // totals off
+            new SearchSourceBuilder().size(2).trackTotalHits(true),                  // exact → Tail whatever the legs say
+            new SearchSourceBuilder().size(2).trackTotalHitsUpTo(50),                // threshold inside the window (100)
+            new SearchSourceBuilder().size(500)                                      // page past the window → Tail
+        );
+        for (SearchSourceBuilder shape : shapes) {
+            HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+            List<SearchRequest> legs = legRequestsFor(new SearchRequest(INDEX_NAME).source(shape.query(hybrid)), hybrid, new TotalHits[1]);
+            assertEquals(shape.toString(), List.of(-1, -1), trackTotalHitsOf(legs));
+        }
+        // and without a consumer at all (the filter did not attach one) the legs never count
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        List<SearchRequest> legs = legRequestsFor(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(hybrid).size(2)),
+            hybrid,
+            null
+        );
+        assertEquals(List.of(-1, -1), trackTotalHitsOf(legs));
+    }
+
+    /** A search pipeline with response processors runs them before a derived total could reach the response: no counting. */
+    @SneakyThrows
+    public void testRewrite_whenThePipelineHasResponseProcessors_thenLegsDoNotCount() {
+        initClusterUtilWithPipeline("rp", "{\"response_processors\":[{\"rename_field\":{\"field\":\"a\",\"target_field\":\"b\"}}]}");
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        List<SearchRequest> legs = legRequestsFor(
+            new SearchRequest(INDEX_NAME).pipeline("rp").source(new SearchSourceBuilder().query(hybrid).size(2)),
+            hybrid,
+            new TotalHits[1]
+        );
+        assertEquals(List.of(-1, -1), trackTotalHitsOf(legs));
+    }
+
+    /** The cluster of {@link #initClusterUtil}, plus one named search pipeline with the given JSON config. */
+    @SneakyThrows
+    private void initClusterUtilWithPipeline(final String id, final String json) {
+        initClusterUtil(null);
+        org.opensearch.search.pipeline.PipelineConfiguration configuration = new org.opensearch.search.pipeline.PipelineConfiguration(
+            id,
+            new org.opensearch.core.common.bytes.BytesArray(json),
+            org.opensearch.core.xcontent.MediaTypeRegistry.JSON
+        );
+        when(clusterService.state().metadata().custom(SearchPipelineMetadata.TYPE)).thenReturn(
+            new SearchPipelineMetadata(Map.of(id, configuration))
+        );
+    }
 }
