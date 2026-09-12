@@ -79,6 +79,8 @@ public class CsrFileNativeIndexWriter {
      * @throws IOException if the engine file cannot be written
      */
     public void writeIndex(BinaryDocValues binaryDocValues) throws IOException {
+        // Before any work: a missing native library must fail this flush, not the node.
+        NativeLibrary.ensureLoaded();
         int threadCount = SparseSettings.state().getSettingValue(SparseSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY);
         final String engineFileName = CodecUtils.buildIndexFileName(
             state.segmentInfo.name,
