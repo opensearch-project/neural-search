@@ -34,14 +34,17 @@ import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.InnerHitBuilder;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
+import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.collapse.CollapseBuilder;
 import org.opensearch.search.pipeline.SearchPipelineService;
+import org.opensearch.search.sort.SortOrder;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
@@ -1687,5 +1690,302 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             )
         );
         assertArrayEquals("rank-only fusion is invariant to raw score magnitude", comparable, skewed, 0.0f);
+    }
+
+    // ---- hits.total from the legs (adaptive Tail) ----
+
+    /** A leg whose response carries the given hits.total, the way a leg tracked to a threshold reports it. */
+    private MultiSearchResponse.Item legItemWithTotal(Map<String, Float> idToScore, TotalHits totalHits) {
+        SearchHit[] hits = new SearchHit[idToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : idToScore.entrySet()) {
+            hits[i] = hitFrom(i, INDEX, e.getKey(), e.getValue());
+            i++;
+        }
+        SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        SearchResponse response = new SearchResponse(sections, null, 1, 1, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    private static TotalHits gte(long value) {
+        return new TotalHits(value, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+    }
+
+    private static TotalHits eq(long value) {
+        return new TotalHits(value, TotalHits.Relation.EQUAL_TO);
+    }
+
+    private BoolQueryBuilder selfErased(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> legs,
+        int window,
+        TotalHits[] out
+    ) {
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            source,
+            ms,
+            legs,
+            minMaxArithmetic(),
+            window,
+            new FusedCoordinatorTimings(),
+            new FusedDocExplanations(),
+            null,
+            derived -> out[0] = derived
+        );
+        return ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+    }
+
+    public void testBuildFusedQuery_whenALegAlreadyExceedsTheDefaultThreshold_thenTheTailIsDroppedAndTheTotalIsDerived() {
+        // Default totals (unset → 10 000). The lexical leg counted past the threshold, so core reported it as {10000, gte} —
+        // which is exactly what round 2's Tail would have reported for the union. The Tail is therefore not built, and the
+        // consumer receives that same total to put on the response.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[1];
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 10, derived);
+
+        assertEquals("a leg past the threshold proves the union is past it: no Tail", 0, self.filter().size());
+        assertEquals(2, self.should().size());
+        assertEquals("and the response gets what the Tail would have said", gte(10_000).value(), derived[0].value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+    }
+
+    public void testBuildFusedQuery_whenEveryLegIsExactAndBelowTheThreshold_thenTheTailStaysAndNothingIsDerived() {
+        // Both legs counted exactly (small match sets). The union's size is genuinely unknown without the Tail, and today's
+        // response gives it exactly — so the Tail is kept and the consumer is told round 2's own total stands.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItemWithTotal(Map.of("2", 0.8f), eq(12)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 10, derived);
+
+        assertEquals("exact legs below the threshold → the Tail counts the union, as today", 1, self.filter().size());
+        assertNull("and nothing replaces round 2's own total", derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenNoConsumerIsAttached_thenTheTailIsKeptEvenThoughALegExceedsTheThreshold() {
+        // Fail closed: without somewhere to put the derived total (the filter is not registered, or this hybrid is nested),
+        // dropping the Tail would leave round 2's window-sized total on the response. Behaviour is exactly today's.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("no consumer → no derivation → Tail", 1, ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().size());
+    }
+
+    public void testBuildFusedQuery_whenTheLegLandsExactlyOnTheThreshold_thenTheTailIsKept() {
+        // {10000, eq} means the leg has exactly 10 000 matches; the union may have exactly that many too, in which case today
+        // reports eq, not gte. Only a leg core capped (gte) proves the union is strictly beyond the threshold.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 10, derived);
+
+        assertEquals(1, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenAnIntegerThresholdAboveTheWindowIsExceeded_thenThatThresholdIsDerived() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(500)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[1];
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2).trackTotalHitsUpTo(500), ms, legs, 10, derived);
+
+        assertEquals(0, self.filter().size());
+        assertEquals(500L, derived[0].value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+    }
+
+    public void testBuildFusedQuery_whenExactTotalsAreRequested_thenTheTailIsKeptWhateverTheLegsSay() {
+        // track_total_hits:true — only the Tail can count the union exactly.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2).trackTotalHits(true), ms, legs, 10, derived);
+
+        assertEquals(1, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenThePageReachesPastTheRankedWindow_thenTheTailIsKept() {
+        // Two ranked documents, size 10: today the Tail's score-0 documents fill the remaining slots. Dropping it would
+        // silently shorten the page, so the leg count is not allowed to stand in for the Tail here.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(10), ms, legs, 10, derived);
+
+        assertEquals("size past the ranked window → Tail documents are part of the answer", 1, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenThePageFitsInTheRankedWindow_thenTheTailCanBeDropped() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[1];
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().from(1).size(1), ms, legs, 10, derived);
+
+        assertEquals(0, self.filter().size());
+        assertNotNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenCollapseSearchAfterOrMinScoreIsPresent_thenTheTailIsKept() {
+        // Shapes where Tail-only documents, or core's own counting rule, are part of the answer: kept exactly as today.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        List<SearchSourceBuilder> sources = List.of(
+            new SearchSourceBuilder().size(1).collapse(new CollapseBuilder("grp")),
+            new SearchSourceBuilder().size(1).searchAfter(new Object[] { 0.5f }),
+            new SearchSourceBuilder().size(1).minScore(0.1f)
+        );
+        for (SearchSourceBuilder source : sources) {
+            MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+            TotalHits[] derived = new TotalHits[] { eq(42) };
+
+            BoolQueryBuilder self = selfErased(source, ms, legs, 10, derived);
+
+            assertEquals(source.toString(), 1, self.filter().size());
+            assertNull(source.toString(), derived[0]);
+        }
+    }
+
+    public void testBuildFusedQuery_whenTotalsAreDisabled_thenNothingChanges() {
+        // The explicit opt-out is already Top-only; the consumer learns that round 2's total (none) stands.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().trackTotalHits(false), ms, legs, 10, derived);
+
+        assertEquals(0, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testLegTotalHitsThreshold() {
+        assertEquals(
+            "unset → core's default",
+            Integer.valueOf(10_000),
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder(), 100)
+        );
+        assertEquals(Integer.valueOf(10_000), HybridFusionOrchestrator.legTotalHitsThreshold(null, 100));
+        assertNull(
+            "disabled → nothing to count toward",
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHits(false), 100)
+        );
+        assertNull(
+            "exact → only the Tail can",
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHits(true), 100)
+        );
+        assertNull(
+            "at or below the window → round 2 reaches it itself",
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHitsUpTo(100), 100)
+        );
+        assertEquals(
+            Integer.valueOf(101),
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHitsUpTo(101), 100)
+        );
+    }
+
+    public void testTotalHitsFromLegs_readsOnlyACappedLeg() {
+        SearchSourceBuilder source = new SearchSourceBuilder();
+        assertNull("no leg counted", HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { null, null }, 100));
+        assertNull("exact below threshold", HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { eq(9_999), null }, 100));
+        assertNull("exactly on the threshold, eq", HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { eq(10_000) }, 100));
+        assertNull(
+            "gte but below the threshold (not a shape core produces, refused all the same)",
+            HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { gte(5) }, 100)
+        );
+        TotalHits derived = HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { eq(3), gte(10_000) }, 100);
+        assertEquals(10_000L, derived.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived.relation());
+        assertNull(
+            "no threshold to derive against",
+            HybridFusionOrchestrator.totalHitsFromLegs(new SearchSourceBuilder().trackTotalHits(true), new TotalHits[] { gte(10_000) }, 100)
+        );
+    }
+
+    public void testBuildFusedQuery_whenSortedByScoreAscending_thenTheTailIsKept() {
+        // _score descending is the fused ranking itself; ascending puts the score-0 Tail documents FIRST, so without the
+        // Tail the page changes. Only a descending _score sort is transparent to the derivation.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder asc = selfErased(new SearchSourceBuilder().size(2).sort("_score", SortOrder.ASC), ms, legs, 10, derived);
+        assertEquals(1, asc.filter().size());
+        assertNull(derived[0]);
+
+        BoolQueryBuilder desc = selfErased(new SearchSourceBuilder().size(2).sort("_score", SortOrder.DESC), ms, legs, 10, derived);
+        assertEquals(0, desc.filter().size());
+        assertNotNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenANamedAnnLegFilledTheWindow_thenTheTailIsKeptForMatchedQueries() {
+        // Without the Tail a named ANN leg is registered as an address of the documents it RETURNED; a leg that filled its
+        // window may have matched a page document it did not return, and that document would lose its matched_queries entry.
+        List<QueryBuilder> legs = List.of(
+            new MatchQueryBuilder("text", "hello"),
+            new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10).queryName("vec")
+        );
+        // window 2: the kNN leg returns 2 → filled.
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(Map.of("1", 0.9f), gte(10_000)),
+            legItem(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.7f)))
+        );
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 2, derived);
+
+        assertEquals("a named ANN leg that filled its window keeps the Tail", 1, self.filter().size());
+        assertNull(derived[0]);
+
+        // The same leg unnamed, or named but short of the window, does not.
+        List<QueryBuilder> unnamed = List.of(
+            new MatchQueryBuilder("text", "hello"),
+            new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10)
+        );
+        assertEquals(0, selfErased(new SearchSourceBuilder().size(2), ms, unnamed, 2, derived).filter().size());
+        MultiSearchResponse shortLeg = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        assertEquals(0, selfErased(new SearchSourceBuilder().size(2), shortLeg, legs, 2, derived).filter().size());
+    }
+
+    public void testRequestShapeAllowsDerivedTotalHits() {
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder()));
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().sort("_score")));
+        assertFalse("null source", HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(null));
+        assertFalse(
+            "aggs",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(
+                new SearchSourceBuilder().aggregation(AggregationBuilders.terms("t").field("f"))
+            )
+        );
+        assertFalse("field sort", HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().sort("price")));
+        assertFalse(
+            "_score asc",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().sort("_score", SortOrder.ASC))
+        );
+        assertFalse(
+            "collapse",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().collapse(new CollapseBuilder("grp")))
+        );
+        assertFalse(
+            "search_after",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().searchAfter(new Object[] { 1 }))
+        );
+        assertFalse("min_score", HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().minScore(0.1f)));
+    }
+
+    public void testRequestedPageEnd_usesCoreDefaults() {
+        assertEquals("from 0, size 10 by default", 10, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder()));
+        assertEquals(35, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder().from(30).size(5)));
+        assertEquals(0, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder().size(0)));
     }
 }

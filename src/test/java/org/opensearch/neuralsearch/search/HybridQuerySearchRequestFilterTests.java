@@ -143,7 +143,8 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         fused.fusion(new java.util.HashMap<>(java.util.Map.of("normalization", java.util.Map.of("technique", "min_max"))));
 
         SearchRequest searchRequest = new SearchRequest("test_index");
-        searchRequest.source(new SearchSourceBuilder().query(fused));
+        // Totals off: with them on, the one report every default fused request carries would wrap the listener for its own reason.
+        searchRequest.source(new SearchSourceBuilder().query(fused).trackTotalHits(false));
 
         Task task = mock(Task.class);
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
@@ -425,13 +426,14 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         assertNotSame("and the response listener must be wrapped so those trees reach the response", listener, proceeded);
     }
 
-    /** Without {@code profile} there is nothing to collect, so neither the query nor the listener is touched. */
+    /** Without {@code profile} there is nothing to collect, so neither the query nor the listener is touched. Totals are
+     *  switched off here so the one report every default request carries (see the hits.total tests) stays out of the way. */
     @SuppressWarnings("unchecked")
     public void testApply_whenFusedHybridIsNotProfiled_thenNothingIsAttached() {
         HybridQueryBuilder hybridQuery = fusedHybrid();
 
         SearchRequest searchRequest = new SearchRequest("test_index");
-        searchRequest.source(new SearchSourceBuilder().query(hybridQuery));
+        searchRequest.source(new SearchSourceBuilder().query(hybridQuery).trackTotalHits(false));
 
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
@@ -952,5 +954,153 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         ArgumentCaptor<ActionListener<ActionResponse>> captor = ArgumentCaptor.forClass(ActionListener.class);
         verify(chain).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), captor.capture());
         return captor.getValue();
+    }
+
+    // ---- hits.total derived from the legs ----
+
+    public void testApply_whenTheRequestQueryIsAFusedHybridWantingTotalsBeyondTheWindow_thenTheTotalsConsumerAttaches() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(hybridQuery));
+
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+
+        assertNotNull(
+            "default totals reach past the window, so the legs' count needs somewhere to go",
+            hybridQuery.fusedTotalHitsConsumer()
+        );
+        assertNotSame("and the listener has to be wrapped for it to reach the response", listener, proceeded);
+    }
+
+    public void testApply_whenTotalsAreDisabledOrExact_thenNoTotalsConsumerAttaches() {
+        for (SearchSourceBuilder source : List.of(
+            new SearchSourceBuilder().trackTotalHits(false),
+            new SearchSourceBuilder().trackTotalHits(true)
+        )) {
+            HybridQueryBuilder hybridQuery = fusedHybrid();
+            SearchRequest searchRequest = new SearchRequest("test_index").source(source.query(hybridQuery));
+            ActionListener<ActionResponse> listener = mock(ActionListener.class);
+            ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+            assertNull(source.toString(), hybridQuery.fusedTotalHitsConsumer());
+            assertSame(source.toString(), listener, proceeded);
+        }
+    }
+
+    public void testApply_whenTheFusedHybridIsNested_thenNoTotalsConsumerAttaches() {
+        // Nested, the legs' union is not what the enclosing clause counts — the Tail must stay, so nothing is attached.
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(new BoolQueryBuilder().must(hybridQuery).filter(new MatchAllQueryBuilder())));
+
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+
+        assertNull(hybridQuery.fusedTotalHitsConsumer());
+        assertSame(listener, proceeded);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenATotalWasDerived_thenItReplacesRoundTwosOwn() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(hybridQuery));
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        hybridQuery.fusedTotalHitsConsumer().accept(new TotalHits(10_000, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO));
+
+        SearchResponse merged = merge(proceeded, listener, responseWithRankedHit());
+
+        assertEquals(10_000L, merged.getHits().getTotalHits().value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, merged.getHits().getTotalHits().relation());
+        assertEquals("the hits themselves are untouched", 1, merged.getHits().getHits().length);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenNoTotalWasDerived_thenTheResponseIsNotRebuilt() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(hybridQuery));
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        hybridQuery.fusedTotalHitsConsumer().accept(null);
+
+        SearchResponse response = responseWithRankedHit();
+        assertSame("the Tail was kept, round 2's total is the right one", response, merge(proceeded, listener, response));
+    }
+
+    public void testApply_whenTheRequestShapeKeepsTheTailAnyway_thenNoTotalsConsumerAttaches() {
+        // Aggregations, highlight, field sort, _score asc, collapse, search_after, min_score: the Tail stays whatever the legs
+        // count, so nothing is attached — and, downstream, the legs are not asked to count for nothing.
+        List<SearchSourceBuilder> shapes = List.of(
+            new SearchSourceBuilder().aggregation(org.opensearch.search.aggregations.AggregationBuilders.terms("t").field("f")),
+            new SearchSourceBuilder().highlighter(new org.opensearch.search.fetch.subphase.highlight.HighlightBuilder().field("f")),
+            new SearchSourceBuilder().sort("price"),
+            new SearchSourceBuilder().sort("_score", org.opensearch.search.sort.SortOrder.ASC),
+            new SearchSourceBuilder().collapse(new org.opensearch.search.collapse.CollapseBuilder("grp")),
+            new SearchSourceBuilder().searchAfter(new Object[] { 1 }),
+            new SearchSourceBuilder().minScore(0.1f)
+        );
+        for (SearchSourceBuilder shape : shapes) {
+            HybridQueryBuilder hybridQuery = fusedHybrid();
+            SearchRequest searchRequest = new SearchRequest("test_index").source(shape.query(hybridQuery));
+            ActionListener<ActionResponse> listener = mock(ActionListener.class);
+            ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+            assertNull(shape.toString(), hybridQuery.fusedTotalHitsConsumer());
+            assertSame(shape.toString(), listener, proceeded);
+        }
+    }
+
+    public void testApply_whenTheRootIsNotAFusedHybrid_thenNoTotalsConsumerAttaches() {
+        // a classic hybrid (no fusion block) and a non-hybrid root, both with default totals: nothing to derive
+        HybridQueryBuilder classic = new HybridQueryBuilder();
+        classic.add(new MatchAllQueryBuilder());
+        for (SearchSourceBuilder source : List.of(
+            new SearchSourceBuilder().query(classic),
+            new SearchSourceBuilder().query(new MatchAllQueryBuilder())
+        )) {
+            ActionListener<ActionResponse> listener = mock(ActionListener.class);
+            assertSame(source.toString(), listener, proceedListener(new SearchRequest("test_index").source(source), listener));
+        }
+        assertNull(classic.fusedTotalHitsConsumer());
+    }
+
+    public void testApply_whenAnIntegerThresholdIsSet_thenTheTotalsConsumerAttaches() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index").source(
+            new SearchSourceBuilder().query(hybridQuery).trackTotalHitsUpTo(500)
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        assertNotSame(listener, proceedListener(searchRequest, listener));
+        assertNotNull(hybridQuery.fusedTotalHitsConsumer());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenWrappedForATimeoutOnly_thenNoTotalIsTouched() {
+        // totals off, timeout set: the listener is wrapped for the timeout report alone, and the totals step is a no-op
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(hybridQuery).trackTotalHits(false).timeout(TimeValue.timeValueMillis(50)));
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        assertNull(hybridQuery.fusedTotalHitsConsumer());
+        hybridQuery.legTimeoutConsumer().accept(false);
+        SearchResponse response = responseWithRankedHit();
+        assertSame(response, merge(proceeded, listener, response));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testApply_whenRescoredWithTotalsOff_thenWrappedForTheSentinelAloneAndNoTotalsConsumerAttaches() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(
+            new SearchSourceBuilder().query(hybridQuery)
+                .trackTotalHits(false)
+                .addRescorer(new org.opensearch.search.rescore.QueryRescorerBuilder(new MatchAllQueryBuilder()))
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        assertNotSame("the sentinel normalisation wraps the listener", listener, proceeded);
+        assertNull("but there is no count to derive", hybridQuery.fusedTotalHitsConsumer());
     }
 }

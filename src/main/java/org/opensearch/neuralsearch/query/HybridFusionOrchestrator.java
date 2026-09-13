@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import org.apache.lucene.search.Explanation;
+import org.apache.lucene.search.TotalHits;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.search.MultiSearchRequest;
@@ -40,9 +41,15 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechniq
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
+import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchService;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.sort.ScoreSortBuilder;
+import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortOrder;
 
 import com.google.common.annotations.VisibleForTesting;
 
@@ -219,6 +226,27 @@ final class HybridFusionOrchestrator {
         FusedDocExplanations explanations,
         HybridQueryBuilder originalQuery
     ) {
+        return buildFusedQuery(source, multiSearchResponse, legs, fusion, windowSize, timings, explanations, originalQuery, null);
+    }
+
+    /**
+     * As above, and able to answer the request's {@code hits.total} from the legs instead of the Tail — see
+     * {@link #totalHitsFromLegs}. {@code totalHitsConsumer} is where the derived total goes; it is attached by
+     * {@code HybridQuerySearchRequestFilter} only when this hybrid is the request's own query, and its presence is what
+     * permits dropping the Tail for totals at all. {@code null} keeps today's behaviour exactly: a request wanting totals
+     * beyond the window gets the Tail.
+     */
+    static QueryBuilder buildFusedQuery(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations,
+        HybridQueryBuilder originalQuery,
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer
+    ) {
         MultiSearchResponse.Item[] items = multiSearchResponse.getResponses();
         long windowMergeStart = System.nanoTime();
         SearchHit[][] legHits = groupLegHits(items, legs.size());
@@ -230,6 +258,22 @@ final class HybridFusionOrchestrator {
         }
         long substituteBuildStart = System.nanoTime();
         boolean tailNeeded = needsTail(source, ranked.ids().length);
+        // The Tail may be there for the count alone. If the legs already prove what that count would be, hand the count
+        // over and let round 2 run Top-only; otherwise the Tail stays and the consumer is told nothing was derived. The
+        // derived count describes round 1's view of the index; round 2 reads it again a moment later, so the two agree
+        // whenever both rounds reach the same shards and see the same reader state — the same assumption the two-round
+        // design makes about the ranked window itself.
+        TotalHits derivedTotalHits = null;
+        if (tailNeeded
+            && Objects.nonNull(totalHitsConsumer)
+            && onlyTotalsNeedTheTail(source, ranked.ids().length)
+            && namedAnnLegFilledTheWindow(legs, legHits, windowSize) == false) {
+            derivedTotalHits = totalHitsFromLegs(source, legTotalHits(items), windowSize);
+            tailNeeded = Objects.isNull(derivedTotalHits);
+        }
+        if (Objects.nonNull(totalHitsConsumer)) {
+            totalHitsConsumer.accept(derivedTotalHits);
+        }
         timings.tailBuilt(tailNeeded);
         // The two leg lists are alternatives, never both populated: an executed Tail converts every leg on the shard and so
         // registers the names itself, and only when it is absent does anything have to be carried for registration alone.
@@ -858,6 +902,129 @@ final class HybridFusionOrchestrator {
         }
         Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
         return Objects.isNull(trackTotalHitsUpTo) || trackTotalHitsUpTo > numRankedDocs;
+    }
+
+    /**
+     * The {@code track_total_hits} threshold a leg has to count up to for {@link #totalHitsFromLegs} to be able to stand
+     * in for the Tail, or {@code null} when no leg count could ever do that: totals disabled (round 2 is Top-only already),
+     * exact totals requested ({@code true} — only the Tail can count the union exactly), or an integer threshold at or
+     * below the window (round 2's own Top count reaches it, or the Tail is kept because the window came back short —
+     * {@link #wantsTotalsBeyondWindow} decides that from the ranked count, which is not known before the legs run).
+     * An unset value is core's default, {@link SearchContext#DEFAULT_TRACK_TOTAL_HITS_UP_TO}.
+     */
+    static Integer legTotalHitsThreshold(SearchSourceBuilder source, int windowSize) {
+        Integer trackTotalHitsUpTo = Objects.isNull(source) ? null : source.trackTotalHitsUpTo();
+        if (Objects.isNull(trackTotalHitsUpTo)) {
+            return SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO;
+        }
+        if (trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
+            || trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
+            return null;
+        }
+        return trackTotalHitsUpTo > windowSize ? trackTotalHitsUpTo : null;
+    }
+
+    /**
+     * Whether the request's <i>shape</i> leaves the Tail nothing to do but count — the source-only half of
+     * {@link #onlyTotalsNeedTheTail}, decidable before the legs run and therefore also the condition under which asking
+     * the legs to count is worth anything at all ({@code HybridQuerySearchRequestFilter} and the fused rewrite consult it
+     * before arming the count; see finding 1 of the review on this change). Everything that makes the Tail's
+     * <i>documents</i> matter fails it: the features {@link #needsTail} names, plus the shapes where Tail-only documents
+     * (score {@code 0}) are what fills the result — a {@code search_after} cursor, a {@code collapse} whose groups the
+     * window may not fill, a {@code min_score} (core's count is of the documents that pass it, not of the union), and any
+     * sort other than {@code _score} descending: {@code _score} <i>ascending</i> puts the score-0 Tail documents first, so
+     * with them absent the page changes. The page bound itself needs the ranked count and is checked separately.
+     */
+    static boolean requestShapeAllowsDerivedTotalHits(SearchSourceBuilder source) {
+        if (Objects.isNull(source)) {
+            return false;
+        }
+        if (Objects.nonNull(source.aggregations()) || Objects.nonNull(source.highlighter())) {
+            return false;
+        }
+        if (Objects.nonNull(source.collapse()) || Objects.nonNull(source.searchAfter()) || Objects.nonNull(source.minScore())) {
+            return false;
+        }
+        if (Objects.nonNull(source.sorts())) {
+            for (SortBuilder<?> sort : source.sorts()) {
+                if ((sort instanceof ScoreSortBuilder) == false || sort.order() != SortOrder.DESC) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** The last result slot the request asks for: {@code from + size}, with core's defaults for either when unset. */
+    static int requestedPageEnd(SearchSourceBuilder source) {
+        int from = Math.max(source.from(), SearchService.DEFAULT_FROM);
+        int size = source.size() < 0 ? SearchService.DEFAULT_SIZE : source.size();
+        return from + size;
+    }
+
+    /**
+     * Whether the Tail, if {@link #needsTail} asked for it, is there for {@code hits.total} and nothing else — the one case
+     * where a count derived from the legs can replace it: the request's shape allows it
+     * ({@link #requestShapeAllowsDerivedTotalHits}) and the page fits inside the ranked window, so no Tail-only document
+     * would have filled a slot. Each excluded shape stays exactly as it is today.
+     */
+    private static boolean onlyTotalsNeedTheTail(SearchSourceBuilder source, int numRankedDocs) {
+        return requestShapeAllowsDerivedTotalHits(source) && requestedPageEnd(source) <= numRankedDocs;
+    }
+
+    /**
+     * Whether dropping the Tail would change {@code matched_queries}. With the Tail, a named leg is registered as the query
+     * the user wrote; without it, {@link #namedLegsForRegistration} carries a named ANN leg as an address of the documents
+     * it <i>returned</i> — deliberately, to spare a shard-side ANN compile (and for {@code neural}, a second inference) for
+     * a reporting field. That address is the leg's match set only when the leg returned all of it; a named ANN leg that
+     * filled its window may have matched a page document it never returned, and that document would lose the entry the
+     * Tail path reports. The count is not allowed to stand in for the Tail in that one shape, so the default path keeps
+     * reporting exactly what it did.
+     */
+    private static boolean namedAnnLegFilledTheWindow(List<QueryBuilder> legs, SearchHit[][] legHits, int windowSize) {
+        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
+            QueryBuilder leg = legs.get(legIndex);
+            if (isMaterializableLeg(leg) && legHits[legIndex].length >= windowSize && carriesQueryName(leg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The {@code hits.total} round 2 would have reported with the Tail, when the legs already prove it — else {@code null}.
+     *
+     * <p>Core caps a tracked count at the threshold: a union with more matches than the threshold is reported as
+     * {@code {threshold, gte}}, whatever its size ({@code SearchPhaseController.TopDocsStats#getTotalHits}). A leg's
+     * match set is a subset of the union and its own count is capped the same way, so a leg that reports
+     * {@code gte} — which core emits only when the leg alone exceeded the threshold — proves the union does too, and
+     * {@code {threshold, gte}} is exactly what the Tail would have produced. Anything else (every leg exact and below the
+     * threshold, a leg that was not asked to count, a leg landing exactly on the threshold with {@code eq}) leaves the
+     * union's count genuinely unknown, and the Tail is kept so the response is unchanged.
+     */
+    static TotalHits totalHitsFromLegs(SearchSourceBuilder source, TotalHits[] legTotalHits, int windowSize) {
+        Integer threshold = legTotalHitsThreshold(source, windowSize);
+        if (Objects.isNull(threshold)) {
+            return null;
+        }
+        for (TotalHits legTotal : legTotalHits) {
+            if (Objects.nonNull(legTotal)
+                && legTotal.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
+                && legTotal.value() >= threshold) {
+                return new TotalHits(threshold, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+            }
+        }
+        return null;
+    }
+
+    /** Each leg's own {@code hits.total}, {@code null} for a leg that did not count. Called after {@link #groupLegHits}
+     *  has failed the request on any failed leg, so every item here has a response. */
+    private static TotalHits[] legTotalHits(MultiSearchResponse.Item[] items) {
+        TotalHits[] totals = new TotalHits[items.length];
+        for (int leg = 0; leg < items.length; leg++) {
+            totals[leg] = items[leg].getResponse().getHits().getTotalHits();
+        }
+        return totals;
     }
 
     /** The fused window in score order. {@code indices} is parallel to {@code ids} and fully populated — every entry names

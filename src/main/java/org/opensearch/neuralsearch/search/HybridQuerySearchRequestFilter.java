@@ -31,6 +31,7 @@ import org.opensearch.neuralsearch.search.explain.FusedExplanationMerger;
 import org.opensearch.neuralsearch.search.profile.FusedLegProfileMerger;
 import org.opensearch.neuralsearch.util.HybridQueryUtil;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.internal.SearchContext;
 import org.opensearch.tasks.Task;
 
 import lombok.extern.log4j.Log4j2;
@@ -171,7 +172,8 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         // A fused request carrying a rescore reaches the coordinator with unranked documents demoted to the guard's
         // sentinel score; that has to be mapped back before the response is handed on. See FusedRescoreScoreNormalizer.
         boolean rescored = Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false;
-        if (profiled == false && mayTimeOut == false && explained == false && rescored == false) {
+        boolean countsBeyondWindow = mayDeriveTotalHitsFromLegs(source);
+        if (profiled == false && mayTimeOut == false && explained == false && rescored == false && countsBeyondWindow == false) {
             return listener;
         }
         FusedHybridFinder finder = new FusedHybridFinder();
@@ -224,16 +226,29 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         // neural_sparse_two_phase_processor, whose collection walks bool and neural clauses and never enters a hybrid, so
         // it cannot fire on a request whose query is a fused hybrid. A processor that REPLACES the source disarms the
         // install too, which fails safe. Re-check this whenever a request processor learns to touch source.rescores().
+        // A total can be derived from the legs only for the request's own query — nested, the legs' union is not what the
+        // enclosing clause counts. mayDeriveTotalHitsFromLegs already required the root to be a fused hybrid, and the finder
+        // visits the root first, so found.get(0) is that root. The consumer's presence is what lets the rewrite drop the
+        // Tail for totals at all (see HybridFusionOrchestrator#buildFusedQuery), so an unregistered filter changes nothing.
+        FusedTotalHitsMerger totalHitsMerger = null;
+        if (countsBeyondWindow) {
+            // mayDeriveTotalHitsFromLegs required the root to be a fused hybrid, and the finder visits the root first, so
+            // found.get(0) is the request's own query — the only one a leg-derived total may be attached to.
+            totalHitsMerger = new FusedTotalHitsMerger();
+            finder.found.get(0).fusedTotalHitsConsumer(totalHitsMerger.consumer());
+        }
         final boolean normalizeSentinel = rescored && finder.found.get(0) == source.query();
         if (Objects.isNull(legProfileMerger)
             && Objects.isNull(timeoutMerger)
             && Objects.isNull(explanationMerger)
+            && Objects.isNull(totalHitsMerger)
             && normalizeSentinel == false) {
             return listener;
         }
         final FusedLegProfileMerger profiles = legProfileMerger;
         final FusedLegTimeoutMerger timeouts = timeoutMerger;
         final FusedExplanationMerger explanations = explanationMerger;
+        final FusedTotalHitsMerger totals = totalHitsMerger;
         return ActionListener.wrap(response -> {
             if ((response instanceof SearchResponse) == false) {
                 listener.onResponse(response);
@@ -260,8 +275,34 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             if (normalizeSentinel) {
                 merged = FusedRescoreScoreNormalizer.normalize(merged, FusedWindowGuardRescorerBuilder.UNRANKED_SCORE);
             }
+            // Last, on the response that is actually returned: the derived hits.total replaces round 2's own, which counted
+            // the fused window because the Tail was dropped. A rewrite that kept the Tail derived nothing, and this is a no-op.
+            if (Objects.nonNull(totals)) {
+                merged = totals.getMergedResponse(merged);
+            }
             listener.onResponse((Response) merged);
         }, listener::onFailure);
+    }
+
+    /**
+     * Whether the request could have its {@code hits.total} answered from the legs instead of the Tail: its top-level
+     * query is a fused hybrid, it wants a count beyond the fused window — totals unset (core's default threshold) or an
+     * integer threshold — and its shape leaves the Tail nothing else to do (aggregations, highlight, a sort other than
+     * {@code _score} descending, collapse, {@code search_after} and {@code min_score} all keep the Tail whatever the legs
+     * report, so for them there is nothing to attach and no reason to ask the legs to count). O(1) on purpose, like
+     * {@link #mayHitASoftTimeout}: this gate runs on every search, and the query-tree walk that follows is only worth
+     * paying for a request that can actually use the result. {@code false} for totals disabled (round 2 is Top-only already)
+     * and for exact totals (only the Tail can count the union exactly).
+     */
+    private static boolean mayDeriveTotalHitsFromLegs(final SearchSourceBuilder source) {
+        if ((source.query() instanceof HybridQueryBuilder) == false || Objects.isNull(((HybridQueryBuilder) source.query()).fusion())) {
+            return false;
+        }
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        boolean countsBeyondWindow = Objects.isNull(trackTotalHitsUpTo)
+            || (trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_DISABLED
+                && trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_ACCURATE);
+        return countsBeyondWindow && HybridQueryBuilder.requestShapeAllowsDerivedTotalHits(source);
     }
 
     /**
