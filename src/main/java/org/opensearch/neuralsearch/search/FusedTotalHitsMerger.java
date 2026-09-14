@@ -28,7 +28,15 @@ import org.opensearch.search.SearchHits;
  * makes about the ranked window. Under {@code allow_partial_search_results} a shard lost in round 2 alone is not reflected
  * in the derived bound, and a leg whose query resolves relative to the clock ({@code now}) or to another document
  * (terms lookup) may not count exactly what round 2 would have; in both the derived value remains a true statement about
- * the index the legs searched.
+ * the index the legs searched. A leg cut short by a soft {@code timeout} <i>after</i> it had counted past the threshold
+ * belongs to the same family and differs in both value and relation: it derives {@code {threshold, gte}} where a Tail that
+ * timed out would have reported its own smaller partial count. The derivation is kept there because the derived bound is
+ * the stronger of the two true statements — the leg counted {@code threshold} real matches before it stopped — and
+ * {@code timed_out} still reaches the response through {@code FusedLegTimeoutMerger}. A leg cut short <i>below</i> the
+ * threshold cannot derive anything whatever relation it reports, because
+ * {@code HybridFusionOrchestrator#totalHitsFromLegs} requires the count to have reached the threshold as well. So "the
+ * total the Tail would have produced" is exact for complete results over a stable index, and a true lower bound
+ * otherwise.
  *
  * <p>Request-scoped, like {@code FusedLegTimeoutMerger}: created by {@link HybridQuerySearchRequestFilter} for a request
  * whose top-level query is a fused hybrid, handed to it as a consumer, and read once when the response passes back

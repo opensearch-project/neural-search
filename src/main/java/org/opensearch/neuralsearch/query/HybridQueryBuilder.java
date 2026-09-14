@@ -674,10 +674,14 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // only where it can be used: nothing to count toward (totals off, exact, or a threshold inside the window), a page
         // that reaches past the window (the ranked count is at most the window, so such a page keeps the Tail whatever the
         // legs report), or a search pipeline with response processors (they run before the derived count could reach the
-        // response, and would read round 2's window-sized total instead) all leave the legs as they were.
+        // response, and would read round 2's window-sized total instead) all leave the legs as they were. The request's
+        // shape is re-read here rather than trusted from the consumer's presence: the filter decided it before the search
+        // pipeline's request processors ran, and one that adds an aggregation between the two would otherwise have the legs
+        // count for a Tail this rewrite is about to keep anyway.
         if (Objects.nonNull(fusedTotalHitsConsumer)) {
             Integer legTotalHitsThreshold = HybridFusionOrchestrator.legTotalHitsThreshold(searchRequest.source(), window);
             if (Objects.nonNull(legTotalHitsThreshold)
+                && HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(searchRequest.source())
                 && HybridFusionOrchestrator.requestedPageEnd(searchRequest.source()) <= window
                 && FusionConfigResolver.resolvedPipelineHasResponseProcessors(searchRequest) == false) {
                 candidateScope.enableLegTotalHits(legTotalHitsThreshold);

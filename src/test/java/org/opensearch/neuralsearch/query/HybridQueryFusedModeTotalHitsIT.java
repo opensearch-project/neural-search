@@ -37,6 +37,9 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
     private static final int DOCS = 12;
     /** Below DOCS, so the lexical leg's own count is capped at it and reported {@code gte}. */
     private static final int THRESHOLD = 8;
+    /** More than one, and enough of them that no single shard holds THRESHOLD of the DOCS matches: the union's crossing is
+     *  what a leg's capped count proves, and that is only tested if no shard crosses on its own. */
+    private static final int SHARDS = 4;
     /** The fused window: smaller than THRESHOLD so the count is genuinely "beyond the window". */
     private static final int WINDOW = 5;
 
@@ -47,7 +50,9 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
         }
         createIndexWithConfiguration(
             INDEX,
-            "{\"settings\":{\"number_of_shards\":2,\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
+            "{\"settings\":{\"number_of_shards\":"
+                + SHARDS
+                + ",\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
                 + TEXT_FIELD
                 + "\":{\"type\":\"text\"}}}}",
             ""
@@ -72,8 +77,14 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private Map<String, Object> search(String body) {
+        return search(body, Map.of());
+    }
+
+    @SneakyThrows
+    private Map<String, Object> search(String body, Map<String, String> params) {
         Request request = new Request("POST", "/" + INDEX + "/_search");
         request.setJsonEntity(body);
+        params.forEach(request::addParameter);
         Response response = client().performRequest(request);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
@@ -87,6 +98,105 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> hits(Map<String, Object> response) {
         return (List<Map<String, Object>>) ((Map<String, Object>) response.get("hits")).get("hits");
+    }
+
+    /** The page's document ids in order, which is what has to agree across the derived and the Tail-kept path. */
+    private static List<String> ids(Map<String, Object> response) {
+        return hits(response).stream().map(hit -> String.valueOf(hit.get("_id"))).toList();
+    }
+
+    /** The page's scores in order. */
+    private static List<Double> scores(Map<String, Object> response) {
+        return hits(response).stream().map(hit -> ((Number) hit.get("_score")).doubleValue()).toList();
+    }
+
+    /**
+     * The parity oracle for the derived value itself: the SAME body at the SAME {@code track_total_hits}, forced onto the
+     * Tail-kept path by an aggregation, has to report the same {@code hits.total} object. The exact-totals control in the
+     * test above reports a different value ({@code {DOCS, eq}}) by design and so cannot catch an off-by-one or an eq/gte
+     * slip at the cap; this can. The aggregation is field-free on purpose — its only job is to make
+     * {@code needsTail} true.
+     *
+     * <p>Deliberately not profiled, unlike the {@code tail_built} test below: {@code profile} over a fused round 2 that also
+     * carries an aggregation trips core's {@code ConcurrentQueryProfileBreakdown} assert and kills the node — a pre-existing
+     * defect unrelated to this change. The Tail-kept side is pinned at unit level instead, by
+     * {@code HybridFusionOrchestratorTests#testRequestShapeAllowsDerivedTotalHits}.
+     */
+    @SneakyThrows
+    public void testTotalHits_whenTheTailIsKeptAtTheSameThreshold_thenTheTotalIsIdentical() {
+        prepareIndex();
+        String tail = ",\"track_total_hits\":" + THRESHOLD + ",\"query\":" + fusedQuery(WINDOW) + "}";
+        String aggregation = ",\"aggs\":{\"all\":{\"filter\":{\"match_all\":{}}}}";
+
+        Map<String, Object> derived = search("{\"size\":" + WINDOW + tail);
+        Map<String, Object> tailKept = search("{\"size\":" + WINDOW + aggregation + tail);
+
+        assertEquals("both paths report the same total at the same threshold", total(tailKept), total(derived));
+        assertEquals(THRESHOLD, total(derived).get("value"));
+        assertEquals("gte", total(derived).get("relation"));
+    }
+
+    /**
+     * The property the derivation rests on: core caps a tracked count per sub-search, not per shard. No single shard of this
+     * index holds THRESHOLD matches — each answers {@code eq} below it — yet the union crosses the threshold, and it is the
+     * union's crossing that a leg's own capped count proves. Pinned through {@code preference=_shards:N}, which is
+     * propagated to the legs, so a shard-restricted fused request really does fuse against that shard alone.
+     */
+    @SneakyThrows
+    public void testTotalHits_whenNoSingleShardReachesTheThreshold_thenTheUnionStillProvesIt() {
+        prepareIndex();
+        String body = "{\"size\":" + WINDOW + ",\"track_total_hits\":" + THRESHOLD + ",\"query\":" + fusedQuery(WINDOW) + "}";
+
+        int summed = 0;
+        for (int shard = 0; shard < SHARDS; shard++) {
+            Map<String, Object> oneShard = search(body, Map.of("preference", "_shards:" + shard));
+            assertEquals("shard " + shard + " counted its matches exactly", "eq", total(oneShard).get("relation"));
+            int shardTotal = (int) total(oneShard).get("value");
+            assertTrue("shard " + shard + " alone must stay below the threshold, was " + shardTotal, shardTotal < THRESHOLD);
+            summed += shardTotal;
+        }
+        assertEquals("the shards partition the union", DOCS, summed);
+
+        Map<String, Object> union = search(body);
+        assertEquals(THRESHOLD, total(union).get("value"));
+        assertEquals("gte", total(union).get("relation"));
+    }
+
+    /**
+     * A {@code rescore} on the derived path. Dropping the Tail removes round 2's {@code filter} clause outright, so its match
+     * set equals its ranked set and no weighting has a document the fusion never ranked available to promote — the inverse of
+     * the Tail-kept path, where {@code FusedWindowGuardRescorer} has to demote the Tail-only documents after the request's own
+     * rescorers ran. {@code rescore} also cannot move {@code hits.total}: core's rescore phase runs after the query phase's
+     * collector produced it. Both are pinned here against the exact-totals Tail-kept arm — same page, same scores — while the
+     * fact that the Tail really was dropped is pinned at unit level, by
+     * {@code HybridQueryFusedFanOutTests#testRewrite_whenTheRequestCarriesARescore_thenTheTotalIsStillDerivedAndNoTailIsBuilt}
+     * (profiling this shape trips core's {@code ConcurrentQueryProfileBreakdown} assert, and the coverage job skips ITs
+     * anyway).
+     */
+    @SneakyThrows
+    public void testTotalHits_whenARescoreRunsOnTheDerivedPath_thenThePageMatchesTheTailKeptPath() {
+        prepareIndex();
+        for (String queryWeight : List.of("1.0", "0.0")) {
+            // match_all as the rescore query so every window document is one the rescore touched, whatever the window is.
+            String rescore = ",\"rescore\":{\"window_size\":"
+                + WINDOW
+                + ",\"query\":{\"rescore_query\":{\"match_all\":{}},\"query_weight\":"
+                + queryWeight
+                + ",\"rescore_query_weight\":10.0,\"score_mode\":\"total\"}}";
+            String query = ",\"query\":" + fusedQuery(WINDOW) + rescore + "}";
+
+            Map<String, Object> derived = search("{\"size\":" + WINDOW + ",\"track_total_hits\":" + THRESHOLD + query);
+            Map<String, Object> tailKept = search("{\"size\":" + WINDOW + ",\"track_total_hits\":true" + query);
+
+            assertEquals("query_weight " + queryWeight + ": the same page", ids(tailKept), ids(derived));
+            assertEquals("query_weight " + queryWeight + ": the same scores", scores(tailKept), scores(derived));
+            assertTrue(
+                "query_weight " + queryWeight + ": the rescore has to have run — every window document matched it",
+                scores(derived).stream().allMatch(score -> score >= 10.0)
+            );
+            assertEquals(THRESHOLD, total(derived).get("value"));
+            assertEquals("gte", total(derived).get("relation"));
+        }
     }
 
     /**

@@ -109,9 +109,17 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
 
     }
 
+    /**
+     * What every mocked leg reports as its own {@code hits.total}. The default is what a leg that was not asked to count
+     * reports, which is what nearly every test here wants; a test about the leg-derived {@code hits.total} sets a capped
+     * {@code gte} instead, because that is the only leg answer the rewrite can stand in for the Tail with.
+     */
+    private TotalHits legTotalHits;
+
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        legTotalHits = new TotalHits(2, TotalHits.Relation.EQUAL_TO);
         initClusterUtil(null);
     }
 
@@ -1201,6 +1209,13 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     private List<Integer> driveWholeSource(final SearchRequest searchRequest) {
         List<Integer> legCountPerMultiSearch = new ArrayList<>();
+        driveWholeSource(searchRequest, legCountPerMultiSearch);
+        return legCountPerMultiSearch;
+    }
+
+    /** As above, returning the source core would have dispatched — the one that carries the self-erased substitute. */
+    @SneakyThrows
+    private SearchSourceBuilder driveWholeSource(final SearchRequest searchRequest, final List<Integer> legCountPerMultiSearch) {
         QueryCoordinatorContext coordinatorContext = fanningOutContext(searchRequest, legCountPerMultiSearch);
 
         AtomicReference<SearchSourceBuilder> settled = new AtomicReference<>();
@@ -1208,7 +1223,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
             throw new AssertionError("rewrite failed: " + e.getMessage(), e);
         }));
         assertNotNull("the rewrite never completed", settled.get());
-        return legCountPerMultiSearch;
+        return settled.get();
     }
 
     /** A coordinator context that answers every fan-out registered on it from {@link #multiSearchingClient}, round by round. */
@@ -1262,7 +1277,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
      */
     private MultiSearchResponse.Item legItem(final boolean timedOut) {
         SearchHit[] hits = new SearchHit[] { hit(0, "1", 0.9f), hit(1, "2", 0.5f) };
-        SearchHits searchHits = new SearchHits(hits, new TotalHits(hits.length, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchHits searchHits = new SearchHits(hits, legTotalHits, 1.0f);
         SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, timedOut, false, null, 0);
         return new MultiSearchResponse.Item(new SearchResponse(sections, null, 1, 1, 0, 10, null, null), null);
     }
@@ -1420,7 +1435,11 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
             new SearchSourceBuilder().size(2).trackTotalHits(false),                 // totals off
             new SearchSourceBuilder().size(2).trackTotalHits(true),                  // exact → Tail whatever the legs say
             new SearchSourceBuilder().size(2).trackTotalHitsUpTo(50),                // threshold inside the window (100)
-            new SearchSourceBuilder().size(500)                                      // page past the window → Tail
+            new SearchSourceBuilder().size(500),                                     // page past the window → Tail
+            // A consumer attached to a shape that keeps the Tail anyway: the filter decided the shape before the search
+            // pipeline's request processors ran, and one that adds an aggregation between the two must not leave the legs
+            // counting for a Tail this rewrite is about to keep.
+            new SearchSourceBuilder().size(2).aggregation(AggregationBuilders.terms("t").field(TEXT_FIELD_NAME))
         );
         for (SearchSourceBuilder shape : shapes) {
             HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
@@ -1435,6 +1454,41 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
             null
         );
         assertEquals(List.of(-1, -1), trackTotalHitsOf(legs));
+    }
+
+    /**
+     * A {@code rescore} does not keep the Tail, and must not: it cannot move {@code hits.total} — core's rescore phase runs
+     * after the query phase's collector produced it — so the legs' count still stands in. What that leaves is the shape this
+     * pins: round 2 without a Tail has no {@code filter} clause at all, so its match set is its ranked set and the rescore
+     * pool holds nothing the fusion did not rank. On the Tail-kept path that separation has to be restored afterwards, by
+     * {@code FusedWindowGuardRescorer} demoting the Tail-only documents; here there are none to demote.
+     *
+     * <p>A rescore body has to be driven as the whole source, not as {@code source.query()} alone: {@code FusedRescoreScope}
+     * installs its placeholder at round 1 and fails closed at round 2 if core never visited it.
+     */
+    @SneakyThrows
+    public void testRewrite_whenTheRequestCarriesARescore_thenTheTotalIsStillDerivedAndNoTailIsBuilt() {
+        legTotalHits = new TotalHits(10_000, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        TotalHits[] derived = new TotalHits[1];
+        hybrid.fusedTotalHitsConsumer(total -> derived[0] = total);
+        SearchSourceBuilder source = new SearchSourceBuilder().query(hybrid)
+            .size(2)
+            .addRescorer(new QueryRescorerBuilder(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello")));
+
+        List<Integer> legCounts = new ArrayList<>();
+        SearchSourceBuilder settled = driveWholeSource(new SearchRequest(INDEX_NAME).source(source), legCounts);
+
+        assertEquals("one fan-out of both legs", List.of(2), legCounts);
+        assertNotNull("the legs proved the count, so the Tail is not needed for it", derived[0]);
+        assertEquals(10_000L, derived[0].value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+        BoolQueryBuilder selfErased = ((HybridFusionQueryBuilder) settled.query()).buildSelfErasedQuery();
+        assertTrue(
+            "no Tail means no filter clause, so every document the rescore can reach is one fusion ranked",
+            selfErased.filter().isEmpty()
+        );
+        assertEquals("and the Top is the ranked window", 2, selfErased.should().size());
     }
 
     /** A search pipeline with response processors runs them before a derived total could reach the response: no counting. */

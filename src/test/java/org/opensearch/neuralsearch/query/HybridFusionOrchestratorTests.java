@@ -43,6 +43,7 @@ import org.opensearch.search.SearchHits;
 import org.opensearch.search.aggregations.AggregationBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.collapse.CollapseBuilder;
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.sort.SortOrder;
 import org.opensearch.test.OpenSearchTestCase;
@@ -1965,6 +1966,12 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             "aggs",
             HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(
                 new SearchSourceBuilder().aggregation(AggregationBuilders.terms("t").field("f"))
+            )
+        );
+        assertFalse(
+            "highlighter",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(
+                new SearchSourceBuilder().highlighter(new HighlightBuilder().field("text"))
             )
         );
         assertFalse("field sort", HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().sort("price")));

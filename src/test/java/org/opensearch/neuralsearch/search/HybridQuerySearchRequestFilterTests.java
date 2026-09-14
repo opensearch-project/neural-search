@@ -1029,6 +1029,44 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         assertSame("the Tail was kept, round 2's total is the right one", response, merge(proceeded, listener, response));
     }
 
+    /**
+     * {@code explain} is deliberately not a Tail trigger, so an explained request can also be the one whose total the legs
+     * derived — and then two rebuilders run over one response. This pins that the response carries both.
+     *
+     * <p>It does not pin the order, and measurement says so: swapping the two merges leaves this test passing, because
+     * {@code FusedTotalHitsMerger} constructs its {@code SearchHits} around the very same {@code SearchHit} instances, so an
+     * explanation written after it still lands on the hits the caller sees. What makes the order safe is that
+     * pass-by-reference, and it is pinned where it belongs — the {@code assertSame} in {@code FusedTotalHitsMergerTests}.
+     */
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenExplainedAndATotalWasDerived_thenTheResponseCarriesBoth() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(hybridQuery).explain(true));
+
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        assertNotNull("explain does not keep the Tail, so the legs may still prove the count", hybridQuery.fusedTotalHitsConsumer());
+
+        FusedDocExplanations collected = new FusedDocExplanations();
+        collected.combinationDescription("arithmetic_mean combination of:").normalizationDescription("min_max normalization of:");
+        collected.addDocument(
+            FusedDocExplanations.documentKey("test_index", "1"),
+            0.75f,
+            List.of(new FusedDocExplanations.LegContribution(0, 0.5f, Explanation.match(2.0f, "leg")))
+        );
+        hybridQuery.fusedExplanationConsumer().accept(collected);
+        hybridQuery.fusedTotalHitsConsumer().accept(new TotalHits(10_000, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO));
+
+        SearchResponse merged = merge(proceeded, listener, responseWithRankedHit());
+
+        assertEquals("the derived total survives the explanation rebuild", 10_000L, merged.getHits().getTotalHits().value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, merged.getHits().getTotalHits().relation());
+        Explanation explanation = merged.getHits().getHits()[0].getExplanation();
+        assertNotNull("and the breakdown survives the totals rebuild", explanation);
+        assertEquals("arithmetic_mean combination of:", explanation.getDescription());
+    }
+
     public void testApply_whenTheRequestShapeKeepsTheTailAnyway_thenNoTotalsConsumerAttaches() {
         // Aggregations, highlight, field sort, _score asc, collapse, search_after, min_score: the Tail stays whatever the legs
         // count, so nothing is attached — and, downstream, the legs are not asked to count for nothing.
