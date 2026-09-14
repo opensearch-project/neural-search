@@ -63,6 +63,9 @@ public final class SegmentNativeIndex implements Closeable {
      * @param fieldName the sparse field to load
      */
     public static SegmentNativeIndex open(LeafReader reader, SegmentInfo segmentInfo, String fieldName) throws IOException {
+        // Every native address a query can reach comes from here, so this is where a missing
+        // native library has to fail the query rather than take the node down.
+        NativeLibrary.ensureLoaded();
         final IndexReader.CacheHelper coreCache = reader.getCoreCacheHelper();
         if (coreCache == null) {
             // A reader wrapper that exposes no core lifecycle leaves nothing to hang the handle
