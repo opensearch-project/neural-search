@@ -528,23 +528,28 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         // Should have results for all 3 sub-queries
         assertEquals(3, topDocs.size());
 
-        // Election is leg-independent over the summed scores, so every group's representative is an even
-        // doc (sum 1.4 beats odd docs' 1.3). Sub-queries 0 and 2 matched those representatives and report
-        // their own scores for them; sub-query 1 matched only odd docs, so its list is empty while its
-        // total hits still count the docs it matched.
-        assertTrue("Sub-query 0 should have results", topDocs.get(0).scoreDocs.length > 0);
-        assertEquals("Sub-query 1 matched no elected representative", 0, topDocs.get(1).scoreDocs.length);
-        assertTrue("Sub-query 2 should have results", topDocs.get(2).scoreDocs.length > 0);
-        for (int i = 0; i < 3; i++) {
-            assertEquals("Sub-query " + i + " total hits counts its own matches", 50 + (i / 2) * 50, topDocs.get(i).totalHits.value());
-        }
-
-        // Sub-queries with results emit the same representatives with their own scores
-        assertEquals(topDocs.get(0).scoreDocs.length, topDocs.get(2).scoreDocs.length);
-        for (int i = 0; i < topDocs.get(0).scoreDocs.length; i++) {
-            assertEquals(topDocs.get(0).scoreDocs[i].doc, topDocs.get(2).scoreDocs[i].doc);
-            assertEquals(0.9f, topDocs.get(0).scoreDocs[i].score, 0.001f);
-            assertEquals(0.5f, topDocs.get(2).scoreDocs[i].score, 0.001f);
+        // Election is leg-independent over the summed scores, so each group's representative is its first
+        // doc. Each sub-query keeps its own top-numHits groups by its own score for the representative:
+        // sub-query 0 the even groups, sub-query 1 the odd groups, sub-query 2 the first five groups
+        // (all its scores tie and ties lose), each entry carrying that sub-query's own score.
+        int[][] expectedDocsPerSubQuery = { { 0, 2, 4, 6, 8 }, { 1, 3, 5, 7, 9 }, { 0, 1, 2, 3, 4 } };
+        float[] expectedScorePerSubQuery = { 0.9f, 0.8f, 0.5f };
+        for (int subQuery = 0; subQuery < 3; subQuery++) {
+            CollapseTopFieldDocs subQueryDocs = topDocs.get(subQuery);
+            assertEquals(
+                "Sub-query " + subQuery + " total hits counts its own matches",
+                50 + (subQuery / 2) * 50,
+                subQueryDocs.totalHits.value()
+            );
+            assertEquals(
+                "Sub-query " + subQuery + " keeps its own top groups",
+                expectedDocsPerSubQuery[subQuery].length,
+                subQueryDocs.scoreDocs.length
+            );
+            for (int i = 0; i < subQueryDocs.scoreDocs.length; i++) {
+                assertEquals(expectedDocsPerSubQuery[subQuery][i], subQueryDocs.scoreDocs[i].doc);
+                assertEquals(expectedScorePerSubQuery[subQuery], subQueryDocs.scoreDocs[i].score, 0.001f);
+            }
         }
 
         reader.close();
@@ -1251,8 +1256,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         leafCollector.setScorer(hybridScorer);
 
         // Leg 0 prefers doc 0, leg 1 prefers doc 1 — the point of hybrid search. The summed
-        // (leg-independent) ranking prefers doc 0 for groupA (1.2 vs 1.0), and ranks groupB
-        // (doc 2, sum 1.3) above groupA.
+        // (leg-independent) ranking prefers doc 0 for groupA (1.2 vs 1.0).
         float[][] scoresByDoc = { { 0.9f, 0.3f }, { 0.4f, 0.6f }, { 0.7f, 0.6f } };
         for (int docId = 0; docId < scoresByDoc.length; docId++) {
             hybridScorer.resetScores();
@@ -1280,19 +1284,17 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
             assertEquals("leg " + leg + " must report its own score for groupB", scoresByDoc[2][leg], scoreByGroup.get("groupB"), 0.001f);
         }
 
-        // Emission order is leg-independent: groupB (sum 1.3) ranks above groupA (sum 1.2) in every leg.
-        for (int leg = 0; leg < 2; leg++) {
-            CollapseTopFieldDocs legDocs = topDocs.get(leg);
-            assertEquals("groupB", ((BytesRef) legDocs.collapseValues[0]).utf8ToString());
-            assertEquals("groupA", ((BytesRef) legDocs.collapseValues[1]).utf8ToString());
-        }
+        // Each leg emits in its own score order for the shared representatives: leg 0 has groupA (0.9)
+        // above groupB (0.7), leg 1 has groupB (0.6) above groupA (0.3)
+        assertEquals(List.of("groupA", "groupB"), collapseValueStrings(topDocs.get(0)));
+        assertEquals(List.of("groupB", "groupA"), collapseValueStrings(topDocs.get(1)));
 
         reader.close();
         writer.close();
         directory.close();
     }
 
-    public void testCollapse_whenGroupStrongInOneLegOnly_thenEvictionUsesSummedScore() throws IOException {
+    public void testCollapse_whenGroupStrongInOneLegOnly_thenLegKeepsItsOwnCandidates() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
@@ -1325,7 +1327,8 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
-        // groupY leads leg 1 (0.5 vs 0.0 and 0.4) but has the weakest sum, so it must be the group evicted
+        // groupY has the weakest sum but leads leg 1 (0.5 vs 0.4); each leg keeps its own top groups,
+        // so leg 0 keeps groupX and groupZ while groupY survives in leg 1
         float[][] scoresByDoc = { { 0.9f, 0.0f }, { 0.1f, 0.5f }, { 0.4f, 0.4f } };
         for (int docId = 0; docId < scoresByDoc.length; docId++) {
             hybridScorer.resetScores();
@@ -1335,12 +1338,132 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         }
 
         List<CollapseTopFieldDocs> topDocs = collector.topDocs();
-        for (int leg = 0; leg < 2; leg++) {
-            Set<String> survivingGroups = new HashSet<>();
-            for (Object cv : topDocs.get(leg).collapseValues) {
-                survivingGroups.add(((BytesRef) cv).utf8ToString());
+        assertEquals("leg 0 keeps its own top groups", List.of("groupX", "groupZ"), collapseValueStrings(topDocs.get(0)));
+        assertEquals("leg 1 keeps its own top groups", List.of("groupY", "groupZ"), collapseValueStrings(topDocs.get(1)));
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenLegScoreScalesDiffer_thenEachLegKeepsItsOwnTopGroups() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // Five disjoint groups: leg 0 scores on a BM25-like scale, leg 1 on a normalized [0, 1] scale
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupB");
+        addKeywordDoc(writer, 2, "text2", 102, "groupC");
+        addKeywordDoc(writer, 3, "text3", 103, "groupX");
+        addKeywordDoc(writer, 4, "text4", 104, "groupY");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        int topNGroups = 3;
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            topNGroups,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(2);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        Map<String, float[]> scoresByGroup = Map.of(
+            "groupA",
+            new float[] { 15f, 0f },
+            "groupB",
+            new float[] { 12f, 0f },
+            "groupC",
+            new float[] { 11f, 0f },
+            "groupX",
+            new float[] { 0f, 0.05f },
+            "groupY",
+            new float[] { 0f, 0.04f }
+        );
+        SortedDocValues collapseDocValues = DocValues.getSorted(context.reader(), COLLAPSE_FIELD_NAME);
+        for (int doc = 0; doc < context.reader().maxDoc(); doc++) {
+            assertTrue(collapseDocValues.advanceExact(doc));
+            float[] scores = scoresByGroup.get(collapseDocValues.lookupOrd(collapseDocValues.ordValue()).utf8ToString());
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[0];
+            hybridScorer.getSubQueryScores()[1] = scores[1];
+            leafCollector.collect(doc);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+
+        // Leg 0's larger scale must not decide leg 1's candidates: each leg keeps its own top groups
+        assertEquals(List.of("groupA", "groupB", "groupC"), collapseValueStrings(topDocs.get(0)));
+        assertEquals(List.of("groupX", "groupY"), collapseValueStrings(topDocs.get(1)));
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenSortByScore_thenEachLegOrderedByOwnScore() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupA");
+        addKeywordDoc(writer, 2, "text2", 102, "groupB");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(2);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        float[][] scoresByDoc = { { 0.9f, 0.3f }, { 0.4f, 0.6f }, { 0.7f, 0.6f } };
+        for (int docId = 0; docId < scoresByDoc.length; docId++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByDoc[docId][0];
+            hybridScorer.getSubQueryScores()[1] = scoresByDoc[docId][1];
+            leafCollector.collect(docId);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        for (int leg = 0; leg < topDocs.size(); leg++) {
+            CollapseTopFieldDocs legDocs = topDocs.get(leg);
+            for (int i = 1; i < legDocs.scoreDocs.length; i++) {
+                assertTrue(
+                    "leg " + leg + " scoreDocs must be sorted descending by its own score",
+                    legDocs.scoreDocs[i - 1].score >= legDocs.scoreDocs[i].score
+                );
             }
-            assertFalse("groupY (sum 0.6) must be evicted in leg " + leg, survivingGroups.contains("groupY"));
         }
 
         reader.close();
@@ -1400,6 +1523,10 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         reader.close();
         writer.close();
         directory.close();
+    }
+
+    private static List<String> collapseValueStrings(CollapseTopFieldDocs topFieldDocs) {
+        return Stream.of(topFieldDocs.collapseValues).map(value -> ((BytesRef) value).utf8ToString()).collect(Collectors.toList());
     }
 
     private void collectWithGroupDerivedScores(

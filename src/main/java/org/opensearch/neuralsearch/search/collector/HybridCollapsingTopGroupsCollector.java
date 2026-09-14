@@ -26,8 +26,10 @@ import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 
 import java.io.IOException;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,8 +38,8 @@ import java.util.TreeSet;
 
 /**
  * Collects the CollapseTopFieldDocs based on a collapse field passed in a search request containing a hybrid query.
- * Keeps the top {@code numHits} collapse groups, each represented by its most competitive document under the group
- * sort, mirroring the bookkeeping of {@link org.apache.lucene.search.grouping.FirstPassGroupingCollector}.
+ * Keeps, per sub-query, the top {@code numHits} collapse groups ranked by that sub-query's own score for the
+ * group's representative, mirroring the bookkeeping of {@link org.apache.lucene.search.grouping.FirstPassGroupingCollector}.
  * The cross-shard collapse deduplication happens downstream in the normalization pipeline.
  *
  * <p>This collector is the opt-in alternative to {@link HybridCollapsingTopDocsCollector}, selected when
@@ -47,11 +49,13 @@ import java.util.TreeSet;
  * <p>Representative election is leg-independent: sub-queries rank documents differently, so a per-sub-query
  * election would elect different documents for one group and split the group's score in the downstream
  * per-document fusion. A single election is run instead — when sorting by score the comparators read
- * {@link HybridSubQueryScorer#score()}, the sum over sub-queries — and every sub-query reports its own score
- * for the one elected representative. A sub-query that did not match the representative leaves it out of its
- * list (a zero-score entry would distort its normalization statistics), and no minimum-competitive-score
- * feedback is sent to {@link HybridSubQueryScorer#getMinScores()}, since a low score in one sub-query does not
- * disqualify a document whose other sub-query scores make it the representative.
+ * {@link HybridSubQueryScorer#score()}, the sum over sub-queries. Candidate selection stays per sub-query:
+ * each sub-query keeps its own top-{@code numHits} groups, ranked and emitted by its own score for the elected
+ * representative, so a sub-query with a larger score scale cannot crowd another sub-query's groups out. A
+ * sub-query that did not match the representative leaves the group out of its list (a zero-score entry would
+ * distort its normalization statistics), and no minimum-competitive-score feedback is sent to
+ * {@link HybridSubQueryScorer#getMinScores()}, since a low score in one sub-query does not disqualify a
+ * document whose other sub-query scores make it the representative.
  */
 
 @Log4j2
@@ -64,22 +68,23 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
     private int docBase;
     private final int numHits;
     private final int[] reversed;
+    private final boolean[] isScoreSortField;
+    private final int compIDXEnd;
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private final HitsThresholdChecker hitsThresholdChecker;
 
-    // Single, leg-independent election state (see class javadoc)
-    private final FieldComparator<?>[] comparators;
-    private final int compIDXEnd;
+    // Election state shared by all sub-queries (see class javadoc)
     private final Map<T, CollectedGroup<T>> groupMap;
-    // Null until groupMap reaches numHits distinct groups
-    private TreeSet<CollectedGroup<T>> orderedGroups;
+    private FieldComparator<?>[] comparators;
     private int spareSlot;
+    private Deque<Integer> freeSlots;
     private LeafFieldComparator[] leafComparators;
 
     // Per-sub-query bookkeeping, sized on the first collected document
     private int numSubQueries = -1;
     private int[] collectedHitsPerSubQuery;
+    private List<TreeSet<CollectedGroup<T>>> orderedGroupsPerSubQuery;
 
     HybridCollapsingTopGroupsCollector(
         GroupSelector<T> groupSelector,
@@ -94,14 +99,12 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
 
         SortField[] sortFields = groupSort.getSort();
         this.reversed = new int[sortFields.length];
-        this.comparators = new FieldComparator<?>[sortFields.length];
+        this.isScoreSortField = new boolean[sortFields.length];
         for (int i = 0; i < sortFields.length; i++) {
-            // numHits + 1 slots so we have a spare slot to stage comparisons
-            comparators[i] = sortFields[i].getComparator(topNGroups + 1, Pruning.NONE);
             reversed[i] = sortFields[i].getReverse() ? -1 : 1;
+            isScoreSortField[i] = SortField.Type.SCORE.equals(sortFields[i].getType());
         }
-        this.compIDXEnd = comparators.length - 1;
-        this.spareSlot = topNGroups;
+        this.compIDXEnd = sortFields.length - 1;
         this.groupMap = new HashMap<>();
         this.numHits = topNGroups;
         this.hitsThresholdChecker = hitsThresholdChecker;
@@ -147,8 +150,9 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
 
     /**
      * Returns the collected top groups, including collapse values and sort fields, grouped by sub-query.
-     * Every sub-query emits the same elected representative per group, best group first, each carrying that
-     * sub-query's own score; representatives a sub-query did not match are left out of its list.
+     * Every sub-query emits the same elected representative per group, best group by that sub-query's own
+     * score first, each entry carrying that sub-query's own score; representatives a sub-query did not match
+     * are left out of its list.
      */
     @Override
     public List<CollapseTopFieldDocs> topDocs() throws IOException {
@@ -157,22 +161,16 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
             return topDocsList;
         }
 
-        if (Objects.isNull(orderedGroups)) {
-            buildSortedSet();
-        }
-
         int numComparators = comparators.length;
         for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
             List<FieldDoc> fieldDocs = new ArrayList<>();
             List<Object> collapseValues = new ArrayList<>();
-            for (CollectedGroup<T> group : orderedGroups) {
+            for (CollectedGroup<T> group : orderedGroupsPerSubQuery.get(subQuery)) {
                 float subQueryScore = group.scoresPerSubQuery[subQuery];
-                if (subQueryScore <= 0) {
-                    continue;
-                }
                 Object[] fields = new Object[numComparators];
                 for (int k = 0; k < numComparators; k++) {
-                    fields[k] = comparators[k].value(group.comparatorSlot);
+                    // Score components carry this sub-query's own score; other components are attributes of the representative
+                    fields[k] = isScoreSortField[k] ? subQueryScore : comparators[k].value(group.comparatorSlot);
                 }
                 fieldDocs.add(new FieldDoc(group.topDoc, subQueryScore, fields));
                 if (group.groupValue instanceof BytesRef) {
@@ -254,6 +252,23 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
                 }
                 numSubQueries = subQueryCount;
                 collectedHitsPerSubQuery = new int[subQueryCount];
+                orderedGroupsPerSubQuery = new ArrayList<>(subQueryCount);
+                for (int subQuery = 0; subQuery < subQueryCount; subQuery++) {
+                    orderedGroupsPerSubQuery.add(new TreeSet<>(subQueryGroupComparator(subQuery)));
+                }
+                // One slot per live group (at most numSubQueries * numHits memberships), one transient slot
+                // for insert-then-trim, and the spare slot used to stage election comparisons
+                int slotCapacity = subQueryCount * numHits + 2;
+                SortField[] sortFields = sort.getSort();
+                comparators = new FieldComparator<?>[sortFields.length];
+                for (int i = 0; i < sortFields.length; i++) {
+                    comparators[i] = sortFields[i].getComparator(slotCapacity, Pruning.NONE);
+                }
+                spareSlot = slotCapacity - 1;
+                freeSlots = new ArrayDeque<>();
+                for (int slot = 0; slot < slotCapacity - 1; slot++) {
+                    freeSlots.push(slot);
+                }
             }
 
             private void ensureLeafComparatorsInitialized(LeafReaderContext ctx, HybridSubQueryScorer compoundQueryScorer)
@@ -282,11 +297,6 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
     }
 
     private void collectGroup(int doc, float[] subScoresByQuery) throws IOException {
-        // A doc below the weakest group's representative can neither form a new group nor improve an existing one
-        if (Objects.nonNull(orderedGroups) && isCompetitive(doc) == false) {
-            return;
-        }
-
         CollectedGroup<T> group = groupMap.get(groupSelector.currentValue());
         if (Objects.isNull(group)) {
             collectNewGroup(doc, subScoresByQuery);
@@ -295,51 +305,19 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         }
     }
 
-    private boolean isCompetitive(int doc) throws IOException {
-        for (int compIDX = 0;; compIDX++) {
-            final int c = reversed[compIDX] * leafComparators[compIDX].compareBottom(doc);
-            if (c < 0) {
-                return false;
-            } else if (c > 0) {
-                return true;
-            } else if (compIDX == compIDXEnd) {
-                // Ties lose: docs are visited in doc id order
-                return false;
-            }
-        }
-    }
-
     private void collectNewGroup(int doc, float[] subScoresByQuery) throws IOException {
-        if (groupMap.size() < numHits) {
-            CollectedGroup<T> group = new CollectedGroup<>();
-            group.groupValue = groupSelector.copyValue();
-            group.comparatorSlot = groupMap.size();
-            group.topDoc = docBase + doc;
-            group.scoresPerSubQuery = subScoresByQuery.clone();
-            for (LeafFieldComparator leafComparator : leafComparators) {
-                leafComparator.copy(group.comparatorSlot, doc);
-            }
-            groupMap.put(group.groupValue, group);
-
-            if (groupMap.size() == numHits) {
-                buildSortedSet();
-                setBottomToWeakestGroup();
-            }
-            return;
-        }
-
-        CollectedGroup<T> evictedGroup = orderedGroups.pollLast();
-        groupMap.remove(evictedGroup.groupValue);
-
-        evictedGroup.groupValue = groupSelector.copyValue();
-        evictedGroup.topDoc = docBase + doc;
-        evictedGroup.scoresPerSubQuery = subScoresByQuery.clone();
+        CollectedGroup<T> group = new CollectedGroup<>();
+        group.groupValue = groupSelector.copyValue();
+        group.comparatorSlot = freeSlots.pop();
+        group.topDoc = docBase + doc;
+        group.scoresPerSubQuery = subScoresByQuery.clone();
+        group.memberOfSubQuery = new boolean[numSubQueries];
         for (LeafFieldComparator leafComparator : leafComparators) {
-            leafComparator.copy(evictedGroup.comparatorSlot, doc);
+            leafComparator.copy(group.comparatorSlot, doc);
         }
-        groupMap.put(evictedGroup.groupValue, evictedGroup);
-        orderedGroups.add(evictedGroup);
-        setBottomToWeakestGroup();
+        groupMap.put(group.groupValue, group);
+        insertIntoSubQueries(group);
+        dropIfMemberless(group);
     }
 
     private void collectExistingGroup(int doc, float[] subScoresByQuery, CollectedGroup<T> group) throws IOException {
@@ -359,10 +337,8 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
             }
         }
 
-        // Remove before mutating — the sorted set locates elements by comparing slots
-        if (Objects.nonNull(orderedGroups)) {
-            orderedGroups.remove(group);
-        }
+        // Remove before mutating — the sorted sets locate elements by comparing slots and scores
+        removeFromSubQueries(group);
 
         group.topDoc = docBase + doc;
         group.scoresPerSubQuery = subScoresByQuery.clone();
@@ -371,16 +347,51 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         spareSlot = group.comparatorSlot;
         group.comparatorSlot = tmpSlot;
 
-        if (Objects.nonNull(orderedGroups)) {
+        insertIntoSubQueries(group);
+        dropIfMemberless(group);
+    }
+
+    private void insertIntoSubQueries(CollectedGroup<T> group) {
+        for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
+            if (group.scoresPerSubQuery[subQuery] <= 0) {
+                continue;
+            }
+            TreeSet<CollectedGroup<T>> orderedGroups = orderedGroupsPerSubQuery.get(subQuery);
             orderedGroups.add(group);
-            setBottomToWeakestGroup();
+            group.memberOfSubQuery[subQuery] = true;
+            if (orderedGroups.size() > numHits) {
+                CollectedGroup<T> evicted = orderedGroups.pollLast();
+                evicted.memberOfSubQuery[subQuery] = false;
+                if (evicted != group) {
+                    dropIfMemberless(evicted);
+                }
+            }
         }
     }
 
-    private void buildSortedSet() {
-        final Comparator<CollectedGroup<T>> groupComparator = (o1, o2) -> {
+    private void removeFromSubQueries(CollectedGroup<T> group) {
+        for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
+            if (group.memberOfSubQuery[subQuery]) {
+                orderedGroupsPerSubQuery.get(subQuery).remove(group);
+                group.memberOfSubQuery[subQuery] = false;
+            }
+        }
+    }
+
+    private void dropIfMemberless(CollectedGroup<T> group) {
+        for (boolean member : group.memberOfSubQuery) {
+            if (member) {
+                return;
+            }
+        }
+        groupMap.remove(group.groupValue);
+        freeSlots.push(group.comparatorSlot);
+    }
+
+    private Comparator<CollectedGroup<T>> subQueryGroupComparator(int subQuery) {
+        return (o1, o2) -> {
             for (int compIDX = 0;; compIDX++) {
-                final int c = reversed[compIDX] * comparators[compIDX].compare(o1.comparatorSlot, o2.comparatorSlot);
+                final int c = reversed[compIDX] * compareBySortField(compIDX, subQuery, o1, o2);
                 if (c != 0) {
                     return c;
                 } else if (compIDX == compIDXEnd) {
@@ -388,15 +399,14 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
                 }
             }
         };
-        orderedGroups = new TreeSet<>(groupComparator);
-        orderedGroups.addAll(groupMap.values());
     }
 
-    private void setBottomToWeakestGroup() throws IOException {
-        final int weakestSlot = orderedGroups.last().comparatorSlot;
-        for (LeafFieldComparator leafComparator : leafComparators) {
-            leafComparator.setBottom(weakestSlot);
+    private int compareBySortField(int compIDX, int subQuery, CollectedGroup<T> o1, CollectedGroup<T> o2) {
+        if (isScoreSortField[compIDX]) {
+            // Mirrors RelevanceComparator: natural order puts the higher score first
+            return Float.compare(o2.scoresPerSubQuery[subQuery], o1.scoresPerSubQuery[subQuery]);
         }
+        return comparators[compIDX].compare(o1.comparatorSlot, o2.comparatorSlot);
     }
 
     private static final class CollectedGroup<T> {
@@ -405,5 +415,7 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         int comparatorSlot;
         // The elected representative's score in each sub-query; a sub-query that did not match it holds 0
         float[] scoresPerSubQuery;
+        // Membership in each sub-query's top-numHits set; a group that is member of none is dropped
+        boolean[] memberOfSubQuery;
     }
 }
