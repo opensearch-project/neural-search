@@ -57,6 +57,11 @@ public class AbstractSparseTestBase extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void setUp() {
         super.setUp();
+        // SparseSettings is a process-wide singleton, so a class that initializes it with a partial
+        // ClusterSettings leaves every later class in the same JVM reading through that instance --
+        // and any setting it did not register throws rather than falling back to its default. Start
+        // each test from the uninitialized state so class order cannot decide the outcome.
+        SparseSettings.reset();
         CircuitBreakerManager.setCircuitBreaker(mockedCircuitBreaker);
         // resolve compilation issue due to nested spy
         RamBytesRecorder ramBytesRecorder = MemoryUsageManager.getInstance().getMemoryUsageTracker();

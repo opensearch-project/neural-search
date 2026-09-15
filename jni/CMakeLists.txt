@@ -114,6 +114,15 @@ if (NOT ${CMAKE_SYSTEM_NAME} STREQUAL Windows)
     endif()
     set_target_properties(${TARGET_LIB_NSPARSE} PROPERTIES BUILD_RPATH "${NSPARSE_ORIGIN}" INSTALL_RPATH "${NSPARSE_ORIGIN}")
 endif()
+
+# The C++ runtime is linked in statically on Linux. ml-commons brings DJL's precxx11
+# PyTorch flavour, which loads its own bundled libstdc++.so.6 into the process; the
+# loader then satisfies our SONAME reference from that copy, and it is older than the
+# toolchain that built us. dlopen fails with "version `GLIBCXX_3.4.32' not found"
+# purely because of load order, and which plugin wins is not something we control.
+if (${CMAKE_SYSTEM_NAME} STREQUAL Linux)
+    target_link_options(${TARGET_LIB_NSPARSE} PRIVATE -static-libstdc++ -static-libgcc)
+endif()
 # ---------------------------------------------------------------------------
 
 # --------------------------------- TESTS -----------------------------------

@@ -8,19 +8,16 @@ import lombok.AllArgsConstructor;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import org.apache.lucene.util.Accountable;
-import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.RamUsageEstimator;
+import org.opensearch.neuralsearch.sparse.common.BinaryVectorUtils;
 import org.opensearch.neuralsearch.sparse.common.IteratorWrapper;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +35,7 @@ public class SparseVector implements Accountable {
     private final byte[] weights;
 
     public SparseVector(BytesRef bytesRef, ByteQuantizer byteQuantizer) throws IOException {
-        this(readToMap(bytesRef), byteQuantizer);
+        this(BinaryVectorUtils.readToMap(bytesRef), byteQuantizer);
     }
 
     public int getSize() {
@@ -84,23 +81,6 @@ public class SparseVector implements Accountable {
 
     public static int prepareTokenForShortType(int token) {
         return token % MODULUS_FOR_SHORT;
-    }
-
-    private static Map<Integer, Float> readToMap(BytesRef bytesRef) throws IOException {
-        Map<Integer, Float> map = new HashMap<>();
-        try (
-            ByteArrayInputStream bais = new ByteArrayInputStream(
-                ArrayUtil.copyOfSubArray(bytesRef.bytes, bytesRef.offset, bytesRef.length)
-            );
-            DataInputStream dis = new DataInputStream(bais)
-        ) {
-            while (bais.available() > 0) {
-                int key = dis.readInt();
-                float value = dis.readFloat();
-                map.put(key, value);
-            }
-        }
-        return map;
     }
 
     public byte[] toDenseVector() {

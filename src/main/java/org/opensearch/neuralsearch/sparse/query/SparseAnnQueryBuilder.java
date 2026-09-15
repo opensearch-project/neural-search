@@ -31,6 +31,8 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
@@ -243,6 +245,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     public Query doToQuery(QueryShardContext context) throws IOException {
         final MappedFieldType fieldType = context.fieldMapper(fieldName);
         validateFieldType(fieldType);
+        validateNativeEngineEnabled(fieldType);
 
         SparseQueryContext sparseQueryContext = constructSparseQueryContext();
 
@@ -261,6 +264,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         return new SparseVectorQuery.SparseVectorQueryBuilder().fieldName(fieldName)
             .queryContext(sparseQueryContext)
             .queryVector(new SparseVector(integerTokens, new ByteQuantizer(quantizationCeilSearch)))
+            .rawQueryTokens(integerTokens)
             .fallbackQuery(fallbackQuery)
             .filter(filterQuery)
             .build();
@@ -277,6 +281,28 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                     + SparseVectorFieldMapper.CONTENT_TYPE
                     + "] fields"
             );
+        }
+    }
+
+    /**
+     * Refuses the query before it can reach {@link org.opensearch.neuralsearch.jni.NativeLibrary}.
+     * Falling back to the exact scorer instead is not an option: the field's mapping still says
+     * native, and a segment over the approximate threshold would otherwise be read by the Lucene
+     * seismic path, which has no clustered postings to read.
+     */
+    static void validateNativeEngineEnabled(MappedFieldType fieldType) {
+        if (fieldType instanceof SparseVectorFieldType sparseVectorFieldType && sparseVectorFieldType.getSparseMethodContext() != null) {
+            String engine = sparseVectorFieldType.getSparseMethodContext().getSparseEngine();
+            if (SparseEngine.NATIVE.getName().equalsIgnoreCase(engine) && SparseSettings.state().isNativeEngineEnabled() == false) {
+                throw new IllegalArgumentException(
+                    "["
+                        + NAME
+                        + "] query on field ["
+                        + sparseVectorFieldType.name()
+                        + "] cannot run: "
+                        + SparseSettings.NATIVE_ENGINE_DISABLED_REASON
+                );
+            }
         }
     }
 

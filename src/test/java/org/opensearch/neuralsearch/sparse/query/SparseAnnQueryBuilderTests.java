@@ -25,6 +25,9 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
+import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldType;
@@ -38,6 +41,9 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SEISMIC;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.NAME_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ENGINE_FIELD;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
@@ -214,6 +220,43 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         when(fieldType.typeName()).thenReturn("text");
 
         expectThrows(IllegalArgumentException.class, () -> { SparseAnnQueryBuilder.validateFieldType(fieldType); });
+    }
+
+    private static SparseVectorFieldType nativeFieldType() {
+        SparseVectorFieldType fieldType = mock(SparseVectorFieldType.class);
+        when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
+        when(fieldType.name()).thenReturn("test_field");
+        when(fieldType.getSparseMethodContext()).thenReturn(
+            SparseMethodContext.parse(Map.of(NAME_FIELD, SEISMIC, ENGINE_FIELD, SparseEngine.NATIVE.getName()))
+        );
+        return fieldType;
+    }
+
+    public void testValidateNativeEngineEnabled_rejectsNativeFieldWhenDisabled() {
+        SparseSettings.reset();  // uninitialized means the dynamic gate is at its default, off
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> SparseAnnQueryBuilder.validateNativeEngineEnabled(nativeFieldType())
+        );
+        assertTrue(exception.getMessage(), exception.getMessage().contains(SparseSettings.NATIVE_ENGINE_DISABLED_REASON));
+    }
+
+    public void testValidateNativeEngineEnabled_allowsLuceneFieldWhenNativeIsDisabled() {
+        SparseSettings.reset();
+
+        SparseVectorFieldType fieldType = mock(SparseVectorFieldType.class);
+        when(fieldType.getSparseMethodContext()).thenReturn(
+            SparseMethodContext.parse(Map.of(NAME_FIELD, SEISMIC, ENGINE_FIELD, SparseEngine.LUCENE.getName()))
+        );
+
+        SparseAnnQueryBuilder.validateNativeEngineEnabled(fieldType);
+    }
+
+    public void testValidateNativeEngineEnabled_ignoresNonSparseFieldType() {
+        SparseSettings.reset();
+
+        SparseAnnQueryBuilder.validateNativeEngineEnabled(mock(MappedFieldType.class));
     }
 
     public void testEquals_withSameValues_returnsTrue() {

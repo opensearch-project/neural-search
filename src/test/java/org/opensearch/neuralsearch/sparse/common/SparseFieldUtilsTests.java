@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse.common;
 
+import org.apache.lucene.index.FieldInfo;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.cluster.ClusterState;
@@ -14,6 +15,8 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.sparse.TestsPrepareUtils;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseForwardIndex;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.Collections;
@@ -25,6 +28,13 @@ import java.util.Set;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTERING_BATCH_SIZE_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ENGINE_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.FORWARD_INDEX_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_CLUSTERING_BATCH_SIZE;
 
 public class SparseFieldUtilsTests extends OpenSearchTestCase {
 
@@ -183,6 +193,44 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         assertEquals(defaultDepth, SparseFieldUtils.getMaxDepth(TEST_INDEX_NAME, clusterService));
     }
 
+    public void testGetSparseForwardIndex_withPerBlockAttribute() {
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        when(fieldInfo.getAttribute(FORWARD_INDEX_FIELD)).thenReturn(SparseForwardIndex.PER_BLOCK.getName());
+
+        assertEquals(SparseForwardIndex.PER_BLOCK, SparseFieldUtils.getSparseForwardIndex(fieldInfo));
+    }
+
+    public void testGetSparseForwardIndex_withMissingOrUnknownAttribute_fallsBackToDefault() {
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        assertEquals(SparseForwardIndex.DEFAULT, SparseFieldUtils.getSparseForwardIndex(fieldInfo));
+
+        when(fieldInfo.getAttribute(FORWARD_INDEX_FIELD)).thenReturn("not_a_forward_index");
+        assertEquals(SparseForwardIndex.DEFAULT, SparseFieldUtils.getSparseForwardIndex(fieldInfo));
+    }
+
+    public void testGetSparseForwardIndex_withNullFieldInfo_fallsBackToDefault() {
+        assertEquals(SparseForwardIndex.DEFAULT, SparseFieldUtils.getSparseForwardIndex(null));
+    }
+
+    public void testGetClusteringBatchSize_withAttribute() {
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        when(fieldInfo.getAttribute(CLUSTERING_BATCH_SIZE_FIELD)).thenReturn("64");
+
+        assertEquals(64, SparseFieldUtils.getClusteringBatchSize(fieldInfo));
+    }
+
+    public void testGetClusteringBatchSize_withMissingOrUnparseableAttribute_fallsBackToDefault() {
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        assertEquals(DEFAULT_CLUSTERING_BATCH_SIZE, SparseFieldUtils.getClusteringBatchSize(fieldInfo));
+
+        when(fieldInfo.getAttribute(CLUSTERING_BATCH_SIZE_FIELD)).thenReturn("not_an_integer");
+        assertEquals(DEFAULT_CLUSTERING_BATCH_SIZE, SparseFieldUtils.getClusteringBatchSize(fieldInfo));
+    }
+
+    public void testGetClusteringBatchSize_withNullFieldInfo_fallsBackToDefault() {
+        assertEquals(DEFAULT_CLUSTERING_BATCH_SIZE, SparseFieldUtils.getClusteringBatchSize(null));
+    }
+
     private void configureSparseIndexSetting(boolean isSparseIndex) {
         Settings settings = Settings.builder().put("index.sparse", isSparseIndex).build();
         when(indexMetadata.getSettings()).thenReturn(settings);
@@ -207,5 +255,37 @@ public class SparseFieldUtilsTests extends OpenSearchTestCase {
         nestedFieldMapping.put("properties", sparseFieldMapping);
         properties.put("properties", Map.of(parentField, nestedFieldMapping));
         return properties;
+    }
+
+    public void testGetSparseEngineDefaultsWhenFieldInfoIsMissing() {
+        // A segment holding no document with the field has no FieldInfo for it
+        assertEquals(SparseEngine.DEFAULT, SparseFieldUtils.getSparseEngine(null));
+    }
+
+    public void testGetSparseEngineDefaultsWhenAttributeIsAbsent() {
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        when(fieldInfo.getAttribute(ENGINE_FIELD)).thenReturn(null);
+
+        assertEquals(SparseEngine.DEFAULT, SparseFieldUtils.getSparseEngine(fieldInfo));
+    }
+
+    public void testGetSparseEngineReadsTheAttribute() {
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        when(fieldInfo.getAttribute(ENGINE_FIELD)).thenReturn(SparseEngine.NATIVE.getName());
+
+        assertEquals(SparseEngine.NATIVE, SparseFieldUtils.getSparseEngine(fieldInfo));
+    }
+
+    public void testFloatAttributeGetters() {
+        FieldInfo fieldInfo = mock(FieldInfo.class);
+        Map<String, String> attributes = new HashMap<>();
+        attributes.put(QUANTIZATION_CEILING_INGEST_FIELD, "3.5");
+        attributes.put(CLUSTER_RATIO_FIELD, "0.1");
+        attributes.put(SUMMARY_PRUNE_RATIO_FIELD, "0.4");
+        when(fieldInfo.attributes()).thenReturn(attributes);
+
+        assertEquals(3.5f, SparseFieldUtils.getQuantizationCeilingIngest(fieldInfo), 0.0f);
+        assertEquals(0.1f, SparseFieldUtils.getClusterRatio(fieldInfo), 0.0f);
+        assertEquals(0.4f, SparseFieldUtils.getSummaryPruneRatio(fieldInfo), 0.0f);
     }
 }

@@ -22,6 +22,20 @@ void insertToIndex(int64_t indexAddress, const int32_t* ids,
                    int64_t tokensAddress, int64_t valuesAddress,
                    int threadCount);
 
+// Builds the index from a native-layout CSR file and the row-aligned id file
+// that maps each CSR row to its doc id, asking nsparse for mmap residency so the
+// vectors are borrowed from the files rather than copied onto the native heap.
+//
+// Both files must outlive the index, which for the writer means outliving
+// writeIndex: the borrow is not released until the index is freed. Does not take
+// ownership of indexAddress, like insertToIndex.
+//
+// The index must be an idmap one -- the row-to-doc-id map has nowhere else to go
+// -- and its delegate must accept mmap residency, which today rules out the
+// scalar-quantized layouts.
+void readCsrAndIdsToIndex(int64_t indexAddress, const std::string& csrPath,
+                          const std::string& idPath, int threadCount);
+
 void writeIndex(int64_t indexAddress, jobject output, JNIEnv* env);
 
 // ioFlags is an nsparse::IndexIoFlag bitmask. Passing kUseMmap makes the nested

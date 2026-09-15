@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.junit.Before;
@@ -28,6 +29,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
@@ -39,6 +41,7 @@ import org.opensearch.neuralsearch.util.prune.PruneType;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
@@ -824,6 +827,57 @@ public class NeuralQueryBuilderTests extends OpenSearchTestCase {
         updatedNeuralQueryBuilder = neuralQueryBuilder.queryfilter(TEST_FILTER);
         assertEquals(neuralQueryBuilder, updatedNeuralQueryBuilder);
         assertEquals(TEST_FILTER, neuralQueryBuilder.queryfilter());
+    }
+
+    public void testVisit_whenFilterPresent_thenVisitsFilterClause() {
+        NeuralQueryBuilder neuralQueryBuilder = getBaselineNeuralQueryBuilder();
+        List<QueryBuilder> visitedQueries = new ArrayList<>();
+        List<BooleanClause.Occur> visitedOccurrences = new ArrayList<>();
+        QueryBuilderVisitor visitor = new QueryBuilderVisitor() {
+            @Override
+            public void accept(QueryBuilder queryBuilder) {
+                visitedQueries.add(queryBuilder);
+            }
+
+            @Override
+            public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
+                visitedOccurrences.add(occur);
+                return this;
+            }
+        };
+
+        neuralQueryBuilder.visit(visitor);
+
+        assertEquals(List.of(neuralQueryBuilder, TEST_FILTER), visitedQueries);
+        assertEquals(List.of(BooleanClause.Occur.FILTER), visitedOccurrences);
+    }
+
+    public void testVisit_whenFilterAbsent_thenVisitsOnlyNeuralQuery() {
+        NeuralQueryBuilder neuralQueryBuilder = NeuralQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .queryText(QUERY_TEXT)
+            .modelId(MODEL_ID)
+            .k(K)
+            .build();
+        List<QueryBuilder> visitedQueries = new ArrayList<>();
+        List<BooleanClause.Occur> visitedOccurrences = new ArrayList<>();
+        QueryBuilderVisitor visitor = new QueryBuilderVisitor() {
+            @Override
+            public void accept(QueryBuilder queryBuilder) {
+                visitedQueries.add(queryBuilder);
+            }
+
+            @Override
+            public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
+                visitedOccurrences.add(occur);
+                return this;
+            }
+        };
+
+        neuralQueryBuilder.visit(visitor);
+
+        assertEquals(List.of(neuralQueryBuilder), visitedQueries);
+        assertTrue(visitedOccurrences.isEmpty());
     }
 
     public void testQueryCreation_whenCreateQueryWithDoToQuery_thenFail() {

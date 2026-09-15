@@ -29,11 +29,13 @@ import org.opensearch.index.engine.EngineException;
 import org.opensearch.index.shard.IllegalIndexShardStateException;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.cache.ClusteredPostingCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCache;
 import org.opensearch.neuralsearch.sparse.cache.ForwardIndexCacheItem;
 import org.opensearch.neuralsearch.sparse.codec.CodecUtilWrapper;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
+import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 import org.opensearch.neuralsearch.sparse.cache.CacheGatedForwardIndexReader;
 import org.opensearch.neuralsearch.sparse.cache.CacheGatedPostingsReader;
@@ -54,6 +56,11 @@ import static org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader.NOO
 
 /**
  * NeuralSparseIndexShard wraps IndexShard and adds methods to perform neural-sparse related operations against the shard
+ *
+ * Both cache operations cover the {@link SparseEngine#LUCENE} fields only: the native engine holds its
+ * index in a file it mmaps at search time, so it has nothing in these caches to load or evict. On a
+ * native-only index they are therefore a successful no-op, and on a mixed-engine index they touch just
+ * the Lucene fields.
  */
 @Log4j2
 @RequiredArgsConstructor
@@ -230,6 +237,11 @@ public class NeuralSparseIndexShard {
             final SegmentInfo segmentInfo = segmentReader.getSegmentInfo().info;
 
             for (FieldInfo fieldInfo : sparseFieldInfos) {
+                if (SparseEngine.NATIVE == SparseFieldUtils.getSparseEngine(fieldInfo)) {
+                    // A native-engine field is searched from its mmap'd index file, never from these
+                    // caches, so warming them would spend heap on data no query reads.
+                    continue;
+                }
                 if (!PredicateUtils.shouldRunSeisPredicate.test(segmentInfo, fieldInfo)) {
                     continue;
                 }

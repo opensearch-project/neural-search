@@ -57,6 +57,7 @@ import lombok.NonNull;
 import lombok.experimental.Accessors;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.builder.EqualsBuilder;
+import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.join.ScoreMode;
@@ -77,6 +78,7 @@ import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.mapper.RankFeaturesFieldMapper;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.WithFieldName;
 import org.opensearch.index.query.QueryRewriteContext;
@@ -523,6 +525,19 @@ public class NeuralQueryBuilder extends AbstractNeuralQueryBuilder<NeuralQueryBu
         }
         return this;
 
+    }
+
+    /**
+     * Exposes the embedded query filter as a {@link BooleanClause.Occur#FILTER} child. The default
+     * {@link QueryBuilder#visit(QueryBuilderVisitor)} implementation visits only this builder, so composite query
+     * builders must override it to make their complete query tree available to visitors.
+     */
+    @Override
+    public void visit(QueryBuilderVisitor visitor) {
+        visitor.accept(this);
+        if (queryfilter != null) {
+            queryfilter.visit(visitor.getChildVisitor(BooleanClause.Occur.FILTER));
+        }
     }
 
     @Override

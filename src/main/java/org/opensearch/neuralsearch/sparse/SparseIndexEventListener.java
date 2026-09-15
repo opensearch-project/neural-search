@@ -51,10 +51,7 @@ public class SparseIndexEventListener implements IndexEventListener {
                         SegmentInfo segmentInfo = segmentInfos.info(i).info;
                         for (MappedFieldType fieldType : mapperService.fieldTypes()) {
                             if (fieldType instanceof SparseVectorFieldType) {
-                                String fieldName = fieldType.name();
-                                CacheKey key = new CacheKey(segmentInfo, fieldName);
-                                ForwardIndexCache.getInstance().onIndexRemoval(key);
-                                ClusteredPostingCache.getInstance().onIndexRemoval(key);
+                                clearJvmCache(fieldType.name(), segmentInfo);
                             }
                         }
                     }
@@ -67,5 +64,11 @@ public class SparseIndexEventListener implements IndexEventListener {
                 log.error("An error occurred during remove index from cache", e);
             }
         }
+    }
+
+    private void clearJvmCache(String fieldName, SegmentInfo segmentInfo) {
+        CacheKey key = new CacheKey(segmentInfo, fieldName);
+        ForwardIndexCache.getInstance().onIndexRemoval(key);
+        ClusteredPostingCache.getInstance().onIndexRemoval(key);
     }
 }

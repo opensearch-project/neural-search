@@ -51,7 +51,7 @@ public class SparseDocValuesFormatTests extends AbstractSparseTestBase {
 
         // Verify
         assertNotNull(result);
-        assertTrue(result instanceof SparseDocValuesConsumer);
+        assertTrue(result instanceof BaseSparseDocValuesConsumer);
         verify(mockDelegate).fieldsConsumer(mockWriteState);
     }
 
