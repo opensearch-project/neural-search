@@ -50,10 +50,9 @@ import java.util.TreeSet;
  * election would elect different documents for one group and split the group's score in the downstream
  * per-document fusion. A single election is run instead — when sorting by score the comparators read
  * {@link HybridSubQueryScorer#score()}, the sum over sub-queries. Candidate selection stays per sub-query:
- * each sub-query keeps its own top-{@code numHits} groups, ranked and emitted by its own score for the elected
- * representative, so a sub-query with a larger score scale cannot crowd another sub-query's groups out. A
- * sub-query that did not match the representative leaves the group out of its list (a zero-score entry would
- * distort its normalization statistics), and no minimum-competitive-score feedback is sent to
+ * each sub-query keeps its own top-{@code numHits} groups, ranked and emitted by its running max over the
+ * group's document scores in that sub-query, so a sub-query keeps every group it matched regardless of
+ * which document was elected. No minimum-competitive-score feedback is sent to
  * {@link HybridSubQueryScorer#getMinScores()}, since a low score in one sub-query does not disqualify a
  * document whose other sub-query scores make it the representative.
  */
@@ -150,9 +149,9 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
 
     /**
      * Returns the collected top groups, including collapse values and sort fields, grouped by sub-query.
-     * Every sub-query emits the same elected representative per group, best group by that sub-query's own
-     * score first, each entry carrying that sub-query's own score; representatives a sub-query did not match
-     * are left out of its list.
+     * Every sub-query emits the same elected representative per group, best group by that sub-query's
+     * running max first, each entry carrying that max; a sub-query that matched none of a group's
+     * documents leaves the group out of its list.
      */
     @Override
     public List<CollapseTopFieldDocs> topDocs() throws IOException {
@@ -321,39 +320,64 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
     }
 
     private void collectExistingGroup(int doc, float[] subScoresByQuery, CollectedGroup<T> group) throws IOException {
-        for (int compIDX = 0;; compIDX++) {
-            leafComparators[compIDX].copy(spareSlot, doc);
-            final int c = reversed[compIDX] * comparators[compIDX].compare(group.comparatorSlot, spareSlot);
-            if (c < 0) {
-                return;
-            } else if (c > 0) {
-                for (int compIDX2 = compIDX + 1; compIDX2 < comparators.length; compIDX2++) {
-                    leafComparators[compIDX2].copy(spareSlot, doc);
-                }
+        boolean electionWon = docWinsElection(doc, group);
+        boolean anyMaxRaised = false;
+        for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
+            if (subScoresByQuery[subQuery] > group.scoresPerSubQuery[subQuery]) {
+                anyMaxRaised = true;
                 break;
-            } else if (compIDX == compIDXEnd) {
-                // Ties lose: docs are visited in doc id order
-                return;
+            }
+        }
+        if (electionWon == false && anyMaxRaised == false) {
+            return;
+        }
+
+        // Remove before mutating — the sorted sets locate elements by comparing scores, slots, and the
+        // topDoc tiebreak, so an election win invalidates the group's position in every member set
+        for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
+            boolean affected = electionWon || subScoresByQuery[subQuery] > group.scoresPerSubQuery[subQuery];
+            if (affected && group.memberOfSubQuery[subQuery]) {
+                orderedGroupsPerSubQuery.get(subQuery).remove(group);
+                group.memberOfSubQuery[subQuery] = false;
             }
         }
 
-        // Remove before mutating — the sorted sets locate elements by comparing slots and scores
-        removeFromSubQueries(group);
-
-        group.topDoc = docBase + doc;
-        group.scoresPerSubQuery = subScoresByQuery.clone();
-        // The staged spare slot becomes the group's slot, the old slot becomes spare
-        final int tmpSlot = spareSlot;
-        spareSlot = group.comparatorSlot;
-        group.comparatorSlot = tmpSlot;
+        for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
+            group.scoresPerSubQuery[subQuery] = Math.max(group.scoresPerSubQuery[subQuery], subScoresByQuery[subQuery]);
+        }
+        if (electionWon) {
+            group.topDoc = docBase + doc;
+            // The staged spare slot becomes the group's slot, the old slot becomes spare
+            final int tmpSlot = spareSlot;
+            spareSlot = group.comparatorSlot;
+            group.comparatorSlot = tmpSlot;
+        }
 
         insertIntoSubQueries(group);
         dropIfMemberless(group);
     }
 
+    private boolean docWinsElection(int doc, CollectedGroup<T> group) throws IOException {
+        for (int compIDX = 0;; compIDX++) {
+            leafComparators[compIDX].copy(spareSlot, doc);
+            final int c = reversed[compIDX] * comparators[compIDX].compare(group.comparatorSlot, spareSlot);
+            if (c < 0) {
+                return false;
+            } else if (c > 0) {
+                for (int compIDX2 = compIDX + 1; compIDX2 < comparators.length; compIDX2++) {
+                    leafComparators[compIDX2].copy(spareSlot, doc);
+                }
+                return true;
+            } else if (compIDX == compIDXEnd) {
+                // Ties lose: docs are visited in doc id order
+                return false;
+            }
+        }
+    }
+
     private void insertIntoSubQueries(CollectedGroup<T> group) {
         for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
-            if (group.scoresPerSubQuery[subQuery] <= 0) {
+            if (group.scoresPerSubQuery[subQuery] <= 0 || group.memberOfSubQuery[subQuery]) {
                 continue;
             }
             TreeSet<CollectedGroup<T>> orderedGroups = orderedGroupsPerSubQuery.get(subQuery);
@@ -365,15 +389,6 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
                 if (evicted != group) {
                     dropIfMemberless(evicted);
                 }
-            }
-        }
-    }
-
-    private void removeFromSubQueries(CollectedGroup<T> group) {
-        for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
-            if (group.memberOfSubQuery[subQuery]) {
-                orderedGroupsPerSubQuery.get(subQuery).remove(group);
-                group.memberOfSubQuery[subQuery] = false;
             }
         }
     }
@@ -413,7 +428,7 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         T groupValue;
         int topDoc;
         int comparatorSlot;
-        // The elected representative's score in each sub-query; a sub-query that did not match it holds 0
+        // Running max of the group's document scores per sub-query; 0 when the sub-query matched none of them
         float[] scoresPerSubQuery;
         // Membership in each sub-query's top-numHits set; a group that is member of none is dropped
         boolean[] memberOfSubQuery;

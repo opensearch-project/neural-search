@@ -51,6 +51,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS = "default_config_with_skewed_groups";
     private static final String DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS = "default_config_with_disagreeing_legs";
     private static final String RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS = "rrf_config_with_disagreeing_legs";
+    private static final String DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS = "default_config_with_leg_exclusive_docs";
     private static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
     private static final String KNN_INDEX_CONFIGURATION = "knn_config";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
@@ -221,7 +222,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
         // rrf turns each sub-query's emission order into ranks, so this exercises the per-sub-query
         // ordering end to end on a single shard: 1/(60+rank+1) summed over the legs gives
-        // groupB (1/61 + 1/62) > groupC (1/63 + 1/61) > groupA (1/62 + 1/63) > groupD (1/64 + 1/64)
+        // groupA (1/61 + 1/62) > groupC (1/63 + 1/61) > groupB (1/62 + 1/63) > groupD (1/64 + 1/64)
         var hybridQuery = new HybridQueryBuilder().add(
             QueryBuilders.functionScoreQuery(
                 QueryBuilders.matchAllQuery(),
@@ -260,9 +261,74 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         List<String> collapseValues = getCollapseValues(searchResponse);
         assertEquals(
             "Expected groups ordered by reciprocal rank, but got: " + collapseValues,
-            List.of("groupB", "groupC", "groupA", "groupD"),
+            List.of("groupA", "groupC", "groupB", "groupD"),
             collapseValues
         );
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenLegExclusiveDocsAndDistinctGroupsEnabled_thenEveryMatchingLegContributes() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS, NUMBER_OF_SHARDS_ONE);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        // groupP's rating evidence comes from a document the price leg never matched. Its best rating (9)
+        // must still reach fusion through the shared representative, lifting groupP over groupQ, whose
+        // rating evidence (2) is weak: min_max + arithmetic_mean gives groupP (0.8 + 1.0) / 2 over
+        // groupQ (1.0 + 0.001) / 2.
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD_RATING)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        List<String> collapseValues = getCollapseValues(searchResponse);
+        assertEquals(
+            "Expected the rating-only evidence to lift groupP, but got: " + collapseValues,
+            List.of("groupP", "groupQ", "groupR"),
+            collapseValues
+        );
+    }
+
+    private void indexDocumentsForLegExclusiveDocsConfiguration() {
+        // Each group's documents match only one leg (a zero field value scores 0 in function_score):
+        // groupP and groupQ hold a price-only and a rating-only document, groupR is price-only
+        indexGroupedDocumentWithRating("1", "groupP", "18", "0");
+        indexGroupedDocumentWithRating("2", "groupP", "0", "9");
+        indexGroupedDocumentWithRating("3", "groupQ", "20", "0");
+        indexGroupedDocumentWithRating("4", "groupQ", "0", "2");
+        indexGroupedDocumentWithRating("5", "groupR", "10", "0");
     }
 
     private void indexDocumentsForDisagreeingLegsConfiguration() {
@@ -299,11 +365,11 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     private void indexDocumentsForRRFDisagreeingLegsConfiguration() {
         // Same shape as the disagreeing-legs dataset with rating values that produce no reciprocal-rank
-        // ties: per-leg ranks are price: groupB, groupA, groupC, groupD and rating: groupC, groupB,
-        // groupA, groupD, and groupA's representative is still doc 2 (best summed score)
+        // ties: per-leg ranks by each leg's best score per group are price: groupA, groupB, groupC, groupD
+        // and rating: groupC, groupA, groupB, groupD, with doc 2 representing groupA (best summed score)
         indexGroupedDocumentWithRating("1", "groupA", "100", "10");
         indexGroupedDocumentWithRating("2", "groupA", "85", "80");
-        indexGroupedDocumentWithRating("3", "groupB", "90", "85");
+        indexGroupedDocumentWithRating("3", "groupB", "90", "70");
         indexGroupedDocumentWithRating("4", "groupC", "50", "90");
         indexGroupedDocumentWithRating("5", "groupD", "20", "30");
     }
@@ -797,6 +863,9 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             case RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS:
                 indexDocumentsForRRFDisagreeingLegsConfiguration();
                 break;
+            case DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS:
+                indexDocumentsForLegExclusiveDocsConfiguration();
+                break;
             default:
                 throw new IllegalArgumentException("Invalid configuration: " + configuration);
         }
@@ -995,7 +1064,8 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         return switch (configuration) {
             case DEFAULT_INDEX_CONFIGURATION, DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET,
                 DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS,
-                RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS -> XContentFactory.jsonBuilder()
+                RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS, DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS -> XContentFactory
+                    .jsonBuilder()
                     .startObject()
                     .startObject("settings")
                     .field("number_of_shards", numberOfShards)
