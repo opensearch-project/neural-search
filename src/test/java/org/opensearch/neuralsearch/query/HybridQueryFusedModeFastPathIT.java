@@ -15,7 +15,6 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 import lombok.SneakyThrows;
 
@@ -34,8 +33,11 @@ import lombok.SneakyThrows;
  * {@link #testFastPath_whenFusedScoresTie_thenTiesAreOrderedByIdAndEverythingElseMatchesTwoRounds} pins the fast
  * path's own order down. The two-round control is the same request with
  * {@code profile: true}, which the fast path refuses (round 2's own tree is part of what profile reports), with the
- * profile section stripped before comparing. Which path ran is proved through the stats API:
- * {@code hybrid_query_fused_fast_path_requests} moves for the fast path and not for the control.
+ * profile section stripped before comparing. Which path ran is proved intrinsically where the paths are
+ * distinguishable at all: on the one-shard all-ties index the fast path's {@code _id} tie order differs from round 2's
+ * doc-id order, so {@link #testFastPath_whenFusedScoresTie_thenTiesAreOrderedByIdAndEverythingElseMatchesTwoRounds}
+ * passing proves the fast path really runs; path selection for every other shape is pinned at unit level
+ * ({@code requestShapeAllowsFastPath}, {@code legsAllowFastPath}, the fetch budget, and the fan-out rewrite tests).
  */
 public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
 
@@ -149,26 +151,16 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         return out;
     }
 
-    @SneakyThrows
-    private int fastPathCount() {
-        String responseBody = executeNeuralStatRequest(new ArrayList<>(), new ArrayList<>());
-        Map<String, Object> allNodesStats = parseAggregatedNodeStatsResponse(responseBody);
-        return ((Number) getNestedValue(allNodesStats, EventStatName.HYBRID_QUERY_FUSED_FAST_PATH_REQUESTS)).intValue();
-    }
-
     /** The common shape: default totals (the lexical leg proves them), a page inside the window, {@code _source} on. */
     @SneakyThrows
-    public void testFastPath_whenDefaultRequest_thenResponseIsIdenticalToTwoRoundsAndRoundTwoIsSkipped() {
+    public void testFastPath_whenDefaultRequest_thenResponseIsIdenticalToTwoRounds() {
         prepareIndex();
-        enableStats();
         String extra = "\"size\":" + WINDOW + ",\"track_total_hits\":" + THRESHOLD;
 
         Map<String, Object> control = twoRoundControl(extra);
-        int before = fastPathCount();
         Map<String, Object> fast = search(body(extra));
 
         assertClientVisibleIdentical(fast, control);
-        assertEquals("the default request took the fast path", before + 1, fastPathCount());
         assertEquals(WINDOW, ((List<?>) hits(fast).get("hits")).size());
         assertEquals(Map.of("value", THRESHOLD, "relation", "gte"), hits(fast).get("total"));
     }
@@ -177,7 +169,6 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testFastPath_whenFetchFieldsRequested_thenTheyMatchRoundTwosFetch() {
         prepareIndex();
-        enableStats();
         String extra = "\"size\":3,\"track_total_hits\":false,\"_source\":{\"includes\":[\""
             + NUM_FIELD
             + "\"]},\"docvalue_fields\":[\""
@@ -187,11 +178,9 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
             + "\"],\"version\":true,\"seq_no_primary_term\":true";
 
         Map<String, Object> control = twoRoundControl(extra);
-        int before = fastPathCount();
         Map<String, Object> fast = search(body(extra));
 
         assertClientVisibleIdentical(fast, control);
-        assertEquals(before + 1, fastPathCount());
         Map<String, Object> first = (Map<String, Object>) ((List<?>) hits(fast).get("hits")).get(0);
         assertNotNull("filtered _source came back", first.get("_source"));
         assertNotNull("_version came back", first.get("_version"));
@@ -204,13 +193,8 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testFastPath_whenFromSizeInsideTheWindowOrSizeZero_thenIdenticalToTwoRounds() {
         prepareIndex();
-        enableStats();
         for (String extra : List.of("\"from\":2,\"size\":3,\"track_total_hits\":false", "\"size\":0,\"track_total_hits\":" + THRESHOLD)) {
-            Map<String, Object> control = twoRoundControl(extra);
-            int before = fastPathCount();
-            Map<String, Object> fast = search(body(extra));
-            assertClientVisibleIdentical(fast, control);
-            assertEquals(extra, before + 1, fastPathCount());
+            assertClientVisibleIdentical(search(body(extra)), twoRoundControl(extra));
         }
     }
 
@@ -218,14 +202,11 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     @SneakyThrows
     public void testFastPath_whenExplain_thenTheFusedBreakdownIsIdentical() {
         prepareIndex();
-        enableStats();
         String extra = "\"size\":3,\"track_total_hits\":false,\"explain\":true";
 
         Map<String, Object> control = twoRoundControl(extra);
-        int before = fastPathCount();
         Map<String, Object> fast = search(body(extra));
 
-        assertEquals(before + 1, fastPathCount());
         List<Map<String, Object>> fastHits = (List<Map<String, Object>>) hits(fast).get("hits");
         List<Map<String, Object>> controlHits = (List<Map<String, Object>>) hits(control).get("hits");
         assertEquals(controlHits.size(), fastHits.size());
@@ -242,13 +223,12 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
 
     /**
      * Shapes that need round 2 take it: the page reaching past the ranked window (Tail documents fill it), a threshold no
-     * leg proves (the Tail counts the union), rescore, a sort, a named leg. Each answers exactly as before and none moves
-     * the fast-path counter.
+     * leg proves (the Tail counts the union), rescore, a sort, a named leg. Each answers exactly as before; that these
+     * shapes refuse the fast path is pinned at unit level, and here their answers stay correct end to end.
      */
     @SneakyThrows
-    public void testFastPath_whenTheRequestNeedsRoundTwo_thenTwoRoundsRunAndTheCounterDoesNotMove() {
+    public void testFastPath_whenTheRequestNeedsRoundTwo_thenTheAnswerIsUnchanged() {
         prepareIndex();
-        enableStats();
         List<String> twoRoundShapes = List.of(
             "\"size\":" + (WINDOW + 3) + ",\"track_total_hits\":false",                       // page past the window
             "\"size\":3,\"track_total_hits\":" + (DOCS + 5),                                   // no leg reaches the threshold
@@ -259,10 +239,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
                 + "\":\"place\"}},\"query_weight\":1.0,\"rescore_query_weight\":2.0}}"        // rescore
         );
         for (String extra : twoRoundShapes) {
-            int before = fastPathCount();
-            Map<String, Object> response = search(body(extra));
-            assertEquals(extra, before, fastPathCount());
-            assertNotNull(extra, hits(response).get("hits"));
+            assertNotNull(extra, hits(search(body(extra))).get("hits"));
         }
         // page past the window: identical to the two-round path for the same request (with default totals the Tail fills
         // every slot; with totals off the Top-only round is short of the window either way — pre-existing behaviour)
@@ -278,9 +255,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
             + "\":{\"query\":\"hello\",\"_name\":\"lex\"}}},{\"term\":{\""
             + TEXT_FIELD
             + "\":{\"value\":\"place\",\"_name\":\"place\"}}}]}}}";
-        int before = fastPathCount();
         Map<String, Object> namedResponse = search(named);
-        assertEquals(before, fastPathCount());
         Map<String, Object> first = (Map<String, Object>) ((List<?>) hits(namedResponse).get("hits")).get(0);
         assertTrue(((List<?>) first.get("matched_queries")).contains("lex"));
     }
@@ -289,7 +264,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
      * The one client-visible difference, pinned down. One shard, twelve identical documents: every fused score ties, so
      * round 2 would order the page by Lucene doc id while the fast path orders it by {@code _id} — "1", "10", "11", "12",
      * "2", ... — deterministically, on every replica, across merges. Ids, scores, sources, total and max_score are the
-     * two-round path's; the fast path ran (the counter moved) and the control did not.
+     * two-round path's. The {@code _id} order is itself the proof the fast path ran: round 2 cannot produce it here.
      */
     @SneakyThrows
     @SuppressWarnings("unchecked")
@@ -309,7 +284,6 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
                 client().performRequest(request);
             }
         }
-        enableStats();
         String extra = "\"size\":" + DOCS + ",\"track_total_hits\":false";
         String requestBody = "{"
             + extra
@@ -322,12 +296,9 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
             + fusedQuery().replace("\"window_size\":" + WINDOW, "\"window_size\":" + DOCS)
             + "}";
 
-        int before = fastPathCount();
         Map<String, Object> fast = searchIndex(index, requestBody);
-        assertEquals("the tie-heavy request took the fast path", before + 1, fastPathCount());
         Map<String, Object> control = searchIndex(index, controlBody);
         control.remove("profile");
-        assertEquals("the profile control ran two rounds", before + 1, fastPathCount());
 
         List<Map<String, Object>> fastHits = (List<Map<String, Object>>) hits(fast).get("hits");
         List<String> fastIds = fastHits.stream().map(h -> (String) h.get("_id")).toList();
@@ -374,7 +345,6 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
                 client().performRequest(request);
             }
         }
-        enableStats();
         // window 100 with size 3: the fast path would fetch up to 2 × 100 − 3 documents of ~7.7 KB (768 floats) — over
         // the 1 MB budget — so a request that returns the vector is refused; the same request without it is not
         int window = 100;
@@ -398,20 +368,19 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
             { "\"_source\":{\"excludes\":[\"vec\"]}", "true" },
             { "\"_source\":false", "true" } }) {
             String source = shape[0].isEmpty() ? "" : shape[0] + ",";
-            boolean fastPathExpected = Boolean.parseBoolean(shape[1]);
+            boolean vectorDroppedFromSource = Boolean.parseBoolean(shape[1]);
             String body = "{" + source + common + ",\"query\":" + query + "}";
             Map<String, Object> control = searchIndex(index, "{" + source + common + ",\"profile\":true,\"query\":" + query + "}");
             control.remove("profile");
-            int before = fastPathCount();
             Map<String, Object> response = searchIndex(index, body);
-            assertEquals("fast path taken? shape=" + shape[0], fastPathExpected ? before + 1 : before, fastPathCount());
+            // which path each shape takes is pinned by ReturnedEmbeddingFieldsTests' budget test; here both answer alike
             assertClientVisibleIdentical(response, control);
             List<Map<String, Object>> hits = (List<Map<String, Object>>) hits(response).get("hits");
             assertEquals(3, hits.size());
             boolean vectorReturned = hits.stream().anyMatch(h -> h.get("_source") instanceof Map<?, ?> src && src.containsKey("vec"));
             assertEquals(
                 "the vector is in the page exactly when _source carries it: shape=" + shape[0],
-                fastPathExpected == false,
+                vectorDroppedFromSource == false,
                 vectorReturned
             );
         }

@@ -74,8 +74,7 @@ public class EventStatNameTests extends OpenSearchTestCase {
             "AGENTIC_QUERY_REQUESTS",
             "SEISMIC_QUERY_REQUESTS",
             "SPARSE_ENCODING_PROCESSOR_SEISMIC_EXECUTIONS",
-            "MMR_NEURAL_QUERY_TRANSFORMER",
-            "HYBRID_QUERY_FUSED_FAST_PATH_REQUESTS"
+            "MMR_NEURAL_QUERY_TRANSFORMER"
         );
 
         assertEquals(frozenOrder, Arrays.stream(EventStatName.values()).map(Enum::name).toList());

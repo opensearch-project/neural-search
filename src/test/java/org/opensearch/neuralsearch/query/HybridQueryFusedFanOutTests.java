@@ -69,7 +69,6 @@ import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.pipeline.SearchPipelineMetadata;
 import org.opensearch.transport.client.Client;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
-import org.opensearch.neuralsearch.util.TestUtils;
 
 import lombok.SneakyThrows;
 
@@ -1424,7 +1423,6 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
      *  page reaches the consumer, and the settled query is match_none: round 2 has nothing to do. */
     @SneakyThrows
     public void testRewrite_whenHitsConsumerAttachedAndShapeEligible_thenLegsFetchAndThePageIsAssembled() {
-        TestUtils.initializeEventStatsManager();
         HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
         SearchHits[] assembled = new SearchHits[1];
         hybrid.fusedHitsConsumer(hits -> assembled[0] = hits);

@@ -39,7 +39,6 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
-import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -2009,7 +2008,6 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         boolean armed,
         TotalHits[] totalOut
     ) {
-        TestUtils.initializeEventStatsManager();
         return HybridFusionOrchestrator.buildFusedResult(
             source,
             ms,

@@ -43,8 +43,6 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
-import org.opensearch.neuralsearch.stats.events.EventStatName;
-import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -1212,10 +1210,9 @@ final class HybridFusionOrchestrator {
      * two-round path with the legs' results reused as they are: the page must fit inside the ranked window (past it,
      * Tail-only documents fill the slots — the same rule the Tail keeps), and a request that wants a count beyond the
      * window must have a leg that proves it (see {@link #totalHitsFromLegs}); totals disabled need no count at all.
-     * Both paths report through the same consumers, so a caller cannot tell them apart except by latency, by the order
-     * of documents with bit-identical fused scores inside one shard — which, at a page edge, is which of the tied
-     * documents the page shows (see {@link #roundTwoOrder}) — and, when stats are on,
-     * {@code hybrid_query_fused_fast_path_requests}.
+     * Both paths report through the same consumers, so a caller cannot tell them apart except by latency and by the
+     * order of documents with bit-identical fused scores inside one shard — which, at a page edge, is which of the
+     * tied documents the page shows (see {@link #roundTwoOrder}).
      */
     static FusedResult buildFusedResult(
         SearchSourceBuilder source,
@@ -1289,7 +1286,6 @@ final class HybridFusionOrchestrator {
         if (Objects.nonNull(totalHitsConsumer)) {
             totalHitsConsumer.accept(null);
         }
-        EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSED_FAST_PATH_REQUESTS);
         return new FusedResult(new MatchNoneQueryBuilder(), page);
     }
 }
