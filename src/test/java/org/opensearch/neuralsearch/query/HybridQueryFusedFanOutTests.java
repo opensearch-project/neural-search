@@ -48,6 +48,7 @@ import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -68,6 +69,7 @@ import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.pipeline.SearchPipelineMetadata;
 import org.opensearch.transport.client.Client;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
+import org.opensearch.neuralsearch.util.TestUtils;
 
 import lombok.SneakyThrows;
 
@@ -1414,6 +1416,54 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         assertNotNull("both legs came back capped, so the count is proven", derived[0]);
         assertEquals(10_000L, derived[0].value());
         assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+    }
+
+    // ---------------------------------------- fast path: arming ----------------------------------------
+
+    /** With a hits consumer attached and an eligible shape, the legs fetch (source left to its default), the assembled
+     *  page reaches the consumer, and the settled query is match_none: round 2 has nothing to do. */
+    @SneakyThrows
+    public void testRewrite_whenHitsConsumerAttachedAndShapeEligible_thenLegsFetchAndThePageIsAssembled() {
+        TestUtils.initializeEventStatsManager();
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        SearchHits[] assembled = new SearchHits[1];
+        hybrid.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder source = new SearchSourceBuilder().query(hybrid).size(2).trackTotalHits(false);
+
+        List<Integer> legCounts = new ArrayList<>();
+        SearchSourceBuilder settled = driveWholeSource(new SearchRequest(INDEX_NAME).source(source), legCounts);
+
+        assertNotNull("the page was assembled from the legs", assembled[0]);
+        assertEquals(2, assembled[0].getHits().length);
+        assertTrue("round 2 has nothing to do", settled.query() instanceof MatchNoneQueryBuilder);
+    }
+
+    /** A named leg, and a pipeline with response processors: the fast path stays off, nothing is assembled, and the
+     *  settled query is the two-round self-erased bool. */
+    @SneakyThrows
+    public void testRewrite_whenLegsOrPipelineForbidTheFastPath_thenNothingIsAssembled() {
+        HybridQueryBuilder named = fused(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "a").queryName("lex"),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "b")
+        );
+        SearchHits[] assembled = new SearchHits[1];
+        named.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder settled = driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(named).size(2).trackTotalHits(false)),
+            new ArrayList<>()
+        );
+        assertNull("a named leg keeps the two-round path", assembled[0]);
+        assertTrue(settled.query() instanceof HybridFusionQueryBuilder);
+
+        initClusterUtilWithPipeline("rp", "{\"response_processors\":[{\"rename_field\":{\"field\":\"a\",\"target_field\":\"b\"}}]}");
+        HybridQueryBuilder piped = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        piped.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder pipedSettled = driveWholeSource(
+            new SearchRequest(INDEX_NAME).pipeline("rp").source(new SearchSourceBuilder().query(piped).size(2).trackTotalHits(false)),
+            new ArrayList<>()
+        );
+        assertNull("response processors keep the two-round path", assembled[0]);
+        assertTrue(pipedSettled.query() instanceof HybridFusionQueryBuilder);
     }
 
     /** An integer threshold above the window is what the legs count to. */

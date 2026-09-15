@@ -60,7 +60,14 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
         for (int i = 1; i <= DOCS; i++) {
             // Every doc carries "hello" (lexical leg); the odd ones also carry "place" (second leg), so the union is all DOCS
             // and the two legs' match sets differ.
-            addDocument(INDEX, String.valueOf(i), TEXT_FIELD, i % 2 == 1 ? "hello place " + i : "hello there " + i, null, null);
+            addDocument(
+                INDEX,
+                String.valueOf(i),
+                TEXT_FIELD,
+                (i % 2 == 1 ? "hello place " + i : "hello there " + i) + " filler".repeat(i),
+                null,
+                null
+            );
         }
     }
 

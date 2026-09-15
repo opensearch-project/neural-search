@@ -67,6 +67,7 @@ import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.search.FusedLegTimeoutMerger;
+import org.opensearch.neuralsearch.search.FusedHitsMerger;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.explain.FusedExplanationMerger;
@@ -183,6 +184,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * never serialized, absent from {@link #doEquals}/{@link #doHashCode}.
      */
     private FusedTotalHitsMerger.TotalHitsConsumer fusedTotalHitsConsumer;
+
+    /**
+     * Where to hand the page assembled from the legs when round 2 is not needed at all — the fast path, see
+     * {@code HybridFusionOrchestrator#buildFusedResult}. Attached by {@code HybridQuerySearchRequestFilter} only when this
+     * hybrid is the request's own query and the request's shape allows the fast path
+     * ({@link #requestShapeAllowsFastPath}); its presence is what permits the fast path at all — {@code null} runs round 2
+     * exactly as before, so where the filter is not registered nothing changes. Never parsed, never serialized, absent
+     * from {@link #doEquals}/{@link #doHashCode}.
+     */
+    private FusedHitsMerger.HitsConsumer fusedHitsConsumer;
 
     /**
      * Where to publish the per-leg breakdown behind each fused score. The counterpart of {@link #legProfileConsumer} for
@@ -507,6 +518,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(source);
     }
 
+    /**
+     * Whether a request of this shape could be answered by a fused hybrid from its legs alone, with no round 2 — the
+     * source-only part of that decision, for callers outside this package ({@code HybridQuerySearchRequestFilter}). See
+     * {@code HybridFusionOrchestrator#requestShapeAllowsFastPath} for the three classes of feature that rule it out.
+     */
+    public static boolean requestShapeAllowsFastPath(final SearchSourceBuilder source) {
+        return HybridFusionOrchestrator.requestShapeAllowsFastPath(source);
+    }
+
     protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
         // Resolver (fused) mode self-erases at the coordinator into a standard query (see doRewriteFused). Classic mode
         // keeps the existing per-sub-query rewrite below.
@@ -688,6 +708,23 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }
 
+        // The fast path: with a consumer attached this hybrid is the request's query and the request's shape needs no
+        // shard-side round over the fused ranking (see HybridFusionOrchestrator#requestShapeAllowsFastPath). What is left
+        // to check is the legs — a named leg or one declaring inner_hits is answered exactly only by round 2 — and the
+        // pipeline: response processors run before an assembled page could reach the response and would see round 2's
+        // empty one. Last, and only once everything else passed, the fetch volume: the legs would fetch legs × window
+        // documents where round 2 fetches the page, a loss once the extra documents carry more embedding payload than the
+        // round saved is worth (ReturnedEmbeddingFields — a mapping lookup, hence last). When all of that holds, the legs fetch the user's
+        // fields so the page can be assembled from them, and round 2 is not needed unless the legs' answers force it
+        // (buildFusedResult decides that once they are in).
+        boolean fastPathArmed = Objects.nonNull(fusedHitsConsumer)
+            && HybridFusionOrchestrator.legsAllowFastPath(legs)
+            && FusionConfigResolver.resolvedPipelineHasResponseProcessors(searchRequest) == false
+            && ReturnedEmbeddingFields.fastPathFetchExceedsBudget(searchRequest, legs.size(), window) == false;
+        if (fastPathArmed) {
+            candidateScope.enableLegFetch(searchRequest.source());
+        }
+
         // Always measured, published only when something asked for it. The spans are a handful of nanoTime calls against a
         // fan-out that costs milliseconds, so gating the measurement would buy nothing and would make the profiled and
         // unprofiled code paths differ in more than what they report.
@@ -721,7 +758,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     // `this` goes onto the substitute as the query it replaced: core overwrites the request's source with
                     // the rewritten query, so without it a response processor reading source().query() sees only the fused
                     // window. Read in the response phase alone — see HybridFusionQueryBuilder#originalQuery().
-                    QueryBuilder fusedQuery = HybridFusionOrchestrator.buildFusedQuery(
+                    HybridFusionOrchestrator.FusedResult result = HybridFusionOrchestrator.buildFusedResult(
                         searchRequest.source(),
                         multiSearchResponse,
                         legs,
@@ -730,8 +767,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         timings,
                         explanations,
                         this,
-                        fusedTotalHitsConsumer
+                        fusedTotalHitsConsumer,
+                        fastPathArmed
                     );
+                    QueryBuilder fusedQuery = result.substitute();
+                    // The assembled page (or null: round 2 runs and its hits stand) goes to the filter's wrapper, which
+                    // swaps it in before anything else annotates the response's hits.
+                    if (Objects.nonNull(fusedHitsConsumer)) {
+                        fusedHitsConsumer.accept(result.assembledHits());
+                    }
                     // Hand the now-known window to the placeholders installed above. Mutates nothing the request holds:
                     // the placeholders are already in it, and core rewrites them into the window on its next pass.
                     if (Objects.nonNull(rescoreScope)) {

@@ -173,7 +173,13 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         // sentinel score; that has to be mapped back before the response is handed on. See FusedRescoreScoreNormalizer.
         boolean rescored = Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false;
         boolean countsBeyondWindow = mayDeriveTotalHitsFromLegs(source);
-        if (profiled == false && mayTimeOut == false && explained == false && rescored == false && countsBeyondWindow == false) {
+        boolean fastPathShape = mayTakeFastPath(source);
+        if (profiled == false
+            && mayTimeOut == false
+            && explained == false
+            && rescored == false
+            && countsBeyondWindow == false
+            && fastPathShape == false) {
             return listener;
         }
         FusedHybridFinder finder = new FusedHybridFinder();
@@ -237,11 +243,19 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             totalHitsMerger = new FusedTotalHitsMerger();
             finder.found.get(0).fusedTotalHitsConsumer(totalHitsMerger.consumer());
         }
+        // The fast path answers from the legs alone and swaps the page in here; like the totals, only for the request's own
+        // query, and its presence is what lets the rewrite skip round 2 at all (see HybridFusionOrchestrator#buildFusedResult).
+        FusedHitsMerger hitsMerger = null;
+        if (fastPathShape && finder.found.get(0) == source.query()) {
+            hitsMerger = new FusedHitsMerger();
+            finder.found.get(0).fusedHitsConsumer(hitsMerger.consumer());
+        }
         final boolean normalizeSentinel = rescored && finder.found.get(0) == source.query();
         if (Objects.isNull(legProfileMerger)
             && Objects.isNull(timeoutMerger)
             && Objects.isNull(explanationMerger)
             && Objects.isNull(totalHitsMerger)
+            && Objects.isNull(hitsMerger)
             && normalizeSentinel == false) {
             return listener;
         }
@@ -249,12 +263,18 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         final FusedLegTimeoutMerger timeouts = timeoutMerger;
         final FusedExplanationMerger explanations = explanationMerger;
         final FusedTotalHitsMerger totals = totalHitsMerger;
+        final FusedHitsMerger assembled = hitsMerger;
         return ActionListener.wrap(response -> {
             if ((response instanceof SearchResponse) == false) {
                 listener.onResponse(response);
                 return;
             }
             SearchResponse merged = (SearchResponse) response;
+            // First, before anything annotates hits: on the fast path round 2 ran empty and the page assembled from the
+            // legs is the response's hits. On the two-round path nothing was assembled and this is a no-op.
+            if (Objects.nonNull(assembled)) {
+                merged = assembled.getMergedResponse(merged);
+            }
             // One rebuild carrying both overrides, rather than one per report: each rebuild has to re-pass every field of
             // the response it is replacing, so chaining them would multiply the places a newly-added core field could be
             // dropped from. Never clears timed_out — the response's own flag is an input to the OR, not something to
@@ -282,6 +302,20 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             }
             listener.onResponse((Response) merged);
         }, listener::onFailure);
+    }
+
+    /**
+     * Whether the request could be answered from a fused hybrid's legs alone, with no round 2: its top-level query is a
+     * fused hybrid and its shape has nothing round 2 is needed for (see {@code HybridQueryBuilder#requestShapeAllowsFastPath}
+     * — no aggregations, highlight, sort, collapse, search_after, min_score, rescore, script_fields, profile or exact
+     * totals). O(fields) like the totals gate; the leg-side and pipeline checks happen in the rewrite, where the legs and
+     * the resolved pipeline are known.
+     */
+    private static boolean mayTakeFastPath(final SearchSourceBuilder source) {
+        if ((source.query() instanceof HybridQueryBuilder) == false || Objects.isNull(((HybridQueryBuilder) source.query()).fusion())) {
+            return false;
+        }
+        return HybridQueryBuilder.requestShapeAllowsFastPath(source);
     }
 
     /**

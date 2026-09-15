@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -42,8 +43,11 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchService;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
@@ -596,6 +600,7 @@ final class HybridFusionOrchestrator {
         String[] ids = new String[ranked.size()];
         String[] indices = new String[ranked.size()];
         float[] scores = new float[ranked.size()];
+        SearchHit[] hits = new SearchHit[ranked.size()];
         for (int i = 0; i < ranked.size(); i++) {
             String key = ranked.get(i).getKey();
             // Resolved through the side map, never by parsing the composite key — an _id may contain the separator.
@@ -603,8 +608,9 @@ final class HybridFusionOrchestrator {
             ids[i] = hit.getId();
             indices[i] = hit.getIndex();
             scores[i] = scoreAboveTail(ranked.get(i).getValue());
+            hits[i] = hit;
         }
-        return new RankedDocs(ids, indices, scores);
+        return new RankedDocs(ids, indices, scores, hits);
     }
 
     /**
@@ -1017,6 +1023,30 @@ final class HybridFusionOrchestrator {
         return null;
     }
 
+    /**
+     * The {@code hits.total} a Top-only round 2 would have reported for a request that wants a count, or {@code null} when
+     * that is not knowable from the legs. Two sources, in order. The ranked window itself: round 2's Top matches exactly
+     * {@code numRankedDocs} documents, so when that count reaches the request's threshold core would report
+     * {@code {threshold, gte}} (past it) or {@code {threshold, eq}} (exactly on it) — the same rule
+     * {@code SearchPhaseController.TopDocsStats#getTotalHits} applies. Below it, the union's count is what round 2 with a
+     * Tail would have produced, and only a leg capped at the threshold proves that ({@link #totalHitsFromLegs}). Exact
+     * totals ({@code true}) are never answered here: the shape check refuses them before the legs run.
+     */
+    static TotalHits totalHitsForFastPath(SearchSourceBuilder source, int numRankedDocs, TotalHits[] legTotalHits, int windowSize) {
+        Integer trackTotalHitsUpTo = Objects.isNull(source) ? null : source.trackTotalHitsUpTo();
+        int threshold = Objects.isNull(trackTotalHitsUpTo) ? SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO : trackTotalHitsUpTo;
+        if (threshold == SearchContext.TRACK_TOTAL_HITS_ACCURATE || threshold == SearchContext.TRACK_TOTAL_HITS_DISABLED) {
+            return null;
+        }
+        if (numRankedDocs > threshold) {
+            return new TotalHits(threshold, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+        }
+        if (numRankedDocs == threshold) {
+            return new TotalHits(threshold, TotalHits.Relation.EQUAL_TO);
+        }
+        return totalHitsFromLegs(source, legTotalHits, windowSize);
+    }
+
     /** Each leg's own {@code hits.total}, {@code null} for a leg that did not count. Called after {@link #groupLegHits}
      *  has failed the request on any failed leg, so every item here has a response. */
     private static TotalHits[] legTotalHits(MultiSearchResponse.Item[] items) {
@@ -1028,7 +1058,238 @@ final class HybridFusionOrchestrator {
     }
 
     /** The fused window in score order. {@code indices} is parallel to {@code ids} and fully populated — every entry names
-     *  the index the document was found in, which is what lets round 2 address it unambiguously. */
-    private record RankedDocs(String[] ids, String[] indices, float[] scores) {
+     *  the index the document was found in, which is what lets round 2 address it unambiguously. {@code hits} is the leg
+     *  hit each document was taken from (the first leg that returned it), which is what the fast path assembles the page
+     *  from: every leg fetches the same fields for the same document, so any leg's instance carries what round 2 would
+     *  have fetched. */
+    private record RankedDocs(String[] ids, String[] indices, float[] scores, SearchHit[] hits) {
+    }
+
+    // ---- fast path: answer from the legs, no round 2 ----
+
+    /**
+     * What the fused rewrite self-erases into. {@code substitute} is the query core executes as round 2: the Top-and-Tail
+     * {@link HybridFusionQueryBuilder} on the two-round path, or {@code match_none} when the page was assembled here and
+     * round 2 has nothing left to do. {@code assembledHits} is that page — {@code null} on the two-round path.
+     */
+    record FusedResult(QueryBuilder substitute, SearchHits assembledHits) {
+        static FusedResult twoRound(QueryBuilder substitute) {
+            return new FusedResult(substitute, null);
+        }
+
+        boolean tookFastPath() {
+            return Objects.nonNull(assembledHits);
+        }
+    }
+
+    /**
+     * Whether the request's <i>shape</i> lets the fast path answer it: nothing in it needs a shard-side round over the
+     * fused ranking or the full match set, and nothing in its hits can depend on a query other than the one that
+     * returned the document.
+     *
+     * <p>The three classes that force the two-round path, and what falls in each:
+     * <ul>
+     *   <li><b>shard-side phases that need the fused docs or the match set on the shard</b> — {@code aggregations},
+     *       {@code highlight}, any {@code sort} (a {@code _score} sort's {@code sort} values are produced shard-side too),
+     *       {@code collapse}, {@code search_after}, {@code min_score}, {@code rescore} ({@code RescorePhase} rescores the
+     *       shard's own query-phase top docs, which the fast path never produces), a page reaching past the window
+     *       (Tail-only documents fill it), exact totals ({@code track_total_hits: true} needs the Tail's count);</li>
+     *   <li><b>fetch-phase features the legs can serve only for the leg that returned the document</b> —
+     *       {@code script_fields} (a script may read {@code _score}, on a leg the raw score); {@code inner_hits} and leg
+     *       {@code _name}s are checked against the legs by {@link #legsAllowFastPath};</li>
+     *   <li><b>coordinator-side processing after the search</b> — {@code profile} (round 2's tree is part of what it
+     *       reports) here; search-pipeline response processors at the rewrite, where the pipeline is resolvable.</li>
+     * </ul>
+     * Source-only and O(fields), so the filter can consult it on every search before deciding to attach anything.
+     */
+    static boolean requestShapeAllowsFastPath(SearchSourceBuilder source) {
+        if (Objects.isNull(source)) {
+            return false;
+        }
+        if (Objects.nonNull(source.aggregations()) || Objects.nonNull(source.highlighter())) {
+            return false;
+        }
+        if (Objects.nonNull(source.sorts()) || Objects.nonNull(source.collapse()) || Objects.nonNull(source.searchAfter())) {
+            return false;
+        }
+        if (Objects.nonNull(source.minScore()) || (Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false)) {
+            return false;
+        }
+        if (Objects.nonNull(source.scriptFields()) && source.scriptFields().isEmpty() == false) {
+            return false;
+        }
+        if (source.profile()) {
+            return false;
+        }
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        return Objects.isNull(trackTotalHitsUpTo) || trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_ACCURATE;
+    }
+
+    /**
+     * The leg-side half of fast-path eligibility: a named leg would have its {@code _name} registered against every
+     * returned document on the two-round path, and a leg's {@code inner_hits} would be computed for every returned
+     * document; from the legs alone each is exact only for the leg that returned the document. Both fall back.
+     */
+    static boolean legsAllowFastPath(List<QueryBuilder> legs) {
+        for (QueryBuilder leg : legs) {
+            if (carriesQueryName(leg)) {
+                return false;
+            }
+        }
+        return innerHitsLegs(legs).isEmpty();
+    }
+
+    /**
+     * The page, assembled from the legs' hits: the ranked documents from {@code from} to {@code from + size}, each hit
+     * being the leg instance that returned it with its score replaced by the fused score — the same floored value the
+     * Top clause would have carried, so {@code _score} is what round 2 would have reported. {@code max_score} is the top
+     * fused score, as core reports the best score across all shards whatever the page. {@code hits.total} is
+     * {@code totalHits} — the leg-derived total, or {@code null} when totals are disabled, exactly as round 2 would have
+     * reported for the same request.
+     */
+    static SearchHits assemblePage(RankedDocs ranked, SearchSourceBuilder source, TotalHits totalHits) {
+        int from = Math.max(source.from(), SearchService.DEFAULT_FROM);
+        int size = source.size() < 0 ? SearchService.DEFAULT_SIZE : source.size();
+        Integer[] order = roundTwoOrder(ranked);
+        int end = Math.min(from + size, order.length);
+        SearchHit[] page = new SearchHit[Math.max(0, end - from)];
+        for (int i = from; i < end; i++) {
+            int position = order[i];
+            SearchHit hit = ranked.hits()[position];
+            hit.score(ranked.scores()[position]);
+            page[i - from] = hit;
+        }
+        float maxScore = ranked.scores().length == 0 || size == 0 ? Float.NaN : ranked.scores()[0];
+        return new SearchHits(page, totalHits, maxScore);
+    }
+
+    /**
+     * The ranked window in the order the page reports it. Round 2's Top scores each document at its fused score and
+     * core merges the shards' results with {@code TopDocs.merge}: score descending, then the shard's position in the
+     * request's shard iteration (which is {@code ShardId} order), then Lucene doc id within the shard. The fused ranking
+     * already has the scores in order; this settles equal scores by shard the same way, and within one shard by the
+     * ranking's own key order — {@code _index}, then {@code _id} — because the coordinator never sees Lucene doc ids
+     * ({@code SearchHit#docId} is {@code -1} after deserialization) and asking the legs for them through a
+     * {@code [_score, _doc]} sort costs a {@code TopFieldCollector} pass on every leg. So documents with bit-identical
+     * fused scores come out exactly as round 2 orders them when they sit in different shards, and in {@code _id} order
+     * rather than doc-id order when they share one — a deterministic order that, unlike doc ids, survives merges and
+     * is the same on every replica. Scores are never reordered; a hit without a shard target keeps its fused position.
+     *
+     * <p>When such a same-shard run of equal scores straddles a page edge ({@code from} or {@code from + size}), the
+     * order decides membership: the page may show a different one of the tied documents than round 2 would, at the same
+     * score. Any of them is a correct occupant of that rank; round 2's own choice is not stable across replicas either.
+     */
+    private static Integer[] roundTwoOrder(RankedDocs ranked) {
+        Integer[] order = new Integer[ranked.hits().length];
+        for (int i = 0; i < order.length; i++) {
+            order[i] = i;
+        }
+        Arrays.sort(order, (a, b) -> {
+            int byScore = Float.compare(ranked.scores()[b], ranked.scores()[a]);
+            if (byScore != 0) {
+                return byScore;
+            }
+            SearchHit first = ranked.hits()[a];
+            SearchHit second = ranked.hits()[b];
+            if (Objects.nonNull(first.getShard()) && Objects.nonNull(second.getShard())) {
+                int byShard = first.getShard().getShardId().compareTo(second.getShard().getShardId());
+                if (byShard != 0) {
+                    return byShard;
+                }
+            }
+            // toRankedDocs sorted equal scores by the composite _index + _id key, so ranked position is that order.
+            return Integer.compare(a, b);
+        });
+        return order;
+    }
+
+    /**
+     * The fused rewrite's result: the page assembled from the legs when the request allows it and the legs delivered what
+     * that needs, else the two-round substitute {@link #buildFusedQuery} builds.
+     *
+     * <p>{@code fastPathArmed} says the rewrite judged the request eligible before the legs ran (shape, legs, pipeline) and
+     * made the legs fetch the user's fields. Two things are only knowable now, and either sends the request down the
+     * two-round path with the legs' results reused as they are: the page must fit inside the ranked window (past it,
+     * Tail-only documents fill the slots — the same rule the Tail keeps), and a request that wants a count beyond the
+     * window must have a leg that proves it (see {@link #totalHitsFromLegs}); totals disabled need no count at all.
+     * Both paths report through the same consumers, so a caller cannot tell them apart except by latency, by the order
+     * of documents with bit-identical fused scores inside one shard — which, at a page edge, is which of the tied
+     * documents the page shows (see {@link #roundTwoOrder}) — and, when stats are on,
+     * {@code hybrid_query_fused_fast_path_requests}.
+     */
+    static FusedResult buildFusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations,
+        HybridQueryBuilder originalQuery,
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer,
+        boolean fastPathArmed
+    ) {
+        if (fastPathArmed == false) {
+            return FusedResult.twoRound(
+                buildFusedQuery(
+                    source,
+                    multiSearchResponse,
+                    legs,
+                    fusion,
+                    windowSize,
+                    timings,
+                    explanations,
+                    originalQuery,
+                    totalHitsConsumer
+                )
+            );
+        }
+        MultiSearchResponse.Item[] items = multiSearchResponse.getResponses();
+        long windowMergeStart = System.nanoTime();
+        SearchHit[][] legHits = groupLegHits(items, legs.size());
+        timings.windowMergeNanos(System.nanoTime() - windowMergeStart);
+        RankedDocs ranked = computeRankedDocs(legHits, fusion, windowSize, timings, explanations);
+        timings.rankedDocs(ranked.ids().length);
+        if (ranked.ids().length == 0) {
+            // Nothing fused: match_none either way, and the consumers learn nothing was derived or assembled.
+            if (Objects.nonNull(totalHitsConsumer)) {
+                totalHitsConsumer.accept(null);
+            }
+            return FusedResult.twoRound(new MatchNoneQueryBuilder());
+        }
+        // The page has to come from the ranked window alone: past it, the two-round path returns Tail-only documents.
+        boolean pageFits = requestedPageEnd(source) <= ranked.ids().length;
+        // Totals: disabled → none; otherwise what round 2 would have reported must already be known (see below).
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
+        TotalHits totalHits = totalsDisabled ? null : totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize);
+        boolean totalsSettled = totalsDisabled || Objects.nonNull(totalHits);
+        if (pageFits == false || totalsSettled == false) {
+            // Fall back with the legs' results in hand: the two-round build reuses this very MultiSearchResponse.
+            return FusedResult.twoRound(
+                buildFusedQuery(
+                    source,
+                    multiSearchResponse,
+                    legs,
+                    fusion,
+                    windowSize,
+                    timings,
+                    explanations,
+                    originalQuery,
+                    totalHitsConsumer
+                )
+            );
+        }
+        long assembleStart = System.nanoTime();
+        SearchHits page = assemblePage(ranked, source, totalHits);
+        timings.substituteBuildNanos(System.nanoTime() - assembleStart);
+        timings.tailBuilt(false);
+        // The page carries its own total; the totals consumer is told round 2's own (empty) total stands so it does not
+        // overwrite the assembled one on the way out.
+        if (Objects.nonNull(totalHitsConsumer)) {
+            totalHitsConsumer.accept(null);
+        }
+        EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSED_FAST_PATH_REQUESTS);
+        return new FusedResult(new MatchNoneQueryBuilder(), page);
     }
 }

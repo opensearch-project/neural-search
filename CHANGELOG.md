@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * In-query fusion in hybrid search. Let a response processor read the hybrid a fused query replaced, so batch semantic highlighting and a `rerank` processor's `query_context.query_text_path` work in fused mode ([#1989](https://github.com/opensearch-project/neural-search/pull/1989))
 * In-query fusion in hybrid search. Gate fused mode behind an opt-in cluster setting ([#1993](https://github.com/opensearch-project/neural-search/pull/1993))
 * In-query fusion in hybrid search. Skip round 2's Tail when the legs already prove the request's `hits.total` ([#2004](https://github.com/opensearch-project/neural-search/pull/2004))
+* In-query fusion in hybrid search. Answer a fused hybrid from its legs alone, skipping round 2, when the request needs nothing from a second shard-side round ([#TBD](https://github.com/opensearch-project/neural-search/pull/TBD))
 * In-query fusion in hybrid search. Refuse a non-object fusion `parameters`, and name rrf's rank constant in explain ([#1995](https://github.com/opensearch-project/neural-search/pull/1995))
 * In-query fusion in hybrid search. Keep a rescore from returning documents the fusion did not rank ([#1999](https://github.com/opensearch-project/neural-search/pull/1999))
 

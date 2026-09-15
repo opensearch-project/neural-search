@@ -276,6 +276,13 @@ public enum EventStatName implements StatName {
         "processors.search",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_3_0
+    ),
+    /** Counts fused (resolver-mode) hybrid query requests answered from the legs alone, without a second round */
+    HYBRID_QUERY_FUSED_FAST_PATH_REQUESTS(
+        "hybrid_query_fused_fast_path_requests",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_8_0
     );
 
     private final String nameString;

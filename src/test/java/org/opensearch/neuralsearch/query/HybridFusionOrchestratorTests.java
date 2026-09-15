@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,7 @@ import org.opensearch.search.SearchShardTarget;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.IdsQueryBuilder;
 import org.opensearch.index.query.MatchNoneQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -37,6 +39,7 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -1994,5 +1997,322 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertEquals("from 0, size 10 by default", 10, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder()));
         assertEquals(35, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder().from(30).size(5)));
         assertEquals(0, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder().size(0)));
+    }
+
+    // ---- fast path: answer from the legs, no round 2 ----
+
+    private HybridFusionOrchestrator.FusedResult fusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> legs,
+        int window,
+        boolean armed,
+        TotalHits[] totalOut
+    ) {
+        TestUtils.initializeEventStatsManager();
+        return HybridFusionOrchestrator.buildFusedResult(
+            source,
+            ms,
+            legs,
+            minMaxArithmetic(),
+            window,
+            new FusedCoordinatorTimings(),
+            new FusedDocExplanations(),
+            null,
+            derived -> totalOut[0] = derived,
+            armed
+        );
+    }
+
+    public void testBuildFusedResult_whenArmedAndTotalsDisabled_thenThePageIsAssembledAndRoundTwoIsMatchNone() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        // leg 0: 1 (0.9), 2 (0.5) ; leg 1: 2 (0.8), 3 (0.3) → fused order 2, 1, 3 (min_max + arithmetic mean over the union)
+        MultiSearchResponse ms = multiSearch(
+            legItem(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f))),
+            legItem(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.3f)))
+        );
+        TotalHits[] total = new TotalHits[] { eq(42) };
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(3).trackTotalHits(false),
+            ms,
+            legs,
+            10,
+            true,
+            total
+        );
+
+        assertTrue("round 2 has nothing to do", result.substitute() instanceof MatchNoneQueryBuilder);
+        assertTrue(result.tookFastPath());
+        SearchHits page = result.assembledHits();
+        assertEquals(3, page.getHits().length);
+        assertNull("totals disabled → no total, as round 2 would report", page.getTotalHits());
+        // scores are the floored fused scores in descending order, and the hits ARE the legs' instances
+        float previous = Float.MAX_VALUE;
+        for (SearchHit hit : page.getHits()) {
+            assertTrue(hit.getScore() <= previous);
+            assertTrue(hit.getScore() >= HybridFusionOrchestrator.MIN_RANKED_SCORE);
+            previous = hit.getScore();
+        }
+        assertEquals("max_score is the top fused score", page.getHits()[0].getScore(), page.getMaxScore(), 0.0f);
+        assertNull("the totals consumer is told round 2's own total stands", total[0]);
+    }
+
+    public void testBuildFusedResult_whenArmedWithDefaultTotalsAndALegProvesTheCount_thenThePageCarriesTheDerivedTotal() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] total = new TotalHits[] { eq(42) };
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(new SearchSourceBuilder().size(2), ms, legs, 10, true, total);
+
+        assertTrue(result.tookFastPath());
+        assertEquals(10_000L, result.assembledHits().getTotalHits().value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, result.assembledHits().getTotalHits().relation());
+        assertNull("the page carries the total; the totals consumer must not overwrite it", total[0]);
+    }
+
+    public void testBuildFusedResult_whenArmedButNoLegProvesTheCount_thenFallsBackToTwoRoundsWithTheTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItemWithTotal(Map.of("2", 0.8f), eq(12)));
+        TotalHits[] total = new TotalHits[] { eq(42) };
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(new SearchSourceBuilder().size(2), ms, legs, 10, true, total);
+
+        assertFalse(result.tookFastPath());
+        assertTrue(result.substitute() instanceof HybridFusionQueryBuilder);
+        assertEquals(
+            "the two-round path keeps the Tail, exactly as before",
+            1,
+            ((HybridFusionQueryBuilder) result.substitute()).buildSelfErasedQuery().filter().size()
+        );
+        assertNull(total[0]);
+    }
+
+    public void testBuildFusedResult_whenThePageReachesPastTheRankedWindow_thenFallsBackToTwoRounds() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(10).trackTotalHits(false),
+            ms,
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+
+        assertFalse("2 ranked docs, size 10: Tail-only documents would fill the page on the two-round path", result.tookFastPath());
+        assertTrue(result.substitute() instanceof HybridFusionQueryBuilder);
+    }
+
+    public void testBuildFusedResult_whenNotArmed_thenBehavesExactlyLikeBuildFusedQuery() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] total = new TotalHits[1];
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(new SearchSourceBuilder().size(2), ms, legs, 10, false, total);
+
+        assertFalse(result.tookFastPath());
+        assertTrue(result.substitute() instanceof HybridFusionQueryBuilder);
+        assertEquals(
+            "Tail dropped for the count as the totals change does",
+            0,
+            ((HybridFusionQueryBuilder) result.substitute()).buildSelfErasedQuery().filter().size()
+        );
+        assertNotNull("and the derived total travels through the totals consumer", total[0]);
+    }
+
+    public void testBuildFusedResult_whenNothingFused_thenMatchNoneAndNothingAssembled() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().trackTotalHits(false),
+            multiSearch(legItem(Map.of())),
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+        assertTrue(result.substitute() instanceof MatchNoneQueryBuilder);
+        assertNull(result.assembledHits());
+    }
+
+    public void testAssemblePage_slicesFromAndSize() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.8f, "3", 0.7f, "4", 0.6f))));
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().from(1).size(2).trackTotalHits(false),
+            ms,
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+
+        SearchHits page = result.assembledHits();
+        assertEquals(2, page.getHits().length);
+        assertEquals("2", page.getHits()[0].getId());
+        assertEquals("3", page.getHits()[1].getId());
+        assertEquals("max_score is the top fused score across the whole ranking, not the page", 1.0f, page.getMaxScore(), 0.0001f);
+        // size 0: an empty page, max_score null, like core
+        SearchHits empty = fusedResult(new SearchSourceBuilder().size(0).trackTotalHits(false), ms, legs, 10, true, new TotalHits[1])
+            .assembledHits();
+        assertEquals(0, empty.getHits().length);
+        assertTrue(Float.isNaN(empty.getMaxScore()));
+    }
+
+    /**
+     * Equal fused scores on the assembled page follow round 2's merge order as far as the coordinator can know it: shard
+     * order first (what {@code TopDocs.merge} does with the shard index), then — where round 2 would fall back to Lucene
+     * doc ids the coordinator never sees — the ranking's own {@code _index}, {@code _id} key order. Scores are never
+     * reordered across a tie.
+     */
+    public void testAssemblePage_whenFusedScoresTie_thenTiesAreOrderedByShardThenIdAndScoresNeverReorder() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        // one leg, every raw score equal: min_max normalizes them all to 1.0, so every document ties at the same fused score
+        SearchHit[] tied = new SearchHit[] {
+            hitInShard(7, "10", 0.7f, 1),
+            hitInShard(3, "2", 0.7f, 0),
+            hitInShard(9, "1", 0.7f, 1),
+            hitInShard(1, "3", 0.7f, 0) };
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(4).trackTotalHits(false),
+            multiSearch(successfulItem(tied)),
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+        assertTrue(result.tookFastPath());
+        List<String> ids = Arrays.stream(result.assembledHits().getHits()).map(SearchHit::getId).toList();
+        assertEquals(
+            "shard 0 before shard 1 (round 2's order); within a shard by _id, so \"1\" before \"10\"",
+            List.of("2", "3", "1", "10"),
+            ids
+        );
+        for (SearchHit hit : result.assembledHits().getHits()) {
+            assertEquals(1.0f, hit.getScore(), 0.0f);
+        }
+
+        // a higher fused score in a later shard still comes first: the shard key only ever settles exact ties
+        SearchHit[] mixed = new SearchHit[] { hitInShard(1, "a", 0.5f, 0), hitInShard(2, "b", 0.9f, 1), hitInShard(3, "c", 0.5f, 1) };
+        result = fusedResult(
+            new SearchSourceBuilder().size(3).trackTotalHits(false),
+            multiSearch(successfulItem(mixed)),
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+        assertEquals(List.of("b", "a", "c"), Arrays.stream(result.assembledHits().getHits()).map(SearchHit::getId).toList());
+    }
+
+    private SearchHit hitInShard(int docId, String id, float score, int shard) {
+        SearchHit hit = new SearchHit(docId, id, Map.of(), Map.of());
+        hit.score(score);
+        hit.shard(new SearchShardTarget("node-1", new ShardId(new Index(INDEX, INDEX + "-uuid"), shard), null, OriginalIndices.NONE));
+        return hit;
+    }
+
+    public void testTotalHitsForFastPath() {
+        // ranked count reaching the threshold reproduces core's clamp; below it, only a capped leg proves the count
+        assertEquals(
+            new TotalHits(5, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+            HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder().trackTotalHitsUpTo(5), 7, new TotalHits[] { null }, 100)
+        );
+        assertEquals(
+            new TotalHits(7, TotalHits.Relation.EQUAL_TO),
+            HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder().trackTotalHitsUpTo(7), 7, new TotalHits[] { null }, 100)
+        );
+        assertNull(HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder(), 7, new TotalHits[] { eq(100) }, 100));
+        assertEquals(
+            new TotalHits(10_000, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+            HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder(), 7, new TotalHits[] { gte(10_000) }, 100)
+        );
+        assertNull(
+            "exact totals are never answered from the legs",
+            HybridFusionOrchestrator.totalHitsForFastPath(
+                new SearchSourceBuilder().trackTotalHits(true),
+                7,
+                new TotalHits[] { gte(10_000) },
+                100
+            )
+        );
+    }
+
+    public void testRequestShapeAllowsFastPath() {
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder()));
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().trackTotalHits(false).from(3).size(7)));
+        assertTrue(
+            "explain is answered from the legs",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().explain(true))
+        );
+        assertTrue(
+            "fetch-phase fields travel with the legs",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().fetchSource(true).docValueField("f").version(true).seqNoAndPrimaryTerm(true)
+            )
+        );
+        assertFalse(HybridFusionOrchestrator.requestShapeAllowsFastPath(null));
+        assertFalse(
+            "aggs",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().aggregation(AggregationBuilders.terms("t").field("f"))
+            )
+        );
+        assertFalse(
+            "highlight",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().highlighter(new org.opensearch.search.fetch.subphase.highlight.HighlightBuilder().field("f"))
+            )
+        );
+        assertFalse("any sort, even _score", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().sort("_score")));
+        assertFalse(
+            "collapse",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().collapse(new CollapseBuilder("grp")))
+        );
+        assertFalse(
+            "search_after",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().searchAfter(new Object[] { 1 }))
+        );
+        assertFalse("min_score", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().minScore(0.1f)));
+        assertFalse(
+            "rescore",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().addRescorer(new org.opensearch.search.rescore.QueryRescorerBuilder(new MatchAllQueryBuilder()))
+            )
+        );
+        assertFalse(
+            "script_fields",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().scriptField("s", new org.opensearch.script.Script("1"))
+            )
+        );
+        assertFalse("profile", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().profile(true)));
+        assertFalse("exact totals", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().trackTotalHits(true)));
+    }
+
+    public void testLegsAllowFastPath() {
+        assertTrue(
+            HybridFusionOrchestrator.legsAllowFastPath(
+                List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"))
+            )
+        );
+        assertFalse(
+            "a named leg",
+            HybridFusionOrchestrator.legsAllowFastPath(List.of(new MatchQueryBuilder("text", "hello").queryName("lex")))
+        );
+        assertFalse(
+            "a leg with inner_hits",
+            HybridFusionOrchestrator.legsAllowFastPath(
+                List.of(
+                    new org.opensearch.index.query.NestedQueryBuilder(
+                        "n",
+                        new MatchAllQueryBuilder(),
+                        org.apache.lucene.search.join.ScoreMode.Max
+                    ).innerHit(new InnerHitBuilder("members"))
+                )
+            )
+        );
     }
 }

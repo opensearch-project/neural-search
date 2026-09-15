@@ -45,6 +45,7 @@ import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.search.aggregations.InternalAggregations;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.internal.InternalSearchResponse;
 import org.opensearch.search.profile.NetworkTime;
 import org.opensearch.search.profile.ProfileShardResult;
@@ -144,7 +145,9 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
 
         SearchRequest searchRequest = new SearchRequest("test_index");
         // Totals off: with them on, the one report every default fused request carries would wrap the listener for its own reason.
-        searchRequest.source(new SearchSourceBuilder().query(fused).trackTotalHits(false));
+        searchRequest.source(new SearchSourceBuilder().query(fused).trackTotalHits(false).sort("_score")); // as above: neither the derived
+                                                                                                           // total nor the fast path may
+                                                                                                           // wrap the listener here
 
         Task task = mock(Task.class);
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
@@ -433,7 +436,10 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         HybridQueryBuilder hybridQuery = fusedHybrid();
 
         SearchRequest searchRequest = new SearchRequest("test_index");
-        searchRequest.source(new SearchSourceBuilder().query(hybridQuery).trackTotalHits(false));
+        searchRequest.source(new SearchSourceBuilder().query(hybridQuery).trackTotalHits(false).sort("_score")); // totals off + _score
+                                                                                                                 // sort: nothing to report,
+                                                                                                                 // nothing the fast path
+                                                                                                                 // answers
 
         ActionListener<ActionResponse> listener = mock(ActionListener.class);
 
@@ -983,7 +989,14 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
             ActionListener<ActionResponse> listener = mock(ActionListener.class);
             ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
             assertNull(source.toString(), hybridQuery.fusedTotalHitsConsumer());
-            assertSame(source.toString(), listener, proceeded);
+            if (source.trackTotalHitsUpTo() == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
+                assertSame("exact totals rule out the fast path too, so nothing wraps the listener", listener, proceeded);
+            } else {
+                assertNotNull(
+                    "totals off is the fast path's own shape: the hits consumer attaches instead",
+                    hybridQuery.fusedHitsConsumer()
+                );
+            }
         }
     }
 
@@ -1140,5 +1153,79 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
         assertNotSame("the sentinel normalisation wraps the listener", listener, proceeded);
         assertNull("but there is no count to derive", hybridQuery.fusedTotalHitsConsumer());
+    }
+    // ---- fast path: hits assembled from the legs ----
+
+    public void testApply_whenTheRequestShapeAllowsTheFastPath_thenTheHitsConsumerAttaches() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index").source(
+            new SearchSourceBuilder().query(hybridQuery).trackTotalHits(false)
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        assertNotNull(hybridQuery.fusedHitsConsumer());
+        assertNotSame(listener, proceeded);
+    }
+
+    public void testApply_whenTheRequestShapeNeedsRoundTwo_thenNoHitsConsumerAttaches() {
+        List<SearchSourceBuilder> shapes = List.of(
+            new SearchSourceBuilder().trackTotalHits(false).sort("_score"),
+            new SearchSourceBuilder().trackTotalHits(false).profile(true),
+            new SearchSourceBuilder().trackTotalHits(false)
+                .addRescorer(new org.opensearch.search.rescore.QueryRescorerBuilder(new MatchAllQueryBuilder())),
+            new SearchSourceBuilder().trackTotalHits(true),
+            new SearchSourceBuilder().trackTotalHits(false).scriptField("s", new org.opensearch.script.Script("1"))
+        );
+        for (SearchSourceBuilder shape : shapes) {
+            HybridQueryBuilder hybridQuery = fusedHybrid();
+            proceedListener(new SearchRequest("test_index").source(shape.query(hybridQuery)), mock(ActionListener.class));
+            assertNull(shape.toString(), hybridQuery.fusedHitsConsumer());
+        }
+        // and never for a nested fused hybrid
+        HybridQueryBuilder nested = fusedHybrid();
+        proceedListener(
+            new SearchRequest("test_index").source(
+                new SearchSourceBuilder().trackTotalHits(false).query(new BoolQueryBuilder().must(nested))
+            ),
+            mock(ActionListener.class)
+        );
+        assertNull(nested.fusedHitsConsumer());
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenAPageWasAssembled_thenItReplacesRoundTwosHitsBeforeExplanationsAttach() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index").source(
+            new SearchSourceBuilder().query(hybridQuery).trackTotalHits(false).explain(true)
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        assertNotNull(hybridQuery.fusedHitsConsumer());
+        assertNotNull(hybridQuery.fusedExplanationConsumer());
+
+        SearchHit assembledHit = new SearchHit(0, "9", Map.of(), Map.of());
+        assembledHit.score(0.75f);
+        SearchHits assembled = new SearchHits(new SearchHit[] { assembledHit }, null, 0.75f);
+        hybridQuery.fusedHitsConsumer().accept(assembled);
+
+        // round 2 ran empty
+        SearchResponse merged = merge(proceeded, listener, responseWithoutProfile());
+
+        assertEquals(1, merged.getHits().getHits().length);
+        assertSame("the assembled hit instance is what the caller receives", assembledHit, merged.getHits().getHits()[0]);
+        assertEquals(0.75f, merged.getHits().getMaxScore(), 0.0f);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenNoPageWasAssembled_thenRoundTwosHitsStand() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index").source(
+            new SearchSourceBuilder().query(hybridQuery).trackTotalHits(false)
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        hybridQuery.fusedHitsConsumer().accept(null);
+        SearchResponse response = responseWithRankedHit();
+        assertSame(response, merge(proceeded, listener, response));
     }
 }

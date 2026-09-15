@@ -422,4 +422,50 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         SearchRequest leg = CandidateScope.from(request).newLegRequest(LEG, 50);
         assertEquals(Integer.valueOf(-1), leg.source().trackTotalHitsUpTo());
     }
+
+    // ---- leg fetch (fast path) ----
+
+    public void testNewLegRequest_whenLegFetchEnabled_thenTheUsersFetchFieldsTravelWithTheLeg() {
+        SearchSourceBuilder source = new SearchSourceBuilder().query(new TermQueryBuilder("text", "outer"))
+            .fetchSource(new String[] { "a", "b" }, new String[] { "c" })
+            .storedField("s")
+            .docValueField("d", "epoch_millis")
+            .fetchField("f")
+            .version(true)
+            .seqNoAndPrimaryTerm(true)
+            .from(30)
+            .size(10);
+        CandidateScope scope = CandidateScope.from(new SearchRequest(INDEX).source(source));
+        scope.enableLegFetch(source);
+
+        SearchRequest leg = scope.newLegRequest(LEG, 50);
+
+        assertArrayEquals(new String[] { "a", "b" }, leg.source().fetchSource().includes());
+        assertArrayEquals(new String[] { "c" }, leg.source().fetchSource().excludes());
+        assertEquals(List.of("s"), leg.source().storedFields().fieldNames());
+        assertEquals("d", leg.source().docValueFields().get(0).field);
+        assertEquals("epoch_millis", leg.source().docValueFields().get(0).format);
+        assertEquals("f", leg.source().fetchFields().get(0).field);
+        assertEquals(Boolean.TRUE, leg.source().version());
+        assertEquals(Boolean.TRUE, leg.source().seqNoAndPrimaryTerm());
+        assertEquals("paging stays a coordinator concern", 0, leg.source().from());
+        assertEquals("the leg still returns the whole window", 50, leg.source().size());
+    }
+
+    public void testNewLegRequest_whenLegFetchEnabledWithUnsetSource_thenTheLegLeavesSourceToTheDefault() {
+        SearchSourceBuilder source = new SearchSourceBuilder().query(new TermQueryBuilder("text", "outer"));
+        CandidateScope scope = CandidateScope.from(new SearchRequest(INDEX).source(source));
+        scope.enableLegFetch(source);
+        assertNull(
+            "unset _source resolves to core's default on the leg, as it would in round 2",
+            scope.newLegRequest(LEG, 50).source().fetchSource()
+        );
+    }
+
+    public void testNewLegRequest_whenLegFetchNotEnabled_thenLegsStayIdOnly() {
+        SearchSourceBuilder source = new SearchSourceBuilder().query(new TermQueryBuilder("text", "outer")).fetchSource(true).version(true);
+        SearchRequest leg = CandidateScope.from(new SearchRequest(INDEX).source(source)).newLegRequest(LEG, 50);
+        assertFalse(leg.source().fetchSource().fetchSource());
+        assertNull(leg.source().version());
+    }
 }

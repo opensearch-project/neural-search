@@ -16,6 +16,7 @@ import org.opensearch.common.unit.TimeValue;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.search.builder.PointInTimeBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.fetch.subphase.FieldAndFormat;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.SearchPipelineService;
 import org.opensearch.search.slice.SliceBuilder;
@@ -395,6 +396,15 @@ final class CandidateScope {
      */
     private Integer legTotalHitsThreshold;
 
+    /**
+     * When set, every leg fetches what the user's request asked to see — {@code _source} (with its includes/excludes),
+     * {@code stored_fields}, {@code docvalue_fields}, {@code fields}, {@code version}, {@code seq_no_primary_term} —
+     * instead of ids alone, because the coordinator will assemble the response page from the leg hits directly and no
+     * round 2 will fetch anything. Captured from the request when {@link #enableLegFetch} is called, which the fused
+     * rewrite does only for the request shapes the fast path can answer; {@code null} keeps the legs id-only.
+     */
+    private SearchSourceBuilder legFetchSource;
+
     private CandidateScope(final SearchRequest request) {
         SearchSourceBuilder source = request.source();
         this.indices = request.indices();
@@ -552,6 +562,24 @@ final class CandidateScope {
     }
 
     /**
+     * Ask every leg built from here on to fetch the user's requested fields for the documents it returns, because the
+     * response page will be assembled from the leg hits with no round 2 to fetch it — the fast path.
+     *
+     * <p>The cost is fetch volume: every leg fetches its own top-{@code window} documents, so up to {@code legs × window}
+     * documents' fields cross to the coordinator where round 2 would have fetched {@code window} (and a page is usually
+     * smaller than that). Roughly half of them are discarded after fusion. This is the trade the fast path makes for
+     * removing a whole distributed round; it is bounded by {@code window_size} and the leg budget.
+     *
+     * <p>Only fields the fetch phase can produce from the document alone are carried. {@code script_fields} are not
+     * (a script may read {@code _score}, which on a leg is the raw leg score rather than the fused one — the rewrite
+     * refuses the fast path for them), and {@code highlight}, {@code inner_hits} and {@code _name} are decided earlier
+     * for the same reason: their answer can depend on a query the returning leg did not run.
+     */
+    void enableLegFetch(final SearchSourceBuilder source) {
+        this.legFetchSource = source;
+    }
+
+    /**
      * The single place a leg sub-search is constructed: the captured candidate scope, plus this leg's own query and the
      * candidate window. Every {@link Disposition#OVERRIDDEN} value is set here explicitly rather than inherited, so no
      * field of the outer request can reach a leg by accident. Legs are id-only (no {@code _source}) with totals disabled,
@@ -581,7 +609,17 @@ final class CandidateScope {
      * </ul>
      */
     SearchRequest newLegRequest(final QueryBuilder leg, final int windowSize) {
-        SearchSourceBuilder legSource = new SearchSourceBuilder().query(leg).size(windowSize).from(0).fetchSource(false);
+        SearchSourceBuilder legSource = new SearchSourceBuilder().query(leg).size(windowSize).from(0);
+        if (Objects.isNull(legFetchSource)) {
+            legSource.fetchSource(false);
+        } else {
+            // The page will be assembled from these hits. They are deliberately NOT sorted to expose Lucene doc ids for
+            // round 2's exact tie order: a [_score, _doc] leg sort costs a full TopFieldCollector pass on every leg
+            // (measured +10 ms per leg on a serverless fleet, the whole round-2 saving) and merges cross-shard leg ties
+            // by raw doc id where the unsorted legs of the two-round path merge them by shard — a different candidate
+            // at the window boundary. Equal fused scores are ordered by HybridFusionOrchestrator#assemblePage instead.
+            propagateFetchFields(legSource);
+        }
         // A leg counts to the threshold when the rewrite asked for it (see legTotalHitsThreshold); otherwise totals stay
         // off, as before.
         if (Objects.nonNull(legTotalHitsThreshold)) {
@@ -633,5 +671,35 @@ final class CandidateScope {
             legRequest.setCancelAfterTimeInterval(cancelAfterTimeInterval);
         }
         return legRequest;
+    }
+
+    /**
+     * The user's fetch-phase requests, copied onto a leg: what {@code enableLegFetch} captured. Each is an exact copy of
+     * the request's own setting, so a leg hit carries precisely what round 2 would have fetched for the same document.
+     * An unset {@code _source} is left unset so the leg resolves core's default (return the source), as round 2 would.
+     */
+    private void propagateFetchFields(final SearchSourceBuilder legSource) {
+        if (Objects.nonNull(legFetchSource.fetchSource())) {
+            legSource.fetchSource(legFetchSource.fetchSource());
+        }
+        if (Objects.nonNull(legFetchSource.storedFields())) {
+            legSource.storedFields(legFetchSource.storedFields());
+        }
+        if (Objects.nonNull(legFetchSource.docValueFields())) {
+            for (FieldAndFormat field : legFetchSource.docValueFields()) {
+                legSource.docValueField(field.field, field.format);
+            }
+        }
+        if (Objects.nonNull(legFetchSource.fetchFields())) {
+            for (FieldAndFormat field : legFetchSource.fetchFields()) {
+                legSource.fetchField(field.field, field.format);
+            }
+        }
+        if (Objects.nonNull(legFetchSource.version())) {
+            legSource.version(legFetchSource.version());
+        }
+        if (Objects.nonNull(legFetchSource.seqNoAndPrimaryTerm())) {
+            legSource.seqNoAndPrimaryTerm(legFetchSource.seqNoAndPrimaryTerm());
+        }
     }
 }
