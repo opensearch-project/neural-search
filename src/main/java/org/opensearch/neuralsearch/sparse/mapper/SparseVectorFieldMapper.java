@@ -158,10 +158,11 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
 
         // Reject the document rather than write a native field the cluster cannot read back. The
         // engine check comes first so a non-native field never reads cluster settings per document.
-        if (isNativeEngine(sparseMethodContext) && SparseSettings.state().isNativeEngineEnabled() == false) {
-            throw new IllegalArgumentException(
-                "[" + CONTENT_TYPE + "] field [" + name() + "] cannot be indexed: " + SparseSettings.NATIVE_ENGINE_DISABLED_REASON
-            );
+        if (isNativeEngine(sparseMethodContext)) {
+            String disabledReason = SparseSettings.state().nativeEngineDisabledReason();
+            if (disabledReason != null) {
+                throw new IllegalArgumentException("[" + CONTENT_TYPE + "] field [" + name() + "] cannot be indexed: " + disabledReason);
+            }
         }
 
         if (context.parser().currentToken() != XContentParser.Token.START_OBJECT) {
@@ -283,8 +284,11 @@ public class SparseVectorFieldMapper extends ParametrizedFieldMapper {
             if (exception != null) {
                 throw new MapperParsingException(exception.getMessage());
             }
-            if (isNativeEngine(context) && SparseSettings.state().isNativeEngineEnabled() == false) {
-                throw new MapperParsingException("[" + ENGINE_FIELD + "]: " + SparseSettings.NATIVE_ENGINE_DISABLED_REASON);
+            if (isNativeEngine(context)) {
+                String disabledReason = SparseSettings.state().nativeEngineDisabledReason();
+                if (disabledReason != null) {
+                    throw new MapperParsingException("[" + ENGINE_FIELD + "]: " + disabledReason);
+                }
             }
             if (isNativeEngine(context) == false) {
                 // Only the native engine lays out a forward index or clusters in batches; accepting a

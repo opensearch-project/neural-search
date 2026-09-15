@@ -9,6 +9,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.util.concurrent.OpenSearchExecutors;
+import org.opensearch.index.IndexModule;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 
 import java.util.List;
@@ -33,6 +34,19 @@ public class SparseSettings {
         + SPARSE_NATIVE_ENGINE_ENABLED
         + "] must be enabled";
 
+    /**
+     * The engine reads its index by mmapping the engine file itself, outside Lucene's
+     * {@link org.apache.lucene.store.Directory}, and has no other read path -- so a node that
+     * disallows mmap cannot serve the engine at all, and the whole feature has to be refused rather
+     * than degraded. Core will not refuse it for us: its own check covers only the {@code mmapfs}
+     * and {@code hybridfs} store types, and nothing stops a plugin from mapping. The same setting
+     * also turns off the {@code vm.max_map_count} bootstrap check, so on such a node nobody has
+     * verified there is room to map anything.
+     */
+    public static final String MMAP_DISALLOWED_REASON = "the native sparse engine requires mmap, which this node disallows via ["
+        + IndexModule.NODE_STORE_ALLOW_MMAP.getKey()
+        + "]";
+
     public static final int DEFAULT_INDEX_THREAD_QTY = 1; // Choosing 1 as default value to protect safety
     public static final int MINIMUM_INDEX_THREAD_QTY = 1;
     public static final int MAXIMUM_INDEX_THREAD_QTY = 1024;
@@ -43,6 +57,9 @@ public class SparseSettings {
     // the node settings: the static flag has no cluster state to consult, and a node that never
     // called initialize() must still answer.
     private boolean staticNativeEngineEnabled = SPARSE_NATIVE_ENGINE_FEATURE_ENABLED_SETTING.getDefault(Settings.EMPTY);
+    // Node-scoped and static like the flag above, and owned by core rather than by us, so it is read
+    // off the node settings the same way rather than from cluster state.
+    private boolean mmapAllowed = IndexModule.NODE_STORE_ALLOW_MMAP.getDefault(Settings.EMPTY);
 
     public static synchronized SparseSettings state() {
         if (INSTANCE == null) {
@@ -64,6 +81,7 @@ public class SparseSettings {
     public void initialize(ClusterService clusterService, Settings settings) {
         this.clusterService = clusterService;
         this.staticNativeEngineEnabled = SPARSE_NATIVE_ENGINE_FEATURE_ENABLED_SETTING.get(settings);
+        this.mmapAllowed = IndexModule.NODE_STORE_ALLOW_MMAP.get(settings);
         registerSettingsCallbacks(clusterService, settings);
     }
 
@@ -71,15 +89,30 @@ public class SparseSettings {
      * The native sparse engine is on only when both gates are open: the static
      * {@link #SPARSE_NATIVE_ENGINE_FEATURE_ENABLED} flag from opensearch.yml (default true) and
      * the dynamic {@link #SPARSE_NATIVE_ENGINE_ENABLED} setting (default false). Either one being
-     * off disables it.
+     * off disables it, as does a node that disallows mmap.
      */
     public boolean isNativeEngineEnabled() {
+        return nativeEngineDisabledReason() == null;
+    }
+
+    /**
+     * Why this node cannot use the native sparse engine, or null when it can. Every gate rejects
+     * with the reason this returns, so an operator is told which of the three settings to change
+     * rather than that the engine is off.
+     */
+    public String nativeEngineDisabledReason() {
         if (staticNativeEngineEnabled == false) {
-            return false;
+            return NATIVE_ENGINE_DISABLED_REASON;
         }
         // Before initialize() this reads the dynamic gate's default, which is off -- the engine is
         // not assumed available on a node that has no cluster state yet.
-        return Boolean.TRUE.equals(getSettingValue(SPARSE_NATIVE_ENGINE_ENABLED));
+        if (Boolean.TRUE.equals(getSettingValue(SPARSE_NATIVE_ENGINE_ENABLED)) == false) {
+            return NATIVE_ENGINE_DISABLED_REASON;
+        }
+        if (mmapAllowed == false) {
+            return MMAP_DISALLOWED_REASON;
+        }
+        return null;
     }
 
     private void registerSettingsCallbacks(ClusterService clusterService, Settings settings) {
