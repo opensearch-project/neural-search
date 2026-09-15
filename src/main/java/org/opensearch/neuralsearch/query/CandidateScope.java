@@ -185,7 +185,9 @@ final class CandidateScope {
             SEARCH_SOURCE,
             "trackTotalHitsUpTo",
             Disposition.OVERRIDDEN,
-            "legs disable totals; the user's value is read instead to decide whether round 2 needs the Tail"
+            "legs disable totals, unless the rewrite asks a lexical leg to count up to the user's threshold so round 2 can "
+                + "skip the Tail when the union is already known to exceed it; the user's value itself decides whether round 2 "
+                + "needs the Tail"
         );
         put(
             table,
@@ -377,6 +379,22 @@ final class CandidateScope {
      */
     private boolean legExplain;
 
+    /**
+     * When set, every leg counts its matches up to this {@code track_total_hits} threshold instead of disabling totals, so
+     * the rewrite can tell whether the leg union already exceeds the threshold and drop round 2's Tail — see
+     * {@code HybridFusionOrchestrator#totalHitsFromLegs}. As {@link #legProfiling}: not inherited from the request but the
+     * fused rewrite's own decision, made from the request's {@code track_total_hits} and only when the request's shape
+     * would let a derived count replace the Tail and the count has somewhere to go.
+     *
+     * <p>Every leg counts, ANN legs included. A leg's count is a valid lower bound on the union's whatever form the Tail
+     * would have carried the leg in — the leg itself, or an address of the documents it returned, which is used only when
+     * it returned all of them — and an ANN leg's count is not as small as it looks: core sums the per-shard counts before
+     * capping, so {@code k = 1000} over twelve shards clears the default threshold, and a {@code neural} leg over a
+     * {@code rank_features} field is a sparse query whose match set is far larger than {@code k}. Counting costs an ANN leg
+     * nothing extra — it collects exactly the documents it counts.
+     */
+    private Integer legTotalHitsThreshold;
+
     private CandidateScope(final SearchRequest request) {
         SearchSourceBuilder source = request.source();
         this.indices = request.indices();
@@ -517,6 +535,23 @@ final class CandidateScope {
     }
 
     /**
+     * Ask every leg built from here on to count its matches up to {@code threshold}, because the request wants a
+     * {@code hits.total} beyond the fused window, its shape would let a count derived from the legs replace the Tail, and
+     * the rewrite has somewhere to put that count.
+     *
+     * <p>The cost lands on the leg's query phase: a collector that counts to a threshold cannot skip non-competitive
+     * documents until it has reached it, so a lexical leg with a large match set does up to {@code threshold} more document
+     * visits per shard than one that only ranks (measured at tens of nanoseconds per visit on warm postings). When a leg
+     * then exceeds the threshold, that is the enumeration the Tail would otherwise have done in round 2, moved into round 1
+     * where it runs alongside the other legs instead of serially after them; when no leg does, the Tail is kept and the
+     * enumeration has been duplicated — small, and bounded by the threshold, but not free, which is why the count is armed
+     * only for the request shapes that can use it.
+     */
+    void enableLegTotalHits(final int threshold) {
+        this.legTotalHitsThreshold = threshold;
+    }
+
+    /**
      * The single place a leg sub-search is constructed: the captured candidate scope, plus this leg's own query and the
      * candidate window. Every {@link Disposition#OVERRIDDEN} value is set here explicitly rather than inherited, so no
      * field of the outer request can reach a leg by accident. Legs are id-only (no {@code _source}) with totals disabled,
@@ -546,11 +581,14 @@ final class CandidateScope {
      * </ul>
      */
     SearchRequest newLegRequest(final QueryBuilder leg, final int windowSize) {
-        SearchSourceBuilder legSource = new SearchSourceBuilder().query(leg)
-            .size(windowSize)
-            .from(0)
-            .fetchSource(false)
-            .trackTotalHits(false);
+        SearchSourceBuilder legSource = new SearchSourceBuilder().query(leg).size(windowSize).from(0).fetchSource(false);
+        // A leg counts to the threshold when the rewrite asked for it (see legTotalHitsThreshold); otherwise totals stay
+        // off, as before.
+        if (Objects.nonNull(legTotalHitsThreshold)) {
+            legSource.trackTotalHitsUpTo(legTotalHitsThreshold);
+        } else {
+            legSource.trackTotalHits(false);
+        }
         if (legProfiling) {
             legSource.profile(true);
         }

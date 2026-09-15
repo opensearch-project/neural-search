@@ -400,4 +400,26 @@ public class CandidateScopeTests extends OpenSearchTestCase {
             )
         );
     }
+
+    // ---- leg totals (adaptive Tail) ----
+
+    public void testNewLegRequest_whenLegTotalsEnabled_thenEveryLegCountsToTheThreshold() {
+        SearchRequest request = new SearchRequest(INDEX).source(new SearchSourceBuilder().query(new TermQueryBuilder("text", "outer")));
+        CandidateScope scope = CandidateScope.from(request);
+        scope.enableLegTotalHits(10_000);
+
+        SearchRequest lexical = scope.newLegRequest(LEG, 50);
+        SearchRequest ann = scope.newLegRequest(new org.opensearch.knn.index.query.KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10), 50);
+
+        assertEquals("a lexical leg counts up to the request's threshold", Integer.valueOf(10_000), lexical.source().trackTotalHitsUpTo());
+        // An ANN leg's count is a valid lower bound too, and not necessarily small: core sums per-shard counts before capping,
+        // so k=1000 over twelve shards clears the default threshold. Counting costs it nothing — it collects what it counts.
+        assertEquals("an ANN leg counts as well", Integer.valueOf(10_000), ann.source().trackTotalHitsUpTo());
+    }
+
+    public void testNewLegRequest_whenLegTotalsNotEnabled_thenEveryLegDisablesTotals() {
+        SearchRequest request = new SearchRequest(INDEX).source(new SearchSourceBuilder().query(new TermQueryBuilder("text", "outer")));
+        SearchRequest leg = CandidateScope.from(request).newLegRequest(LEG, 50);
+        assertEquals(Integer.valueOf(-1), leg.source().trackTotalHitsUpTo());
+    }
 }
