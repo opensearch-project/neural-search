@@ -201,9 +201,17 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             }
         }
         if (hasScoreSort && hasFieldSort) {
-            throw new IllegalArgumentException(
-                "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them."
-            );
+            // Collapse-gated relaxation: a hybrid query with collapse may mix _score with a field so the
+            // collapse group head is deterministic (field breaks exact fused-score ties). Allowed only when
+            // _score is the primary (first) sort key; field-primary + _score stays rejected.
+            boolean isScorePrimaryWithCollapse = searchContext.collapse() != null
+                && sortFields.length > 0
+                && SortField.Type.SCORE.equals(sortFields[0].getType());
+            if (!isScorePrimaryWithCollapse) {
+                throw new IllegalArgumentException(
+                    "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them."
+                );
+            }
         }
         if (trackScores && hasFieldSort) {
             throw new IllegalArgumentException(

@@ -247,13 +247,23 @@ public class ScoreCombiner {
                 FieldDoc fieldDoc = (FieldDoc) topDocs.scoreDocs[scoreDocIndex];
 
                 if (docIdSortFieldMap.get(fieldDoc.doc) == null) {
-                    // If sort by score then replace sort field value with normalized score.
+                    // If sort by score then replace the score sort field value with the normalized score,
+                    // keeping any trailing tiebreaker field values intact.
                     // If collapse is enabled, then we append the collapse value to the end of the sort fields
                     // in order to more easily access it later.
                     Object[] sortFields;
 
                     if (isSortByScore) {
-                        sortFields = new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) };
+                        Float normalizedScore = combinedNormalizedScoresByDocId.get(fieldDoc.doc);
+                        if (fieldDoc.fields == null || fieldDoc.fields.length <= 1) {
+                            // Single-key [_score] sort (or no field values) — original behavior
+                            sortFields = new Object[] { normalizedScore };
+                        } else {
+                            // Multi-key [_score, field] sort — _score is always the primary key (index 0),
+                            // so preserve the trailing tiebreaker(s) and swap only the score slot
+                            sortFields = fieldDoc.fields.clone();
+                            sortFields[0] = normalizedScore;
+                        }
                     } else {
                         sortFields = fieldDoc.fields;
                     }
