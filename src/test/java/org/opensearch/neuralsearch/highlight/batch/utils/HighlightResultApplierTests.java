@@ -284,6 +284,57 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         assertTrue(e.getMessage(), e.getMessage().contains("Batch results size"));
     }
 
+    public void testAppliesListFieldAsPerElementFragments() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"alpha\",\"beta\",\"gamma\"]}");
+        applier.applyBatchResults(
+            List.of(hit, hit, hit),
+            List.of(List.of(), List.of(Map.of("start", 0, "end", 4)), List.of()),
+            List.of(0, 1, 2),
+            List.of("body", "body", "body"),
+            List.of("<em>", "<em>", "<em>"),
+            List.of("</em>", "</em>", "</em>"),
+            List.of(0, 0, 0),
+            List.of("default", "default", "default")
+        );
+        HighlightField field = hit.getHighlightFields().get("body");
+        assertNotNull(field);
+        assertEquals(1, field.fragments().length);
+        assertEquals("<em>beta</em>", field.fragments()[0].string());
+    }
+
+    public void testAppliesListFieldWhenElementContainsSeparator() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"alpha\\n\\nbeta\",\"gamma\"]}");
+        applier.applyBatchResults(
+            List.of(hit, hit),
+            List.of(List.of(Map.of("start", 7, "end", 11)), List.of()),
+            List.of(0, 1),
+            List.of("body", "body"),
+            List.of("<em>", "<em>"),
+            List.of("</em>", "</em>"),
+            List.of(0, 0),
+            List.of("default", "default")
+        );
+        HighlightField field = hit.getHighlightFields().get("body");
+        assertNotNull(field);
+        assertEquals(1, field.fragments().length);
+        assertEquals("alpha\n\n<em>beta</em>", field.fragments()[0].string());
+    }
+
+    public void testAppliesScalarNumberField() {
+        SearchHit hit = hitWithRawJson("{\"count\":42}");
+        // Joined "42" is [0,2)
+        applier.applyBatchResults(
+            List.of(hit),
+            List.of(List.of(Map.of("start", 0, "end", 2))),
+            List.of("count"),
+            List.of("<em>"),
+            List.of("</em>"),
+            List.of(0),
+            List.of("default")
+        );
+        assertEquals("<em>42</em>", highlightedValue(hit, "count"));
+    }
+
     private static SearchHit hitWithSource(Map<String, Object> source) {
         SearchHit hit = new SearchHit(0, "_id", new HashMap<>(), new HashMap<>());
         StringBuilder sb = new StringBuilder("{");
@@ -296,6 +347,12 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         sb.append('}');
         BytesReference src = new BytesArray(sb.toString());
         hit.sourceRef(src);
+        return hit;
+    }
+
+    private static SearchHit hitWithRawJson(String json) {
+        SearchHit hit = new SearchHit(0, "_id", new HashMap<>(), new HashMap<>());
+        hit.sourceRef(new BytesArray(json));
         return hit;
     }
 
