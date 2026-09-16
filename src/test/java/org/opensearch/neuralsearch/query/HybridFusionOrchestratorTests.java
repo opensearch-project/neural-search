@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1693,6 +1694,43 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             )
         );
         assertArrayEquals("rank-only fusion is invariant to raw score magnitude", comparable, skewed, 0.0f);
+    }
+
+    /**
+     * RRF ties by construction, and the tie order is the fast path's {@code _index}+{@code _id} order, not insertion.
+     * Two documents that hold the same rank in each leg (doc "b" and doc "a" both rank 0 in their respective single-leg
+     * appearances) receive bit-identical RRF scores; {@code toRankedDocs} then orders that equal-score run by
+     * {@code (_index, _id)}, so "a" precedes "b" in the Top even though "b" was inserted first. This is the exact
+     * substitution the fast path makes for round 2's {@code _doc} order, and RRF is where equal scores are not contrived.
+     */
+    public void testBuildFusedQuery_rrf_equalScoreTiesOrderByIndexThenId() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        // "b" appears rank 0 in leg0, "a" appears rank 0 in leg1 → identical single-rank RRF score, distinct ids.
+        MultiSearchResponse ms = multiSearch(legItem(idToScore("b", 0.9f)), legItem(idToScore("a", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+            10
+        );
+
+        float rank0 = RRFScoreNormalizer.scoreForRank(0, FusionSpec.DEFAULT_RANK_CONSTANT);
+        assertArrayEquals("both hold rank 0 → bit-identical RRF scores", new float[] { rank0, rank0 }, topScores(fused), 0.0f);
+        assertEquals("the equal-score run orders by _id (a before b), not insertion (b before a)", List.of("a", "b"), topIds(fused));
+    }
+
+    /** A single-entry ordered id→score map (Map.of does not preserve order, and these tests assert ranked order). */
+    private Map<String, Float> idToScore(String id, float score) {
+        Map<String, Float> m = new LinkedHashMap<>();
+        m.put(id, score);
+        return m;
+    }
+
+    /** The Top clauses' {@code _id}s in ranked order — the order round 2 (or the assembled page) presents them. */
+    private List<String> topIds(QueryBuilder fused) {
+        return new ArrayList<>(fusedScoresById(fused).keySet());
     }
 
     // ---- hits.total from the legs (adaptive Tail) ----

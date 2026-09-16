@@ -255,6 +255,28 @@ final class HybridFusionOrchestrator {
         timings.windowMergeNanos(System.nanoTime() - windowMergeStart);
         RankedDocs ranked = computeRankedDocs(legHits, fusion, windowSize, timings, explanations);
         timings.rankedDocs(ranked.ids().length);
+        return buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer);
+    }
+
+    /**
+     * The two-round substitute built from a {@link RankedDocs} the caller already has. {@link #buildFusedResult}'s
+     * fast-path fallback reaches here so the coordinator-side fusion — {@link #groupLegHits} +
+     * {@link #computeRankedDocs}, with their {@code timings}/{@code explanations} side effects — is done exactly once for
+     * a request that arms the fast path and then needs round 2, rather than recomputed and its timings double-written.
+     * The recomputing {@code buildFusedQuery} overloads above stay the entry point for the un-armed path, which never
+     * ran fusion before reaching them.
+     */
+    private static QueryBuilder buildSubstitute(
+        SearchSourceBuilder source,
+        MultiSearchResponse.Item[] items,
+        SearchHit[][] legHits,
+        RankedDocs ranked,
+        List<QueryBuilder> legs,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        HybridQueryBuilder originalQuery,
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer
+    ) {
         if (ranked.ids().length == 0) {
             return new MatchNoneQueryBuilder();
         }
@@ -401,6 +423,13 @@ final class HybridFusionOrchestrator {
      * if they were one document. The composite key is built with a separator but is never parsed back — an {@code _id}
      * may itself contain the separator, so the original identity is carried in a side map instead. To fusion and to every
      * normalizer the key stays opaque.
+     *
+     * <p>One consequence the fast path makes observable: under custom routing the same {@code _id} can be indexed onto
+     * two shards of a single index as two distinct documents. Keying by {@code _index}+{@code _id} folds them into one
+     * fused entry, so the assembled page carries one hit — whereas round 2's {@code ids} clause matches both and returns
+     * two. The two paths therefore disagree on the count of such a document. This is a property of the composite keying,
+     * not new to the fast path, but the fast path is where it becomes visible in {@code hits}; a routing-partitioned
+     * index that guarantees {@code _id} uniqueness per shard does not hit it.
      */
     private static RankedDocs computeRankedDocs(
         SearchHit[][] legHits,
@@ -1262,19 +1291,10 @@ final class HybridFusionOrchestrator {
         TotalHits totalHits = totalsDisabled ? null : totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize);
         boolean totalsSettled = totalsDisabled || Objects.nonNull(totalHits);
         if (pageFits == false || totalsSettled == false) {
-            // Fall back with the legs' results in hand: the two-round build reuses this very MultiSearchResponse.
+            // Fall back with the fusion already done: reuse the legHits/ranked computed above rather than recomputing
+            // them (and re-recording their timings/explanations) inside a recomputing buildFusedQuery overload.
             return FusedResult.twoRound(
-                buildFusedQuery(
-                    source,
-                    multiSearchResponse,
-                    legs,
-                    fusion,
-                    windowSize,
-                    timings,
-                    explanations,
-                    originalQuery,
-                    totalHitsConsumer
-                )
+                buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer)
             );
         }
         long assembleStart = System.nanoTime();

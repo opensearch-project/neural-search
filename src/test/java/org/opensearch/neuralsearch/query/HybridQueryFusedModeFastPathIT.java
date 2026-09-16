@@ -269,21 +269,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     @SneakyThrows
     @SuppressWarnings("unchecked")
     public void testFastPath_whenFusedScoresTie_thenTiesAreOrderedByIdAndEverythingElseMatchesTwoRounds() {
-        String index = INDEX + "-ties";
-        if (indexExists(index) == false) {
-            createIndexWithConfiguration(
-                index,
-                "{\"settings\":{\"number_of_shards\":1,\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
-                    + TEXT_FIELD
-                    + "\":{\"type\":\"text\"}}}}",
-                ""
-            );
-            for (int i = 1; i <= DOCS; i++) {
-                Request request = new Request("PUT", "/" + index + "/_doc/" + i + "?refresh=true");
-                request.setJsonEntity("{\"" + TEXT_FIELD + "\":\"hello place\"}");
-                client().performRequest(request);
-            }
-        }
+        String index = allTiesIndex();
         String extra = "\"size\":" + DOCS + ",\"track_total_hits\":false";
         String requestBody = "{"
             + extra
@@ -306,6 +292,145 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         assertEquals("every document ties, so the fast path orders the whole page by _id", fastIds.stream().sorted().toList(), fastIds);
         assertEquals("all twelve fused scores are the same value", 1, fastHits.stream().map(h -> h.get("_score")).distinct().count());
         assertClientVisibleIdentical(fast, control);
+    }
+
+    /**
+     * The fast path under {@code rrf} end to end. RRF is where bit-identical fused scores arise without a contrived
+     * corpus — two documents that hold the same rank in every leg receive the same rank-constant sum — so it is the
+     * technique whose ties the new shard→{@code _index}+{@code _id} order replaces round 2's {@code _doc} order for.
+     * The intrinsic tie order is pinned where the tie can be constructed exactly (the unit test
+     * {@code testBuildFusedQuery_rrf_equalScoreTiesOrderByIndexThenId}); here the whole {@code rrf} request must answer
+     * identically to its two-round control (forced with {@code profile:true}), up to that tie order, on a real index —
+     * proving the fast path assembles an rrf page field for field, ties included.
+     */
+    @SneakyThrows
+    public void testFastPath_whenRrf_thenPageMatchesTwoRounds() {
+        String index = allTiesIndex();
+        String query = "{\"hybrid\":{\"fusion\":{\"window_size\":"
+            + DOCS
+            + ",\"combination\":{\"technique\":\"rrf\"}},\"queries\":[{\"match\":{\""
+            + TEXT_FIELD
+            + "\":\"hello\"}},{\"term\":{\""
+            + TEXT_FIELD
+            + "\":\"place\"}}]}}";
+        String extra = "\"size\":" + DOCS + ",\"track_total_hits\":false,\"_source\":true";
+
+        Map<String, Object> fast = searchIndex(index, "{" + extra + ",\"query\":" + query + "}");
+        Map<String, Object> control = searchIndex(index, "{" + extra + ",\"profile\":true,\"query\":" + query + "}");
+        control.remove("profile");
+        assertClientVisibleIdentical(fast, control);
+    }
+
+    /**
+     * The one sanctioned client-visible difference, observed at the page edge. On the all-ties index a page with
+     * {@code from > 0} slices an equal-score run in the middle: {@code from:5,size:3} shows tied documents 5..7 of the
+     * {@code _id}-ordered run. The fast path assembles that window from its {@code _id} order; round 2 would slice its
+     * {@code _doc} order — so the two may show different tied documents at the boundary, which is exactly the documented
+     * allowance. The test asserts the fast path returns a valid tied occupant for every slot and, up to tie order, the
+     * same page as the control — i.e. the difference is confined to which equally-scored documents fall in the slice.
+     */
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    public void testFastPath_whenATiedRunStraddlesThePageEdge_thenTheFastPathKeepsValidTiedOccupants() {
+        String index = allTiesIndex();
+        int from = 5, size = 3;
+        String extra = "\"from\":" + from + ",\"size\":" + size + ",\"track_total_hits\":false";
+        String windowed = fusedQuery().replace("\"window_size\":" + WINDOW, "\"window_size\":" + DOCS);
+
+        Map<String, Object> fast = searchIndex(index, "{" + extra + ",\"query\":" + windowed + "}");
+        Map<String, Object> control = searchIndex(index, "{" + extra + ",\"profile\":true,\"query\":" + windowed + "}");
+        control.remove("profile");
+
+        List<Map<String, Object>> fastHits = (List<Map<String, Object>>) hits(fast).get("hits");
+        assertEquals("the straddled window is full", size, fastHits.size());
+        // Every document in this index ties, so the fast path's window is exactly _id-order positions [from, from+size).
+        List<String> idOrder = new ArrayList<>();
+        for (int i = 1; i <= DOCS; i++) {
+            idOrder.add(String.valueOf(i));
+        }
+        idOrder.sort(java.util.Comparator.naturalOrder());
+        List<String> expectedSlice = idOrder.subList(from, from + size);
+        List<String> fastIds = fastHits.stream().map(h -> (String) h.get("_id")).toList();
+        assertEquals("the fast path shows the _id-ordered occupants of the straddled slice", expectedSlice, fastIds);
+        // Each is a valid tied occupant (present in the corpus, single tied score); the control is a valid slice too, and
+        // the two agree up to tie order — the boundary difference is which tied ids land in the slice, nothing else.
+        assertEquals("one tied score across the page", 1, fastHits.stream().map(h -> h.get("_score")).distinct().count());
+        List<Map<String, Object>> controlHits = (List<Map<String, Object>>) hits(control).get("hits");
+        assertEquals(size, controlHits.size());
+        assertEquals("same tied score value on both paths", controlHits.get(0).get("_score"), fastHits.get(0).get("_score"));
+    }
+
+    /**
+     * Multi-index page assembly, end to end. Two indices hold documents keyed by {@code (_index, _id)}; a single fused
+     * request spans both. The composite keying, per-hit {@code _index}/{@code _source}, and cross-index
+     * {@code _index}-then-{@code _id} tie order are only unit-touched elsewhere — here the assembled page must equal the
+     * two-round control (forced with {@code profile:true}) field for field, proving the fast path reproduces round 2
+     * across indices and never merges two same-{@code _id} documents from different indices into one.
+     */
+    @SneakyThrows
+    public void testFastPath_whenSpanningTwoIndices_thenPageMatchesTwoRounds() {
+        String a = INDEX + "-multi-a", b = INDEX + "-multi-b";
+        for (String idx : List.of(a, b)) {
+            if (indexExists(idx) == false) {
+                createIndexWithConfiguration(
+                    idx,
+                    "{\"settings\":{\"number_of_shards\":2,\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
+                        + TEXT_FIELD
+                        + "\":{\"type\":\"text\"},\""
+                        + NUM_FIELD
+                        + "\":{\"type\":\"integer\"}}}}",
+                    ""
+                );
+                // Same _ids in both indices (1..6) so the composite keying is actually exercised — a bare _id match would
+                // merge them. Distinct-length text gives distinct scores so ordering is deterministic (no tie ambiguity).
+                for (int i = 1; i <= 6; i++) {
+                    Request request = new Request("PUT", "/" + idx + "/_doc/" + i + "?refresh=true");
+                    request.setJsonEntity(
+                        "{\"" + TEXT_FIELD + "\":\"hello place" + " here".repeat(i) + "\",\"" + NUM_FIELD + "\":" + i + "}"
+                    );
+                    client().performRequest(request);
+                }
+            }
+        }
+        String extra = "\"size\":8,\"track_total_hits\":false,\"_source\":true";
+        String windowed = fusedQuery().replace("\"window_size\":" + WINDOW, "\"window_size\":12");
+        Request fastReq = new Request("POST", "/" + a + "," + b + "/_search");
+        fastReq.setJsonEntity("{" + extra + ",\"query\":" + windowed + "}");
+        Map<String, Object> fast = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(client().performRequest(fastReq).getEntity()),
+            false
+        );
+        Request controlReq = new Request("POST", "/" + a + "," + b + "/_search");
+        controlReq.setJsonEntity("{" + extra + ",\"profile\":true,\"query\":" + windowed + "}");
+        Map<String, Object> control = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(client().performRequest(controlReq).getEntity()),
+            false
+        );
+        control.remove("profile");
+        assertClientVisibleIdentical(fast, control);
+    }
+
+    /** The shared single-shard index whose every document ties on any fused score; created once, reused by tie tests. */
+    @SneakyThrows
+    private String allTiesIndex() {
+        String index = INDEX + "-ties";
+        if (indexExists(index) == false) {
+            createIndexWithConfiguration(
+                index,
+                "{\"settings\":{\"number_of_shards\":1,\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
+                    + TEXT_FIELD
+                    + "\":{\"type\":\"text\"}}}}",
+                ""
+            );
+            for (int i = 1; i <= DOCS; i++) {
+                Request request = new Request("PUT", "/" + index + "/_doc/" + i + "?refresh=true");
+                request.setJsonEntity("{\"" + TEXT_FIELD + "\":\"hello place\"}");
+                client().performRequest(request);
+            }
+        }
+        return index;
     }
 
     @SneakyThrows
