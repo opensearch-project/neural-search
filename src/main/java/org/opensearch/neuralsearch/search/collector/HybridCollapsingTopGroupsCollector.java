@@ -50,9 +50,9 @@ import java.util.TreeSet;
  * election would elect different documents for one group and split the group's score in the downstream
  * per-document fusion. A single election is run instead — when sorting by score the comparators read
  * {@link HybridSubQueryScorer#score()}, the sum over sub-queries. Candidate selection stays per sub-query:
- * each sub-query keeps its own top-{@code numHits} groups, ranked and emitted by its running max over the
- * group's document scores in that sub-query, so a sub-query keeps every group it matched regardless of
- * which document was elected. No minimum-competitive-score feedback is sent to
+ * each sub-query keeps its own top-{@code numHits} groups, ranked and emitted by its best score over the
+ * group's documents in that sub-query (a running max, or a running min under a reversed score sort), so a
+ * sub-query keeps every group it matched regardless of which document was elected. No minimum-competitive-score feedback is sent to
  * {@link HybridSubQueryScorer#getMinScores()}, since a low score in one sub-query does not disqualify a
  * document whose other sub-query scores make it the representative.
  */
@@ -68,6 +68,7 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
     private final int numHits;
     private final int[] reversed;
     private final boolean[] isScoreSortField;
+    private final boolean isScoreSortReversed;
     private final int compIDXEnd;
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
@@ -99,10 +100,15 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         SortField[] sortFields = groupSort.getSort();
         this.reversed = new int[sortFields.length];
         this.isScoreSortField = new boolean[sortFields.length];
+        boolean reversedScoreSort = false;
         for (int i = 0; i < sortFields.length; i++) {
             reversed[i] = sortFields[i].getReverse() ? -1 : 1;
             isScoreSortField[i] = SortField.Type.SCORE.equals(sortFields[i].getType());
+            if (isScoreSortField[i] && reversed[i] == -1) {
+                reversedScoreSort = true;
+            }
         }
+        this.isScoreSortReversed = reversedScoreSort;
         this.compIDXEnd = sortFields.length - 1;
         this.groupMap = new HashMap<>();
         this.numHits = topNGroups;
@@ -150,7 +156,7 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
     /**
      * Returns the collected top groups, including collapse values and sort fields, grouped by sub-query.
      * Every sub-query emits the same elected representative per group, best group by that sub-query's
-     * running max first, each entry carrying that max; a sub-query that matched none of a group's
+     * best matched score first, each entry carrying that score; a sub-query that matched none of a group's
      * documents leaves the group out of its list.
      */
     @Override
@@ -309,7 +315,10 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         group.groupValue = groupSelector.copyValue();
         group.comparatorSlot = freeSlots.pop();
         group.topDoc = docBase + doc;
-        group.scoresPerSubQuery = subScoresByQuery.clone();
+        group.scoresPerSubQuery = new float[numSubQueries];
+        for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
+            group.scoresPerSubQuery[subQuery] = foldScore(noMatchSentinel(), subScoresByQuery[subQuery]);
+        }
         group.memberOfSubQuery = new boolean[numSubQueries];
         for (LeafFieldComparator leafComparator : leafComparators) {
             leafComparator.copy(group.comparatorSlot, doc);
@@ -321,21 +330,21 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
 
     private void collectExistingGroup(int doc, float[] subScoresByQuery, CollectedGroup<T> group) throws IOException {
         boolean electionWon = docWinsElection(doc, group);
-        boolean anyMaxRaised = false;
+        boolean anyAggregateImproved = false;
         for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
-            if (subScoresByQuery[subQuery] > group.scoresPerSubQuery[subQuery]) {
-                anyMaxRaised = true;
+            if (improvesAggregate(group.scoresPerSubQuery[subQuery], subScoresByQuery[subQuery])) {
+                anyAggregateImproved = true;
                 break;
             }
         }
-        if (electionWon == false && anyMaxRaised == false) {
+        if (electionWon == false && anyAggregateImproved == false) {
             return;
         }
 
         // Remove before mutating — the sorted sets locate elements by comparing scores, slots, and the
         // topDoc tiebreak, so an election win invalidates the group's position in every member set
         for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
-            boolean affected = electionWon || subScoresByQuery[subQuery] > group.scoresPerSubQuery[subQuery];
+            boolean affected = electionWon || improvesAggregate(group.scoresPerSubQuery[subQuery], subScoresByQuery[subQuery]);
             if (affected && group.memberOfSubQuery[subQuery]) {
                 orderedGroupsPerSubQuery.get(subQuery).remove(group);
                 group.memberOfSubQuery[subQuery] = false;
@@ -343,7 +352,7 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         }
 
         for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
-            group.scoresPerSubQuery[subQuery] = Math.max(group.scoresPerSubQuery[subQuery], subScoresByQuery[subQuery]);
+            group.scoresPerSubQuery[subQuery] = foldScore(group.scoresPerSubQuery[subQuery], subScoresByQuery[subQuery]);
         }
         if (electionWon) {
             group.topDoc = docBase + doc;
@@ -377,7 +386,7 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
 
     private void insertIntoSubQueries(CollectedGroup<T> group) {
         for (int subQuery = 0; subQuery < numSubQueries; subQuery++) {
-            if (group.scoresPerSubQuery[subQuery] <= 0 || group.memberOfSubQuery[subQuery]) {
+            if (hasMatch(group.scoresPerSubQuery[subQuery]) == false || group.memberOfSubQuery[subQuery]) {
                 continue;
             }
             TreeSet<CollectedGroup<T>> orderedGroups = orderedGroupsPerSubQuery.get(subQuery);
@@ -391,6 +400,30 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
                 }
             }
         }
+    }
+
+    // The per-sub-query aggregate follows the score sort direction: a running max, or a running min
+    // seeded with +Infinity under a reversed score sort, folding matched (positive) scores only
+    private float foldScore(float aggregate, float score) {
+        if (score <= 0) {
+            return aggregate;
+        }
+        return isScoreSortReversed ? Math.min(aggregate, score) : Math.max(aggregate, score);
+    }
+
+    private float noMatchSentinel() {
+        return isScoreSortReversed ? Float.POSITIVE_INFINITY : 0f;
+    }
+
+    private boolean hasMatch(float aggregate) {
+        return isScoreSortReversed ? aggregate != Float.POSITIVE_INFINITY : aggregate > 0;
+    }
+
+    private boolean improvesAggregate(float aggregate, float score) {
+        if (score <= 0) {
+            return false;
+        }
+        return isScoreSortReversed ? score < aggregate : score > aggregate;
     }
 
     private void dropIfMemberless(CollectedGroup<T> group) {
@@ -428,7 +461,8 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
         T groupValue;
         int topDoc;
         int comparatorSlot;
-        // Running max of the group's document scores per sub-query; 0 when the sub-query matched none of them
+        // Best matched score per sub-query in the score sort's direction (see foldScore); the sentinel
+        // marks a sub-query that matched none of the group's documents
         float[] scoresPerSubQuery;
         // Membership in each sub-query's top-numHits set; a group that is member of none is dropped
         boolean[] memberOfSubQuery;

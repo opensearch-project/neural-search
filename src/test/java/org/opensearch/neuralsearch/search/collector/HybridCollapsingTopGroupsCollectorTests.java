@@ -1589,6 +1589,59 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         directory.close();
     }
 
+    public void testCollapse_whenSortByScoreAscending_thenLowestScoringGroupSurvives() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // groupA owns the globally lowest-scoring document and a high-scoring one, groupB sits in between
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupA");
+        addKeywordDoc(writer, 2, "text2", 102, "groupB");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(new SortField(null, SortField.Type.SCORE, true));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        int topNGroups = 1;
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            topNGroups,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        float[] scoresByDoc = { 1.0f, 100.0f, 2.0f };
+        for (int docId = 0; docId < scoresByDoc.length; docId++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByDoc[docId];
+            leafCollector.collect(docId);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+
+        // Under an ascending score sort the per-sub-query aggregate is a running min, so groupA is kept
+        // for its lowest-scoring document and reported with that score, not with its highest
+        assertEquals(List.of("groupA"), collapseValueStrings(topDocs.get(0)));
+        assertEquals(1.0f, topDocs.get(0).scoreDocs[0].score, 0.001f);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
     public void testCollapse_whenSortByFieldAndLegsMatchDifferentDocs_thenSameRepresentativeElected() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
