@@ -37,6 +37,7 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.ObservedSourceSizes;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
@@ -67,6 +68,7 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
     public void setUp() throws Exception {
         super.setUp();
         filter = new HybridQuerySearchRequestFilter();
+        ObservedSourceSizes.clear();
     }
 
     public void testOrder_thenReturnsZero() {
@@ -1227,5 +1229,77 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         hybridQuery.fusedHitsConsumer().accept(null);
         SearchResponse response = responseWithRankedHit();
         assertSame(response, merge(proceeded, listener, response));
+    }
+
+    /**
+     * The fetch gate learns the returned _source size from here, on either path: the two-round page (nothing assembled)
+     * and the assembled page both carry the _source the request asked for. A request whose shape the fast path cannot
+     * answer attaches no hits consumer and teaches nothing.
+     */
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenAFastPathShapedResponsePasses_thenItsSourceSizeIsObserved() {
+        // two-round path: round 2's own page is the observation
+        HybridQueryBuilder twoRound = fusedHybrid();
+        SearchRequest twoRoundRequest = new SearchRequest("test_index").source(
+            new SearchSourceBuilder().query(twoRound).trackTotalHits(false)
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(twoRoundRequest, listener);
+        twoRound.fusedHitsConsumer().accept(null);
+        merge(proceeded, listener, responseWithSourcedHits("test_index", 120, 280));
+        assertEquals(
+            "the two-round page taught the mean returned _source size",
+            java.util.OptionalLong.of(200),
+            ObservedSourceSizes.bytesPerDocument("test_index", twoRoundRequest.source())
+        );
+
+        // fast path: the assembled page is the observation (a second index, to keep the two apart)
+        HybridQueryBuilder fast = fusedHybrid();
+        SearchRequest fastRequest = new SearchRequest("other_index").source(new SearchSourceBuilder().query(fast).trackTotalHits(false));
+        ActionListener<ActionResponse> fastListener = mock(ActionListener.class);
+        ActionListener<ActionResponse> fastProceeded = proceedListener(fastRequest, fastListener);
+        fast.fusedHitsConsumer().accept(responseWithSourcedHits("other_index", 1_000).getHits());
+        merge(fastProceeded, fastListener, responseWithoutProfile());
+        assertEquals(java.util.OptionalLong.of(1_000), ObservedSourceSizes.bytesPerDocument("other_index", fastRequest.source()));
+
+        // a shape round 2 is needed for (aggregations) attaches no hits consumer, so nothing is learned from it
+        HybridQueryBuilder aggregated = fusedHybrid();
+        SearchRequest aggregatedRequest = new SearchRequest("agg_index").source(
+            new SearchSourceBuilder().query(aggregated)
+                .trackTotalHits(false)
+                .aggregation(org.opensearch.search.aggregations.AggregationBuilders.terms("t").field("f"))
+        );
+        ActionListener<ActionResponse> aggListener = mock(ActionListener.class);
+        ActionListener<ActionResponse> aggProceeded = proceedListener(aggregatedRequest, aggListener);
+        assertNull(aggregated.fusedHitsConsumer());
+        merge(aggProceeded, aggListener, responseWithSourcedHits("agg_index", 5_000));
+        assertEquals(java.util.OptionalLong.empty(), ObservedSourceSizes.bytesPerDocument("agg_index", aggregatedRequest.source()));
+    }
+
+    /** A response whose hits come from {@code index} and carry JSON _source documents of exactly the given byte sizes. */
+    private static SearchResponse responseWithSourcedHits(final String index, final int... sourceBytes) {
+        SearchHit[] hits = new SearchHit[sourceBytes.length];
+        for (int i = 0; i < sourceBytes.length; i++) {
+            SearchHit hit = new SearchHit(i, String.valueOf(i), null, null);
+            hit.shard(
+                new org.opensearch.search.SearchShardTarget(
+                    "node",
+                    new org.opensearch.core.index.shard.ShardId(index, "uuid", 0),
+                    null,
+                    org.opensearch.action.OriginalIndices.NONE
+                )
+            );
+            String frame = "{\"body\":\"\"}";
+            hit.sourceRef(
+                new org.opensearch.core.common.bytes.BytesArray(
+                    frame.substring(0, 9) + "x".repeat(Math.max(0, sourceBytes[i] - frame.length())) + frame.substring(9)
+                )
+            );
+            hit.score(1.0f);
+            hits[i] = hit;
+        }
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(hits.length, TotalHits.Relation.EQUAL_TO), 1.0f);
+        InternalSearchResponse sections = new InternalSearchResponse(searchHits, null, null, null, false, null, 1);
+        return new SearchResponse(sections, null, 1, 1, 0, 3L, ShardSearchFailure.EMPTY_ARRAY, SearchResponse.Clusters.EMPTY);
     }
 }

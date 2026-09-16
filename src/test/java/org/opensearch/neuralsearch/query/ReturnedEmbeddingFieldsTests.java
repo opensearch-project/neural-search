@@ -13,6 +13,13 @@ import java.util.LinkedHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Map;
 
+import org.apache.lucene.search.TotalHits;
+import org.opensearch.action.OriginalIndices;
+import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
+import org.opensearch.search.SearchShardTarget;
 import org.junit.Before;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
@@ -48,7 +55,18 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
     @Before
     public void resetCache() {
         ReturnedEmbeddingFields.clearCache();
+        ObservedSourceSizes.clear();
         indices.clear();
+    }
+
+    /** Seed what a response of this request shape would have taught the gate: {@code bytes} of _source per hit of {@code index}. */
+    private static void observe(String index, SearchSourceBuilder shape, long bytes) {
+        SearchHit hit = new SearchHit(0, "1", null, null);
+        hit.shard(new SearchShardTarget("node", new ShardId(index, "uuid", 0), null, OriginalIndices.NONE));
+        // A real JSON document of exactly `bytes` bytes: sourceRef sniffs the bytes for a compressor, so they must be XContent.
+        String frame = "{\"body\":\"\"}";
+        hit.sourceRef(new BytesArray(frame.substring(0, 9) + "x".repeat((int) Math.max(0, bytes - frame.length())) + frame.substring(9)));
+        ObservedSourceSizes.record(shape, new SearchHits(new SearchHit[] { hit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f));
     }
 
     /** The cluster state holds the given indices; the resolver resolves every request to all of them, in order. */
@@ -148,6 +166,9 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
      */
     public void testFastPathFetchExceedsBudget_reproducesTheMeasuredCrossover() {
         cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1));
+        // The gate weighs _source by what responses of this shape returned. Seed the observation the measured index
+        // produced — a 768-dim float vector serialized as JSON text, ~7.7 KB per document — for the unfiltered shape.
+        observe(VECTOR_INDEX, source(), 768 * ReturnedEmbeddingFields.FLOAT_VECTOR_BYTES_PER_DIMENSION);
         assertFalse(
             "size 100: 100 extra documents × 7.7 KB < 1 MB",
             ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(source().size(100)), 2, 100)
@@ -161,13 +182,13 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
             "a wider window at size 100 crosses too",
             ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(source().size(100)), 2, 500)
         );
+        // Excluding the vectors changes the _source filter shape, and the size under that shape is its own observation:
+        // the text that is left, a few hundred bytes.
+        SearchSourceBuilder excludingVectors = source().size(10).fetchSource(null, new String[] { "vec", "emb.inner" });
+        observe(VECTOR_INDEX, excludingVectors, 300);
         assertFalse(
-            "vector excluded: nothing to weigh",
-            ReturnedEmbeddingFields.fastPathFetchExceedsBudget(
-                request(source().size(10).fetchSource(null, new String[] { "vec", "emb.inner" })),
-                2,
-                500
-            )
+            "vector excluded: only the observed text is weighed",
+            ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(excludingVectors), 2, 500)
         );
         assertFalse(
             "_source off",
@@ -265,6 +286,11 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
         when(empty.concreteIndices(any(ClusterState.class), any(IndicesRequest.class))).thenReturn(new Index[0]);
         NeuralSearchClusterUtil.instance().initialize(NeuralSearchClusterUtil.instance().getClusterService(), empty);
         assertTrue("nothing resolved: fail closed", carried(request(source())));
+        assertEquals(
+            "the fetch estimate fails closed the same way",
+            Long.MAX_VALUE,
+            ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source()))
+        );
 
         NeuralSearchClusterUtil.instance().initialize(null, null);
         assertTrue("no cluster util at all: fail closed", carried(request(source())));
@@ -281,6 +307,7 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
         );
         NeuralSearchClusterUtil.instance().initialize(NeuralSearchClusterUtil.instance().getClusterService(), stale);
         assertTrue(carried(request(source())));
+        assertEquals(Long.MAX_VALUE, ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source())));
     }
 
     public void testRequested_whenTheMappingChanges_thenTheCacheFollowsTheMappingVersion() {
@@ -311,6 +338,12 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
         when(resolver.concreteIndices(any(ClusterState.class), any(IndicesRequest.class))).thenReturn(new Index[] { brokenIndex });
         NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
         assertEquals(Long.MAX_VALUE, ReturnedEmbeddingFields.estimatedEmbeddingBytesPerDocument(request(source())));
+        // the fetch estimate reads the mapping only for the `fields` term; with _source off and a field named, it fails
+        // closed on the same unparsable mapping
+        assertEquals(
+            Long.MAX_VALUE,
+            ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source().fetchSource(false).docValueField("vec")))
+        );
     }
 
     public void testRequested_whenTheRequestHasNoSourceBuilderAndFieldsAreChecked_thenPatternsAreEmpty() {
@@ -365,5 +398,82 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
     public void testEmbeddingFieldTypes() {
         assertEquals(2, ReturnedEmbeddingFields.EMBEDDING_FIELD_TYPES.size());
         assertTrue(ReturnedEmbeddingFields.EMBEDDING_FIELD_TYPES.containsAll(Arrays.asList("knn_vector", "rank_features")));
+    }
+
+    // ---- the observed _source term ----
+
+    public void testFetchBytes_whenSourceOnAndUnobserved_thenFailsClosed() {
+        cluster(index("text-only", "{\"properties\":{\"body\":{\"type\":\"text\"}}}", 1));
+        assertEquals(
+            "no response of this shape seen yet: unknown, two rounds",
+            Long.MAX_VALUE,
+            ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source().size(10)))
+        );
+        assertTrue(ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(source().size(10)), 2, 100));
+    }
+
+    public void testFetchBytes_whenTextIsObserved_thenTheGateWeighsIt() {
+        cluster(index("text-only", "{\"properties\":{\"body\":{\"type\":\"text\"}}}", 1));
+        // ~3.2 KB documents (the Quora corpus): 190 extra × 3.2 KB ≈ 0.6 MB, under budget
+        observe("text-only", source(), 3_200);
+        assertEquals(3_200L, ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source().size(10))));
+        assertFalse("small text: armed", ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(source().size(10)), 2, 100));
+        // 50 KB articles: 190 × 50 KB ≈ 9.5 MB — the case the mapping cannot see
+        ObservedSourceSizes.clear();
+        observe("text-only", source(), 50_000);
+        assertTrue("large text: refused", ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(source().size(10)), 2, 100));
+        assertFalse(
+            "but a page as wide as the window has nothing extra to fetch",
+            ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(source().size(200)), 2, 100)
+        );
+    }
+
+    public void testFetchBytes_whenSourceOff_thenObservationsAreIrrelevant() {
+        cluster(index("text-only", "{\"properties\":{\"body\":{\"type\":\"text\"}}}", 1));
+        observe("text-only", source(), 50_000);
+        assertEquals(0L, ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source().fetchSource(false))));
+        assertFalse(ReturnedEmbeddingFields.fastPathFetchExceedsBudget(request(source().fetchSource(false)), 2, 100));
+    }
+
+    public void testFetchBytes_whenObservedSourceAndFieldsNameAVector_thenBothTermsAdd() {
+        cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1));
+        // _source excludes the vectors and weighs 300 bytes; `fields` pulls the 768-dim vector back through docvalues.
+        SearchSourceBuilder shape = source().size(10).fetchSource(null, new String[] { "vec", "emb.inner" }).docValueField("vec");
+        observe(VECTOR_INDEX, shape, 300);
+        assertEquals(
+            300 + 768 * ReturnedEmbeddingFields.FLOAT_VECTOR_BYTES_PER_DIMENSION,
+            ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(shape))
+        );
+    }
+
+    public void testFetchBytes_whenObservedUnderAnotherShape_thenStillUnknownForThisOne() {
+        cluster(index("text-only", "{\"properties\":{\"body\":{\"type\":\"text\"}}}", 1));
+        observe("text-only", source().fetchSource(new String[] { "title" }, null), 120);
+        assertEquals(
+            "a different _source filter is a different size: not observed",
+            Long.MAX_VALUE,
+            ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source()))
+        );
+        assertEquals(
+            120L,
+            ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source().fetchSource(new String[] { "title" }, null)))
+        );
+    }
+
+    public void testFetchBytes_whenSeveralIndicesAreObserved_thenTheWidestCounts() {
+        cluster(
+            index("small", "{\"properties\":{\"body\":{\"type\":\"text\"}}}", 1),
+            index("large", "{\"properties\":{\"body\":{\"type\":\"text\"}}}", 1)
+        );
+        observe("small", source(), 500);
+        observe("large", source(), 20_000);
+        assertEquals(20_000L, ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source())));
+        ObservedSourceSizes.clear();
+        observe("small", source(), 500);
+        assertEquals(
+            "one index unobserved: unknown",
+            Long.MAX_VALUE,
+            ReturnedEmbeddingFields.estimatedFetchBytesPerDocument(request(source()))
+        );
     }
 }

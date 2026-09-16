@@ -282,6 +282,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
             + fusedQuery().replace("\"window_size\":" + WINDOW, "\"window_size\":" + DOCS)
             + "}";
 
+        prime(index, requestBody);
         Map<String, Object> fast = searchIndex(index, requestBody);
         Map<String, Object> control = searchIndex(index, controlBody);
         control.remove("profile");
@@ -337,6 +338,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         String extra = "\"from\":" + from + ",\"size\":" + size + ",\"track_total_hits\":false";
         String windowed = fusedQuery().replace("\"window_size\":" + WINDOW, "\"window_size\":" + DOCS);
 
+        prime(index, "{" + extra + ",\"query\":" + windowed + "}");
         Map<String, Object> fast = searchIndex(index, "{" + extra + ",\"query\":" + windowed + "}");
         Map<String, Object> control = searchIndex(index, "{" + extra + ",\"profile\":true,\"query\":" + windowed + "}");
         control.remove("profile");
@@ -394,6 +396,10 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         }
         String extra = "\"size\":8,\"track_total_hits\":false,\"_source\":true";
         String windowed = fusedQuery().replace("\"window_size\":" + WINDOW, "\"window_size\":12");
+        // teach the gate both indices' _source size under this shape, so the request below is the fast-path exercise
+        Request primeReq = new Request("POST", "/" + a + "," + b + "/_search");
+        primeReq.setJsonEntity("{" + extra + ",\"query\":" + windowed + "}");
+        client().performRequest(primeReq);
         Request fastReq = new Request("POST", "/" + a + "," + b + "/_search");
         fastReq.setJsonEntity("{" + extra + ",\"query\":" + windowed + "}");
         Map<String, Object> fast = XContentHelper.convertToMap(
@@ -410,6 +416,113 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         );
         control.remove("profile");
         assertClientVisibleIdentical(fast, control);
+    }
+
+    /**
+     * Run the request once so its response teaches the fetch gate the index's {@code _source} size under this shape. The
+     * gate fails closed until an index has been observed under a request's {@code _source} filter (see
+     * {@code ObservedSourceSizes}), so the very first such request on a fresh index takes two rounds; tests that assert
+     * fast-path behaviour prime first, as any second request in production would be.
+     */
+    @SneakyThrows
+    private void prime(String index, String requestBody) {
+        searchIndex(index, requestBody);
+    }
+
+    /** The index's cumulative shard-level fetch-phase executions — the per-request delta tells the path apart. */
+    @SneakyThrows
+    private long fetchOps(String index) {
+        Response response = client().performRequest(new Request("GET", "/" + index + "/_stats/search"));
+        Map<String, Object> stats = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        Map<String, Object> indices = (Map<String, Object>) stats.get("indices");
+        Map<String, Object> total = (Map<String, Object>) ((Map<String, Object>) indices.get(index)).get("total");
+        return ((Number) ((Map<String, Object>) total.get("search")).get("fetch_total")).longValue();
+    }
+
+    /**
+     * The fetch-volume gate on text. The mapping cannot see how large a text document is, so the gate learns it from
+     * responses: on a fresh index the first request takes two rounds (nothing observed yet — fail closed), and its page
+     * teaches the size. Twelve ~20 KB documents then weigh 2 × 100 − 3 = 197 extra × 20 KB ≈ 3.9 MB, far over the 1 MB
+     * budget, so every later request stays on two rounds; the same request with {@code _source: false} carries nothing
+     * and takes the fast path; and on an index of small documents the primed request takes the fast path. Every answer
+     * is identical to the two-round control.
+     *
+     * <p>Which path ran is read off the index's shard fetch-phase counter. The legs fetch on every shard that holds a
+     * hit; round 2 then fetches the page on the shards that hold it, while the fast path's {@code match_none} round
+     * fetches nothing. The two reference counts are calibrated in the test itself — a named leg forces two rounds, and
+     * {@code _source: false} is a known fast-path shape — rather than hard-coded, so shard skew cannot fake a result. The
+     * indices have two shards: on a single-shard index core runs query and fetch in one shard round, and the fetch phase
+     * executes (and counts) even for {@code match_none}, which would hide the difference.
+     */
+    @SneakyThrows
+    public void testFastPath_whenDocumentsAreLargeText_thenTwoRoundsUnlessSourceIsOff() {
+        String large = twoShardTextIndex(INDEX + "-large-text", "lorem ipsum ".repeat(1_700));
+        String small = twoShardTextIndex(INDEX + "-small-text", "brief");
+        String query = fusedQuery().replace("\"window_size\":" + WINDOW, "\"window_size\":100");
+        String common = "\"size\":3,\"track_total_hits\":false";
+        String namedQuery = query.replace(
+            "\"match\":{\"" + TEXT_FIELD + "\":\"hello\"}",
+            "\"match\":{\"" + TEXT_FIELD + "\":{\"query\":\"hello\",\"_name\":\"lex\"}}"
+        );
+
+        // calibrate on the large index: a named leg is two rounds, _source off is the fast path
+        long twoRoundOps = fetchOpsOf(large, "{" + common + ",\"_source\":false,\"query\":" + namedQuery + "}");
+        long fastOps = fetchOpsOf(large, "{" + common + ",\"_source\":false,\"query\":" + query + "}");
+        assertTrue("round 2 fetches the page where match_none fetches nothing: " + twoRoundOps + " vs " + fastOps, twoRoundOps > fastOps);
+
+        // cold: nothing observed for this index under _source:true → two rounds, and the page teaches the size
+        String sourced = "{" + common + ",\"_source\":true,\"query\":" + query + "}";
+        assertEquals("unobserved _source size: two rounds", twoRoundOps, fetchOpsOf(large, sourced));
+        // warm, but ~20 KB documents: 197 extra × 20 KB ≈ 3.9 MB > 1 MB → still two rounds
+        assertEquals("large text observed: refused, two rounds", twoRoundOps, fetchOpsOf(large, sourced));
+        Map<String, Object> warm = searchIndex(large, sourced);
+        Map<String, Object> control = searchIndex(large, "{" + common + ",\"_source\":true,\"profile\":true,\"query\":" + query + "}");
+        control.remove("profile");
+        assertClientVisibleIdentical(warm, control);
+
+        // small documents: the first sourced request is cold (two rounds), the second takes the fast path
+        String smallSourced = "{" + common + ",\"_source\":true,\"query\":" + query + "}";
+        long smallTwoRoundOps = fetchOpsOf(small, "{" + common + ",\"_source\":false,\"query\":" + namedQuery + "}");
+        long smallFastOps = fetchOpsOf(small, "{" + common + ",\"_source\":false,\"query\":" + query + "}");
+        assertTrue(smallTwoRoundOps > smallFastOps);
+        assertEquals("cold: two rounds", smallTwoRoundOps, fetchOpsOf(small, smallSourced));
+        assertEquals("small documents observed: fast path", smallFastOps, fetchOpsOf(small, smallSourced));
+        Map<String, Object> smallFast = searchIndex(small, smallSourced);
+        Map<String, Object> smallControl = searchIndex(small, "{" + common + ",\"_source\":true,\"profile\":true,\"query\":" + query + "}");
+        smallControl.remove("profile");
+        assertClientVisibleIdentical(smallFast, smallControl);
+    }
+
+    /** The fetch-phase executions one request costs the index, measured as the counter's delta around it. */
+    @SneakyThrows
+    private long fetchOpsOf(String index, String requestBody) {
+        long before = fetchOps(index);
+        searchIndex(index, requestBody);
+        return fetchOps(index) - before;
+    }
+
+    /** A two-shard index of twelve documents with distinct-length {@code text} and the given {@code body}; created once. */
+    @SneakyThrows
+    private String twoShardTextIndex(String index, String body) {
+        if (indexExists(index) == false) {
+            createIndexWithConfiguration(
+                index,
+                "{\"settings\":{\"number_of_shards\":2,\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
+                    + TEXT_FIELD
+                    + "\":{\"type\":\"text\"},\"body\":{\"type\":\"text\"}}}}",
+                ""
+            );
+            for (int i = 1; i <= DOCS; i++) {
+                Request request = new Request("PUT", "/" + index + "/_doc/" + i + "?refresh=true");
+                request.setJsonEntity("{\"" + TEXT_FIELD + "\":\"hello place" + " filler".repeat(i) + "\",\"body\":\"" + body + "\"}");
+                client().performRequest(request);
+            }
+        }
+        return index;
     }
 
     /** The shared single-shard index whose every document ties on any fused score; created once, reused by tie tests. */

@@ -713,10 +713,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // to check is the legs — a named leg or one declaring inner_hits is answered exactly only by round 2 — and the
         // pipeline: response processors run before an assembled page could reach the response and would see round 2's
         // empty one. Last, and only once everything else passed, the fetch volume: the legs would fetch legs × window
-        // documents where round 2 fetches the page, a loss once the extra documents carry more embedding payload than the
-        // round saved is worth (ReturnedEmbeddingFields — a mapping lookup, hence last). When all of that holds, the legs fetch the user's
-        // fields so the page can be assembled from them, and round 2 is not needed unless the legs' answers force it
-        // (buildFusedResult decides that once they are in).
+        // documents where round 2 fetches the page, a loss once the extra documents weigh more than the round saved is
+        // worth. Their weight is the _source size observed on earlier responses of this shape plus the embedding payload
+        // the mapping declares for requested fields (ReturnedEmbeddingFields — a lookup, hence last); an index not yet
+        // observed under this _source filter fails closed to two rounds, whose page is the first observation. When all of
+        // that holds, the legs fetch the user's fields so the page can be assembled from them, and round 2 is not needed
+        // unless the legs' answers force it (buildFusedResult decides that once they are in).
         boolean fastPathArmed = Objects.nonNull(fusedHitsConsumer)
             && HybridFusionOrchestrator.legsAllowFastPath(legs)
             && FusionConfigResolver.resolvedPipelineHasResponseProcessors(searchRequest) == false

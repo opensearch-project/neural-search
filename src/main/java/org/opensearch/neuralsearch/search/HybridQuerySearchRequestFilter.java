@@ -27,6 +27,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.neuralsearch.query.FusedWindowGuardRescorerBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.ObservedSourceSizes;
 import org.opensearch.neuralsearch.search.explain.FusedExplanationMerger;
 import org.opensearch.neuralsearch.search.profile.FusedLegProfileMerger;
 import org.opensearch.neuralsearch.util.HybridQueryUtil;
@@ -299,6 +300,13 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             // the fused window because the Tail was dropped. A rewrite that kept the Tail derived nothing, and this is a no-op.
             if (Objects.nonNull(totals)) {
                 merged = totals.getMergedResponse(merged);
+            }
+            // What this request's page actually weighed, per index: the fast path's fetch-volume gate learns the
+            // _source size of a returned document from here, on either path — the two-round page carries the same
+            // _source the assembled one would — so that a request whose shape it could answer is refused when the
+            // documents are too large to over-fetch, text included (see ObservedSourceSizes).
+            if (Objects.nonNull(assembled)) {
+                ObservedSourceSizes.record(source, merged.getHits());
             }
             listener.onResponse((Response) merged);
         }, listener::onFailure);

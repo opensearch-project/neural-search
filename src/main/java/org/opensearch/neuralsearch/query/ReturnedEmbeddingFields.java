@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalLong;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -41,15 +42,21 @@ import lombok.extern.log4j.Log4j2;
  * still won by 9. What decides it is the <b>extra</b> fetch volume, {@code (legs × window − size) × bytes per document},
  * against the round saved — not the presence of a vector, and not {@code window} or {@code size} alone.
  *
- * <p>Both terms are knowable before the legs run. The bytes per document are estimated from the mapping: for each
- * {@code knn_vector} the page would carry, {@code dimension} times the width of one serialized value (~10 bytes for a
- * float rendered as JSON text, ~4 for a byte vector; a vector without a declared dimension is taken as 1024-wide), and
- * a fixed ~4 KB for a {@code rank_features} field. A field "would be carried" when it survives the same filters core
- * applies — the mapping-level {@code _source.includes/excludes} and the request-level {@code _source}
- * includes/excludes, both {@link XContentMapValues#filter} — or is named by {@code fields}/{@code docvalue_fields}.
- * {@code _source: false} with no field patterns costs no lookup at all. The rewrite refuses the fast path when the extra
- * volume exceeds {@link #FAST_PATH_EXTRA_FETCH_BUDGET_BYTES}. This is a predictor of latency, not a correctness
- * condition — both paths return the same page — so an estimate that is off costs milliseconds only.
+ * <p>Both terms are knowable before the legs run. The bytes per document come from two sources. The {@code _source} a
+ * document returns is <b>observed</b>: {@link ObservedSourceSizes} learns, from the responses the fused-mode filter
+ * handles on either path, the mean serialized {@code _source} bytes per hit for each index under each {@code _source}
+ * filter shape; until an index has been observed under the request's shape the size is unknown and the request fails
+ * closed to two rounds, whose own page is the first observation. That is what makes text-heavy documents — invisible to
+ * any mapping — count. The embedding payload pulled through {@code fields}/{@code docvalue_fields} is <b>estimated</b>
+ * from the mapping: for each {@code knn_vector} named, {@code dimension} times the width of one serialized value (~10
+ * bytes for a float rendered as JSON text, ~4 for a byte vector; a vector without a declared dimension is taken as
+ * 1024-wide), and a fixed ~4 KB for a {@code rank_features} field. The mapping-only estimate of what {@code _source}
+ * would carry — the same declared widths, put through the mapping-level {@code _source.includes/excludes} and the
+ * request-level {@code _source} includes/excludes with the {@link XContentMapValues#filter} core applies — is kept as
+ * {@link #estimatedEmbeddingBytesPerDocument} for the mapping's view. {@code _source: false} with no field patterns costs
+ * no lookup at all. The rewrite refuses the fast path when the extra volume exceeds
+ * {@link #FAST_PATH_EXTRA_FETCH_BUDGET_BYTES}. This is a predictor of latency, not a correctness condition — both paths
+ * return the same page — so an estimate that is off costs milliseconds only.
  *
  * <p>Derived source (k-NN {@code index.knn.derived_source.enabled}) is deliberately <b>not</b> consulted: it strips the
  * vector from the stored {@code _source} but re-injects it on read ({@code DerivedSourceVectorTransformer#injectVectors}),
@@ -98,12 +105,11 @@ final class ReturnedEmbeddingFields {
     private ReturnedEmbeddingFields() {}
 
     /**
-     * True when the fast path would fetch more than {@link #FAST_PATH_EXTRA_FETCH_BUDGET_BYTES} of embedding payload
-     * beyond the page round 2 fetches — {@code (legs × window − size) × bytes per document} — or when that cannot be
-     * established.
+     * True when the fast path would fetch more than {@link #FAST_PATH_EXTRA_FETCH_BUDGET_BYTES} beyond the page round 2
+     * fetches — {@code (legs × window − size) × bytes per document} — or when that cannot be established.
      */
     static boolean fastPathFetchExceedsBudget(final SearchRequest request, final int legCount, final int windowSize) {
-        long bytesPerDocument = estimatedEmbeddingBytesPerDocument(request);
+        long bytesPerDocument = estimatedFetchBytesPerDocument(request);
         if (bytesPerDocument == 0) {
             return false;
         }
@@ -117,9 +123,84 @@ final class ReturnedEmbeddingFields {
     }
 
     /**
-     * Estimated bytes of embedding payload one returned document would carry for this request: {@code 0} when none would,
-     * {@link Long#MAX_VALUE} when that cannot be established (fail closed), else the sum over the embedding fields that
-     * survive the request's and the mappings' fetch filters, taking the widest estimate across the targeted indices.
+     * Estimated bytes one returned document would carry for this request: {@code 0} when it carries nothing the gate
+     * accounts for, {@link Long#MAX_VALUE} when that cannot be established (fail closed), else the widest per-index sum of
+     * two terms.
+     *
+     * <p>The {@code _source} term is the document as the request returns it. When a response of this request's
+     * {@code _source} filter shape has been observed for the index, it is the observed size
+     * ({@link ObservedSourceSizes#bytesPerDocument}) — which already contains any vector the filter lets through, so the
+     * mapping's embedding estimate is not added on top. When none has been observed the size is unknown and the request
+     * fails closed: two rounds, whose page is the first observation. The mapping's estimate alone is not an answer here —
+     * it declares vectors and sparse features and is blind to text, and a text-heavy {@code _source} is exactly the case
+     * that makes the fast path lose (see {@link ObservedSourceSizes}).
+     *
+     * <p>The {@code fields} term is the embedding payload the request pulls through {@code fields}/{@code docvalue_fields},
+     * from the mapping as before; those are not part of {@code _source} and are not in the observation.
+     */
+    static long estimatedFetchBytesPerDocument(final SearchRequest request) {
+        SearchSourceBuilder source = request.source();
+        FetchSourceContext fetchSource = Objects.isNull(source) ? null : source.fetchSource();
+        boolean sourceOn = Objects.isNull(fetchSource) || fetchSource.fetchSource();
+        List<String> fieldPatterns = fieldPatterns(source);
+        if (sourceOn == false && fieldPatterns.isEmpty()) {
+            return 0;
+        }
+        List<IndexMetadata> indices;
+        try {
+            indices = NeuralSearchClusterUtil.instance().getIndexMetadataList(request);
+        } catch (Exception e) {
+            log.debug("fused fast path: cannot resolve the request's indices on the coordinator, taking the two-round path", e);
+            return Long.MAX_VALUE;
+        }
+        if (indices.isEmpty()) {
+            return Long.MAX_VALUE;
+        }
+        long widest = 0;
+        for (IndexMetadata index : indices) {
+            if (Objects.isNull(index)) {
+                // resolved a moment ago, gone from the state now: cannot be established, take the two-round path
+                return Long.MAX_VALUE;
+            }
+            long bytes = 0;
+            if (sourceOn) {
+                OptionalLong observed = ObservedSourceSizes.bytesPerDocument(index.getIndex().getName(), source);
+                if (observed.isEmpty()) {
+                    log.debug(
+                        "fused fast path: no observed _source size yet for [{}] under this _source filter, taking the two-round path",
+                        index.getIndex()
+                    );
+                    return Long.MAX_VALUE;
+                }
+                bytes += observed.getAsLong();
+            }
+            if (fieldPatterns.isEmpty() == false) {
+                MappingFacts facts;
+                try {
+                    facts = factsFor(index);
+                } catch (Exception e) {
+                    log.debug("fused fast path: cannot read the mapping of [{}], taking the two-round path", index.getIndex(), e);
+                    return Long.MAX_VALUE;
+                }
+                if (Objects.nonNull(facts)) {
+                    for (Map.Entry<String, Long> field : facts.embeddingBytes().entrySet()) {
+                        if (fieldPatterns.stream().anyMatch(pattern -> Regex.simpleMatch(pattern, field.getKey()))) {
+                            bytes += field.getValue();
+                        }
+                    }
+                }
+            }
+            widest = Math.max(widest, bytes);
+        }
+        return widest;
+    }
+
+    /**
+     * Estimated bytes of embedding payload one returned document would carry for this request, from the mapping alone:
+     * {@code 0} when none would, {@link Long#MAX_VALUE} when that cannot be established (fail closed), else the sum over
+     * the embedding fields that survive the request's and the mappings' fetch filters, taking the widest estimate across
+     * the targeted indices. This is the mapping's view; the gate itself ({@link #estimatedFetchBytesPerDocument}) prefers
+     * the observed {@code _source} size where one exists, and uses this only for the {@code fields} term.
      */
     static long estimatedEmbeddingBytesPerDocument(final SearchRequest request) {
         SearchSourceBuilder source = request.source();
