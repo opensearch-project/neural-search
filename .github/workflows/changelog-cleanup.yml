@@ -1,0 +1,104 @@
+name: Changelog Cleanup
+
+# When a new release note is added under release-notes/, the entries that were
+# in the "Unreleased" section of CHANGELOG.md have now shipped. This workflow
+# clears those entries (keeping the section and its category headers intact) so
+# the Unreleased section is ready for the next release cycle, and opens a PR
+# with the change.
+
+on:
+  push:
+    branches:
+      - main
+      - '[0-9]+.[0-9]+'
+      - '[0-9]+.x'
+    paths:
+      - 'release-notes/**'
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup-changelog:
+    # Only run when a release note file is actually added (not merely modified).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: GitHub App token
+        id: github_app_token
+        uses: tibdex/github-app-token@1901dc7d52169e70c27a8da37aef0d423e2867a2 # v1.5.0
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          installation_id: 22958780
+
+      - name: Checkout
+        uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3
+        with:
+          fetch-depth: 0
+          token: ${{ steps.github_app_token.outputs.token }}
+
+      - name: Detect added release notes
+        id: detect
+        run: |
+          set -euo pipefail
+          # List files added in this push. For the initial push (before is all
+          # zeros) fall back to comparing against the parent commit.
+          before="${{ github.event.before }}"
+          after="${{ github.sha }}"
+          if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
+            range="${after}^..${after}"
+          else
+            range="${before}..${after}"
+          fi
+
+          added=$(git diff --name-only --diff-filter=A "$range" -- 'release-notes/**' || true)
+          echo "Added release note files:"
+          echo "$added"
+
+          if [[ -z "$added" ]]; then
+            echo "added=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "added=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Clean up Unreleased section in CHANGELOG.md
+        if: steps.detect.outputs.added == 'true'
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/cleanup_changelog.py CHANGELOG.md
+
+      - name: Check for changes
+        if: steps.detect.outputs.added == 'true'
+        id: diff
+        run: |
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No changelog changes needed."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.detect.outputs.added == 'true' && steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7
+        with:
+          token: ${{ steps.github_app_token.outputs.token }}
+          commit-message: "Clean up Unreleased section of CHANGELOG after release note added"
+          title: "[AUTO] Clean up CHANGELOG Unreleased section after release"
+          body: |
+            A new release note was added under `release-notes/`, so the entries
+            previously listed in the **Unreleased** section of `CHANGELOG.md`
+            have now shipped.
+
+            This automated PR clears those entries (keeping the section and its
+            category headers) so the Unreleased section is ready for the next
+            release cycle.
+          branch: automated/changelog-cleanup-${{ github.ref_name }}
+          delete-branch: true
+          labels: |
+            skip-changelog
+          add-paths: |
+            CHANGELOG.md
