@@ -45,9 +45,11 @@ import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.index.Index;
+import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
@@ -121,6 +123,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         super.setUp();
         legTotalHits = new TotalHits(2, TotalHits.Relation.EQUAL_TO);
         initClusterUtil(null);
+        ObservedSourceSizes.clear();
     }
 
     // ------------------------------------------------ fan-out shape ------------------------------------------------
@@ -1414,6 +1417,109 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         assertNotNull("both legs came back capped, so the count is proven", derived[0]);
         assertEquals(10_000L, derived[0].value());
         assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+    }
+
+    // ---------------------------------------- fast path: arming ----------------------------------------
+
+    /** With a hits consumer attached and an eligible shape, the legs fetch (source left to its default), the assembled
+     *  page reaches the consumer, and the settled query is match_none: round 2 has nothing to do. */
+    @SneakyThrows
+    public void testRewrite_whenHitsConsumerAttachedAndShapeEligible_thenLegsFetchAndThePageIsAssembled() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        SearchHits[] assembled = new SearchHits[1];
+        hybrid.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder source = new SearchSourceBuilder().query(hybrid).size(2).trackTotalHits(false);
+        // The fetch gate weighs _source by what earlier responses of this shape returned: a small document is on record.
+        observeSourceSize(source, 200);
+
+        List<Integer> legCounts = new ArrayList<>();
+        SearchSourceBuilder settled = driveWholeSource(new SearchRequest(INDEX_NAME).source(source), legCounts);
+
+        assertNotNull("the page was assembled from the legs", assembled[0]);
+        assertEquals(2, assembled[0].getHits().length);
+        assertTrue("round 2 has nothing to do", settled.query() instanceof MatchNoneQueryBuilder);
+    }
+
+    /**
+     * The cold start of the fetch gate's _source term. Nothing has been observed for the index under this request's
+     * _source shape, so the size is unknown and the request fails closed to two rounds (nothing assembled); once a
+     * response of the shape has been seen — here, recorded as the filter would from that two-round page — the same
+     * request takes the fast path. And a shape whose observed documents are too large stays on two rounds.
+     */
+    @SneakyThrows
+    public void testRewrite_whenSourceSizeIsUnobserved_thenTwoRoundsUntilAResponseTeachesIt() {
+        // the same _source shape (unfiltered) on every request below; a fresh builder per request since the rewrite settles it
+        java.util.function.Supplier<SearchSourceBuilder> shape = () -> new SearchSourceBuilder().size(2).trackTotalHits(false);
+
+        HybridQueryBuilder cold = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        SearchHits[] assembled = new SearchHits[1];
+        cold.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder settledCold = driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(shape.get().query(cold)),
+            new ArrayList<>()
+        );
+        assertNull("unobserved _source size: fail closed, nothing assembled", assembled[0]);
+        assertTrue(settledCold.query() instanceof HybridFusionQueryBuilder);
+
+        observeSourceSize(shape.get(), 200);
+        HybridQueryBuilder warm = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        warm.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder settledWarm = driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(shape.get().query(warm)),
+            new ArrayList<>()
+        );
+        assertNotNull("observed small documents: the page is assembled", assembled[0]);
+        assertTrue(settledWarm.query() instanceof MatchNoneQueryBuilder);
+
+        // 50 KB documents: 2 × window − size extra documents of that weigh far more than a round is worth
+        ObservedSourceSizes.clear();
+        observeSourceSize(shape.get(), 50_000);
+        assembled[0] = null;
+        HybridQueryBuilder heavy = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        heavy.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder settledHeavy = driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(shape.get().query(heavy)),
+            new ArrayList<>()
+        );
+        assertNull("large observed documents: the fast path is refused", assembled[0]);
+        assertTrue(settledHeavy.query() instanceof HybridFusionQueryBuilder);
+    }
+
+    /** What a response of this request shape would have taught the fetch gate about INDEX_NAME's documents. */
+    private static void observeSourceSize(SearchSourceBuilder shape, int bytes) {
+        SearchHit hit = new SearchHit(0, "1", null, null);
+        hit.shard(new SearchShardTarget("node", new ShardId(INDEX_NAME, "uuid", 0), null, OriginalIndices.NONE));
+        String frame = "{\"body\":\"\"}";
+        hit.sourceRef(new BytesArray(frame.substring(0, 9) + "x".repeat(Math.max(0, bytes - frame.length())) + frame.substring(9)));
+        ObservedSourceSizes.record(shape, new SearchHits(new SearchHit[] { hit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f));
+    }
+
+    /** A named leg, and a pipeline with response processors: the fast path stays off, nothing is assembled, and the
+     *  settled query is the two-round self-erased bool. */
+    @SneakyThrows
+    public void testRewrite_whenLegsOrPipelineForbidTheFastPath_thenNothingIsAssembled() {
+        HybridQueryBuilder named = fused(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "a").queryName("lex"),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "b")
+        );
+        SearchHits[] assembled = new SearchHits[1];
+        named.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder settled = driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(named).size(2).trackTotalHits(false)),
+            new ArrayList<>()
+        );
+        assertNull("a named leg keeps the two-round path", assembled[0]);
+        assertTrue(settled.query() instanceof HybridFusionQueryBuilder);
+
+        initClusterUtilWithPipeline("rp", "{\"response_processors\":[{\"rename_field\":{\"field\":\"a\",\"target_field\":\"b\"}}]}");
+        HybridQueryBuilder piped = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        piped.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder pipedSettled = driveWholeSource(
+            new SearchRequest(INDEX_NAME).pipeline("rp").source(new SearchSourceBuilder().query(piped).size(2).trackTotalHits(false)),
+            new ArrayList<>()
+        );
+        assertNull("response processors keep the two-round path", assembled[0]);
+        assertTrue(pipedSettled.query() instanceof HybridFusionQueryBuilder);
     }
 
     /** An integer threshold above the window is what the legs count to. */
