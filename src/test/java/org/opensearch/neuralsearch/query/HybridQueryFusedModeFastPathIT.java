@@ -419,14 +419,24 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Run the request once so its response teaches the fetch gate the index's {@code _source} size under this shape. The
-     * gate fails closed until an index has been observed under a request's {@code _source} filter (see
-     * {@code ObservedSourceSizes}), so the very first such request on a fresh index takes two rounds; tests that assert
-     * fast-path behaviour prime first, as any second request in production would be.
+     * Run the request once per cluster node so its response teaches the fetch gate the index's {@code _source} size
+     * under this shape on every coordinator. The gate fails closed until an index has been observed under a request's
+     * {@code _source} filter (see {@code ObservedSourceSizes}), and what it has observed lives in the coordinator's own
+     * JVM, so on a fresh index the first such request on each coordinator takes two rounds. The REST client spreads
+     * requests over the nodes round-robin, so two turns of the rotation reach every coordinator whatever position
+     * other requests have left it in; tests that assert fast-path behaviour prime first, as a warmed production fleet
+     * would be.
      */
     @SneakyThrows
     private void prime(String index, String requestBody) {
-        searchIndex(index, requestBody);
+        for (int i = 0; i < 2 * clusterNodes(); i++) {
+            searchIndex(index, requestBody);
+        }
+    }
+
+    /** The number of nodes the build started for this run; each is a coordinator with its own learned sizes. */
+    private static int clusterNodes() {
+        return Integer.parseInt(System.getProperty("cluster.number_of_nodes", "1"));
     }
 
     /** The index's cumulative shard-level fetch-phase executions — the per-request delta tells the path apart. */
@@ -445,8 +455,8 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
 
     /**
      * The fetch-volume gate on text. The mapping cannot see how large a text document is, so the gate learns it from
-     * responses: on a fresh index the first request takes two rounds (nothing observed yet — fail closed), and its page
-     * teaches the size. Twelve ~20 KB documents then weigh 2 × 100 − 3 = 197 extra × 20 KB ≈ 3.9 MB, far over the 1 MB
+     * responses: on a fresh index the first request on each coordinator takes two rounds (nothing observed yet — fail
+     * closed), and its page teaches that coordinator the size. Twelve ~20 KB documents then weigh 2 × 100 − 3 = 197 extra × 20 KB ≈ 3.9 MB, far over the 1 MB
      * budget, so every later request stays on two rounds; the same request with {@code _source: false} carries nothing
      * and takes the fast path; and on an index of small documents the primed request takes the fast path. Every answer
      * is identical to the two-round control.
@@ -474,10 +484,12 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         long fastOps = fetchOpsOf(large, "{" + common + ",\"_source\":false,\"query\":" + query + "}");
         assertTrue("round 2 fetches the page where match_none fetches nothing: " + twoRoundOps + " vs " + fastOps, twoRoundOps > fastOps);
 
-        // cold: nothing observed for this index under _source:true → two rounds, and the page teaches the size
+        // cold: nothing observed for this index under _source:true anywhere → the first request takes two rounds, and
+        // its page teaches the coordinator that served it the size
         String sourced = "{" + common + ",\"_source\":true,\"query\":" + query + "}";
         assertEquals("unobserved _source size: two rounds", twoRoundOps, fetchOpsOf(large, sourced));
-        // warm, but ~20 KB documents: 197 extra × 20 KB ≈ 3.9 MB > 1 MB → still two rounds
+        // warm every coordinator, then: ~20 KB documents weigh 197 extra × 20 KB ≈ 3.9 MB > 1 MB → still two rounds
+        prime(large, sourced);
         assertEquals("large text observed: refused, two rounds", twoRoundOps, fetchOpsOf(large, sourced));
         Map<String, Object> warm = searchIndex(large, sourced);
         Map<String, Object> control = searchIndex(large, "{" + common + ",\"_source\":true,\"profile\":true,\"query\":" + query + "}");
@@ -490,6 +502,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         long smallFastOps = fetchOpsOf(small, "{" + common + ",\"_source\":false,\"query\":" + query + "}");
         assertTrue(smallTwoRoundOps > smallFastOps);
         assertEquals("cold: two rounds", smallTwoRoundOps, fetchOpsOf(small, smallSourced));
+        prime(small, smallSourced);
         assertEquals("small documents observed: fast path", smallFastOps, fetchOpsOf(small, smallSourced));
         Map<String, Object> smallFast = searchIndex(small, smallSourced);
         Map<String, Object> smallControl = searchIndex(small, "{" + common + ",\"_source\":true,\"profile\":true,\"query\":" + query + "}");
