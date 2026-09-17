@@ -71,6 +71,7 @@ import org.opensearch.neuralsearch.search.FusedHitsMerger;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.explain.FusedExplanationMerger;
+import org.opensearch.neuralsearch.search.profile.FastPathDecision;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.neuralsearch.search.profile.FusedLegProfileMerger;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
@@ -194,6 +195,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * from {@link #doEquals}/{@link #doHashCode}.
      */
     private FusedHitsMerger.HitsConsumer fusedHitsConsumer;
+
+    /**
+     * Set by {@code HybridQuerySearchRequestFilter} on a <b>profiled</b> request when this fused hybrid is the request's
+     * own query. A profiled request never takes the fast path (round 2's tree is part of what it reports), so no
+     * {@link #fusedHitsConsumer} is attached and the rewrite could not otherwise tell the request's own hybrid from a
+     * nested one; this lets the coordinator profile entry report the fast-path verdict of the same request without
+     * {@code profile} (see {@link FastPathDecision}). Never read for anything but that report.
+     */
+    private boolean fastPathReportRoot;
 
     /**
      * Where to publish the per-leg breakdown behind each fused score. The counterpart of {@link #legProfileConsumer} for
@@ -527,6 +537,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return HybridFusionOrchestrator.requestShapeAllowsFastPath(source);
     }
 
+    /**
+     * {@link #requestShapeAllowsFastPath} for the request as it would be without {@code profile: true}: whether the shape
+     * of a profiled request's unprofiled twin allows the fast path. For {@code HybridQuerySearchRequestFilter}, which is
+     * in another package.
+     */
+    public static boolean requestShapeAllowsFastPathWithoutProfile(final SearchSourceBuilder source) {
+        return Objects.isNull(HybridFusionOrchestrator.requestShapeFastPathRefusal(source, true));
+    }
+
     protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
         // Resolver (fused) mode self-erases at the coordinator into a standard query (see doRewriteFused). Classic mode
         // keeps the existing per-sub-query rewrite below.
@@ -719,10 +738,17 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // observed under this _source filter fails closed to two rounds, whose page is the first observation. When all of
         // that holds, the legs fetch the user's fields so the page can be assembled from them, and round 2 is not needed
         // unless the legs' answers force it (buildFusedResult decides that once they are in).
-        boolean fastPathArmed = Objects.nonNull(fusedHitsConsumer)
-            && HybridFusionOrchestrator.legsAllowFastPath(legs)
-            && FusionConfigResolver.resolvedPipelineHasResponseProcessors(searchRequest) == false
-            && ReturnedEmbeddingFields.fastPathFetchExceedsBudget(searchRequest, legs.size(), window) == false;
+        //
+        // The checks are one verdict (FastPathDecision) so that what arms the fast path and what the profile reports
+        // about it are the same evaluation. The request's shape is re-read here rather than trusted from the consumer's
+        // presence, for the reason given for totals above: a search request processor that adds, say, an aggregation
+        // between the filter and this rewrite must keep round 2, whose aggregations the assembled page cannot carry.
+        // The consumer's presence stays the arming condition — it is what says this hybrid is the request's own query
+        // and that the filter's wrapper is there to swap the page in. A profiled request has no consumer (profile keeps
+        // two rounds) but may carry fastPathReportRoot, so its verdict is still evaluated, for the report alone.
+        boolean rootHybrid = Objects.nonNull(fusedHitsConsumer) || fastPathReportRoot;
+        FastPathDecision fastPath = HybridFusionOrchestrator.decideFastPathBeforeLegs(searchRequest, legs, window, rootHybrid);
+        boolean fastPathArmed = Objects.nonNull(fusedHitsConsumer) && fastPath.allowsSoFar();
         if (fastPathArmed) {
             candidateScope.enableLegFetch(searchRequest.source());
         }
@@ -732,7 +758,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // unprofiled code paths differ in more than what they report.
         FusedCoordinatorTimings timings = new FusedCoordinatorTimings().windowSize(window)
             .normalizationTechnique(fusionSpec.normalizationTechnique())
-            .combinationTechnique(fusionSpec.combinationTechnique());
+            .combinationTechnique(fusionSpec.combinationTechnique())
+            .fastPath(fastPath);
         // Always constructed, for the same reason, but filled only when the legs actually explained — an unexplained
         // request's legs return no explanations, so this stays empty and is discarded.
         FusedDocExplanations explanations = new FusedDocExplanations();

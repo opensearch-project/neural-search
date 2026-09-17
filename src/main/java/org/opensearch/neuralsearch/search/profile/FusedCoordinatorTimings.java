@@ -75,6 +75,12 @@ public final class FusedCoordinatorTimings {
 
     private String combinationTechnique;
 
+    /**
+     * Whether this hybrid takes the fast path and, if not, why — see {@link FastPathDecision}. Set before the legs run and
+     * completed once they have answered; rendered under {@code debug.fast_path}. {@code null} when nothing evaluated it.
+     */
+    private FastPathDecision fastPath;
+
     /** One entry per leg, in leg order, as rendered under the profile node's {@code debug}. */
     private final List<Map<String, Object>> legs = new ArrayList<>();
 

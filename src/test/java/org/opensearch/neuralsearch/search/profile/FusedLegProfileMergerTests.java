@@ -237,6 +237,37 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
         );
     }
 
+    /** The fast-path verdict rides under {@code debug} when one was recorded, and is simply absent when none was. */
+    public void testForHybridTiming_whenAFastPathDecisionIsRecorded_thenDebugCarriesIt() {
+        FusedLegProfileMerger merger = new FusedLegProfileMerger();
+        FusedCoordinatorTimings timings = timings().fastPath(
+            new FastPathDecision().refuse(FastPathDecision.COUNT_NOT_SETTLED, "no leg proved the count").countSettled(false)
+        );
+        merger.forHybridTiming("hybrid_0").accept(timings);
+
+        Map<String, Object> debug = coordinatorDebug(merger);
+
+        assertEquals(
+            Map.of("would_take", false, "refused_by", "count_not_settled", "detail", "no leg proved the count", "count_settled", false),
+            debug.get("fast_path")
+        );
+
+        FusedLegProfileMerger silent = new FusedLegProfileMerger();
+        silent.forHybridTiming("hybrid_0").accept(timings());
+        assertFalse("nothing recorded, nothing rendered", coordinatorDebug(silent).containsKey("fast_path"));
+    }
+
+    private Map<String, Object> coordinatorDebug(final FusedLegProfileMerger merger) {
+        return merger.mergedProfileResults(responseWithProfile(null))
+            .getShardResults()
+            .get("[coordinator][fused:hybrid_0]")
+            .getQueryProfileResults()
+            .get(0)
+            .getQueryResults()
+            .get(0)
+            .getDebugInfo();
+    }
+
     /** Core renders both of these unconditionally, so the coordinator entry has to carry them as empty rather than absent. */
     public void testForHybridTiming_whenTimingsPublished_thenTheAggregationAndFetchSectionsAreEmpty() {
         FusedLegProfileMerger merger = new FusedLegProfileMerger();

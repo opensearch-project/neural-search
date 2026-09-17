@@ -175,6 +175,10 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
         boolean rescored = Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false;
         boolean countsBeyondWindow = mayDeriveTotalHitsFromLegs(source);
         boolean fastPathShape = mayTakeFastPath(source);
+        // A profiled request keeps two rounds, but its page is the page its unprofiled twin would return, so it can teach
+        // the fetch gate the same _source size — and its coordinator entry reports that twin's verdict, which is then
+        // about a warmed gate on the next unprofiled request rather than a cold one (see FastPathDecision).
+        boolean profiledFastPathTwin = profiled && mayTakeFastPathWithoutProfile(source);
         if (profiled == false
             && mayTimeOut == false
             && explained == false
@@ -206,6 +210,10 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
                 String hybridLabel = String.format(Locale.ROOT, "hybrid_%d", i);
                 hybrid.legProfileConsumer(legProfileMerger.forHybrid(hybridLabel));
                 hybrid.fusionTimingConsumer(legProfileMerger.forHybridTiming(hybridLabel));
+                // A profiled request keeps two rounds, so no hits consumer marks the request's own hybrid for the rewrite;
+                // this does, for the coordinator entry's fast_path report alone (see FastPathDecision). The finder visits
+                // the root first, so found.get(0) is the request's own query when it is a fused hybrid.
+                hybrid.fastPathReportRoot(i == 0 && hybrid == source.query());
             }
             if (Objects.nonNull(timeoutMerger)) {
                 hybrid.legTimeoutConsumer(timeoutMerger.consumer());
@@ -305,7 +313,7 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             // _source size of a returned document from here, on either path — the two-round page carries the same
             // _source the assembled one would — so that a request whose shape it could answer is refused when the
             // documents are too large to over-fetch, text included (see ObservedSourceSizes).
-            if (Objects.nonNull(assembled)) {
+            if (Objects.nonNull(assembled) || profiledFastPathTwin) {
                 ObservedSourceSizes.record(source, merged.getHits());
             }
             listener.onResponse((Response) merged);
@@ -324,6 +332,14 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
             return false;
         }
         return HybridQueryBuilder.requestShapeAllowsFastPath(source);
+    }
+
+    /** {@link #mayTakeFastPath} for the request as it would be without {@code profile: true}. */
+    private static boolean mayTakeFastPathWithoutProfile(final SearchSourceBuilder source) {
+        if ((source.query() instanceof HybridQueryBuilder) == false || Objects.isNull(((HybridQueryBuilder) source.query()).fusion())) {
+            return false;
+        }
+        return HybridQueryBuilder.requestShapeAllowsFastPathWithoutProfile(source);
     }
 
     /**

@@ -164,6 +164,43 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
      * {@code size:100} the fast path fetches 100 extra documents (~0.77 MB estimated) and stays on; at {@code size:10} it
      * would fetch 190 extra (~1.46 MB) and is refused. Without the vector, or with {@code _source} off, never refused.
      */
+    /** The volume the gate weighs, in the open: extra documents, their estimated bytes, the budget, and why an estimate is missing. */
+    public void testFastPathFetchVolume_thenTheGateAndTheProfileReadOneCalculation() {
+        cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1));
+
+        ReturnedEmbeddingFields.FetchVolume unobserved = ReturnedEmbeddingFields.fastPathFetchVolume(request(source().size(10)), 2, 100);
+        assertEquals(190, unobserved.extraDocuments());
+        assertEquals(ReturnedEmbeddingFields.FAST_PATH_EXTRA_FETCH_BUDGET_BYTES, unobserved.budgetBytes());
+        assertEquals(ReturnedEmbeddingFields.Unknown.SOURCE_SIZE_UNOBSERVED, unobserved.perDocument().unknown());
+        assertTrue("unknown fails closed", unobserved.exceedsBudget());
+        assertEquals(Long.MAX_VALUE, unobserved.extraBytes());
+
+        observe(VECTOR_INDEX, source(), 7_000);
+        ReturnedEmbeddingFields.FetchVolume observed = ReturnedEmbeddingFields.fastPathFetchVolume(request(source().size(10)), 2, 100);
+        assertEquals(ReturnedEmbeddingFields.Unknown.NONE, observed.perDocument().unknown());
+        assertEquals(7_000L, observed.perDocument().bytes());
+        assertEquals(190L * 7_000L, observed.extraBytes());
+        assertTrue("1.33 MB over the 1 MB default", observed.exceedsBudget());
+
+        ReturnedEmbeddingFields.FetchVolume smallerWindow = ReturnedEmbeddingFields.fastPathFetchVolume(request(source().size(10)), 2, 50);
+        assertEquals(90, smallerWindow.extraDocuments());
+        assertFalse("630 KB under budget", smallerWindow.exceedsBudget());
+
+        ReturnedEmbeddingFields.FetchVolume nothing = ReturnedEmbeddingFields.fastPathFetchVolume(
+            request(source().size(10).fetchSource(false)),
+            2,
+            100
+        );
+        assertEquals(0L, nothing.extraBytes());
+        assertFalse("a request that fetches nothing is never refused on volume", nothing.exceedsBudget());
+        assertEquals(ReturnedEmbeddingFields.PerDocumentEstimate.NOTHING, nothing.perDocument());
+
+        cluster();
+        ReturnedEmbeddingFields.FetchVolume unresolved = ReturnedEmbeddingFields.fastPathFetchVolume(request(source().size(10)), 2, 100);
+        assertEquals(ReturnedEmbeddingFields.Unknown.INDICES_UNRESOLVED, unresolved.perDocument().unknown());
+        assertTrue(unresolved.exceedsBudget());
+    }
+
     public void testFastPathFetchExceedsBudget_reproducesTheMeasuredCrossover() {
         cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1));
         // The gate weighs _source by what responses of this shape returned. Seed the observation the measured index

@@ -8,6 +8,7 @@ import org.opensearch.common.settings.Setting;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
+import org.opensearch.core.common.unit.ByteSizeUnit;
 import org.opensearch.core.common.unit.ByteSizeValue;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 
@@ -169,6 +170,25 @@ public final class NeuralSearchSettings {
     public static final Setting<Boolean> HYBRID_FUSION_ENABLED = Setting.boolSetting(
         "plugins.neural_search.hybrid.fusion.enabled",
         false,
+        Setting.Property.NodeScope,
+        Setting.Property.Dynamic
+    );
+
+    /**
+     * How much the fused fast path may fetch beyond the page round 2 would have fetched — {@code (legs × window − size)}
+     * documents, weighed by the {@code _source} size observed for the index and the embedding payload the mapping
+     * declares for requested fields — before it is refused and the request runs the usual two rounds.
+     *
+     * <p>The default is set for a tiered coordinator/worker topology, where 1.3–3 MB of extra documents cost as much as
+     * the round saved. On a co-located cluster the crossover is higher (measured above 3.7 MB on 3 × r5.xlarge), so an
+     * operator there can raise it; {@code 0} refuses the fast path for any request that fetches anything. Dynamic and
+     * read per request. A latency knob only: both paths return the same page.
+     */
+    public static final Setting<ByteSizeValue> HYBRID_FUSION_FAST_PATH_FETCH_BUDGET = Setting.byteSizeSetting(
+        "plugins.neural_search.hybrid.fusion.fast_path_fetch_budget",
+        new ByteSizeValue(1, ByteSizeUnit.MB),
+        ByteSizeValue.ZERO,
+        new ByteSizeValue(1, ByteSizeUnit.GB),
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );

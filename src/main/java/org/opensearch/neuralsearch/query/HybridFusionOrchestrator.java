@@ -43,6 +43,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
+import org.opensearch.neuralsearch.search.profile.FastPathDecision;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -255,6 +256,9 @@ final class HybridFusionOrchestrator {
         timings.windowMergeNanos(System.nanoTime() - windowMergeStart);
         RankedDocs ranked = computeRankedDocs(legHits, fusion, windowSize, timings, explanations);
         timings.rankedDocs(ranked.ids().length);
+        // Not armed, so nothing here depends on the verdict — but a profiled request's report of its unprofiled twin
+        // still needs what the legs decided, read off the same answers the unprofiled twin would have had.
+        decideFastPathAfterLegs(timings.fastPath(), source, items, ranked, windowSize);
         return buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer);
     }
 
@@ -1130,26 +1134,164 @@ final class HybridFusionOrchestrator {
      * Source-only and O(fields), so the filter can consult it on every search before deciding to attach anything.
      */
     static boolean requestShapeAllowsFastPath(SearchSourceBuilder source) {
+        return Objects.isNull(requestShapeFastPathRefusal(source, false));
+    }
+
+    /**
+     * The first request feature that keeps the fast path off, as {@code [reason, detail]} for {@link FastPathDecision},
+     * or {@code null} when the shape allows it. The order is the order {@link #requestShapeAllowsFastPath} checks in, so
+     * the two agree on every source. {@code ignoreProfile} evaluates the shape the request would have without
+     * {@code profile: true} — what a profiled request reports about its unprofiled twin.
+     */
+    static String[] requestShapeFastPathRefusal(SearchSourceBuilder source, boolean ignoreProfile) {
         if (Objects.isNull(source)) {
-            return false;
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "no request source" };
         }
-        if (Objects.nonNull(source.aggregations()) || Objects.nonNull(source.highlighter())) {
-            return false;
+        if (Objects.nonNull(source.aggregations())) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "aggregations need round 2 over the fused ranking" };
         }
-        if (Objects.nonNull(source.sorts()) || Objects.nonNull(source.collapse()) || Objects.nonNull(source.searchAfter())) {
-            return false;
+        if (Objects.nonNull(source.highlighter())) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "highlight needs round 2 over the fused ranking" };
         }
-        if (Objects.nonNull(source.minScore()) || (Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false)) {
-            return false;
+        if (Objects.nonNull(source.sorts())) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "sort needs round 2 over the fused ranking" };
+        }
+        if (Objects.nonNull(source.collapse())) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "collapse needs round 2 over the fused ranking" };
+        }
+        if (Objects.nonNull(source.searchAfter())) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "search_after needs round 2 over the fused ranking" };
+        }
+        if (Objects.nonNull(source.minScore())) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "min_score needs round 2 over the fused ranking" };
+        }
+        if (Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "rescore runs on the shard over round 2's query" };
         }
         if (Objects.nonNull(source.scriptFields()) && source.scriptFields().isEmpty() == false) {
-            return false;
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "script_fields may read _score, which a leg reports raw" };
         }
-        if (source.profile()) {
-            return false;
+        if (ignoreProfile == false && source.profile()) {
+            return new String[] { FastPathDecision.REQUEST_SHAPE, "profile reports round 2's query tree" };
         }
         Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
-        return Objects.isNull(trackTotalHitsUpTo) || trackTotalHitsUpTo != SearchContext.TRACK_TOTAL_HITS_ACCURATE;
+        if (Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
+            return new String[] { FastPathDecision.EXACT_TOTALS, "track_total_hits: true needs the Tail's exact count" };
+        }
+        return null;
+    }
+
+    /**
+     * The fast-path verdict for this hybrid as far as it can be known before the legs run — the request's shape (read
+     * as if unprofiled), its legs, the resolved pipeline, then the fetch volume against the budget in force — in the
+     * order the fast path itself checks them, so the first refusal is the one that would have applied.
+     * {@code rootHybrid} says whether this hybrid is the request's own query, the one thing the rewrite cannot see and
+     * {@code HybridQuerySearchRequestFilter} tells it. What the legs decide afterwards ({@link #decideFastPathAfterLegs})
+     * completes the verdict.
+     */
+    static FastPathDecision decideFastPathBeforeLegs(SearchRequest request, List<QueryBuilder> legs, int windowSize, boolean rootHybrid) {
+        FastPathDecision decision = new FastPathDecision();
+        if (rootHybrid == false) {
+            return decision.refuse(FastPathDecision.NESTED_HYBRID, "only the request's own top-level hybrid can have its page assembled");
+        }
+        SearchSourceBuilder source = request.source();
+        String[] shape = requestShapeFastPathRefusal(source, true);
+        if (Objects.nonNull(shape)) {
+            return decision.refuse(shape[0], shape[1]);
+        }
+        for (int leg = 0; leg < legs.size(); leg++) {
+            if (carriesQueryName(legs.get(leg))) {
+                return decision.refuse(
+                    FastPathDecision.LEG_NAME,
+                    String.format(Locale.ROOT, "leg %d carries _name; round 2 registers it against every returned document", leg)
+                );
+            }
+        }
+        if (innerHitsLegs(legs).isEmpty() == false) {
+            return decision.refuse(
+                FastPathDecision.LEG_INNER_HITS,
+                "a leg declares inner_hits; round 2 computes them for every returned document"
+            );
+        }
+        if (FusionConfigResolver.resolvedPipelineHasResponseProcessors(request)) {
+            return decision.refuse(
+                FastPathDecision.RESPONSE_PROCESSORS,
+                "the resolved search pipeline has response processors, which run before an assembled page could reach them"
+            );
+        }
+        ReturnedEmbeddingFields.FetchVolume volume = ReturnedEmbeddingFields.fastPathFetchVolume(request, legs.size(), windowSize);
+        decision.fetchBudgetBytes(volume.budgetBytes());
+        switch (volume.perDocument().unknown()) {
+            case SOURCE_SIZE_UNOBSERVED:
+                return decision.refuse(
+                    FastPathDecision.SOURCE_SIZE_UNOBSERVED,
+                    "no response with this _source filter has been observed for the index on this coordinator yet; "
+                        + "the two-round page is the first observation"
+                );
+            case INDICES_UNRESOLVED:
+                return decision.refuse(
+                    FastPathDecision.FETCH_VOLUME_UNKNOWN,
+                    "the request's indices or their mappings could not be read on the coordinator"
+                );
+            default:
+                break;
+        }
+        decision.fetchEstimateBytes(volume.extraBytes());
+        if (volume.exceedsBudget()) {
+            return decision.refuse(
+                FastPathDecision.FETCH_BUDGET,
+                String.format(
+                    Locale.ROOT,
+                    "the legs would fetch %d documents beyond the page, an estimated %d bytes, over the %d-byte budget",
+                    volume.extraDocuments(),
+                    volume.extraBytes(),
+                    volume.budgetBytes()
+                )
+            );
+        }
+        return decision;
+    }
+
+    /**
+     * Completes a {@link #decideFastPathBeforeLegs verdict} with what only the legs' answers decide: whether anything was
+     * ranked, whether the requested page lies inside the ranked window, and whether the count the request wants is
+     * settled — disabled, inside the window, or proved by a leg (see {@link #totalHitsForFastPath}). Evaluated identically
+     * on the armed path, where it decides the fallback, and on the two-round path of a profiled request, where it
+     * completes the report; a decision already refused before the legs is left as it is.
+     */
+    static void decideFastPathAfterLegs(
+        FastPathDecision decision,
+        SearchSourceBuilder source,
+        MultiSearchResponse.Item[] items,
+        RankedDocs ranked,
+        int windowSize
+    ) {
+        if (Objects.isNull(decision) || decision.allowsSoFar() == false) {
+            return;
+        }
+        if (ranked.ids().length == 0) {
+            decision.refuse(FastPathDecision.NO_CANDIDATES, "the legs returned nothing to fuse; round 2 is a match_none either way");
+            return;
+        }
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
+        boolean countSettled = totalsDisabled
+            || Objects.nonNull(totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize));
+        decision.countSettled(countSettled);
+        int pageEnd = requestedPageEnd(source);
+        if (pageEnd > ranked.ids().length) {
+            decision.refuse(
+                FastPathDecision.PAGE_BEYOND_WINDOW,
+                String.format(Locale.ROOT, "the page ends at %d but only %d documents were ranked", pageEnd, ranked.ids().length)
+            );
+            return;
+        }
+        if (countSettled == false) {
+            decision.refuse(
+                FastPathDecision.COUNT_NOT_SETTLED,
+                "the request wants a count beyond the window and no leg reported enough matches to prove it"
+            );
+        }
     }
 
     /**
@@ -1239,9 +1381,10 @@ final class HybridFusionOrchestrator {
      * two-round path with the legs' results reused as they are: the page must fit inside the ranked window (past it,
      * Tail-only documents fill the slots — the same rule the Tail keeps), and a request that wants a count beyond the
      * window must have a leg that proves it (see {@link #totalHitsFromLegs}); totals disabled need no count at all.
-     * Both paths report through the same consumers, so a caller cannot tell them apart except by latency and by the
-     * order of documents with bit-identical fused scores inside one shard — which, at a page edge, is which of the
-     * tied documents the page shows (see {@link #roundTwoOrder}).
+     * Both paths report through the same consumers, so a caller cannot tell them apart from the hits except by latency
+     * and by the order of documents with bit-identical fused scores inside one shard — which, at a page edge, is which
+     * of the tied documents the page shows (see {@link #roundTwoOrder}). What tells them apart on purpose: the
+     * coordinator profile entry's {@code fast_path} verdict ({@link FastPathDecision}).
      */
     static FusedResult buildFusedResult(
         SearchSourceBuilder source,
@@ -1276,6 +1419,11 @@ final class HybridFusionOrchestrator {
         timings.windowMergeNanos(System.nanoTime() - windowMergeStart);
         RankedDocs ranked = computeRankedDocs(legHits, fusion, windowSize, timings, explanations);
         timings.rankedDocs(ranked.ids().length);
+        // What the legs decide: nothing ranked, a page past the ranked window, or a count no leg proved, each a fallback.
+        // The verdict is recorded on the timings' decision (the profile's account of it) and read back here, so the
+        // report and the behaviour cannot disagree.
+        FastPathDecision decision = Objects.nonNull(timings.fastPath()) ? timings.fastPath() : new FastPathDecision();
+        decideFastPathAfterLegs(decision, source, items, ranked, windowSize);
         if (ranked.ids().length == 0) {
             // Nothing fused: match_none either way, and the consumers learn nothing was derived or assembled.
             if (Objects.nonNull(totalHitsConsumer)) {
@@ -1283,20 +1431,17 @@ final class HybridFusionOrchestrator {
             }
             return FusedResult.twoRound(new MatchNoneQueryBuilder());
         }
-        // The page has to come from the ranked window alone: past it, the two-round path returns Tail-only documents.
-        boolean pageFits = requestedPageEnd(source) <= ranked.ids().length;
-        // Totals: disabled → none; otherwise what round 2 would have reported must already be known (see below).
-        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
-        boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
-        TotalHits totalHits = totalsDisabled ? null : totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize);
-        boolean totalsSettled = totalsDisabled || Objects.nonNull(totalHits);
-        if (pageFits == false || totalsSettled == false) {
+        if (decision.allowsSoFar() == false) {
             // Fall back with the fusion already done: reuse the legHits/ranked computed above rather than recomputing
             // them (and re-recording their timings/explanations) inside a recomputing buildFusedQuery overload.
             return FusedResult.twoRound(
                 buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer)
             );
         }
+        // Totals: disabled → none; otherwise what round 2 would have reported, which the verdict above established is known.
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
+        TotalHits totalHits = totalsDisabled ? null : totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize);
         long assembleStart = System.nanoTime();
         SearchHits page = assemblePage(ranked, source, totalHits);
         timings.substituteBuildNanos(System.nanoTime() - assembleStart);
