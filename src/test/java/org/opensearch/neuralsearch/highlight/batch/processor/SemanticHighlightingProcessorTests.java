@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.processor;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -20,11 +21,13 @@ import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.text.Text;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.ml.common.FunctionName;
 import org.opensearch.ml.common.MLModel;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -228,6 +231,54 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         assertNotNull(resultHit.getHighlightFields().get("body"));
         String highlighted = resultHit.getHighlightFields().get("body").fragments()[0].string();
         assertEquals("alpha <em>beta</em> gamma", highlighted);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testListElementsWithoutTerminalPunctuationUseSeparateBatchInputs() throws Exception {
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder source = new SearchSourceBuilder();
+        source.query(new MatchQueryBuilder("body", "red car"));
+        HighlightBuilder hl = new HighlightBuilder();
+        hl.field(new HighlightBuilder.Field("body").highlighterType("semantic"));
+        hl.options(Map.of("model_id", "m1", "max_inference_batch_size", 1));
+        source.highlighter(hl);
+        request.source(source);
+
+        SearchHit hit = hitWithRawSource("1", "{\"body\":[\"Apple is red\",\"My car is outside\"]}");
+        SearchResponse response = mockResponse(new SearchHit[] { hit });
+        List<String> inferenceContexts = new ArrayList<>();
+
+        doAnswer(invocation -> {
+            List<SentenceHighlightingRequest> requests = invocation.getArgument(1);
+            for (SentenceHighlightingRequest inferenceRequest : requests) {
+                inferenceContexts.add(inferenceRequest.getContext());
+            }
+            ActionListener<List<List<Map<String, Object>>>> listener = invocation.getArgument(3);
+            listener.onResponse(List.of(List.of(Map.of("start", 0, "end", requests.get(0).getContext().length()))));
+            return null;
+        }).when(mlClientAccessor).batchInferenceSentenceHighlighting(eq("m1"), anyList(), eq(FunctionName.REMOTE), any());
+
+        AtomicReference<SearchResponse> result = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        processor.processResponseAsync(request, response, mock(PipelineProcessingContext.class), ActionListener.wrap(r -> {
+            result.set(r);
+            latch.countDown();
+        }, e -> {
+            fail("unexpected failure: " + e.getMessage());
+            latch.countDown();
+        }));
+
+        assertTrue(latch.await(5, TimeUnit.SECONDS));
+        assertEquals(List.of("Apple is red", "My car is outside"), inferenceContexts);
+        Text[] fragments = result.get()
+            .getHits()
+            .getHits()[0]
+            .getHighlightFields()
+            .get("body")
+            .fragments();
+        assertEquals(2, fragments.length);
+        assertEquals("<em>Apple is red</em>", fragments[0].string());
+        assertEquals("<em>My car is outside</em>", fragments[1].string());
     }
 
     @SuppressWarnings("unchecked")
@@ -506,6 +557,12 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
         sb.append('}');
         BytesReference src = new BytesArray(sb.toString());
         hit.sourceRef(src);
+        return hit;
+    }
+
+    private static SearchHit hitWithRawSource(String id, String json) {
+        SearchHit hit = new SearchHit(0, id, new HashMap<>(), new HashMap<>());
+        hit.sourceRef(new BytesArray(json));
         return hit;
     }
 
