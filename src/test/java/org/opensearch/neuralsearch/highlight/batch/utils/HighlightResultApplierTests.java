@@ -320,6 +320,102 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         assertEquals("alpha\n\n<em>beta</em>", field.fragments()[0].string());
     }
 
+    public void testElementBatchRejectsResultsSizeMismatch() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"alpha\",\"beta\"]}");
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> applier.applyBatchResults(
+                List.of(hit, hit),
+                List.of(List.of()),
+                List.of(0, 1),
+                List.of("body", "body"),
+                List.of("<em>", "<em>"),
+                List.of("</em>", "</em>"),
+                List.of(0, 0),
+                List.of("default", "default")
+            )
+        );
+        assertEquals("Batch results size mismatch", e.getMessage());
+        assertTrue(hit.getHighlightFields().isEmpty());
+    }
+
+    public void testElementBatchRejectsElementIndicesSizeMismatch() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"alpha\",\"beta\"]}");
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> applier.applyBatchResults(
+                List.of(hit, hit),
+                List.of(List.of(), List.of()),
+                List.of(0),
+                List.of("body", "body"),
+                List.of("<em>", "<em>"),
+                List.of("</em>", "</em>"),
+                List.of(0, 0),
+                List.of("default", "default")
+            )
+        );
+        assertEquals("Batch results size mismatch", e.getMessage());
+        assertTrue(hit.getHighlightFields().isEmpty());
+    }
+
+    public void testElementBatchWithoutMatchesEmitsTruncatedSnippet() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"abcdefgh\",\"second\"]}");
+        applyElementBatchWithoutMatches(hit, 4, "default");
+        assertEquals("abcd", highlightedValue(hit, "body"));
+    }
+
+    public void testElementBatchWithoutMatchesEmitsWholeSnippetWhenShorterThanLimit() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"short\",\"second\"]}");
+        applyElementBatchWithoutMatches(hit, 10, "default");
+        assertEquals("short", highlightedValue(hit, "body"));
+    }
+
+    public void testElementBatchWithoutMatchesEscapesHtmlSnippet() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"<b>bold</b>\",\"second\"]}");
+        applyElementBatchWithoutMatches(hit, 6, "HTML");
+        assertEquals("&lt;b&gt;bol", highlightedValue(hit, "body"));
+    }
+
+    public void testElementBatchWithoutMatchesAndZeroNoMatchSizeEmitsNoHighlight() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"first\",\"second\"]}");
+        applyElementBatchWithoutMatches(hit, 0, "default");
+        assertTrue(hit.getHighlightFields().isEmpty());
+    }
+
+    public void testElementBatchRejectsIncompleteElementMapping() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"first\",\"second\"]}");
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> applier.applyBatchResults(
+                List.of(hit),
+                List.of(List.of()),
+                List.of(0),
+                List.of("body"),
+                List.of("<em>"),
+                List.of("</em>"),
+                List.of(4),
+                List.of("default")
+            )
+        );
+        assertEquals("Batch element mapping mismatch", e.getMessage());
+        assertTrue(hit.getHighlightFields().isEmpty());
+    }
+
+    public void testElementBatchHtmlEncoderPreservesHighlightTags() {
+        SearchHit hit = hitWithRawJson("{\"body\":[\"<b>bold\",\"other\"]}");
+        applier.applyBatchResults(
+            List.of(hit, hit),
+            List.of(List.of(Map.of("start", 3, "end", 7)), List.of()),
+            List.of(0, 1),
+            List.of("body", "body"),
+            List.of("<em>", "<em>"),
+            List.of("</em>", "</em>"),
+            List.of(0, 0),
+            List.of("html", "html")
+        );
+        assertEquals("&lt;b&gt;<em>bold</em>", highlightedValue(hit, "body"));
+    }
+
     public void testAppliesScalarNumberField() {
         SearchHit hit = hitWithRawJson("{\"count\":42}");
         // Joined "42" is [0,2)
@@ -348,6 +444,19 @@ public class HighlightResultApplierTests extends OpenSearchTestCase {
         BytesReference src = new BytesArray(sb.toString());
         hit.sourceRef(src);
         return hit;
+    }
+
+    private void applyElementBatchWithoutMatches(SearchHit hit, int noMatchSize, String encoder) {
+        applier.applyBatchResults(
+            List.of(hit, hit),
+            List.of(List.of(), List.of()),
+            List.of(0, 1),
+            List.of("body", "body"),
+            List.of("<em>", "<em>"),
+            List.of("</em>", "</em>"),
+            List.of(noMatchSize, noMatchSize),
+            List.of(encoder, encoder)
+        );
     }
 
     private static SearchHit hitWithRawJson(String json) {
