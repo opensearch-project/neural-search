@@ -404,17 +404,34 @@ public class NormalizationProcessorWorkflow {
     }
 
     /**
-     * Filters out null instance results from the query search results.
-     * Null instances occur when:
-     * 1. A shard has no matching documents (match_no_docs)
-     * 2. A shard's query was rewritten to empty
-     * 3. Partial reduce consumed the topDocs during batched shard processing (>512 shards)
+     * Filters out results that hold nothing to normalize, and refuses results that held hybrid documents this workflow can
+     * no longer reach.
+     *
+     * <p>Dropped: a {@code null} entry, and a {@link QuerySearchResult#nullInstance() null instance} — a shard whose request
+     * was built after another shard had answered and whose query could not match (core's can-match shortcut: no matching
+     * documents, or a query rewritten to {@code match_none}). Such a result never held a hit.
+     *
+     * <p>Refused, with an explanation: a result whose topDocs a partial reduce has already consumed. Its documents are
+     * already in the partially reduced TopDocs, un-normalized and still in the hybrid delimiter format, where this workflow
+     * cannot rewrite them; dropping the result here would hand the final reduce a mix of normalized and raw documents at
+     * HTTP 200. {@code HybridQuerySearchRequestFilter} prevents the situation for any request whose submitted top-level
+     * query is a hybrid, by disabling batched reduction; it can only arise when a search-pipeline request processor
+     * creates the hybrid after that filter ran, which is not a supported way to run a hybrid query.
      * @param querySearchResults the list of QuerySearchResult from all shards
-     * @return list containing only valid (non-null) results
+     * @return the results that can be normalized
      */
     private List<QuerySearchResult> filterValidResults(final List<QuerySearchResult> querySearchResults) {
-        return querySearchResults.stream()
+        List<QuerySearchResult> readable = querySearchResults.stream()
             .filter(searchResult -> Objects.nonNull(searchResult) && !searchResult.isNull())
             .collect(Collectors.toList());
+        if (readable.stream().anyMatch(QuerySearchResult::hasConsumedTopDocs)) {
+            throw new IllegalStateException(
+                "hybrid query results were partially reduced before normalization and can no longer be processed. A hybrid "
+                    + "query must be the request's top-level query when the request is submitted, so that batched reduction "
+                    + "can be disabled for it; a search-pipeline request processor that creates or replaces the hybrid query "
+                    + "is not supported"
+            );
+        }
+        return readable;
     }
 }

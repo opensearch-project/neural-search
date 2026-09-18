@@ -636,7 +636,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         validateFusedLegSearchBudget(searchRequest);
         // And, when the request carries a rescore, this hybrid has to be the request's own query — a rescore is confined to
         // the fused window, which is the request's ranking only then. Refused here, before any fan-out.
-        requireFusedHybridIsTheRequestQueryWhenRescoring(searchRequest);
+        requireFusedHybridIsRequestQueryWhenRescoring(searchRequest);
         // Then the request's own shape, in one place: what each leg inherits, and a refusal for the shapes fused mode
         // cannot answer correctly. Ahead of every check that resolves index metadata — config resolution reads the
         // targeted indices' default pipelines, and the window ceiling reads their max_result_window — because a request
@@ -701,9 +701,24 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             candidateScope.enableLegProfiling();
         }
 
+        // Every consumer below was attached by HybridQuerySearchRequestFilter against the request as submitted, and the
+        // filter attached the explain, totals and hits consumers only where this hybrid was the request's own query. Core
+        // runs the search pipeline's request processors between that filter and this rewrite (TransportSearchAction:
+        // transformRequest, then rewriteAndFetch in its callback), and a processor may have wrapped this very instance —
+        // core's filter_query does exactly that (bool{must:[<this>], filter:[…]}) — or changed the request's shape. The
+        // consumer then stays attached to a hybrid that is no longer the query, so its presence proves nothing about
+        // position or shape any more: both are re-derived here, on the request core is actually executing. A hybrid that
+        // is not the request's query keeps every consumer unused, which each merger treats as "nothing to merge".
+        // The source is non-null here: requireFusedQueryIsPartOfRequestQuery above refused a request without one.
+        final boolean isRequestQuery = searchRequest.source().query() == this;
+        // The totals consumer a processor-nested hybrid hands on is null, exactly as a user-nested hybrid's is: whatever the
+        // legs happen to count, no total is derived for a query that is not the request's.
+        final FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumerForThisQuery = isRequestQuery ? fusedTotalHitsConsumer : null;
+
         // Same contract for explain: with a consumer attached the request asked to be explained, so the legs explain their
-        // hits and the fused breakdown replaces round 2's own explanation of the substituted query.
-        if (Objects.nonNull(fusedExplanationConsumer)) {
+        // hits and the fused breakdown replaces round 2's own explanation of the substituted query — but only while this
+        // hybrid still is the request's query, whose score the explanation describes.
+        if (Objects.nonNull(fusedExplanationConsumer) && isRequestQuery) {
             candidateScope.enableLegExplain();
         }
 
@@ -717,7 +732,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // shape is re-read here rather than trusted from the consumer's presence: the filter decided it before the search
         // pipeline's request processors ran, and one that adds an aggregation between the two would otherwise have the legs
         // count for a Tail this rewrite is about to keep anyway.
-        if (Objects.nonNull(fusedTotalHitsConsumer)) {
+        if (Objects.nonNull(totalHitsConsumerForThisQuery)) {
             Integer legTotalHitsThreshold = HybridFusionOrchestrator.legTotalHitsThreshold(searchRequest.source(), window);
             if (Objects.nonNull(legTotalHitsThreshold)
                 && HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(searchRequest.source())
@@ -727,9 +742,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }
 
-        // The fast path: with a consumer attached this hybrid is the request's query and the request's shape needs no
-        // shard-side round over the fused ranking (see HybridFusionOrchestrator#requestShapeAllowsFastPath). What is left
-        // to check is the legs — a named leg or one declaring inner_hits is answered exactly only by round 2 — and the
+        // The fast path: a consumer was attached because, as submitted, this hybrid was the request's query in a shape that
+        // needs no shard-side round over the fused ranking; both are re-checked here against the executing request (see
+        // isRequestQuery above and HybridFusionOrchestrator#requestShapeAllowsFastPath). What is left to check is the legs — a named leg
+        // or one declaring inner_hits is answered exactly only by round 2 — and the
         // pipeline: response processors run before an assembled page could reach the response and would see round 2's
         // empty one. Last, and only once everything else passed, the fetch volume: the legs would fetch legs × window
         // documents where round 2 fetches the page, a loss once the extra documents weigh more than the round saved is
@@ -740,15 +756,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // unless the legs' answers force it (buildFusedResult decides that once they are in).
         //
         // The checks are one verdict (FastPathDecision) so that what arms the fast path and what the profile reports
-        // about it are the same evaluation. The request's shape is re-read here rather than trusted from the consumer's
-        // presence, for the reason given for totals above: a search request processor that adds, say, an aggregation
-        // between the filter and this rewrite must keep round 2, whose aggregations the assembled page cannot carry.
-        // The consumer's presence stays the arming condition — it is what says this hybrid is the request's own query
-        // and that the filter's wrapper is there to swap the page in. A profiled request has no consumer (profile keeps
-        // two rounds) but may carry fastPathReportRoot, so its verdict is still evaluated, for the report alone.
-        boolean rootHybrid = Objects.nonNull(fusedHitsConsumer) || fastPathReportRoot;
+        // about it are the same evaluation. Whether this hybrid is the request's own query is re-derived above
+        // (isRequestQuery) rather than trusted from the consumer's presence, and the request's shape is re-read by the
+        // verdict, for the reason given for totals above: a search request processor that wraps this hybrid or adds, say,
+        // an aggregation between the filter and this rewrite must keep round 2, whose aggregations the assembled page
+        // cannot carry. The consumer's presence stays part of the arming condition — it is what says the filter's wrapper
+        // is there to swap the page in. A profiled request has no consumer (profile keeps two rounds) but may carry
+        // fastPathReportRoot, so its verdict is still evaluated, for the report alone. That verdict deliberately reads the
+        // shape as if unprofiled (it describes the unprofiled twin), so arming re-reads the shape with profile honoured:
+        // a request processor may have set profile after the filter (core's script processor can), and a profiled
+        // request never takes the fast path.
+        boolean rootHybrid = (Objects.nonNull(fusedHitsConsumer) || fastPathReportRoot) && isRequestQuery;
         FastPathDecision fastPath = HybridFusionOrchestrator.decideFastPathBeforeLegs(searchRequest, legs, window, rootHybrid);
-        boolean fastPathArmed = Objects.nonNull(fusedHitsConsumer) && fastPath.allowsSoFar();
+        boolean fastPathArmed = Objects.nonNull(fusedHitsConsumer)
+            && fastPath.allowsSoFar()
+            && HybridFusionOrchestrator.requestShapeAllowsFastPath(searchRequest.source());
         if (fastPathArmed) {
             candidateScope.enableLegFetch(searchRequest.source());
         }
@@ -796,7 +818,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         timings,
                         explanations,
                         this,
-                        fusedTotalHitsConsumer,
+                        totalHitsConsumerForThisQuery,
                         fastPathArmed
                     );
                     QueryBuilder fusedQuery = result.substitute();
@@ -1095,7 +1117,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * and only when a rescore is present. The position-aware confinement that would make the composed cases correct is a
      * separate feature; until then they are refused rather than answered inaccurately.
      */
-    private void requireFusedHybridIsTheRequestQueryWhenRescoring(final SearchRequest searchRequest) {
+    private void requireFusedHybridIsRequestQueryWhenRescoring(final SearchRequest searchRequest) {
         SearchSourceBuilder source = searchRequest.source();
         if (Objects.isNull(source) || Objects.isNull(source.rescores()) || source.rescores().isEmpty() || this == source.query()) {
             return;

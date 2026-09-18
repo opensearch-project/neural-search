@@ -176,7 +176,9 @@ final class CandidateScope {
             "postQueryBuilder",
             Disposition.PROPAGATED,
             "round 2 applies post_filter above the top-docs collector, so its window is post-filtered; an unfiltered leg "
-                + "window would be decimated in round 2 and backfilled with score-0 Tail documents"
+                + "window would be decimated in round 2 and backfilled with score-0 Tail documents. This also matches classic "
+                + "hybrid, where core wraps the shard's hybrid collector in a FilteredCollector for post_filter, so normalization "
+                + "there likewise runs over post-filtered candidates: post_filter shapes the normalization range on both paths"
         );
         put(table, SEARCH_SOURCE, "size", Disposition.OVERRIDDEN, "a leg returns exactly the candidate window");
         put(table, SEARCH_SOURCE, "from", Disposition.OVERRIDDEN, "a leg always starts at 0; paging is a round-2 concern");

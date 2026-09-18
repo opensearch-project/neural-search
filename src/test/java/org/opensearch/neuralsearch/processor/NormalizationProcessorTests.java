@@ -53,6 +53,8 @@ import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.fetch.QueryFetchSearchResult;
 import org.opensearch.search.internal.ShardSearchRequest;
+import org.opensearch.common.util.concurrent.AtomicArray;
+import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.threadpool.TestThreadPool;
@@ -120,6 +122,66 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         assertEquals(SearchPhaseName.FETCH, normalizationProcessor.getAfterPhase());
         assertEquals(SearchPhaseName.QUERY, normalizationProcessor.getBeforePhase());
         assertFalse(normalizationProcessor.isIgnoreFailure());
+    }
+
+    /**
+     * The skip decision inherited from {@code AbstractScoreHybridizationProcessor}, pinned on this processor too: a null
+     * instance, a fetch-only result, a consumed result and a result with null topDocs are none of them hybrid and are not
+     * read; a hybrid result beside them is still seen. Mirrors {@code RRFProcessorTests}, so a future override of
+     * {@code isHybridQuery} on either processor cannot drop the guard unnoticed.
+     */
+    public void testShouldSkipProcessor_whenResultsCarryNothingReadable_thenTheyAreSkippedNotRead() {
+        NormalizationProcessor normalizationProcessor = new NormalizationProcessor(
+            PROCESSOR_TAG,
+            DESCRIPTION,
+            new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+            new ScoreCombinationFactory().createCombination(COMBINATION_METHOD),
+            new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+        );
+        SearchPhaseResult fetchOnly = mock(SearchPhaseResult.class);
+        when(fetchOnly.queryResult()).thenReturn(null);
+        QuerySearchResult consumed = hybridShardResult(0);
+        consumed.consumeTopDocs();
+        QuerySearchResult nullTopDocs = mock(QuerySearchResult.class);
+        when(nullTopDocs.isNull()).thenReturn(false);
+        when(nullTopDocs.hasConsumedTopDocs()).thenReturn(false);
+        when(nullTopDocs.topDocs()).thenReturn(null);
+        when(nullTopDocs.queryResult()).thenReturn(nullTopDocs);
+
+        AtomicArray<SearchPhaseResult> atomicArray = new AtomicArray<>(5);
+        atomicArray.set(0, QuerySearchResult.nullInstance());
+        atomicArray.set(1, fetchOnly);
+        atomicArray.set(2, consumed);
+        atomicArray.set(3, nullTopDocs);
+        QueryPhaseResultConsumer results = mock(QueryPhaseResultConsumer.class);
+        when(results.getAtomicArray()).thenReturn(atomicArray);
+
+        assertTrue("nothing readable is hybrid", normalizationProcessor.shouldSkipProcessor(results));
+
+        atomicArray.set(4, hybridShardResult(4));
+        assertFalse("a hybrid result beside them is still seen", normalizationProcessor.shouldSkipProcessor(results));
+    }
+
+    /** One shard's hybrid-formatted result: delimiter frame around a single document. */
+    private QuerySearchResult hybridShardResult(final int shard) {
+        QuerySearchResult result = new QuerySearchResult();
+        result.topDocs(
+            new TopDocsAndMaxScore(
+                new TopDocs(
+                    new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+                    new ScoreDoc[] {
+                        createStartStopElementForHybridSearchResults(shard),
+                        createDelimiterElementForHybridSearchResults(shard),
+                        new ScoreDoc(shard, 0.5f),
+                        createStartStopElementForHybridSearchResults(shard) }
+                ),
+                0.5f
+            ),
+            null
+        );
+        result.setSearchShardTarget(new SearchShardTarget("node", new ShardId("index", "uuid", shard), null, OriginalIndices.NONE));
+        result.setShardIndex(shard);
+        return result;
     }
 
     public void testSearchResultTypes_whenCompoundDocs_thenDoNormalizationCombination() {
