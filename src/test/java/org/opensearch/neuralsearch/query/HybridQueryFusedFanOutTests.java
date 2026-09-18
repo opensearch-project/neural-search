@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.DEFAULT_MAX_FUSION_LEG_SEARCHES;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES;
 
 import java.util.ArrayList;
@@ -69,6 +70,8 @@ import org.opensearch.search.sort.NestedSortBuilder;
 import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.pipeline.SearchPipelineMetadata;
 import org.opensearch.transport.client.Client;
+import org.opensearch.neuralsearch.search.profile.FastPathDecision;
+import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import lombok.SneakyThrows;
@@ -1334,7 +1337,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
                 .put(Objects.isNull(clusterSettings) ? Settings.EMPTY : clusterSettings)
                 .build();
             when(clusterService.getClusterSettings()).thenReturn(
-                new ClusterSettings(settings, Set.of(HYBRID_FUSION_ENABLED, MAX_FUSION_LEG_SEARCHES))
+                new ClusterSettings(settings, Set.of(HYBRID_FUSION_ENABLED, MAX_FUSION_LEG_SEARCHES, HYBRID_FUSION_FAST_PATH_FETCH_BUDGET))
             );
         }
         Index index = new Index(INDEX_NAME, "uuid-1");
@@ -1520,6 +1523,161 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         );
         assertNull("response processors keep the two-round path", assembled[0]);
         assertTrue(pipedSettled.query() instanceof HybridFusionQueryBuilder);
+    }
+
+    // ---------------------------------------- fast path: the profile's verdict and the counters ----------------------------------------
+
+    /**
+     * A profiled request keeps two rounds, but its coordinator entry reports the verdict of the same request without
+     * {@code profile}: eligible and settled here, so {@code would_take} is true even though nothing was assembled. The
+     * filter marks the request's own hybrid as the root; a nested one reports {@code nested_hybrid}.
+     */
+    @SneakyThrows
+    public void testRewrite_whenProfiled_thenTheTimingsCarryTheUnprofiledTwinsVerdict() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        hybrid.fastPathReportRoot(true);
+        FusedCoordinatorTimings[] published = new FusedCoordinatorTimings[1];
+        hybrid.fusionTimingConsumer(timings -> published[0] = timings);
+        SearchSourceBuilder source = new SearchSourceBuilder().query(hybrid).size(2).trackTotalHits(false).profile(true);
+        observeSourceSize(source, 200);
+
+        SearchSourceBuilder settled = driveWholeSource(new SearchRequest(INDEX_NAME).source(source), new ArrayList<>());
+
+        assertTrue("profile keeps two rounds", settled.query() instanceof HybridFusionQueryBuilder);
+        FastPathDecision verdict = published[0].fastPath();
+        assertTrue("but the unprofiled twin would have taken the fast path", verdict.allowsSoFar());
+        assertEquals(Boolean.TRUE, verdict.countSettled());
+        assertNotNull("the fetch volume was weighed", verdict.fetchEstimateBytes());
+        assertEquals(ReturnedEmbeddingFields.FAST_PATH_EXTRA_FETCH_BUDGET_BYTES, (long) verdict.fetchBudgetBytes());
+        assertEquals(
+            List.of("would_take", "fetch_estimate_bytes", "fetch_budget_bytes", "count_settled"),
+            List.copyOf(verdict.toMap().keySet())
+        );
+
+        // the same request whose hybrid the filter did not mark as the root: nested, and nothing else is evaluated
+        HybridQueryBuilder nested = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        nested.fusionTimingConsumer(timings -> published[0] = timings);
+        driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(nested).size(2).trackTotalHits(false).profile(true)),
+            new ArrayList<>()
+        );
+        assertEquals(FastPathDecision.NESTED_HYBRID, published[0].fastPath().refusedBy());
+        assertNull(published[0].fastPath().fetchBudgetBytes());
+    }
+
+    /** Each refusal the rewrite can make before the legs run is named, with the facts that decided it. */
+    @SneakyThrows
+    public void testRewrite_whenProfiledAndRefused_thenTheVerdictNamesTheFirstReason() {
+        FusedCoordinatorTimings[] published = new FusedCoordinatorTimings[1];
+
+        HybridQueryBuilder named = fused(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "a").queryName("lex"),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "b")
+        );
+        named.fastPathReportRoot(true).fusionTimingConsumer(timings -> published[0] = timings);
+        driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(named).size(2).trackTotalHits(false).profile(true)),
+            new ArrayList<>()
+        );
+        assertEquals(FastPathDecision.LEG_NAME, published[0].fastPath().refusedBy());
+        assertTrue(published[0].fastPath().detail(), published[0].fastPath().detail().startsWith("leg 0 "));
+
+        // nothing observed for this _source shape yet: unobserved, and the budget in force is reported
+        HybridQueryBuilder cold = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        cold.fastPathReportRoot(true).fusionTimingConsumer(timings -> published[0] = timings);
+        driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(cold).size(2).trackTotalHits(false).profile(true)),
+            new ArrayList<>()
+        );
+        assertEquals(FastPathDecision.SOURCE_SIZE_UNOBSERVED, published[0].fastPath().refusedBy());
+        assertEquals(ReturnedEmbeddingFields.FAST_PATH_EXTRA_FETCH_BUDGET_BYTES, (long) published[0].fastPath().fetchBudgetBytes());
+        assertNull(published[0].fastPath().fetchEstimateBytes());
+
+        // the request resolves to no index on the coordinator: the pipeline check has nothing to read and passes, the
+        // estimate has nothing to weigh and cannot be established — the volume is unknown, and that is the reason
+        IndexNameExpressionResolver none = mock(IndexNameExpressionResolver.class);
+        when(none.concreteIndices(any(ClusterState.class), any(org.opensearch.action.IndicesRequest.class))).thenReturn(new Index[0]);
+        NeuralSearchClusterUtil.instance().initialize(clusterService, none);
+        FastPathDecision unresolvedVerdict = HybridFusionOrchestrator.decideFastPathBeforeLegs(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().size(2).trackTotalHits(false)),
+            List.of(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b")),
+            10,
+            true
+        );
+        assertEquals(FastPathDecision.FETCH_VOLUME_UNKNOWN, unresolvedVerdict.refusedBy());
+        assertNull(unresolvedVerdict.fetchEstimateBytes());
+        assertEquals(ReturnedEmbeddingFields.FAST_PATH_EXTRA_FETCH_BUDGET_BYTES, (long) unresolvedVerdict.fetchBudgetBytes());
+        initClusterUtil(null);
+
+        // 50 KB observed documents: over budget, with the estimate that says so
+        SearchSourceBuilder heavyShape = new SearchSourceBuilder().size(2).trackTotalHits(false).profile(true);
+        observeSourceSize(heavyShape, 50_000);
+        HybridQueryBuilder heavy = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        heavy.fastPathReportRoot(true).fusionTimingConsumer(timings -> published[0] = timings);
+        driveWholeSource(new SearchRequest(INDEX_NAME).source(heavyShape.query(heavy)), new ArrayList<>());
+        FastPathDecision overBudget = published[0].fastPath();
+        assertEquals(FastPathDecision.FETCH_BUDGET, overBudget.refusedBy());
+        assertTrue(overBudget.fetchEstimateBytes() > overBudget.fetchBudgetBytes());
+        assertTrue(overBudget.detail(), overBudget.detail().contains("over the " + overBudget.fetchBudgetBytes() + "-byte budget"));
+
+        // default totals on a corpus where no leg proves the count: the legs decide, after they answer
+        // (the observed sizes are an EWMA per shape, so the 50 KB observation above is cleared first)
+        ObservedSourceSizes.clear();
+        SearchSourceBuilder countingShape = new SearchSourceBuilder().size(2).profile(true);
+        observeSourceSize(countingShape, 200);
+        HybridQueryBuilder counting = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        counting.fastPathReportRoot(true).fusionTimingConsumer(timings -> published[0] = timings);
+        driveWholeSource(new SearchRequest(INDEX_NAME).source(countingShape.query(counting)), new ArrayList<>());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, published[0].fastPath().refusedBy());
+        assertEquals(Boolean.FALSE, published[0].fastPath().countSettled());
+    }
+
+    /** The budget is read off the cluster settings per request: raised, the same documents pass; zero refuses any fetch. */
+    @SneakyThrows
+    public void testRewrite_whenTheFetchBudgetSettingChanges_thenTheGateFollowsIt() {
+        SearchSourceBuilder shape = new SearchSourceBuilder().size(2).trackTotalHits(false);
+        // 2 × 100 − 2 = 198 extra documents × 10 KB ≈ 1.98 MB: over the default 1 MB, under 4 MB
+        observeSourceSize(shape, 10_000);
+        SearchHits[] assembled = new SearchHits[1];
+
+        HybridQueryBuilder underDefault = fused(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "b")
+        );
+        underDefault.fusedHitsConsumer(hits -> assembled[0] = hits);
+        driveWholeSource(new SearchRequest(INDEX_NAME).source(shape.query(underDefault)), new ArrayList<>());
+        assertNull("1.8 MB over a 1 MB budget: refused", assembled[0]);
+
+        initClusterUtil(Settings.builder().put(HYBRID_FUSION_FAST_PATH_FETCH_BUDGET.getKey(), "4mb").build());
+        HybridQueryBuilder raised = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        raised.fusedHitsConsumer(hits -> assembled[0] = hits);
+        driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().size(2).trackTotalHits(false).query(raised)),
+            new ArrayList<>()
+        );
+        assertNotNull("the same documents under a 4 MB budget: the page is assembled", assembled[0]);
+
+        assembled[0] = null;
+        initClusterUtil(Settings.builder().put(HYBRID_FUSION_FAST_PATH_FETCH_BUDGET.getKey(), "0b").build());
+        ObservedSourceSizes.clear();
+        observeSourceSize(shape, 10);
+        HybridQueryBuilder zero = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        zero.fusedHitsConsumer(hits -> assembled[0] = hits);
+        driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().size(2).trackTotalHits(false).query(zero)),
+            new ArrayList<>()
+        );
+        assertNull("a zero budget refuses any request that fetches at all", assembled[0]);
+
+        HybridQueryBuilder sourceless = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        sourceless.fusedHitsConsumer(hits -> assembled[0] = hits);
+        driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(
+                new SearchSourceBuilder().size(2).trackTotalHits(false).fetchSource(false).query(sourceless)
+            ),
+            new ArrayList<>()
+        );
+        assertNotNull("but a request that fetches nothing is never refused on volume", assembled[0]);
     }
 
     /** An integer threshold above the window is what the legs count to. */

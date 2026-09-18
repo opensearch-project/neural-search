@@ -396,7 +396,8 @@ public class NeuralSearch extends Plugin
             NEURAL_CIRCUIT_BREAKER_LIMIT,
             NEURAL_CIRCUIT_BREAKER_OVERHEAD,
             NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES,
-            NeuralSearchSettings.HYBRID_FUSION_ENABLED
+            NeuralSearchSettings.HYBRID_FUSION_ENABLED,
+            NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET
         );
     }
 

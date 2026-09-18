@@ -333,6 +333,140 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         assertNotNull("and the aggregation still answers", response.get("aggregations"));
     }
 
+    // ------------------------------------------------ the fast-path verdict ------------------------------------------------
+
+    /**
+     * A profiled request keeps two rounds, and its coordinator entry says what the same request without {@code profile}
+     * would do on this coordinator, and why. Here: the shape and legs allow it, the gate has observed this
+     * {@code _source} shape (the priming requests below, one per node, as production traffic would), and with totals off
+     * the count is settled — so the twin {@code would_take} the fast path, with the volume it was weighed at.
+     */
+    @SneakyThrows
+    public void testProfiledFusedHybrid_whenTheTwinIsEligible_thenTheCoordinatorEntryReportsWouldTake() {
+        ensureDataset(INDEX, 1);
+        String body = "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3,\"track_total_hits\":false}";
+        prime(INDEX, body);
+
+        Map<String, Object> verdict = fastPathVerdict(
+            search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3,\"track_total_hits\":false"))
+        );
+
+        assertEquals(Boolean.TRUE, verdict.get("would_take"));
+        assertNull("nothing refused, so no reason", verdict.get("refused_by"));
+        assertEquals(Boolean.TRUE, verdict.get("count_settled"));
+        assertTrue(
+            "the volume was weighed: extra documents × observed bytes",
+            ((Number) verdict.get("fetch_estimate_bytes")).longValue() > 0
+        );
+        assertEquals("the default budget", 1L << 20, ((Number) verdict.get("fetch_budget_bytes")).longValue());
+    }
+
+    /** What the legs decide, read off their actual answers: six documents cannot prove a count of 10,000. */
+    @SneakyThrows
+    public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheVerdictIsCountNotSettled() {
+        ensureDataset(INDEX, 1);
+        prime(INDEX, "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3}");
+
+        Map<String, Object> verdict = fastPathVerdict(search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3")));
+
+        assertEquals(Boolean.FALSE, verdict.get("would_take"));
+        assertEquals("count_not_settled", verdict.get("refused_by"));
+        assertEquals(Boolean.FALSE, verdict.get("count_settled"));
+        assertNotNull("the volume had passed before the legs decided", verdict.get("fetch_estimate_bytes"));
+    }
+
+    /** Each refusal the request itself causes is named — the feature, the leg, or the nesting — before anything is weighed. */
+    @SneakyThrows
+    public void testProfiledFusedHybrid_whenTheRequestRefusesTheFastPath_thenTheVerdictNamesWhat() {
+        ensureDataset(INDEX, 1);
+
+        Map<String, Object> exact = fastPathVerdict(
+            search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3,\"track_total_hits\":true"))
+        );
+        assertEquals("exact_totals", exact.get("refused_by"));
+        assertNull("refused before the volume was weighed", exact.get("fetch_budget_bytes"));
+
+        String namedLeg = "{\"term\":{\"" + TEXT_FIELD + "\":{\"value\":\"hello\",\"_name\":\"lex\"}}}";
+        Map<String, Object> named = fastPathVerdict(
+            search(INDEX, profiled(fusedHybrid(knnLeg(), namedLeg), "\"size\":3,\"track_total_hits\":false"))
+        );
+        assertEquals("leg_name", named.get("refused_by"));
+        assertTrue(String.valueOf(named.get("detail")), String.valueOf(named.get("detail")).startsWith("leg 1 "));
+
+        Map<String, Object> aggregated = fastPathVerdict(search(INDEX, profiledWithAggregation(fusedHybrid(knnLeg(), termLeg()))));
+        assertEquals("request_shape", aggregated.get("refused_by"));
+        assertTrue(String.valueOf(aggregated.get("detail")), String.valueOf(aggregated.get("detail")).startsWith("aggregations"));
+
+        String nested = "{\"bool\":{\"must\":[" + fusedHybrid(knnLeg(), termLeg()) + "]}}";
+        Map<String, Object> inBool = fastPathVerdict(search(INDEX, profiled(nested, "\"size\":3,\"track_total_hits\":false")));
+        assertEquals("nested_hybrid", inBool.get("refused_by"));
+    }
+
+    /** On an index no coordinator has seen a response for, the twin would fail closed — and the profile says so. */
+    @SneakyThrows
+    public void testProfiledFusedHybrid_whenTheSourceSizeIsUnobserved_thenTheVerdictSaysSo() {
+        String cold = INDEX + "-cold";
+        ensureDataset(cold, 1);
+
+        Map<String, Object> verdict = fastPathVerdict(
+            search(cold, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3,\"track_total_hits\":false"))
+        );
+
+        assertEquals(Boolean.FALSE, verdict.get("would_take"));
+        assertEquals("source_size_unobserved", verdict.get("refused_by"));
+        assertEquals("the budget it would have been weighed against", 1L << 20, ((Number) verdict.get("fetch_budget_bytes")).longValue());
+        assertNull("no estimate without an observation", verdict.get("fetch_estimate_bytes"));
+    }
+
+    /** The budget is a live cluster setting: at zero, the same eligible request is refused on volume, and the verdict shows both numbers. */
+    @SneakyThrows
+    public void testProfiledFusedHybrid_whenTheFetchBudgetIsZero_thenTheVerdictIsFetchBudget() {
+        ensureDataset(INDEX, 1);
+        String body = "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3,\"track_total_hits\":false}";
+        prime(INDEX, body);
+        updateClusterSettings("plugins.neural_search.hybrid.fusion.fast_path_fetch_budget", "0b");
+        try {
+            Map<String, Object> verdict = fastPathVerdict(
+                search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3,\"track_total_hits\":false"))
+            );
+            assertEquals("fetch_budget", verdict.get("refused_by"));
+            assertEquals(0L, ((Number) verdict.get("fetch_budget_bytes")).longValue());
+            assertTrue(((Number) verdict.get("fetch_estimate_bytes")).longValue() > 0);
+            assertTrue(String.valueOf(verdict.get("detail")), String.valueOf(verdict.get("detail")).contains("over the 0-byte budget"));
+        } finally {
+            updateClusterSettings("plugins.neural_search.hybrid.fusion.fast_path_fetch_budget", null);
+        }
+        assertEquals(
+            "back on the default budget",
+            Boolean.TRUE,
+            fastPathVerdict(search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3,\"track_total_hits\":false"))).get(
+                "would_take"
+            )
+        );
+    }
+
+    /**
+     * Run a request once per cluster node: the fetch gate learns an index's {@code _source} size per coordinator from
+     * responses, and the REST client reaches the nodes round-robin, so two turns warm every coordinator whatever position
+     * other requests left the rotation in.
+     */
+    @SneakyThrows
+    private void prime(final String index, final String body) {
+        int nodes = Integer.parseInt(System.getProperty("cluster.number_of_nodes", "1"));
+        for (int i = 0; i < 2 * nodes; i++) {
+            search(index, body);
+        }
+    }
+
+    /** The {@code fast_path} block of the coordinator entry's {@code debug}. */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> fastPathVerdict(final Map<String, Object> response) {
+        Map<String, Object> node = onlyQueryNode(onlySearch(onlyEntryEndingWith(response, COORDINATOR_TAG)));
+        Map<String, Object> verdict = (Map<String, Object>) mapAt(node, "debug").get("fast_path");
+        assertNotNull("the coordinator entry carries the fast-path verdict", verdict);
+        return verdict;
+    }
+
     // ------------------------------------------------ request bodies ------------------------------------------------
 
     /** A materializable ANN leg: in the Tail it is replaced by an address of the hits it returned. */
@@ -362,6 +496,11 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
 
     private String profiled(final String query) {
         return "{\"query\":" + query + ",\"profile\":true,\"track_total_hits\":true}";
+    }
+
+    /** A profiled request with the caller's extra top-level fields, or none. */
+    private String profiled(final String query, final String extra) {
+        return "{\"query\":" + query + ",\"profile\":true" + (Objects.isNull(extra) ? "" : "," + extra) + "}";
     }
 
     /**

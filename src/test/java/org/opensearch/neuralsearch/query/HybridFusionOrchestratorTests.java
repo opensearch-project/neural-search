@@ -40,6 +40,7 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
+import org.opensearch.neuralsearch.search.profile.FastPathDecision;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -2046,13 +2047,25 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         boolean armed,
         TotalHits[] totalOut
     ) {
+        return fusedResult(source, ms, legs, window, armed, totalOut, new FusedCoordinatorTimings());
+    }
+
+    private HybridFusionOrchestrator.FusedResult fusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> legs,
+        int window,
+        boolean armed,
+        TotalHits[] totalOut,
+        FusedCoordinatorTimings timings
+    ) {
         return HybridFusionOrchestrator.buildFusedResult(
             source,
             ms,
             legs,
             minMaxArithmetic(),
             window,
-            new FusedCoordinatorTimings(),
+            timings,
             new FusedDocExplanations(),
             null,
             derived -> totalOut[0] = derived,
@@ -2328,27 +2341,179 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertFalse("exact totals", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().trackTotalHits(true)));
     }
 
-    public void testLegsAllowFastPath() {
+    /** The refusal names the first feature in check order, and {@code profile} can be read as absent for the report. */
+    public void testRequestShapeFastPathRefusal_thenTheFirstFeatureInCheckOrderIsNamed() {
+        assertNull(HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder(), false));
+        assertEquals(
+            FastPathDecision.REQUEST_SHAPE,
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false).reason()
+        );
         assertTrue(
-            HybridFusionOrchestrator.legsAllowFastPath(
-                List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"))
-            )
+            "the first failing check is the one reported",
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false)
+                .detail()
+                .startsWith("sort ")
         );
-        assertFalse(
-            "a named leg",
-            HybridFusionOrchestrator.legsAllowFastPath(List.of(new MatchQueryBuilder("text", "hello").queryName("lex")))
+        assertEquals(
+            FastPathDecision.EXACT_TOTALS,
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().trackTotalHits(true), false).reason()
         );
-        assertFalse(
-            "a leg with inner_hits",
-            HybridFusionOrchestrator.legsAllowFastPath(
-                List.of(
-                    new org.opensearch.index.query.NestedQueryBuilder(
-                        "n",
-                        new MatchAllQueryBuilder(),
-                        org.apache.lucene.search.join.ScoreMode.Max
-                    ).innerHit(new InnerHitBuilder("members"))
-                )
-            )
+        FastPathDecision.Refusal profiled = HybridFusionOrchestrator.requestShapeFastPathRefusal(
+            new SearchSourceBuilder().profile(true),
+            false
+        );
+        assertEquals(FastPathDecision.REQUEST_SHAPE, profiled.reason());
+        assertTrue(profiled.detail().startsWith("profile "));
+        assertNull(
+            "read as the unprofiled twin, the same source allows the fast path",
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true), true)
+        );
+        assertEquals(
+            "the profile flag is the only thing ignored",
+            FastPathDecision.EXACT_TOTALS,
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true).trackTotalHits(true), true)
+                .reason()
         );
     }
+
+    /** Before the legs run: a nested hybrid, then the shape, then the legs — in that order. */
+    public void testDecideFastPathBeforeLegs_thenNestedShapeAndLegsRefuseInOrder() {
+        SearchRequest request = new SearchRequest("idx").source(new SearchSourceBuilder().size(2).trackTotalHits(false));
+        List<QueryBuilder> plainLegs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+
+        FastPathDecision nested = HybridFusionOrchestrator.decideFastPathBeforeLegs(request, plainLegs, 10, false);
+        assertEquals(FastPathDecision.NESTED_HYBRID, nested.refusedBy());
+        assertNull("nothing past the first refusal is evaluated", nested.fetchBudgetBytes());
+
+        SearchRequest aggregated = new SearchRequest("idx").source(
+            new SearchSourceBuilder().aggregation(AggregationBuilders.terms("t").field("f")).profile(true)
+        );
+        FastPathDecision shape = HybridFusionOrchestrator.decideFastPathBeforeLegs(aggregated, plainLegs, 10, true);
+        assertEquals(
+            "the shape is read with profile ignored, so aggregations is what refuses",
+            FastPathDecision.REQUEST_SHAPE,
+            shape.refusedBy()
+        );
+        assertTrue(shape.detail().startsWith("aggregations"));
+
+        FastPathDecision named = HybridFusionOrchestrator.decideFastPathBeforeLegs(
+            request,
+            List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place").queryName("lex")),
+            10,
+            true
+        );
+        assertEquals(FastPathDecision.LEG_NAME, named.refusedBy());
+        assertTrue("the leg is identified", named.detail().startsWith("leg 1 "));
+
+        FastPathDecision innerHits = HybridFusionOrchestrator.decideFastPathBeforeLegs(
+            request,
+            List.of(
+                new org.opensearch.index.query.NestedQueryBuilder(
+                    "n",
+                    new MatchAllQueryBuilder(),
+                    org.apache.lucene.search.join.ScoreMode.Max
+                ).innerHit(new InnerHitBuilder("members"))
+            ),
+            10,
+            true
+        );
+        assertEquals(FastPathDecision.LEG_INNER_HITS, innerHits.refusedBy());
+    }
+
+    /** After the legs: the verdict on the timings says why an armed request fell back, and that a taken one settled. */
+    public void testBuildFusedResult_thenTheDecisionOnTheTimingsRecordsTheVerdict() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+
+        // taken: totals disabled settle trivially
+        FusedCoordinatorTimings taken = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(2).trackTotalHits(false),
+            multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            taken
+        );
+        assertTrue(result.tookFastPath());
+        assertTrue(taken.fastPath().allowsSoFar());
+        assertEquals(Boolean.TRUE, taken.fastPath().countSettled());
+        assertEquals(Map.of("would_take", true, "count_settled", true), taken.fastPath().toMap());
+
+        // fallback: default totals and no leg proves the count
+        FusedCoordinatorTimings unsettled = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(2),
+            multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItemWithTotal(Map.of("2", 0.8f), eq(12))),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            unsettled
+        );
+        assertFalse(result.tookFastPath());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, unsettled.fastPath().refusedBy());
+        assertEquals(Boolean.FALSE, unsettled.fastPath().countSettled());
+
+        // fallback: the page reaches past the ranked window
+        FusedCoordinatorTimings beyond = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(10).trackTotalHits(false),
+            multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            beyond
+        );
+        assertFalse(result.tookFastPath());
+        assertEquals(FastPathDecision.PAGE_BEYOND_WINDOW, beyond.fastPath().refusedBy());
+        assertEquals("the count was settled; the page was the problem", Boolean.TRUE, beyond.fastPath().countSettled());
+
+        // fallback: nothing ranked
+        FusedCoordinatorTimings empty = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(2).trackTotalHits(false),
+            multiSearch(legItem(Map.of()), legItem(Map.of())),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            empty
+        );
+        assertFalse(result.tookFastPath());
+        assertEquals(FastPathDecision.NO_CANDIDATES, empty.fastPath().refusedBy());
+
+        // un-armed (a profiled request's twin): the same verdict is completed for the report, and nothing is assembled
+        FusedCoordinatorTimings profiled = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(2).profile(true),
+            multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            false,
+            new TotalHits[1],
+            profiled
+        );
+        assertFalse(result.tookFastPath());
+        assertTrue("its unprofiled twin would have taken the fast path", profiled.fastPath().allowsSoFar());
+        assertEquals(Boolean.TRUE, profiled.fastPath().countSettled());
+
+        // a decision refused before the legs is left alone by the legs' verdict
+        FusedCoordinatorTimings refusedEarly = new FusedCoordinatorTimings().fastPath(
+            new FastPathDecision().refuse(FastPathDecision.LEG_NAME, "leg 1 carries _name")
+        );
+        fusedResult(
+            new SearchSourceBuilder().size(2),
+            multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            false,
+            new TotalHits[1],
+            refusedEarly
+        );
+        assertEquals(FastPathDecision.LEG_NAME, refusedEarly.fastPath().refusedBy());
+        assertNull(refusedEarly.fastPath().countSettled());
+    }
+
 }

@@ -37,7 +37,8 @@ import lombok.SneakyThrows;
  * distinguishable at all: on the one-shard all-ties index the fast path's {@code _id} tie order differs from round 2's
  * doc-id order, so {@link #testFastPath_whenFusedScoresTie_thenTiesAreOrderedByIdAndEverythingElseMatchesTwoRounds}
  * passing proves the fast path really runs; path selection for every other shape is pinned at unit level
- * ({@code requestShapeAllowsFastPath}, {@code legsAllowFastPath}, the fetch budget, and the fan-out rewrite tests).
+ * ({@code requestShapeAllowsFastPath}, {@code decideFastPathBeforeLegs}, the fetch budget, and the fan-out rewrite
+ * tests).
  */
 public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
 

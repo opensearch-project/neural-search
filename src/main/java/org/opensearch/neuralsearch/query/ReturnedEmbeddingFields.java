@@ -18,10 +18,12 @@ import java.util.function.Function;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
+import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.common.regex.Regex;
 import org.opensearch.common.xcontent.support.XContentMapValues;
 import org.opensearch.core.index.Index;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.SearchService;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -74,11 +76,65 @@ final class ReturnedEmbeddingFields {
     static final Set<String> EMBEDDING_FIELD_TYPES = Set.of("knn_vector", "rank_features");
 
     /**
-     * The extra fetch volume, beyond the page round 2 would have fetched, above which the fast path is refused. Measured
+     * The default extra fetch volume, beyond the page round 2 would have fetched, above which the fast path is refused —
+     * the value of {@link NeuralSearchSettings#HYBRID_FUSION_FAST_PATH_FETCH_BUDGET} on an unconfigured cluster. Measured
      * crossover on a serverless fleet: ~1.3–3 MB of extra documents cost as much as the round saved; 1 MB refuses well
      * before it while keeping a {@code size ≈ window} request with 768-dim vectors (~0.77 MB extra) on the fast path.
+     * Co-located clusters cross over higher (above 3.7 MB measured), which is what the setting is for.
      */
     static final long FAST_PATH_EXTRA_FETCH_BUDGET_BYTES = 1L << 20;
+
+    /** Why a per-document estimate could not be established, when it could not. */
+    enum Unknown {
+        /** It could: the estimate is a number. */
+        NONE,
+        /** No response of this request's {@code _source} filter shape has been observed for one of its indices yet. */
+        SOURCE_SIZE_UNOBSERVED,
+        /** The request's indices or one of their mappings could not be read on the coordinator. */
+        INDICES_UNRESOLVED
+    }
+
+    /** One returned document's estimated bytes, or why there is no estimate. */
+    record PerDocumentEstimate(long bytes, Unknown unknown) {
+        static final PerDocumentEstimate NOTHING = new PerDocumentEstimate(0, Unknown.NONE);
+
+        static PerDocumentEstimate unknown(Unknown reason) {
+            return new PerDocumentEstimate(Long.MAX_VALUE, reason);
+        }
+
+        boolean isUnknown() {
+            return unknown != Unknown.NONE;
+        }
+    }
+
+    /**
+     * What the fast path would fetch beyond round 2's page for one request — the documents over-fetched and their
+     * estimated weight — against the budget in force, so the gate and the profile read one calculation.
+     */
+    record FetchVolume(long extraDocuments, PerDocumentEstimate perDocument, long budgetBytes) {
+        /** The extra bytes, or {@link Long#MAX_VALUE} when the estimate is unknown. */
+        long extraBytes() {
+            if (perDocument.isUnknown()) {
+                return Long.MAX_VALUE;
+            }
+            // extraDocuments is at most legs × window: the legs are capped by MAX_FUSION_LEG_SEARCHES, which
+            // HybridQueryBuilder#validateFusedLegSearchBudget enforces before the rewrite reaches here, and a window above
+            // min(index.max_result_window, indices.query.bool.max_clause_count − TAIL_CLAUSE_RESERVE) is refused there
+            // too. Bytes per document is an observed _source size (a BytesReference length, so int-bounded) plus the
+            // mapping's declared width for the fields the request names. The product stays orders of magnitude below
+            // Long.MAX_VALUE.
+            return extraDocuments * perDocument.bytes();
+        }
+
+        /**
+         * Refuse when unknown (fail closed) or over budget. Strictly over, so a volume exactly at the budget fits — which
+         * is also what lets a zero budget admit a request whose accounted volume is zero and refuse every other.
+         */
+        boolean exceedsBudget() {
+            return perDocument.isUnknown() || extraBytes() > budgetBytes;
+        }
+    }
+
     /** A float rendered in JSON ({@code 0.12345678,}) is about this many bytes. */
     static final long FLOAT_VECTOR_BYTES_PER_DIMENSION = 10;
     /** A byte value rendered in JSON ({@code -12,}) is about this many bytes; binary vectors are declared in bits. */
@@ -105,21 +161,35 @@ final class ReturnedEmbeddingFields {
     private ReturnedEmbeddingFields() {}
 
     /**
-     * True when the fast path would fetch more than {@link #FAST_PATH_EXTRA_FETCH_BUDGET_BYTES} beyond the page round 2
-     * fetches — {@code (legs × window − size) × bytes per document} — or when that cannot be established.
+     * True when the fast path would fetch more than the budget in force beyond the page round 2 fetches —
+     * {@code (legs × window − size) × bytes per document} — or when that cannot be established.
      */
     static boolean fastPathFetchExceedsBudget(final SearchRequest request, final int legCount, final int windowSize) {
-        long bytesPerDocument = estimatedFetchBytesPerDocument(request);
-        if (bytesPerDocument == 0) {
-            return false;
-        }
-        if (bytesPerDocument == Long.MAX_VALUE) {
-            return true;
-        }
+        return fastPathFetchVolume(request, legCount, windowSize).exceedsBudget();
+    }
+
+    /**
+     * The fast path's extra fetch volume for this request against the budget in force
+     * ({@link NeuralSearchSettings#HYBRID_FUSION_FAST_PATH_FETCH_BUDGET}, read live). A request that fetches nothing the
+     * gate accounts for ({@code _source: false}, no field patterns) has an estimate of zero and is never refused here.
+     */
+    static FetchVolume fastPathFetchVolume(final SearchRequest request, final int legCount, final int windowSize) {
         SearchSourceBuilder source = request.source();
         int size = Objects.isNull(source) || source.size() < 0 ? SearchService.DEFAULT_SIZE : source.size();
         long extraDocuments = Math.max(0L, (long) legCount * windowSize - size);
-        return extraDocuments * bytesPerDocument > FAST_PATH_EXTRA_FETCH_BUDGET_BYTES;
+        return new FetchVolume(extraDocuments, estimatePerDocument(request), fastPathFetchBudgetBytes());
+    }
+
+    /**
+     * The budget in force, read off the cluster settings so an operator's update applies to the next request; the
+     * setting's own default where there is no cluster service to read (unit tests, or a node still starting).
+     */
+    static long fastPathFetchBudgetBytes() {
+        ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
+        if (Objects.isNull(clusterService) || Objects.isNull(clusterService.getClusterSettings())) {
+            return FAST_PATH_EXTRA_FETCH_BUDGET_BYTES;
+        }
+        return clusterService.getClusterSettings().get(NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET).getBytes();
     }
 
     /**
@@ -139,28 +209,33 @@ final class ReturnedEmbeddingFields {
      * from the mapping as before; those are not part of {@code _source} and are not in the observation.
      */
     static long estimatedFetchBytesPerDocument(final SearchRequest request) {
+        return estimatePerDocument(request).bytes();
+    }
+
+    /** {@link #estimatedFetchBytesPerDocument} with the reason attached when there is no estimate. */
+    static PerDocumentEstimate estimatePerDocument(final SearchRequest request) {
         SearchSourceBuilder source = request.source();
         FetchSourceContext fetchSource = Objects.isNull(source) ? null : source.fetchSource();
         boolean sourceOn = Objects.isNull(fetchSource) || fetchSource.fetchSource();
         List<String> fieldPatterns = fieldPatterns(source);
         if (sourceOn == false && fieldPatterns.isEmpty()) {
-            return 0;
+            return PerDocumentEstimate.NOTHING;
         }
         List<IndexMetadata> indices;
         try {
             indices = NeuralSearchClusterUtil.instance().getIndexMetadataList(request);
         } catch (Exception e) {
             log.debug("fused fast path: cannot resolve the request's indices on the coordinator, taking the two-round path", e);
-            return Long.MAX_VALUE;
+            return PerDocumentEstimate.unknown(Unknown.INDICES_UNRESOLVED);
         }
         if (indices.isEmpty()) {
-            return Long.MAX_VALUE;
+            return PerDocumentEstimate.unknown(Unknown.INDICES_UNRESOLVED);
         }
         long widest = 0;
         for (IndexMetadata index : indices) {
             if (Objects.isNull(index)) {
                 // resolved a moment ago, gone from the state now: cannot be established, take the two-round path
-                return Long.MAX_VALUE;
+                return PerDocumentEstimate.unknown(Unknown.INDICES_UNRESOLVED);
             }
             long bytes = 0;
             if (sourceOn) {
@@ -170,7 +245,7 @@ final class ReturnedEmbeddingFields {
                         "fused fast path: no observed _source size yet for [{}] under this _source filter, taking the two-round path",
                         index.getIndex()
                     );
-                    return Long.MAX_VALUE;
+                    return PerDocumentEstimate.unknown(Unknown.SOURCE_SIZE_UNOBSERVED);
                 }
                 bytes += observed.getAsLong();
             }
@@ -180,7 +255,7 @@ final class ReturnedEmbeddingFields {
                     facts = factsFor(index);
                 } catch (Exception e) {
                     log.debug("fused fast path: cannot read the mapping of [{}], taking the two-round path", index.getIndex(), e);
-                    return Long.MAX_VALUE;
+                    return PerDocumentEstimate.unknown(Unknown.INDICES_UNRESOLVED);
                 }
                 if (Objects.nonNull(facts)) {
                     for (Map.Entry<String, Long> field : facts.embeddingBytes().entrySet()) {
@@ -192,7 +267,7 @@ final class ReturnedEmbeddingFields {
             }
             widest = Math.max(widest, bytes);
         }
-        return widest;
+        return new PerDocumentEstimate(widest, Unknown.NONE);
     }
 
     /**

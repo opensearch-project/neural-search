@@ -238,7 +238,7 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(10, settings.size());
+        assertEquals(11, settings.size());
         // A setting the plugin defines but never registers here cannot be set on a cluster at all, dynamically or in
         // opensearch.yml — the fused fan-out budget would silently stay at its default, and fused mode's opt-in switch
         // could never be turned on.
