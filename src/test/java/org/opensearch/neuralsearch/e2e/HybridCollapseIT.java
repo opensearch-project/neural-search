@@ -118,6 +118,109 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         );
     }
 
+    @SneakyThrows
+    public void testCollapse_whenDistinctGroupsToggledOnSameIndex_thenEachRequestFollowsTheSetting() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_ONE);
+
+        List<String> collapseValues = searchSkewedGroupsWithCollapse();
+        assertEquals("Expected the default mode before the flip, but got: " + collapseValues, 4, collapseValues.size());
+
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+        collapseValues = searchSkewedGroupsWithCollapse();
+        assertEquals("Expected distinct groups after the flip, but got: " + collapseValues, 5, collapseValues.size());
+
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), false)
+        );
+        collapseValues = searchSkewedGroupsWithCollapse();
+        assertEquals("Expected the default mode after flipping back, but got: " + collapseValues, 4, collapseValues.size());
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenDistinctGroupsEnabledOnMultipleShards_thenCoordinatorMergesAllGroups() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_FIVE);
+        // A document without the collapse field lands in the null group and must survive the cross-shard dedup
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            "9",
+            List.of(),
+            List.of(),
+            List.of(TEST_TEXT_FIELD_CATEGORY),
+            List.of("groups"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of("65"),
+            null
+        );
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            6,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        // The per-shard distinct-groups collections merge into all 6 groups, the null group included
+        Map<String, Object> hits = (Map<String, Object>) searchResponse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        assertEquals("Expected one hit per group across shards, but got: " + actualHits.size(), 6, actualHits.size());
+        Set<String> namedGroups = new HashSet<>();
+        int nullGroupHits = 0;
+        for (Map<String, Object> hit : actualHits) {
+            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
+            if (fields == null || fields.get(TEST_TEXT_FIELD_ITEM) == null) {
+                nullGroupHits++;
+            } else {
+                namedGroups.add(((List<Object>) fields.get(TEST_TEXT_FIELD_ITEM)).getFirst().toString());
+            }
+        }
+        assertEquals(Set.of("groupA", "groupB", "groupC", "groupD", "groupE"), namedGroups);
+        assertEquals("Expected exactly one hit in the null group", 1, nullGroupHits);
+    }
+
     private List<String> searchSkewedGroupsWithCollapse() {
         var hybridQuery = new HybridQueryBuilder().add(
             QueryBuilders.functionScoreQuery(

@@ -89,6 +89,11 @@ public final class NeuralSearchSettings {
      * which preserves score parity with the same hybrid query without collapse but can return fewer groups than
      * {@code size} when one group owns several top-scoring documents. The two behaviors are mutually exclusive;
      * see https://github.com/opensearch-project/neural-search/issues/1947 for the design discussion.
+     *
+     * <p>The setting is dynamic and read per request, so flipping it between pages of a paginated search changes
+     * the page semantics mid-flight. It is also index-scoped: a single search spanning indices with different
+     * values runs a different collector per shard and merges the two result shapes into one response, so the two
+     * modes should not be mixed across indices in one request.
      */
     public static final Setting<Boolean> HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED = Setting.boolSetting(
         "index.neural_search.hybrid_collapse_distinct_groups_enabled",
