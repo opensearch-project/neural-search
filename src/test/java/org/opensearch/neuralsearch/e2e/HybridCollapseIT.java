@@ -5,20 +5,25 @@
 package org.opensearch.neuralsearch.e2e;
 
 import org.junit.Before;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.index.query.functionscore.ScoreFunctionBuilders;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortBuilders;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import lombok.SneakyThrows;
 
@@ -31,6 +36,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_TEXT_FIELD_ITEM = "item";
     private static final String TEST_TEXT_FIELD_CATEGORY = "category";
     private static final String TEST_FLOAT_FIELD = "price";
+    private static final String TEST_FLOAT_FIELD_RATING = "rating";
     private static final String SEARCH_PIPELINE = "test-pipeline";
     private static final int NUMBER_OF_SHARDS_FIVE = 5;
     private static final int NUMBER_OF_SHARDS_ONE = 1;
@@ -42,6 +48,11 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
     private static final String TEST_INTEGER_FIELD_AGE = "age";
     private static final String DEFAULT_INDEX_CONFIGURATION = "default_config";
     private static final String DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET = "default_config_with_large_dataset";
+    private static final String DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS = "default_config_with_skewed_groups";
+    private static final String DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS = "default_config_with_disagreeing_legs";
+    private static final String RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS = "rrf_config_with_disagreeing_legs";
+    private static final String DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS = "default_config_with_leg_exclusive_docs";
+    private static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
     private static final String KNN_INDEX_CONFIGURATION = "knn_config";
     public static final float DELTA_FOR_SCORE_ASSERTION = 0.001f;
 
@@ -70,6 +81,448 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
         // For min_score=0.5005f, it filters out no docs;
         testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenOneGroupOwnsMultipleTopDocsAndDistinctGroupsEnabled_thenDistinctGroupsReturned() {
+        // Reproduces https://github.com/opensearch-project/neural-search/issues/1947
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_ONE);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        List<String> collapseValues = searchSkewedGroupsWithCollapse();
+
+        assertEquals("Expected `size` hits, one per distinct group, but got: " + collapseValues, 5, collapseValues.size());
+        assertEquals(
+            "Expected the 5 best distinct groups, but got: " + collapseValues,
+            Set.of("groupA", "groupB", "groupC", "groupD", "groupE"),
+            new HashSet<>(collapseValues)
+        );
+    }
+
+    public void testCollapse_whenOneGroupOwnsMultipleTopDocsByDefault_thenGroupsUnderReturned() {
+        // Default behavior (distinct groups disabled): the collector keeps the top-`size` documents per sub-query,
+        // so a group owning several top slots crowds out other groups after downstream deduplication. This test
+        // pins the by-design default agreed on in https://github.com/opensearch-project/neural-search/issues/1947.
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_ONE);
+
+        List<String> collapseValues = searchSkewedGroupsWithCollapse();
+
+        assertEquals("Expected under-returned groups by default, but got: " + collapseValues, 4, collapseValues.size());
+        assertEquals(
+            "Expected groups deduplicated from the top-`size` documents, but got: " + collapseValues,
+            Set.of("groupA", "groupB", "groupC", "groupD"),
+            new HashSet<>(collapseValues)
+        );
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenDistinctGroupsToggledOnSameIndex_thenEachRequestFollowsTheSetting() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_ONE);
+
+        List<String> collapseValues = searchSkewedGroupsWithCollapse();
+        assertEquals("Expected the default mode before the flip, but got: " + collapseValues, 4, collapseValues.size());
+
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+        collapseValues = searchSkewedGroupsWithCollapse();
+        assertEquals("Expected distinct groups after the flip, but got: " + collapseValues, 5, collapseValues.size());
+
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), false)
+        );
+        collapseValues = searchSkewedGroupsWithCollapse();
+        assertEquals("Expected the default mode after flipping back, but got: " + collapseValues, 4, collapseValues.size());
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenDistinctGroupsEnabledOnMultipleShards_thenCoordinatorMergesAllGroups() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, NUMBER_OF_SHARDS_FIVE);
+        // A document without the collapse field lands in the null group and must survive the cross-shard dedup
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            "9",
+            List.of(),
+            List.of(),
+            List.of(TEST_TEXT_FIELD_CATEGORY),
+            List.of("groups"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of("65"),
+            null
+        );
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            6,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        // The per-shard distinct-groups collections merge into all 6 groups, the null group included
+        Map<String, Object> hits = (Map<String, Object>) searchResponse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        assertEquals("Expected one hit per group across shards, but got: " + actualHits.size(), 6, actualHits.size());
+        Set<String> namedGroups = new HashSet<>();
+        int nullGroupHits = 0;
+        for (Map<String, Object> hit : actualHits) {
+            Map<String, Object> fields = (Map<String, Object>) hit.get("fields");
+            if (fields == null || fields.get(TEST_TEXT_FIELD_ITEM) == null) {
+                nullGroupHits++;
+            } else {
+                namedGroups.add(((List<Object>) fields.get(TEST_TEXT_FIELD_ITEM)).getFirst().toString());
+            }
+        }
+        assertEquals(Set.of("groupA", "groupB", "groupC", "groupD", "groupE"), namedGroups);
+        assertEquals("Expected exactly one hit in the null group", 1, nullGroupHits);
+    }
+
+    private List<String> searchSkewedGroupsWithCollapse() {
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        return getCollapseValues(searchResponse);
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenLegsDisagreeAndDistinctGroupsEnabled_thenGroupsOrderedByFusedScore() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS, NUMBER_OF_SHARDS_ONE);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        // Two legs scoring different fields, so they rank groupA's documents differently. The elected
+        // representative must be the one with the best summed score (doc 2), and the response must order
+        // groups by their representative's fused score: groupA, groupC, groupB, groupD.
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD_RATING)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        List<String> collapseValues = getCollapseValues(searchResponse);
+        assertEquals(
+            "Expected groups ordered by fused score, but got: " + collapseValues,
+            List.of("groupA", "groupC", "groupB", "groupD"),
+            collapseValues
+        );
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenRRFAndDistinctGroupsEnabled_thenGroupsOrderedByRank() {
+        createTestIndexAndIngestDocuments(RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS, NUMBER_OF_SHARDS_ONE);
+        createRRFSearchPipeline(RRF_SEARCH_PIPELINE, List.of(), false);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        // rrf turns each sub-query's emission order into ranks, so this exercises the per-sub-query
+        // ordering end to end on a single shard: 1/(60+rank+1) summed over the legs gives
+        // groupA (1/61 + 1/62) > groupC (1/63 + 1/61) > groupB (1/62 + 1/63) > groupD (1/64 + 1/64)
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD_RATING)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            5,
+            Map.of("search_pipeline", RRF_SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        List<String> collapseValues = getCollapseValues(searchResponse);
+        assertEquals(
+            "Expected groups ordered by reciprocal rank, but got: " + collapseValues,
+            List.of("groupA", "groupC", "groupB", "groupD"),
+            collapseValues
+        );
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenLegExclusiveDocsAndDistinctGroupsEnabled_thenEveryMatchingLegContributes() {
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS, NUMBER_OF_SHARDS_ONE);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+
+        // groupP's rating evidence comes from a document the price leg never matched. Its best rating (9)
+        // must still reach fusion through the shared representative, lifting groupP over groupQ, whose
+        // rating evidence (2) is weak: min_max + arithmetic_mean gives groupP (0.8 + 1.0) / 2 over
+        // groupQ (1.0 + 0.001) / 2.
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.functionScoreQuery(
+                QueryBuilders.matchAllQuery(),
+                ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD)
+            )
+        )
+            .add(
+                QueryBuilders.functionScoreQuery(
+                    QueryBuilders.matchAllQuery(),
+                    ScoreFunctionBuilders.fieldValueFactorFunction(TEST_FLOAT_FIELD_RATING)
+                )
+            );
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            5,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            null,
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        List<String> collapseValues = getCollapseValues(searchResponse);
+        assertEquals(
+            "Expected the rating-only evidence to lift groupP, but got: " + collapseValues,
+            List.of("groupP", "groupQ", "groupR"),
+            collapseValues
+        );
+    }
+
+    private void indexDocumentsForLegExclusiveDocsConfiguration() {
+        // Each group's documents match only one leg (a zero field value scores 0 in function_score):
+        // groupP and groupQ hold a price-only and a rating-only document, groupR is price-only
+        indexGroupedDocumentWithRating("1", "groupP", "18", "0");
+        indexGroupedDocumentWithRating("2", "groupP", "0", "9");
+        indexGroupedDocumentWithRating("3", "groupQ", "20", "0");
+        indexGroupedDocumentWithRating("4", "groupQ", "0", "2");
+        indexGroupedDocumentWithRating("5", "groupR", "10", "0");
+    }
+
+    private void indexDocumentsForDisagreeingLegsConfiguration() {
+        // groupA owns the best document per leg individually (doc 1 by price, doc 2 by rating),
+        // but doc 2 has the best summed score and must represent the group in every leg
+        indexGroupedDocumentWithRating("1", "groupA", "100", "10");
+        indexGroupedDocumentWithRating("2", "groupA", "85", "80");
+        indexGroupedDocumentWithRating("3", "groupB", "90", "50");
+        indexGroupedDocumentWithRating("4", "groupC", "50", "90");
+        indexGroupedDocumentWithRating("5", "groupD", "20", "30");
+    }
+
+    private void indexGroupedDocumentWithRating(String docId, String group, String price, String rating) {
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            docId,
+            List.of(),
+            List.of(),
+            List.of(TEST_TEXT_FIELD_ITEM, TEST_TEXT_FIELD_CATEGORY),
+            List.of(group, "groups"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD, TEST_FLOAT_FIELD_RATING),
+            List.of(price, rating),
+            null
+        );
+    }
+
+    private void indexDocumentsForRRFDisagreeingLegsConfiguration() {
+        // Same shape as the disagreeing-legs dataset with rating values that produce no reciprocal-rank
+        // ties: per-leg ranks by each leg's best score per group are price: groupA, groupB, groupC, groupD
+        // and rating: groupC, groupA, groupB, groupD, with doc 2 representing groupA (best summed score)
+        indexGroupedDocumentWithRating("1", "groupA", "100", "10");
+        indexGroupedDocumentWithRating("2", "groupA", "85", "80");
+        indexGroupedDocumentWithRating("3", "groupB", "90", "70");
+        indexGroupedDocumentWithRating("4", "groupC", "50", "90");
+        indexGroupedDocumentWithRating("5", "groupD", "20", "30");
+    }
+
+    private void indexDocumentsForSkewedGroupsConfiguration() {
+        // 6 distinct groups; groupA owns the three highest-priced documents
+        indexGroupedDocument("1", "groupA", "10");
+        indexGroupedDocument("2", "groupB", "90");
+        indexGroupedDocument("3", "groupC", "80");
+        indexGroupedDocument("4", "groupD", "70");
+        indexGroupedDocument("5", "groupE", "60");
+        indexGroupedDocument("6", "groupF", "50");
+        indexGroupedDocument("7", "groupA", "95");
+        indexGroupedDocument("8", "groupA", "99");
+    }
+
+    private void indexGroupedDocument(String docId, String group, String price) {
+        indexTheDocument(
+            COLLAPSE_TEST_INDEX,
+            docId,
+            List.of(),
+            List.of(),
+            List.of(TEST_TEXT_FIELD_ITEM, TEST_TEXT_FIELD_CATEGORY),
+            List.of(group, "groups"),
+            List.of(),
+            Map.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(),
+            List.of(TEST_FLOAT_FIELD),
+            List.of(price),
+            null
+        );
+    }
+
+    private List<String> getCollapseValues(Map<String, Object> collapseResponse) {
+        Map<String, Object> hits = (Map<String, Object>) collapseResponse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        List<String> collapseValues = new ArrayList<>();
+        for (Map<String, Object> actualHit : actualHits) {
+            Map<String, Object> fields = (Map<String, Object>) actualHit.get("fields");
+            ArrayList<Object> items = (ArrayList<Object>) fields.get(TEST_TEXT_FIELD_ITEM);
+            for (Object item : items) {
+                collapseValues.add(item.toString());
+            }
+        }
+        return collapseValues;
     }
 
     public void testCollapseOnNestedFieldWithInnerHits_withoutReferenceOnGroup_thenSuccessful() {
@@ -504,6 +957,18 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
             case DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET:
                 index100DocumentsForDefaultConfiguration();
                 break;
+            case DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS:
+                indexDocumentsForSkewedGroupsConfiguration();
+                break;
+            case DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS:
+                indexDocumentsForDisagreeingLegsConfiguration();
+                break;
+            case RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS:
+                indexDocumentsForRRFDisagreeingLegsConfiguration();
+                break;
+            case DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS:
+                indexDocumentsForLegExclusiveDocsConfiguration();
+                break;
             default:
                 throw new IllegalArgumentException("Invalid configuration: " + configuration);
         }
@@ -700,27 +1165,33 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
 
     private String getIndexConfiguration(String configuration, int numberOfShards) throws IOException {
         return switch (configuration) {
-            case DEFAULT_INDEX_CONFIGURATION, DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET -> XContentFactory.jsonBuilder()
-                .startObject()
-                .startObject("settings")
-                .field("number_of_shards", numberOfShards)
-                .field("number_of_replicas", 1)
-                .endObject()
-                .startObject("mappings")
-                .startObject("properties")
-                .startObject(TEST_TEXT_FIELD_ITEM)
-                .field("type", "keyword")
-                .endObject()
-                .startObject(TEST_TEXT_FIELD_CATEGORY)
-                .field("type", "keyword")
-                .endObject()
-                .startObject(TEST_FLOAT_FIELD)
-                .field("type", "float")
-                .endObject()
-                .endObject()
-                .endObject()
-                .endObject()
-                .toString();
+            case DEFAULT_INDEX_CONFIGURATION, DEFAULT_INDEX_CONFIGURATION_WITH_LARGE_DATASET,
+                DEFAULT_INDEX_CONFIGURATION_WITH_SKEWED_GROUPS, DEFAULT_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS,
+                RRF_INDEX_CONFIGURATION_WITH_DISAGREEING_LEGS, DEFAULT_INDEX_CONFIGURATION_WITH_LEG_EXCLUSIVE_DOCS -> XContentFactory
+                    .jsonBuilder()
+                    .startObject()
+                    .startObject("settings")
+                    .field("number_of_shards", numberOfShards)
+                    .field("number_of_replicas", 1)
+                    .endObject()
+                    .startObject("mappings")
+                    .startObject("properties")
+                    .startObject(TEST_TEXT_FIELD_ITEM)
+                    .field("type", "keyword")
+                    .endObject()
+                    .startObject(TEST_TEXT_FIELD_CATEGORY)
+                    .field("type", "keyword")
+                    .endObject()
+                    .startObject(TEST_FLOAT_FIELD)
+                    .field("type", "float")
+                    .endObject()
+                    .startObject(TEST_FLOAT_FIELD_RATING)
+                    .field("type", "float")
+                    .endObject()
+                    .endObject()
+                    .endObject()
+                    .endObject()
+                    .toString();
             case KNN_INDEX_CONFIGURATION -> XContentFactory.jsonBuilder()
                 .startObject()
                 .startObject("settings")
