@@ -26,7 +26,6 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
@@ -34,6 +33,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -166,14 +166,9 @@ public class ScoreCombiner {
         if (sort == null) {
             return false;
         }
-
-        for (SortField sortField : sort.getSort()) {
-            if (SortField.Type.SCORE.equals(sortField.getType())) {
-                return true;
-            }
-        }
-
-        return false;
+        // Hybrid rejects field-primary + _score upstream, so this is equivalent to the old "any key is score"
+        // check for every reachable hybrid sort, while staying consistent with that slot-0 assumption.
+        return HybridSearchCollapseUtil.isScorePrimarySort(sort.getSort());
     }
 
     /**

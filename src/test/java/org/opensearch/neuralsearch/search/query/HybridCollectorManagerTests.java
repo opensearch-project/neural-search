@@ -303,6 +303,55 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
+    public void testCreateCollectorManager_whenScoreAscendingWithFieldAndCollapse_thenFail() {
+        // [_score asc, <field>] + collapse must be rejected. The collapse relaxation allows _score to be mixed
+        // with a field, but only when _score is the DESCENDING primary key. The collapse collector's
+        // min-competitive-score pruning (minScoreThresholds / HybridSubQueryScorer#getMinScores) assumes
+        // score-descending and never consults the sort's reverse flag, so an ascending _score could prune
+        // competitive docs and yield a wrong group head. _score asc maps to SortField reverse=true.
+        SearchContext searchContext = mock(SearchContext.class);
+        SortField scoreAscending = new SortField(null, SortField.Type.SCORE, true); // _score asc == reverse=true
+        SortField fieldSort = new SortField("price", SortField.Type.INT);
+        Sort sort = new Sort(scoreAscending, fieldSort);
+        DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW, DocValueFormat.RAW };
+        when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
+        when(searchContext.minimumScore()).thenReturn(null);
+
+        // Collapse present + score primary would otherwise pass the relaxation; the ascending order is what fails it.
+        CollapseContext collapseContext = mock(CollapseContext.class);
+        when(collapseContext.getFieldName()).thenReturn(TEXT_FIELD_NAME);
+        when(searchContext.collapse()).thenReturn(collapseContext);
+
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+
+        when(searchContext.query()).thenReturn(hybridQuery);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQuery)
+        );
+        assertEquals(
+            "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them.",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
     public void testNewCollector_whenNotConcurrentSearchAndSortingAndSearchAfterAreApplied_thenSuccessful() {
         SearchContext searchContext = mock(SearchContext.class);
         SortField sortField = new SortField("_doc", SortField.Type.DOC);

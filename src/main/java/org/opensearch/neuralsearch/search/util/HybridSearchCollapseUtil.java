@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.util;
 
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.util.BytesRef;
@@ -76,5 +77,31 @@ public class HybridSearchCollapseUtil {
         }
         // null will be returned when the field on which collapse is applied is absent from the document.
         return null;
+    }
+
+    /**
+     * Whether {@code _score} is the primary (first) sort key. Hybrid score handling assumes the score occupies
+     * sort slot 0 — the collapse score-slot swap ({@code fields[0] = normalizedScore}) and min-score gating both
+     * rely on it — so this is the shared "is this a score-primary sort" predicate.
+     *
+     * @param sortFields the sort keys (may be {@code null}/empty)
+     * @return {@code true} iff the first sort key is {@link SortField.Type#SCORE}
+     */
+    public static boolean isScorePrimarySort(final SortField[] sortFields) {
+        return sortFields != null && sortFields.length > 0 && SortField.Type.SCORE.equals(sortFields[0].getType());
+    }
+
+    /**
+     * Whether {@code _score} is the primary sort key AND descending. For a SCORE sort field {@code reverse == false}
+     * is the natural highest-first (descending) order; OpenSearch maps {@code _score} order:asc to {@code reverse == true}.
+     * The hybrid+collapse relaxation accepts only this form: the collapse collector's min-competitive-score pruning
+     * ({@code minScoreThresholds} / {@code HybridSubQueryScorer#getMinScores}) assumes score-descending and does not
+     * consult the reverse flag, so an ascending {@code _score} could prune competitive docs and yield a wrong group head.
+     *
+     * @param sortFields the sort keys (may be {@code null}/empty)
+     * @return {@code true} iff the first sort key is a descending {@link SortField.Type#SCORE}
+     */
+    public static boolean isScorePrimaryDescendingSort(final SortField[] sortFields) {
+        return isScorePrimarySort(sortFields) && !sortFields[0].getReverse();
     }
 }

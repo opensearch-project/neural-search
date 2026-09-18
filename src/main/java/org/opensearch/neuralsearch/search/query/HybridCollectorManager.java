@@ -26,6 +26,7 @@ import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.query.util.HybridSearchCollectorResultUtil;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
@@ -201,12 +202,12 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             }
         }
         if (hasScoreSort && hasFieldSort) {
-            // Collapse-gated relaxation: a hybrid query with collapse may mix _score with a field so the
-            // collapse group head is deterministic (field breaks exact fused-score ties). Allowed only when
-            // _score is the primary (first) sort key; field-primary + _score stays rejected.
+            // Collapse-gated relaxation: a hybrid query with collapse may mix _score with a field so the collapse
+            // group head is deterministic (field breaks exact fused-score ties). Allowed only when _score is the
+            // primary (first) sort key AND descending; field-primary + _score, and ascending _score, stay rejected
+            // (see HybridSearchCollapseUtil#isScorePrimaryDescendingSort for why descending is required).
             boolean isScorePrimaryWithCollapse = searchContext.collapse() != null
-                && sortFields.length > 0
-                && SortField.Type.SCORE.equals(sortFields[0].getType());
+                && HybridSearchCollapseUtil.isScorePrimaryDescendingSort(sortFields);
             if (!isScorePrimaryWithCollapse) {
                 throw new IllegalArgumentException(
                     "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them."
