@@ -80,6 +80,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private int[] collectedHitsPerSubQuery;
     // Per-sub-query min score thresholds (only used when sorting by score)
     private float[] minScoreThresholds;
+    // Per-sub-query handle to the HybridLeafFieldComparator wrapping the SCORE sub-comparator.
+    // For a single-key score sort this is the top-level comparator itself; for a multi-key
+    // [_score, field] sort it is the wrapped SCORE child nested inside the MultiLeafFieldComparator.
+    // Null entries when the sort is not by score.
+    private HybridLeafFieldComparator[] scoreComparators;
 
     HybridCollapsingTopDocsCollector(
         GroupSelector<T> groupSelector,
@@ -92,14 +97,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         this.collapseField = collapseField;
         this.sort = groupSort;
 
-        boolean sortByScore = false;
-        for (SortField sf : groupSort.getSort()) {
-            if (SortField.Type.SCORE.equals(sf.getType())) {
-                sortByScore = true;
-                break;
-            }
-        }
-        this.isSortByScore = sortByScore;
+        // Score is supported only as the primary (first) sort key; the collapse guard rejects any other
+        // position, so the score sub-comparator (when present) is always at index 0.
+        SortField[] sortFields = groupSort.getSort();
+        this.isSortByScore = sortFields.length > 0 && SortField.Type.SCORE.equals(sortFields[0].getType());
         this.numHits = topNGroups;
         this.hitsThresholdChecker = hitsThresholdChecker;
     }
@@ -297,6 +298,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 leafComparators = new LeafFieldComparator[numSubQueries];
                 reverseMuls = new int[numSubQueries];
                 collectedHitsPerSubQuery = new int[numSubQueries];
+                scoreComparators = new HybridLeafFieldComparator[numSubQueries];
 
                 for (int i = 0; i < numSubQueries; i++) {
                     subQueryQueues[i] = FieldValueHitQueue.create(sort.getSort(), numHits);
@@ -318,19 +320,32 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     int[] queueReverseMuls = subQueryQueues[subQuery].getReverseMul();
 
                     LeafFieldComparator comparator;
+                    HybridLeafFieldComparator scoreWrapper = null;
                     int reverseMul;
 
                     if (leafFieldComparators.length == 1) {
                         reverseMul = queueReverseMuls[0];
-                        LeafFieldComparator actual = leafFieldComparators[0];
-                        comparator = isSortByScore ? new HybridLeafFieldComparator(actual) : actual;
+                        if (isSortByScore) {
+                            // Single-key score sort: the top-level comparator IS the score wrapper
+                            scoreWrapper = new HybridLeafFieldComparator(leafFieldComparators[0]);
+                            comparator = scoreWrapper;
+                        } else {
+                            comparator = leafFieldComparators[0];
+                        }
                     } else {
                         reverseMul = 1;
+                        if (isSortByScore) {
+                            // Multi-key [_score, field] sort: _score is the primary key (index 0), so wrap
+                            // ONLY that child to feed the per-sub-query score; field children stay plain.
+                            scoreWrapper = new HybridLeafFieldComparator(leafFieldComparators[0]);
+                            leafFieldComparators[0] = scoreWrapper;
+                        }
                         comparator = new MultiLeafFieldComparator(leafFieldComparators, queueReverseMuls);
                     }
 
                     comparator.setScorer(compoundQueryScorer);
                     leafComparators[subQuery] = comparator;
+                    scoreComparators[subQuery] = scoreWrapper;
                     reverseMuls[subQuery] = reverseMul;
                 }
             }
@@ -340,11 +355,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 LeafFieldComparator comparator = leafComparators[subQuery];
                 float scoreOfLastTopEntry = 0;
 
-                // For score-based sorting, set the individual sub-query score on the wrapper
+                // For score-based sorting, set the individual sub-query score on the wrapped SCORE comparator
                 if (isSortByScore) {
-                    assert comparator instanceof HybridLeafFieldComparator;
-                    scoreOfLastTopEntry = ((HybridLeafFieldComparator) comparator).getCurrentSubQueryScore();
-                    ((HybridLeafFieldComparator) comparator).setCurrentSubQueryScore(score);
+                    scoreOfLastTopEntry = scoreComparators[subQuery].getCurrentSubQueryScore();
+                    scoreComparators[subQuery].setCurrentSubQueryScore(score);
                 }
 
                 boolean accepted = false;
@@ -352,7 +366,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     accepted = reverseMuls[subQuery] * comparator.compareBottom(doc) > 0;
                 } finally {
                     if (!accepted && isSortByScore) {
-                        ((HybridLeafFieldComparator) comparator).setCurrentSubQueryScore(scoreOfLastTopEntry);
+                        scoreComparators[subQuery].setCurrentSubQueryScore(scoreOfLastTopEntry);
                     }
                 }
 
@@ -384,8 +398,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 int slot = subQueryQueues[subQuery].size();
 
                 if (isSortByScore) {
-                    assert comparator instanceof HybridLeafFieldComparator;
-                    ((HybridLeafFieldComparator) comparator).setCurrentSubQueryScore(score);
+                    scoreComparators[subQuery].setCurrentSubQueryScore(score);
                 }
 
                 comparator.copy(slot, doc);

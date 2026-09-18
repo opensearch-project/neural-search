@@ -209,6 +209,68 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         }
     }
 
+    public void testCombination_whenScorePrimaryWithTiebreakField_thenTiebreakPreservedAndScoreSlotSwapped() {
+        // Multi-key [_score desc, price asc] sort (the collapse [_score, field] shape). isSortByScore is true, so
+        // ScoreCombiner must swap ONLY the score slot (fields[0]) for the combined/normalized score and PRESERVE the
+        // trailing tiebreaker slot(s). The pre-fix code did `new Object[]{ normalizedScore }`, which dropped the
+        // tiebreaker (length -> 1); this pins the clone/swap branch that keeps it.
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+
+        // fields[0] is a sentinel (not the real score) so a successful swap is unambiguous; fields[1] is the tiebreak.
+        Object[] fieldsDoc1 = new Object[] { 111.0f, 100 };
+        Object[] fieldsDoc2 = new Object[] { 111.0f, 200 };
+        SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) };
+        Sort sort = new Sort(sortFields);
+
+        final List<CompoundTopDocs> queryTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                List.of(
+                    new TopFieldDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new FieldDoc[] { new FieldDoc(1, 0.9f, fieldsDoc1), new FieldDoc(2, 0.7f, fieldsDoc2) },
+                        sortFields
+                    )
+                ),
+                true,
+                SEARCH_SHARD
+            )
+        );
+
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .sort(sort)
+                .isSingleShard(true)
+                .build()
+        );
+
+        // The swapped sort fields land on the COMBINED docs exposed via getScoreDocs() (getTopDocs() still holds the
+        // per-sub-query originals with the sentinel). getScoreDoc() builds each combined FieldDoc from docIdSortFieldMap.
+        List<ScoreDoc> combinedDocs = queryTopDocs.getFirst().getScoreDocs();
+        assertEquals("both docs survive combination", 2, combinedDocs.size());
+        for (ScoreDoc scoreDoc : combinedDocs) {
+            FieldDoc fieldDoc = (FieldDoc) scoreDoc;
+            // tiebreaker slot preserved => length stays 2 (pre-fix code collapsed it to a single [score] element)
+            assertEquals("trailing tiebreaker slot must be preserved", 2, fieldDoc.fields.length);
+            // slot 0 swapped to the combined score (== the doc's score), no longer the 111f sentinel
+            assertEquals(
+                "score slot must hold the combined score, not the sentinel",
+                fieldDoc.score,
+                ((Number) fieldDoc.fields[0]).floatValue(),
+                DELTA_FOR_SCORE_ASSERTION
+            );
+            // slot 1 is the original tiebreaker, untouched
+            if (fieldDoc.doc == 1) {
+                assertEquals("tiebreaker preserved for doc1", 100, ((Number) fieldDoc.fields[1]).intValue());
+            } else if (fieldDoc.doc == 2) {
+                assertEquals("tiebreaker preserved for doc2", 200, ((Number) fieldDoc.fields[1]).intValue());
+            }
+        }
+    }
+
     public void testCombination_whenSortEnabledAndShardHasNoResults_thenNoException() {
         // Reproduces https://github.com/opensearch-project/neural-search/issues/1934:
         // with sort enabled (as search_after requires), a shard that contributed no results past the cursor
