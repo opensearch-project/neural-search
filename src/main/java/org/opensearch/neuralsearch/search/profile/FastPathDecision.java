@@ -26,6 +26,20 @@ import lombok.experimental.Accessors;
  * are the same under profile. The one thing that is per coordinator — which {@code _source} sizes it has observed — is
  * also what the unprofiled request would have met on the coordinator that served this one.
  *
+ * <p>One precondition is the exception: whether this hybrid is the request's own query. A profiled request is marked as
+ * the root whatever its shape, while an unprofiled one is marked by the hits consumer the filter attaches only when the
+ * shape already allows the fast path — so a profiled request that a shape feature refuses reports that feature's own
+ * refusal ({@link #REQUEST_SHAPE}, or {@link #EXACT_TOTALS} for {@code track_total_hits: true}), where its unprofiled
+ * twin would have stopped one check earlier at {@link #NESTED_HYBRID}. For the request as submitted the verdict is the
+ * same either way and only the reason differs, the reported one being the more specific.
+ *
+ * <p>Where the two can differ on {@code would_take} is the one thing neither reads at the same moment. The twin's gate is
+ * two shape reads — the filter's, of the request as submitted, and the rewrite's, after the search pipeline's request
+ * processors have run — because the consumer the filter attaches is also what arms the path. This report is the rewrite's
+ * read alone. So a processor that <i>adds</i> a refusing feature is reported faithfully, while one that <i>removes</i> the
+ * feature the filter refused on leaves the twin no consumer to arm, and this reports {@code would_take: true} for a
+ * request that runs two rounds. No processor in this plugin rewrites those features; core's {@code script} processor can.
+ *
  * <p>{@link #refusedBy} is {@code null} while nothing has refused; the reasons are checked in the order the fast path
  * checks them, and the first to fail is the one reported. Optional facts are set when they were evaluated:
  * {@link #fetchEstimateBytes}/{@link #fetchBudgetBytes} once the fetch volume was weighed, {@link #countSettled} once
@@ -61,6 +75,13 @@ public final class FastPathDecision {
     /** The request wants a count beyond the window and no leg proved it. */
     public static final String COUNT_NOT_SETTLED = "count_not_settled";
 
+    /**
+     * One refusal before it is recorded: the reason and the detail that names what caused it. What the checks that read
+     * a request feature by feature return, so the pair travels as one value instead of a two-element array.
+     */
+    public record Refusal(String reason, String detail) {
+    }
+
     private String refusedBy;
     private String detail;
     private Long fetchEstimateBytes;
@@ -79,6 +100,11 @@ public final class FastPathDecision {
             detail = reasonDetail;
         }
         return this;
+    }
+
+    /** {@link #refuse(String, String)} for a refusal already established as a pair. */
+    public FastPathDecision refuse(final Refusal refusal) {
+        return refuse(refusal.reason(), refusal.detail());
     }
 
     /** The rendering under the coordinator entry's {@code debug}: {@code would_take}, then only what applies. */

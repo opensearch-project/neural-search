@@ -186,6 +186,21 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
         assertEquals(90, smallerWindow.extraDocuments());
         assertFalse("630 KB under budget", smallerWindow.exceedsBudget());
 
+        // A volume exactly at the budget fits: the gate refuses only what is over it. Pins the boundary at a non-zero
+        // point, where a `>` that drifted to `>=` would refuse a request the fast path can serve; the degenerate 0 == 0
+        // point is pinned by HybridQueryFusedFanOutTests' zero-budget `_source: false` arm.
+        ObservedSourceSizes.clear();
+        observe(VECTOR_INDEX, source(), 8_192);
+        ReturnedEmbeddingFields.FetchVolume exactlyAtBudget = ReturnedEmbeddingFields.fastPathFetchVolume(
+            request(source().size(72)),
+            2,
+            100
+        );
+        assertEquals(128, exactlyAtBudget.extraDocuments());
+        assertEquals(8_192L, exactlyAtBudget.perDocument().bytes());
+        assertEquals("128 × 8192 is the 1 MB default exactly", exactlyAtBudget.budgetBytes(), exactlyAtBudget.extraBytes());
+        assertFalse("a volume exactly at the budget is not over it", exactlyAtBudget.exceedsBudget());
+
         ReturnedEmbeddingFields.FetchVolume nothing = ReturnedEmbeddingFields.fastPathFetchVolume(
             request(source().size(10).fetchSource(false)),
             2,

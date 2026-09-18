@@ -117,12 +117,19 @@ final class ReturnedEmbeddingFields {
             if (perDocument.isUnknown()) {
                 return Long.MAX_VALUE;
             }
-            // extraDocuments is at most legs × window (tens of thousands) and bytes per document is bounded by the
-            // observed size of a document, so the product fits comfortably.
+            // extraDocuments is at most legs × window: the legs are capped by MAX_FUSION_LEG_SEARCHES, which
+            // HybridQueryBuilder#validateFusedLegSearchBudget enforces before the rewrite reaches here, and a window above
+            // min(index.max_result_window, indices.query.bool.max_clause_count − TAIL_CLAUSE_RESERVE) is refused there
+            // too. Bytes per document is an observed _source size (a BytesReference length, so int-bounded) plus the
+            // mapping's declared width for the fields the request names. The product stays orders of magnitude below
+            // Long.MAX_VALUE.
             return extraDocuments * perDocument.bytes();
         }
 
-        /** Refuse when unknown (fail closed) or over budget. */
+        /**
+         * Refuse when unknown (fail closed) or over budget. Strictly over, so a volume exactly at the budget fits — which
+         * is also what lets a zero budget admit a request whose accounted volume is zero and refuse every other.
+         */
         boolean exceedsBudget() {
             return perDocument.isUnknown() || extraBytes() > budgetBytes;
         }

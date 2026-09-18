@@ -1127,7 +1127,7 @@ final class HybridFusionOrchestrator {
      *       (Tail-only documents fill it), exact totals ({@code track_total_hits: true} needs the Tail's count);</li>
      *   <li><b>fetch-phase features the legs can serve only for the leg that returned the document</b> —
      *       {@code script_fields} (a script may read {@code _score}, on a leg the raw score); {@code inner_hits} and leg
-     *       {@code _name}s are checked against the legs by {@link #legsAllowFastPath};</li>
+     *       {@code _name}s are checked against the legs by {@link #decideFastPathBeforeLegs};</li>
      *   <li><b>coordinator-side processing after the search</b> — {@code profile} (round 2's tree is part of what it
      *       reports) here; search-pipeline response processors at the rewrite, where the pipeline is resolvable.</li>
      * </ul>
@@ -1138,45 +1138,45 @@ final class HybridFusionOrchestrator {
     }
 
     /**
-     * The first request feature that keeps the fast path off, as {@code [reason, detail]} for {@link FastPathDecision},
-     * or {@code null} when the shape allows it. The order is the order {@link #requestShapeAllowsFastPath} checks in, so
-     * the two agree on every source. {@code ignoreProfile} evaluates the shape the request would have without
-     * {@code profile: true} — what a profiled request reports about its unprofiled twin.
+     * The first request feature that keeps the fast path off, as a {@link FastPathDecision.Refusal}, or {@code null} when
+     * the shape allows it. The order is the order {@link #requestShapeAllowsFastPath} checks in, so the two agree on
+     * every source. {@code ignoreProfile} evaluates the shape the request would have without {@code profile: true} —
+     * what a profiled request reports about its unprofiled twin.
      */
-    static String[] requestShapeFastPathRefusal(SearchSourceBuilder source, boolean ignoreProfile) {
+    static FastPathDecision.Refusal requestShapeFastPathRefusal(SearchSourceBuilder source, boolean ignoreProfile) {
         if (Objects.isNull(source)) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "no request source" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "no request source");
         }
         if (Objects.nonNull(source.aggregations())) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "aggregations need round 2 over the fused ranking" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "aggregations need round 2 over the fused ranking");
         }
         if (Objects.nonNull(source.highlighter())) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "highlight needs round 2 over the fused ranking" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "highlight needs round 2 over the fused ranking");
         }
         if (Objects.nonNull(source.sorts())) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "sort needs round 2 over the fused ranking" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "sort needs round 2 over the fused ranking");
         }
         if (Objects.nonNull(source.collapse())) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "collapse needs round 2 over the fused ranking" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "collapse needs round 2 over the fused ranking");
         }
         if (Objects.nonNull(source.searchAfter())) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "search_after needs round 2 over the fused ranking" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "search_after needs round 2 over the fused ranking");
         }
         if (Objects.nonNull(source.minScore())) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "min_score needs round 2 over the fused ranking" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "min_score needs round 2 over the fused ranking");
         }
         if (Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "rescore runs on the shard over round 2's query" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "rescore runs on the shard over round 2's query");
         }
         if (Objects.nonNull(source.scriptFields()) && source.scriptFields().isEmpty() == false) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "script_fields may read _score, which a leg reports raw" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "script_fields may read _score, which a leg reports raw");
         }
         if (ignoreProfile == false && source.profile()) {
-            return new String[] { FastPathDecision.REQUEST_SHAPE, "profile reports round 2's query tree" };
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "profile reports round 2's query tree");
         }
         Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
         if (Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
-            return new String[] { FastPathDecision.EXACT_TOTALS, "track_total_hits: true needs the Tail's exact count" };
+            return new FastPathDecision.Refusal(FastPathDecision.EXACT_TOTALS, "track_total_hits: true needs the Tail's exact count");
         }
         return null;
     }
@@ -1195,9 +1195,9 @@ final class HybridFusionOrchestrator {
             return decision.refuse(FastPathDecision.NESTED_HYBRID, "only the request's own top-level hybrid can have its page assembled");
         }
         SearchSourceBuilder source = request.source();
-        String[] shape = requestShapeFastPathRefusal(source, true);
+        FastPathDecision.Refusal shape = requestShapeFastPathRefusal(source, true);
         if (Objects.nonNull(shape)) {
-            return decision.refuse(shape[0], shape[1]);
+            return decision.refuse(shape);
         }
         for (int leg = 0; leg < legs.size(); leg++) {
             if (carriesQueryName(legs.get(leg))) {
@@ -1292,20 +1292,6 @@ final class HybridFusionOrchestrator {
                 "the request wants a count beyond the window and no leg reported enough matches to prove it"
             );
         }
-    }
-
-    /**
-     * The leg-side half of fast-path eligibility: a named leg would have its {@code _name} registered against every
-     * returned document on the two-round path, and a leg's {@code inner_hits} would be computed for every returned
-     * document; from the legs alone each is exact only for the leg that returned the document. Both fall back.
-     */
-    static boolean legsAllowFastPath(List<QueryBuilder> legs) {
-        for (QueryBuilder leg : legs) {
-            if (carriesQueryName(leg)) {
-                return false;
-            }
-        }
-        return innerHitsLegs(legs).isEmpty();
     }
 
     /**

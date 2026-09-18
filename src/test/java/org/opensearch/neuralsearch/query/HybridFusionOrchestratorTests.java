@@ -2346,20 +2346,24 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertNull(HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder(), false));
         assertEquals(
             FastPathDecision.REQUEST_SHAPE,
-            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false)[0]
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false).reason()
         );
         assertTrue(
             "the first failing check is the one reported",
-            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false)[1]
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false)
+                .detail()
                 .startsWith("sort ")
         );
         assertEquals(
             FastPathDecision.EXACT_TOTALS,
-            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().trackTotalHits(true), false)[0]
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().trackTotalHits(true), false).reason()
         );
-        String[] profiled = HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true), false);
-        assertEquals(FastPathDecision.REQUEST_SHAPE, profiled[0]);
-        assertTrue(profiled[1].startsWith("profile "));
+        FastPathDecision.Refusal profiled = HybridFusionOrchestrator.requestShapeFastPathRefusal(
+            new SearchSourceBuilder().profile(true),
+            false
+        );
+        assertEquals(FastPathDecision.REQUEST_SHAPE, profiled.reason());
+        assertTrue(profiled.detail().startsWith("profile "));
         assertNull(
             "read as the unprofiled twin, the same source allows the fast path",
             HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true), true)
@@ -2367,7 +2371,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertEquals(
             "the profile flag is the only thing ignored",
             FastPathDecision.EXACT_TOTALS,
-            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true).trackTotalHits(true), true)[0]
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true).trackTotalHits(true), true)
+                .reason()
         );
     }
 
@@ -2511,27 +2516,4 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertNull(refusedEarly.fastPath().countSettled());
     }
 
-    public void testLegsAllowFastPath() {
-        assertTrue(
-            HybridFusionOrchestrator.legsAllowFastPath(
-                List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"))
-            )
-        );
-        assertFalse(
-            "a named leg",
-            HybridFusionOrchestrator.legsAllowFastPath(List.of(new MatchQueryBuilder("text", "hello").queryName("lex")))
-        );
-        assertFalse(
-            "a leg with inner_hits",
-            HybridFusionOrchestrator.legsAllowFastPath(
-                List.of(
-                    new org.opensearch.index.query.NestedQueryBuilder(
-                        "n",
-                        new MatchAllQueryBuilder(),
-                        org.apache.lucene.search.join.ScoreMode.Max
-                    ).innerHit(new InnerHitBuilder("members"))
-                )
-            )
-        );
-    }
 }
