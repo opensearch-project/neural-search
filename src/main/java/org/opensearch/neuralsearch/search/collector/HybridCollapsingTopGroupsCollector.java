@@ -443,7 +443,7 @@ public class HybridCollapsingTopGroupsCollector<T> implements HybridSearchCollec
                 if (c != 0) {
                     return c;
                 } else if (compIDX == compIDXEnd) {
-                    return o1.topDoc - o2.topDoc;
+                    return Integer.compare(o1.topDoc, o2.topDoc);
                 }
             }
         };

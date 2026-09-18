@@ -18,11 +18,13 @@ import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.SortedDocValues;
+import org.apache.lucene.search.CollectionTerminatedException;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
+import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.store.Directory;
@@ -1636,6 +1638,172 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
         // for its lowest-scoring document and reported with that score, not with its highest
         assertEquals(List.of("groupA"), collapseValueStrings(topDocs.get(0)));
         assertEquals(1.0f, topDocs.get(0).scoreDocs[0].score, 0.001f);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenHitsThresholdReached_thenCollectionTerminatesWithLowerBoundRelation() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupB");
+        addKeywordDoc(writer, 2, "text2", 102, "groupC");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(2)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        hybridScorer.resetScores();
+        hybridScorer.getSubQueryScores()[0] = 0.9f;
+        leafCollector.collect(0);
+
+        hybridScorer.resetScores();
+        hybridScorer.getSubQueryScores()[0] = 0.8f;
+        expectThrows(CollectionTerminatedException.class, () -> leafCollector.collect(1));
+
+        // The doc that tripped the threshold is counted in the total but not collected into groups
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, topDocs.get(0).totalHits.relation());
+        assertEquals(List.of("groupA"), collapseValueStrings(topDocs.get(0)));
+        assertEquals(2, collector.getTotalHits());
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenAllComparatorSlotsOccupied_thenNewGroupsStillCollected() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        // 2 sub-queries * numHits 2 fills every live slot with leg-exclusive groups; the last two docs
+        // then exercise the transient insertion slot while the pool is at its floor
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        addKeywordDoc(writer, 1, "text1", 101, "groupB");
+        addKeywordDoc(writer, 2, "text2", 102, "groupC");
+        addKeywordDoc(writer, 3, "text3", 103, "groupD");
+        addKeywordDoc(writer, 4, "text4", 104, "groupE");
+        addKeywordDoc(writer, 5, "text5", 105, "groupF");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        int topNGroups = 2;
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            topNGroups,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(2);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // groupE loses both trims and hands its slot back, groupF evicts a group in each leg
+        float[][] scoresByDoc = { { 0.9f, 0.0f }, { 0.8f, 0.0f }, { 0.0f, 0.9f }, { 0.0f, 0.8f }, { 0.5f, 0.5f }, { 0.95f, 0.95f } };
+        for (int docId = 0; docId < scoresByDoc.length; docId++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByDoc[docId][0];
+            hybridScorer.getSubQueryScores()[1] = scoresByDoc[docId][1];
+            leafCollector.collect(docId);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(List.of("groupF", "groupA"), collapseValueStrings(topDocs.get(0)));
+        assertEquals(List.of("groupF", "groupC"), collapseValueStrings(topDocs.get(1)));
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenDocumentHasNoCollapseField_thenItFormsTheNullGroup() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        addKeywordDoc(writer, 0, "text0", 100, "groupA");
+        // doc 1 carries no collapse field and must fold into the null group
+        Document doc = new Document();
+        doc.add(new NumericDocValuesField("_id", 1));
+        doc.add(new StoredField("_id", 1));
+        doc.add(new TextField(TEXT_FIELD_NAME, "text1", Field.Store.YES));
+        doc.add(new StoredField(INT_FIELD_NAME, 101));
+        doc.add(new NumericDocValuesField(INT_FIELD_NAME, 101));
+        writer.addDocument(doc);
+        addKeywordDoc(writer, 2, "text2", 102, "groupB");
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopGroupsCollector<?> collector = HybridCollapsingTopGroupsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        float[] scoresByDoc = { 0.9f, 0.8f, 0.7f };
+        for (int docId = 0; docId < scoresByDoc.length; docId++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scoresByDoc[docId];
+            leafCollector.collect(docId);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        CollapseTopFieldDocs result = topDocs.get(0);
+        assertEquals(3, result.scoreDocs.length);
+        assertEquals(0.8f, result.scoreDocs[1].score, 0.001f);
+        assertNull("The doc without the collapse field forms the null group", result.collapseValues[1]);
+        assertEquals("groupA", ((BytesRef) result.collapseValues[0]).utf8ToString());
+        assertEquals("groupB", ((BytesRef) result.collapseValues[2]).utf8ToString());
 
         reader.close();
         writer.close();
