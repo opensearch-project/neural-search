@@ -152,9 +152,24 @@ public abstract class AbstractScoreHybridizationProcessor implements SearchPhase
      */
     @VisibleForTesting
     boolean isHybridQuery(final SearchPhaseResult searchPhaseResult) {
+        // Two kinds of result carry nothing to read, and QuerySearchResult#topDocs() throws on both. A shard whose request
+        // was built after the first shard answered may reply with QuerySearchResult.nullInstance() when its query cannot
+        // match (core's can-match shortcut for a match_none rewrite — the fused fast path's round 2, or any plain query
+        // rewritten to match_none). And a partial reduce may already have consumed a shard's topDocs; that happens to a
+        // hybrid result only when the request's hybrid was not visible to HybridQuerySearchRequestFilter, which otherwise
+        // disables batched reduction for it. For THIS decision — is there a hybrid result to process at all — both count
+        // as not hybrid, which is exact: a null instance never held one, and a consumed result cannot be told apart from a
+        // non-hybrid one here. It is not a claim that a consumed hybrid result is processable: the workflow refuses those
+        // (see NormalizationProcessorWorkflow#filterValidResults). Nor can every hybrid result be consumed when this runs:
+        // core buffers the result whose arrival triggers a partial reduce and reduces the rest only after the phase-results
+        // processors, so at least one non-null result is always still readable here.
+        if (Objects.isNull(searchPhaseResult.queryResult())
+            || searchPhaseResult.queryResult().isNull()
+            || searchPhaseResult.queryResult().hasConsumedTopDocs()) {
+            return false;
+        }
         // check for delimiter at the end of the score docs.
-        return Objects.nonNull(searchPhaseResult.queryResult())
-            && Objects.nonNull(searchPhaseResult.queryResult().topDocs())
+        return Objects.nonNull(searchPhaseResult.queryResult().topDocs())
             && Objects.nonNull(searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs)
             && searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs.length > 0
             && isHybridQueryStartStopElement(searchPhaseResult.queryResult().topDocs().topDocs.scoreDocs[0]);

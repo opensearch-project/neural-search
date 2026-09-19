@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.query;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.opensearch.client.Request;
@@ -417,6 +418,191 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         );
         control.remove("profile");
         assertClientVisibleIdentical(fast, control);
+    }
+
+    /**
+     * A search-pipeline request processor runs after the ActionFilter that arms the fast path and before the rewrite. Core's
+     * {@code filter_query} wraps the submitted hybrid in {@code bool{must:[hybrid], filter:[…]}}; the answer must honour that
+     * filter exactly as the two-round path does, for the page and for the derived total alike.
+     */
+    @SneakyThrows
+    public void testFastPath_whenAFilterQueryRequestProcessorWrapsTheHybrid_thenTheInjectedFilterIsApplied() {
+        prepareIndex();
+        String onlyDocOne = "fast-path-filter-query-doc-one";
+        String matchesNothing = "fast-path-filter-query-none";
+        createFilterQueryPipeline(onlyDocOne, "{\"term\":{\"" + NUM_FIELD + "\":1}}");
+        createFilterQueryPipeline(matchesNothing, "{\"term\":{\"" + NUM_FIELD + "\":" + (DOCS + 100) + "}}");
+        try {
+            // Fast-path shape: a page inside the ranked window (6 candidates), totals off, no source. Primed so a learned-size
+            // cold start cannot hide the path.
+            String fastShape = body("\"size\":5,\"track_total_hits\":false,\"_source\":false");
+            primeThroughPipeline(onlyDocOne, fastShape);
+            Map<String, Object> filteredToOne = searchThroughPipeline(onlyDocOne, fastShape);
+            assertEquals("the injected filter admits document 1 alone", List.of("1"), ids(filteredToOne));
+            assertClientVisibleIdentical(
+                filteredToOne,
+                twoRoundControlThroughPipeline(onlyDocOne, "\"track_total_hits\":false,\"_source\":false")
+            );
+
+            primeThroughPipeline(matchesNothing, fastShape);
+            assertEquals(
+                "a filter matching nothing leaves nothing to return",
+                List.of(),
+                ids(searchThroughPipeline(matchesNothing, fastShape))
+            );
+
+            // Default-totals shape (the threshold the fixture makes reachable): the total is the filtered count, not the legs'.
+            // The non-empty case is the discriminating one — the legs' union would prove {THRESHOLD, gte} here, and only the
+            // filtered count can say {1, eq}; the empty case is kept because many defects also reach 0.
+            String countingShape = body("\"size\":5,\"track_total_hits\":" + THRESHOLD + ",\"_source\":false");
+            primeThroughPipeline(onlyDocOne, countingShape);
+            Map<String, Object> countedToOne = searchThroughPipeline(onlyDocOne, countingShape);
+            assertEquals(List.of("1"), ids(countedToOne));
+            assertEquals(
+                "the total is the filtered count, not the legs' union of " + DOCS,
+                Map.of("value", 1, "relation", "eq"),
+                hits(countedToOne).get("total")
+            );
+            primeThroughPipeline(matchesNothing, countingShape);
+            Map<String, Object> counted = searchThroughPipeline(matchesNothing, countingShape);
+            assertEquals(List.of(), ids(counted));
+            assertEquals(Map.of("value", 0, "relation", "eq"), hits(counted).get("total"));
+        } finally {
+            deletePipeline("_search", onlyDocOne);
+            deletePipeline("_search", matchesNothing);
+        }
+    }
+
+    /**
+     * On the fast path round 2 is {@code match_none}. Core answers a match-none shard whose request was built after the first
+     * shard responded with {@code QuerySearchResult.nullInstance()} — deterministic here because 12 shards are dispatched one
+     * at a time — and an attached hybridization processor must skip those results rather than read their topDocs. This is the
+     * zero-migration request shape: the user's normalization pipeline stays attached and {@code fusion} is added.
+     *
+     * <p>No priming is needed: the request carries {@code _source: false} and no field patterns, so the fetch gate has nothing
+     * to weigh and never fails closed for it. That the fast path really ran — rather than the test passing on a quietly
+     * two-round request that never produced a null shard result — is proved two ways: the page is identical to a two-round
+     * control (a named leg) through the same pipeline, and the shard fetch-phase counter shows round 2 fetched nothing
+     * where the control's round 2 fetched the page.
+     */
+    @SneakyThrows
+    public void testFastPath_whenAHybridizationPipelineIsAttached_thenNullShardResultsDoNotFailTheRequest() {
+        String index = "test-hybrid-fused-fast-path-twelve-shards";
+        String pipeline = "fast-path-attached-normalization";
+        createIndexWithConfiguration(
+            index,
+            "{\"settings\":{\"number_of_shards\":12,\"number_of_replicas\":0},\"mappings\":{\"properties\":{\""
+                + TEXT_FIELD
+                + "\":{\"type\":\"text\"}}}}",
+            ""
+        );
+        for (int i = 1; i <= DOCS; i++) {
+            Request request = new Request("PUT", "/" + index + "/_doc/" + i + "?refresh=true");
+            request.setJsonEntity(
+                "{\"" + TEXT_FIELD + "\":\"" + (i % 2 == 1 ? "hello place " + i : "hello there " + i) + " filler".repeat(i) + "\"}"
+            );
+            client().performRequest(request);
+        }
+        createSearchPipelineWithResultsPostProcessor(pipeline);
+        try {
+            String zeroMigration =
+                "{\"size\":5,\"track_total_hits\":false,\"_source\":false,\"query\":{\"hybrid\":{\"fusion\":\"pipeline\","
+                    + "\"queries\":[{\"match\":{\""
+                    + TEXT_FIELD
+                    + "\":\"hello\"}},{\"term\":{\""
+                    + TEXT_FIELD
+                    + "\":\"place\"}}]}}}";
+            String twoRoundControl = zeroMigration.replace(
+                "{\"term\":{\"" + TEXT_FIELD + "\":\"place\"}}",
+                "{\"term\":{\"" + TEXT_FIELD + "\":{\"value\":\"place\",\"_name\":\"lex\"}}}"
+            );
+            List<String> expected = null;
+            for (int attempt = 0; attempt < 6; attempt++) {
+                Map<String, Object> fast = searchSerialised(index, pipeline, zeroMigration);
+                List<String> page = ids(fast);
+                assertEquals(5, page.size());
+                if (expected == null) {
+                    expected = page;
+                }
+                assertEquals("the same page every time", expected, page);
+                Map<String, Object> control = searchSerialised(index, pipeline, twoRoundControl);
+                control.put("hits", withoutMatchedQueries(hits(control)));
+                assertClientVisibleIdentical(fast, control);
+            }
+            // The path itself, read off the shards: the control's round 2 fetches the page, the fast path's match_none
+            // round 2 fetches nothing, so it costs the index strictly fewer fetch-phase executions.
+            long before = fetchOps(index);
+            searchSerialised(index, pipeline, twoRoundControl);
+            long twoRoundOps = fetchOps(index) - before;
+            before = fetchOps(index);
+            searchSerialised(index, pipeline, zeroMigration);
+            long fastOps = fetchOps(index) - before;
+            assertTrue("round 2 fetched nothing on the fast path: " + fastOps + " vs two-round " + twoRoundOps, fastOps < twoRoundOps);
+        } finally {
+            deletePipeline("_search", pipeline);
+            client().performRequest(new Request("DELETE", "/" + index));
+        }
+    }
+
+    /** A search through {@code pipeline} with the shards dispatched one at a time, parsed. */
+    @SneakyThrows
+    private Map<String, Object> searchSerialised(String index, String pipeline, String requestBody) {
+        Request request = new Request("POST", "/" + index + "/_search");
+        request.addParameter("search_pipeline", pipeline);
+        request.addParameter("max_concurrent_shard_requests", "1");
+        request.setJsonEntity(requestBody);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
+    }
+
+    /** The control's named leg registers {@code matched_queries} on every hit; the fast-path request has no named leg. */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> withoutMatchedQueries(Map<String, Object> hits) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>(hits);
+        List<Map<String, Object>> stripped = new java.util.ArrayList<>();
+        for (Map<String, Object> hit : (List<Map<String, Object>>) hits.get("hits")) {
+            Map<String, Object> h = new java.util.LinkedHashMap<>(hit);
+            h.remove("matched_queries");
+            stripped.add(h);
+        }
+        copy.put("hits", stripped);
+        return copy;
+    }
+
+    @SneakyThrows
+    private void createFilterQueryPipeline(String pipelineId, String filterQuery) {
+        Request request = new Request("PUT", "/_search/pipeline/" + pipelineId);
+        request.setJsonEntity("{\"request_processors\":[{\"filter_query\":{\"query\":" + filterQuery + "}}]}");
+        assertEquals(RestStatus.OK, RestStatus.fromCode(client().performRequest(request).getStatusLine().getStatusCode()));
+    }
+
+    @SneakyThrows
+    private Map<String, Object> searchThroughPipeline(String pipelineId, String requestBody) {
+        Request request = new Request("POST", "/" + INDEX + "/_search");
+        request.addParameter("search_pipeline", pipelineId);
+        request.setJsonEntity(requestBody);
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
+    }
+
+    private Map<String, Object> twoRoundControlThroughPipeline(String pipelineId, String extra) {
+        Map<String, Object> control = searchThroughPipeline(pipelineId, body(extra + ",\"profile\":true"));
+        control.remove("profile");
+        return control;
+    }
+
+    private void primeThroughPipeline(String pipelineId, String requestBody) {
+        for (int i = 0; i < 2 * clusterNodes(); i++) {
+            searchThroughPipeline(pipelineId, requestBody);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<String> ids(Map<String, Object> response) {
+        List<Map<String, Object>> hitList = (List<Map<String, Object>>) hits(response).get("hits");
+        return hitList.stream().map(h -> (String) h.get("_id")).collect(Collectors.toList());
     }
 
     /**

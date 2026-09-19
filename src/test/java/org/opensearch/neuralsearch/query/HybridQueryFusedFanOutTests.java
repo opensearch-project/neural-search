@@ -1680,7 +1680,175 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         assertNotNull("but a request that fetches nothing is never refused on volume", assembled[0]);
     }
 
-    /** An integer threshold above the window is what the legs count to. */
+    /**
+     * The consumers are attached by the ActionFilter against the request as submitted, and core runs search request
+     * processors between that filter and the rewrite. A processor that wraps the hybrid — core's {@code filter_query} builds
+     * {@code bool{must:[<the same instance>], filter:[…]}} — leaves the consumers attached to a hybrid that is no longer the
+     * request's query. The rewrite must then neither assemble a page (the enclosing filter would be bypassed) nor derive a
+     * total from the legs (the filtered count is not the legs' union).
+     */
+    @SneakyThrows
+    public void testRewrite_whenARequestProcessorWrappedTheHybridAfterTheFilter_thenNoPageIsAssembledAndNoTotalIsDerived() {
+        legTotalHits = new TotalHits(10_000, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        SearchHits[] assembled = new SearchHits[1];
+        TotalHits[] derived = new TotalHits[1];
+        // As the filter left it: the hybrid was the request's query in a fast-path shape.
+        hybrid.fusedHitsConsumer(hits -> assembled[0] = hits);
+        hybrid.fusedTotalHitsConsumer(total -> derived[0] = total);
+        // As a filter_query request processor then leaves it, downstream of every ActionFilter.
+        BoolQueryBuilder wrapped = new BoolQueryBuilder().must(hybrid).filter(QueryBuilders.termQuery(TEXT_FIELD_NAME, "tenant"));
+
+        SearchSourceBuilder settled = driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(wrapped).size(2)),
+            new ArrayList<>()
+        );
+
+        assertNull("no page may be assembled from the legs: the enclosing filter would be bypassed", assembled[0]);
+        assertNull("no total may be derived from the legs: the filtered count is not their union", derived[0]);
+        assertTrue("the wrapper is what core dispatches", settled.query() instanceof BoolQueryBuilder);
+        QueryBuilder must = ((BoolQueryBuilder) settled.query()).must().get(0);
+        assertTrue("the hybrid self-erased into the two-round query, not into match_none", must instanceof HybridFusionQueryBuilder);
+        BoolQueryBuilder selfErased = ((HybridFusionQueryBuilder) must).buildSelfErasedQuery();
+        assertFalse("the Tail is kept so the enclosing filter counts the true match set", selfErased.filter().isEmpty());
+    }
+
+    /**
+     * The explain consumer is attached on the same condition as the hits consumer — this hybrid was the request's query as
+     * submitted — and a request processor can falsify that too. A hybrid a processor nested is not what the response's
+     * {@code _explanation} describes, so its legs must not pay for explaining their hits: the leg requests go out unexplained,
+     * exactly as for a hybrid the user nested.
+     */
+    @SneakyThrows
+    public void testRewrite_whenARequestProcessorWrappedAnExplainedHybridAfterTheFilter_thenTheLegsDoNotExplain() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        hybrid.fusedExplanationConsumer(explanations -> {});
+        BoolQueryBuilder wrapped = new BoolQueryBuilder().must(hybrid).filter(QueryBuilders.termQuery(TEXT_FIELD_NAME, "tenant"));
+
+        List<SearchRequest> legs = legRequestsFor(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(wrapped).size(2).explain(true)),
+            hybrid,
+            null
+        );
+
+        assertEquals(2, legs.size());
+        for (SearchRequest leg : legs) {
+            assertNull("a processor-nested hybrid's legs run unexplained, as a user-nested hybrid's do", leg.source().explain());
+        }
+
+        // the control: the same hybrid as the request's own query runs its legs explained
+        HybridQueryBuilder root = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        root.fusedExplanationConsumer(explanations -> {});
+        for (SearchRequest leg : legRequestsFor(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(root).size(2).explain(true)),
+            root,
+            null
+        )) {
+            assertEquals(Boolean.TRUE, leg.source().explain());
+        }
+    }
+
+    /**
+     * A request processor may also replace the query outright with a different fused hybrid instance. The consumers the filter
+     * attached stay on the submitted instance, which is never rewritten; the replacement has none, so it runs the plain two
+     * rounds — nothing assembled, nothing derived, no exception, and the submitted instance's consumers are never fed.
+     */
+    @SneakyThrows
+    public void testRewrite_whenARequestProcessorReplacedTheHybridWithAnotherInstance_thenTheReplacementRunsTwoRoundsCleanly() {
+        HybridQueryBuilder submitted = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        SearchHits[] assembled = new SearchHits[1];
+        TotalHits[] derived = new TotalHits[1];
+        submitted.fusedHitsConsumer(hits -> assembled[0] = hits);
+        submitted.fusedTotalHitsConsumer(total -> derived[0] = total);
+        SearchSourceBuilder source = new SearchSourceBuilder().query(submitted).size(2).trackTotalHits(false);
+        observeSourceSize(source, 200);
+        // the processor's replacement: same legs, a different instance, no consumers
+        HybridQueryBuilder replacement = fused(
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"),
+            QueryBuilders.termQuery(TEXT_FIELD_NAME, "b")
+        );
+        source.query(replacement);
+
+        SearchSourceBuilder settled = driveWholeSource(new SearchRequest(INDEX_NAME).source(source), new ArrayList<>());
+
+        assertNull("the submitted instance's hits consumer is never fed", assembled[0]);
+        assertNull("nor its totals consumer", derived[0]);
+        assertTrue("the replacement runs the two-round path", settled.query() instanceof HybridFusionQueryBuilder);
+    }
+
+    /**
+     * The other thing a request processor can do between the filter and the rewrite: change the request's shape rather than
+     * the hybrid's position. The consumer was attached for a shape the fast path could answer; a processor then sets
+     * {@code min_score} (core's {@code script} processor can set anything on the source). Re-read at the rewrite, the shape
+     * disarms the fast path, and the request runs the two rounds that honour it.
+     */
+    @SneakyThrows
+    public void testRewrite_whenARequestProcessorChangedTheShapeAfterTheFilter_thenTheFastPathIsDisarmed() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        SearchHits[] assembled = new SearchHits[1];
+        hybrid.fusedHitsConsumer(hits -> assembled[0] = hits);
+        SearchSourceBuilder source = new SearchSourceBuilder().query(hybrid).size(2).trackTotalHits(false);
+        observeSourceSize(source, 200);
+        // as the filter saw it, the shape allows the fast path; a processor then adds min_score before the rewrite runs
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsFastPath(source));
+        source.minScore(0.5f);
+
+        SearchSourceBuilder settled = driveWholeSource(new SearchRequest(INDEX_NAME).source(source), new ArrayList<>());
+
+        assertNull("min_score needs round 2 over the fused ranking: nothing may be assembled", assembled[0]);
+        assertTrue("the two-round self-erased query stands", settled.query() instanceof HybridFusionQueryBuilder);
+    }
+
+    /**
+     * The verdict reads the shape as if unprofiled — it describes the unprofiled twin of a profiled request — so
+     * {@code profile} is the one shape change the verdict alone would let through. A request processor can set it after
+     * the filter (core's {@code script} processor can); arming re-reads the shape with profile honoured, so a request that
+     * is profiled by the time it is rewritten keeps its two rounds, while its verdict still says the twin would have taken
+     * the fast path.
+     */
+    @SneakyThrows
+    public void testRewrite_whenARequestProcessorSetProfileAfterTheFilter_thenTheFastPathIsDisarmedButTheVerdictStands() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        SearchHits[] assembled = new SearchHits[1];
+        FusedCoordinatorTimings[] published = new FusedCoordinatorTimings[1];
+        hybrid.fusedHitsConsumer(hits -> assembled[0] = hits);
+        hybrid.fusionTimingConsumer(timings -> published[0] = timings);
+        SearchSourceBuilder source = new SearchSourceBuilder().query(hybrid).size(2).trackTotalHits(false);
+        observeSourceSize(source, 200);
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsFastPath(source));
+        source.profile(true);
+
+        SearchSourceBuilder settled = driveWholeSource(new SearchRequest(INDEX_NAME).source(source), new ArrayList<>());
+
+        assertNull("profile reports round 2's tree: nothing may be assembled", assembled[0]);
+        assertTrue(settled.query() instanceof HybridFusionQueryBuilder);
+        assertTrue(
+            "the verdict describes the unprofiled twin, which would have taken the fast path",
+            published[0].fastPath().allowsSoFar()
+        );
+    }
+
+    /**
+     * The filter marks a profiled request's own hybrid as the report root; a request processor that then wraps it makes it
+     * a nested hybrid of the request core executes, and the verdict says so rather than reporting a twin that would have
+     * had its page assembled past the enclosing filter.
+     */
+    @SneakyThrows
+    public void testRewrite_whenARequestProcessorWrappedAProfiledHybridAfterTheFilter_thenTheVerdictIsNestedHybrid() {
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        hybrid.fastPathReportRoot(true);
+        FusedCoordinatorTimings[] published = new FusedCoordinatorTimings[1];
+        hybrid.fusionTimingConsumer(timings -> published[0] = timings);
+        BoolQueryBuilder wrapped = new BoolQueryBuilder().must(hybrid).filter(QueryBuilders.termQuery(TEXT_FIELD_NAME, "tenant"));
+
+        driveWholeSource(
+            new SearchRequest(INDEX_NAME).source(new SearchSourceBuilder().query(wrapped).size(2).trackTotalHits(false).profile(true)),
+            new ArrayList<>()
+        );
+
+        assertEquals(FastPathDecision.NESTED_HYBRID, published[0].fastPath().refusedBy());
+    }
+
     @SneakyThrows
     public void testRewrite_whenIntegerThresholdAboveTheWindow_thenLegsCountToIt() {
         HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
