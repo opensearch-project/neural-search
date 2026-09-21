@@ -20,6 +20,7 @@ import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
+import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopGroupsCollector;
 import org.opensearch.neuralsearch.search.collector.HybridCollectorFactory;
 import org.opensearch.neuralsearch.search.collector.HybridCollectorFactoryDTO;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
@@ -56,7 +57,8 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
     private final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
         HybridTopScoreDocCollector.class,
         HybridTopFieldDocSortCollector.class,
-        HybridCollapsingTopDocsCollector.class
+        HybridCollapsingTopDocsCollector.class,
+        HybridCollapsingTopGroupsCollector.class
     );
 
     /**
