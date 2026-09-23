@@ -270,12 +270,7 @@ public class SemanticHighlightingProcessorTests extends OpenSearchTestCase {
 
         assertTrue(latch.await(5, TimeUnit.SECONDS));
         assertEquals(List.of("Apple is red", "My car is outside"), inferenceContexts);
-        Text[] fragments = result.get()
-            .getHits()
-            .getHits()[0]
-            .getHighlightFields()
-            .get("body")
-            .fragments();
+        Text[] fragments = result.get().getHits().getHits()[0].getHighlightFields().get("body").fragments();
         assertEquals(2, fragments.length);
         assertEquals("<em>Apple is red</em>", fragments[0].string());
         assertEquals("<em>My car is outside</em>", fragments[1].string());

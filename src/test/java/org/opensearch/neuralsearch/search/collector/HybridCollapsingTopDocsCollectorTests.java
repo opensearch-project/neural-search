@@ -1172,7 +1172,62 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
-    public void testCollapse_whenNegativeScore_thenCountedButNotQueued() throws IOException {
+    public void testCollapse_whenSortByScoreAscending_thenLowestScoresWin() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        for (int i = 0; i < 4; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        // ascending score sort: the two LOWEST scores should survive
+        Sort sort = new Sort(new SortField(null, SortField.Type.SCORE, true));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            2,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        float[] scores = new float[] { 10.0f, 9.0f, 1.0f, 0.5f };
+        for (int i = 0; i < scores.length; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[i];
+            leafCollector.collect(i);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+        Set<Float> survivors = new HashSet<>();
+        for (int i = 0; i < result.scoreDocs.length; i++) {
+            survivors.add(result.scoreDocs[i].score);
+        }
+        assertEquals(Set.of(0.5f, 1.0f), survivors);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenNegativeScore_thenNotCountedAndNotQueued() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
 
@@ -1219,7 +1274,9 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         CollapseTopFieldDocs result = topDocs.get(0);
 
-        assertEquals(scores.length, result.totalHits.value());
+        // A non-positive score is not a match, so it is neither counted nor queued. This matches
+        // HybridTopScoreDocCollector and HybridCollapsingTopGroupsCollector.
+        assertEquals(scores.length - 1, result.totalHits.value());
 
         assertEquals(scores.length - 1, result.scoreDocs.length);
         for (int i = 0; i < result.scoreDocs.length; i++) {
