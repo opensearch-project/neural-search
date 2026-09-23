@@ -15,6 +15,7 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.DEFAULT_
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES_CEILING;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -271,6 +272,28 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
             error.getMessage(),
             containsString("must be >= " + HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES)
         );
+    }
+
+    /**
+     * The budget is bounded above as well as below: the ceiling is the leg limit cubed (one more level of full nesting than
+     * the default admits), it is accepted, and one past it is refused at parse time — so the setting cannot be raised to a
+     * value at which it no longer bounds the fan-out.
+     */
+    public void testLegSearchBudgetSetting_hasAnExplicitCeiling() {
+        assertEquals(DEFAULT_MAX_FUSION_LEG_SEARCHES * HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES, MAX_FUSION_LEG_SEARCHES_CEILING);
+
+        Settings atCeiling = Settings.builder().put(MAX_FUSION_LEG_SEARCHES.getKey(), MAX_FUSION_LEG_SEARCHES_CEILING).build();
+        assertEquals(Integer.valueOf(MAX_FUSION_LEG_SEARCHES_CEILING), MAX_FUSION_LEG_SEARCHES.get(atCeiling));
+
+        for (int over : new int[] { MAX_FUSION_LEG_SEARCHES_CEILING + 1, Integer.MAX_VALUE }) {
+            Settings aboveCeiling = Settings.builder().put(MAX_FUSION_LEG_SEARCHES.getKey(), over).build();
+            IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> MAX_FUSION_LEG_SEARCHES.get(aboveCeiling));
+            assertThat(
+                "a budget that can be raised without bound is not a budget",
+                error.getMessage(),
+                containsString("must be <= " + MAX_FUSION_LEG_SEARCHES_CEILING)
+            );
+        }
     }
 
     /**

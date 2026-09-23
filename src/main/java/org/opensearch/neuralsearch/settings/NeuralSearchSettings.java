@@ -127,20 +127,33 @@ public final class NeuralSearchSettings {
         * HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
     /**
+     * The most {@link #MAX_FUSION_LEG_SEARCHES} can be raised to — the cube of the per-query leg limit, i.e. one more level
+     * of fully-nested fused hybrids than the default admits. Derived the same way as the default rather than picked, and
+     * present because a ceiling on the fan-out that could itself be raised without bound would not be a ceiling: the
+     * request-level leg budget is the fail-closed backstop the rest of fused mode's resource guards lean on, so the setting
+     * that carries it needs a maximum as well as a minimum.
+     */
+    public static final int MAX_FUSION_LEG_SEARCHES_CEILING = DEFAULT_MAX_FUSION_LEG_SEARCHES
+        * HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
+
+    /**
      * Ceiling on the leg sub-searches one search request may fan out in the {@code hybrid} query's fused mode — the sum of
      * {@code queries} sizes over every fused {@code hybrid} in the request body, whether nested or side by side. Each such
      * leg is a full search across the request's shards, so this is the request's fan-out multiplier and the reason the
      * limit is expressed in the same units the user wrote.
      *
      * <p>Counterpart to {@code indices.query.bool.max_clause_count}, and deliberately shaped like it: a whole-request count
-     * of a declared unit, checked once, adjustable per cluster. The floor is
+     * of a declared unit, checked once, adjustable per cluster within fixed bounds. The floor is
      * {@link HybridQueryBuilder#MAX_NUMBER_OF_SUB_QUERIES} — lowering it below the number of legs a single {@code hybrid}
-     * is already allowed to declare would reject a plain, un-nested fused query, so that is not an available setting.
+     * is already allowed to declare would reject a plain, un-nested fused query, so that is not an available setting. The
+     * maximum is {@link #MAX_FUSION_LEG_SEARCHES_CEILING}: operator headroom of a few times the default, but never a value
+     * at which the budget stops bounding anything.
      */
     public static final Setting<Integer> MAX_FUSION_LEG_SEARCHES = Setting.intSetting(
         "plugins.neural_search.hybrid.fusion.max_leg_searches",
         DEFAULT_MAX_FUSION_LEG_SEARCHES,
         HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES,
+        MAX_FUSION_LEG_SEARCHES_CEILING,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );
