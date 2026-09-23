@@ -1172,6 +1172,65 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
+    public void testCollapse_whenNegativeScore_thenCountedButNotQueued() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        for (int i = 0; i < 5; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // A negative score is a match, so it is counted, but it can never be competitive
+        // against a threshold that is always positive, so it does not enter the queue.
+        float[] scores = new float[] { 0.5f, 0.4f, 0.3f, 0.2f, -1.0f };
+
+        for (int i = 0; i < scores.length; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[i];
+            leafCollector.collect(i);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+
+        assertEquals(scores.length, result.totalHits.value());
+
+        assertEquals(scores.length - 1, result.scoreDocs.length);
+        for (int i = 0; i < result.scoreDocs.length; i++) {
+            assertTrue("Queued doc score should be positive", result.scoreDocs[i].score > 0.0f);
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
     private void addNumericDoc(IndexWriter writer, int id, String textValue, int intValue, long collapseValue) throws IOException {
         Document doc = new Document();
         // ID field

@@ -263,7 +263,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 for (int subQuery = 0; subQuery < subScoresByQuery.length; subQuery++) {
                     float score = subScoresByQuery[subQuery];
                     // Skip sub-queries with no match
-                    if (score <= 0) {
+                    if (score == 0) {
                         continue;
                     }
 
