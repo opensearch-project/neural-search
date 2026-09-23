@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * In-query fusion in hybrid search. Skip round 2 of fused query and use legs information to get final search hits results ([#2008](https://github.com/opensearch-project/neural-search/pull/2008))
 * In-query fusion in hybrid search. Report the fast-path verdict in the coordinator profile entry and make the fast-path fetch budget a dynamic cluster setting ([#2020](https://github.com/opensearch-project/neural-search/pull/2020))
 * In-query fusion in hybrid search. Re-check the fused hybrid's position and request's shape to avoid errors in search-pipeline request processors; skip null shard results in the hybridization processors ([#2021](https://github.com/opensearch-project/neural-search/pull/2021))
+* In-query fusion in hybrid search. Give `plugins.neural_search.hybrid.fusion.max_leg_searches` an explicit maximum (125, the per-query leg limit cubed) so the request-level fan-out budget cannot be raised past the point where it stops bounding anything ([#2025](https://github.com/opensearch-project/neural-search/pull/2025))
 * In-query fusion in hybrid search. Refuse a non-object fusion `parameters`, and name rrf's rank constant in explain ([#1995](https://github.com/opensearch-project/neural-search/pull/1995))
 * In-query fusion in hybrid search. Keep a rescore from returning documents the fusion did not rank ([#1999](https://github.com/opensearch-project/neural-search/pull/1999))
 
