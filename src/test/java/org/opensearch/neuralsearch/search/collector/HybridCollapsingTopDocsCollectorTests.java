@@ -1111,6 +1111,67 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
+    public void testCollapse_whenScoreBelowThreshold_thenDocStillCountedInTotalHits() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        for (int i = 0; i < 10; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE);
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // Ascending first, so each new doc evicts the queue bottom and raises
+        // minScoreThresholds; the trailing 0.01f docs then fall below it.
+        float[] scores = new float[] { 0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.01f, 0.01f, 0.01f };
+
+        for (int i = 0; i < scores.length; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[i];
+            leafCollector.collect(i);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+
+        // Non-competitive docs are skipped before the queue insert, but they still matched,
+        // so they must be counted. Counting below the competitiveness check undercounts.
+        assertEquals(scores.length, result.totalHits.value());
+
+        assertEquals(numHits, result.scoreDocs.length);
+        for (int i = 0; i < result.scoreDocs.length; i++) {
+            assertTrue("Surviving doc score should be above threshold", result.scoreDocs[i].score > 0.01f);
+        }
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
     private void addNumericDoc(IndexWriter writer, int id, String textValue, int intValue, long collapseValue) throws IOException {
         Document doc = new Document();
         // ID field

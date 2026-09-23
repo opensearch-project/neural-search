@@ -263,17 +263,17 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 for (int subQuery = 0; subQuery < subScoresByQuery.length; subQuery++) {
                     float score = subScoresByQuery[subQuery];
                     // Skip sub-queries with no match
-                    if (score == 0) {
-                        continue;
-                    }
-
-                    // Skip non-competitive docs when sorting by score
-                    if (isSortByScore && score <= 0 && score < minScoreThresholds[subQuery]) {
+                    if (score <= 0) {
                         continue;
                     }
 
                     collectedHitsPerSubQuery[subQuery]++;
                     maxScore = Math.max(score, maxScore);
+
+                    // Skip non-competitive docs when sorting by score
+                    if (isSortByScore && score < minScoreThresholds[subQuery]) {
+                        continue;
+                    }
 
                     if (queueFull[subQuery]) {
                         // Queue is full — compare with bottom and replace if competitive
