@@ -1357,8 +1357,8 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         LeafCollector leafCollector = collector.getLeafCollector(context);
         leafCollector.setScorer(hybridScorer);
 
-        // A negative score is a match, so it is counted, but it can never be competitive
-        // against a threshold that is always positive, so it does not enter the queue.
+        // A negative score is treated as no-match under the `score <= 0` guard, so it is neither
+        // counted nor queued.
         float[] scores = new float[] { 0.5f, 0.4f, 0.3f, 0.2f, -1.0f };
 
         for (int i = 0; i < scores.length; i++) {

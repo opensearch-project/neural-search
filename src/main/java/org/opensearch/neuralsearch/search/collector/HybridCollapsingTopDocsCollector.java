@@ -169,6 +169,8 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             if (totalHitsForSubQuery == 0 || queue.size() == 0) {
                 // The queue can be empty while the sub-query still matched documents, when every
                 // match was non-competitive. Report the hits that were counted rather than zero.
+                // Note this per-sub-query total is not response-visible: CompoundTopDocs recomputes
+                // it from scoreDocs.length, and the shard total comes from getTotalHits().
                 topDocsList.add(
                     new CollapseTopFieldDocs(
                         collapseField,
