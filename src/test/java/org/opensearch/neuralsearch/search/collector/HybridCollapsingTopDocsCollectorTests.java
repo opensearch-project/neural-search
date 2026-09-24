@@ -1270,6 +1270,137 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
         directory.close();
     }
 
+    public void testCollapse_whenSortByScoreAscendingAboveWindowSize_thenLowestGroupsSurviveAndTotalHitsExact() throws IOException {
+        // More than HybridBulkScorer.WINDOW_SIZE (4096) matching docs. Note this drives the
+        // collector directly, so it does not exercise HybridBulkScorer's per-window pruning --
+        // it pins that the collector keeps the lowest scores and counts exactly at scale.
+        final int docCount = 5000;
+        final int topNGroups = 10;
+
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        for (int i = 0; i < docCount; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(new SortField(null, SortField.Type.SCORE, true));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            topNGroups,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // Descending scores on the way in, so the lowest ones arrive last -- they are the winners
+        // under ascending sort and must not be pruned by a stale threshold.
+        for (int i = 0; i < docCount; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = (float) (docCount - i);
+            leafCollector.collect(i);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+
+        CollapseTopFieldDocs result = topDocs.get(0);
+        assertEquals(docCount, result.totalHits.value());
+        assertEquals(topNGroups, result.scoreDocs.length);
+
+        // The lowest topNGroups scores are 1.0 .. 10.0
+        Set<Float> survivors = new HashSet<>();
+        for (int i = 0; i < result.scoreDocs.length; i++) {
+            survivors.add(result.scoreDocs[i].score);
+        }
+        Set<Float> expected = new HashSet<>();
+        for (int i = 1; i <= topNGroups; i++) {
+            expected.add((float) i);
+        }
+        assertEquals(expected, survivors);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenSortByScoreAscendingWithMultipleSubQueries_thenEachLegKeepsLowestScores() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        for (int i = 0; i < 6; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        Sort sort = new Sort(new SortField(null, SortField.Type.SCORE, true));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            2,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        // The descending gate is per sub-query, so cover more than one leg
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(2);
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        float[] legOne = new float[] { 10.0f, 9.0f, 1.0f, 0.5f, 8.0f, 7.0f };
+        float[] legTwo = new float[] { 20.0f, 19.0f, 3.0f, 2.0f, 18.0f, 17.0f };
+        for (int i = 0; i < legOne.length; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = legOne[i];
+            hybridScorer.getSubQueryScores()[1] = legTwo[i];
+            leafCollector.collect(i);
+        }
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(2, topDocs.size());
+
+        // Nothing is propagated to the scorer under ascending, for either leg
+        assertEquals(0.0f, hybridScorer.getMinScores()[0], 0.0f);
+        assertEquals(0.0f, hybridScorer.getMinScores()[1], 0.0f);
+
+        Set<Float> legOneSurvivors = new HashSet<>();
+        for (int i = 0; i < topDocs.get(0).scoreDocs.length; i++) {
+            legOneSurvivors.add(topDocs.get(0).scoreDocs[i].score);
+        }
+        assertEquals(Set.of(0.5f, 1.0f), legOneSurvivors);
+
+        Set<Float> legTwoSurvivors = new HashSet<>();
+        for (int i = 0; i < topDocs.get(1).scoreDocs.length; i++) {
+            legTwoSurvivors.add(topDocs.get(1).scoreDocs[i].score);
+        }
+        assertEquals(Set.of(2.0f, 3.0f), legTwoSurvivors);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
     public void testCollapse_whenSortByScoreAscending_thenLowestScoresWin() throws IOException {
         Directory directory = newDirectory();
         IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
