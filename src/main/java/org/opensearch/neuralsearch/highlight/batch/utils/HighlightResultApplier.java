@@ -215,12 +215,7 @@ public class HighlightResultApplier {
             if (elementIndex != row - groupStart || validHits.get(row) != hit || fieldName.equals(fieldNames.get(row)) == false) {
                 throw new IllegalStateException("Batch element mapping mismatch");
             }
-            String highlighted = HighlightTagApplier.applyTags(
-                elements.get(elementIndex),
-                batchResults.get(row),
-                preTag,
-                postTag
-            );
+            String highlighted = HighlightTagApplier.applyTags(elements.get(elementIndex), batchResults.get(row), preTag, postTag);
             if (highlighted == null) continue;
             if (SemanticHighlightingConstants.ENCODER_HTML.equalsIgnoreCase(encoder)) {
                 highlighted = HighlightEncoders.htmlEncodePreservingTags(highlighted, preTag, postTag);

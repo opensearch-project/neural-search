@@ -370,9 +370,7 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
     }
 
     private String hybridNeuralRequest(String modelId) {
-        return String.format(
-            Locale.ROOT,
-            """
+        return String.format(Locale.ROOT, """
             {
               "size": 10,
               "query": {
@@ -392,15 +390,11 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
                 }
               }
             }
-            """,
-            modelId
-        );
+            """, modelId);
     }
 
     private String hybridKnnAndNeuralRequest(String modelId) {
-        return String.format(
-            Locale.ROOT,
-            """
+        return String.format(Locale.ROOT, """
             {
               "size": 10,
               "query": {
@@ -429,9 +423,7 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
                 }
               }
             }
-            """,
-            modelId
-        );
+            """, modelId);
     }
 
     private void assertHitIds(Map<String, Object> responseBody, Set<String> expectedIds) {

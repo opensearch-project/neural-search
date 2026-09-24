@@ -60,6 +60,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private int docBase;
     private final int numHits;
     private final boolean isSortByScore;
+    // minScoreThresholds is a max of evicted scores, so it is only a valid lower bound when the
+    // highest score wins. Under ascending score sort the evicted entry is the highest, so the
+    // threshold would discard exactly the documents that should be kept.
+    private final boolean isSortByScoreDescending;
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private final HitsThresholdChecker hitsThresholdChecker;
@@ -93,13 +97,17 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         this.sort = groupSort;
 
         boolean sortByScore = false;
+        boolean sortByScoreDescending = false;
         for (SortField sf : groupSort.getSort()) {
             if (SortField.Type.SCORE.equals(sf.getType())) {
                 sortByScore = true;
+                // For Type.SCORE, highest score first
+                sortByScoreDescending = sf.getReverse() == false;
                 break;
             }
         }
         this.isSortByScore = sortByScore;
+        this.isSortByScoreDescending = sortByScoreDescending;
         this.numHits = topNGroups;
         this.hitsThresholdChecker = hitsThresholdChecker;
     }
@@ -159,10 +167,14 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             int totalHitsForSubQuery = collectedHitsPerSubQuery[subQuery];
 
             if (totalHitsForSubQuery == 0 || queue.size() == 0) {
+                // The queue can be empty while the sub-query still matched documents, when every
+                // match was non-competitive. Report the hits that were counted rather than zero.
+                // Note this per-sub-query total is not response-visible: CompoundTopDocs recomputes
+                // it from scoreDocs.length, and the shard total comes from getTotalHits().
                 topDocsList.add(
                     new CollapseTopFieldDocs(
                         collapseField,
-                        new TotalHits(0, totalHitsRelation),
+                        new TotalHits(totalHitsForSubQuery, totalHitsRelation),
                         new FieldDoc[0],
                         sort.getSort(),
                         new Object[0]
@@ -262,18 +274,17 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 for (int subQuery = 0; subQuery < subScoresByQuery.length; subQuery++) {
                     float score = subScoresByQuery[subQuery];
-                    // Skip sub-queries with no match
-                    if (score == 0) {
-                        continue;
-                    }
-
-                    // Skip non-competitive docs when sorting by score
-                    if (isSortByScore && score <= 0 && score < minScoreThresholds[subQuery]) {
+                    if (score <= 0) {
                         continue;
                     }
 
                     collectedHitsPerSubQuery[subQuery]++;
                     maxScore = Math.max(score, maxScore);
+
+                    // Skip non-competitive docs when sorting by score
+                    if (isSortByScoreDescending && score < minScoreThresholds[subQuery]) {
+                        continue;
+                    }
 
                     if (queueFull[subQuery]) {
                         // Queue is full — compare with bottom and replace if competitive
@@ -371,8 +382,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     bottomEntries[subQuery] = subQueryQueues[subQuery].updateTop();
                     comparator.setBottom(bottomEntries[subQuery].slot);
 
-                    // Update minScore from the evicted entry's score
-                    if (isSortByScore) {
+                    // Update minScore from the evicted entry's score. Only propagated for descending
+                    // score sort: under ascending the evicted entry is the highest kept score, and
+                    // HybridBulkScorer prunes on this shared array, so propagating it would drop the
+                    // low-scoring docs that ascending should keep.
+                    if (isSortByScoreDescending) {
                         minScoreThresholds[subQuery] = Math.max(minScoreThresholds[subQuery], evictedScore);
                         compoundQueryScorer.getMinScores()[subQuery] = Math.max(compoundQueryScorer.getMinScores()[subQuery], evictedScore);
                     }
