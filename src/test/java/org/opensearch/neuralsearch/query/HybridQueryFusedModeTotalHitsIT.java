@@ -21,10 +21,14 @@ import lombok.SneakyThrows;
  * {@code hits.total} of a fused hybrid when round 2 runs without its Tail.
  *
  * <p>A fused request that sets nothing but wants a count beyond its window used to carry the Tail for that count alone.
- * Now the lexical legs count up to the request's threshold, and when one of them already exceeds it the Tail is dropped
- * and the response carries the total the Tail would have produced — core caps a tracked count at the threshold, so both
- * paths say {@code {threshold, gte}}. These tests pin that the visible response is the same either way, and that the shapes
- * where the Tail's documents (not just its count) are part of the answer keep it.
+ * Now the legs count up to the request's threshold, and the Tail is dropped whenever the union's count can be had without
+ * it. Three sources answer, in order of cost: a leg whose own count already exceeded the threshold proves the union does
+ * too (core caps a tracked count at the threshold, so both paths say {@code {threshold, gte}}); a hybrid with an ANN leg
+ * derives the union from overlap aggregations the legs carried; and a <b>lexical-only</b> hybrid whose legs all came back
+ * exact and short of the threshold settles it with one {@code size: 0} count round over the legs' disjunction — cheap
+ * there, where no ANN graph is walked twice, which is why the aggregations are not attached to that shape at all.
+ * These tests pin that the visible response is the same whichever answered, and that the shapes where the Tail's documents
+ * (not just its count) are part of the answer keep it.
  *
  * <p>The threshold is set low ({@code track_total_hits: N}) so a handful of documents is enough to cross it; the default
  * threshold (10 000) exercises exactly the same code with a larger corpus.
@@ -95,6 +99,56 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
         Response response = client().performRequest(request);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
+    }
+
+    /** The same body with a field-free aggregation, which keeps the Tail and refuses the fast path: the two-round twin. */
+    private static String withTailKept(String body) {
+        return "{\"aggs\":{\"n\":{\"filter\":{\"match_all\":{}}}}," + body.substring(1);
+    }
+
+    /**
+     * Issue a body until the fast path can arm for it, and discard the responses.
+     *
+     * <p>The fetch-volume gate that arms the fast path is <b>learned</b>: it refuses until the coordinator has observed
+     * this index-and-shape's {@code _source} size from an earlier execution, and asking the legs to count at all rides on
+     * the same decision. So the first request of a shape takes round 2 with its Tail whatever its count says, and every
+     * fetch-op oracle below — which compares an armed request against a Tail-kept one — would otherwise pass or fail on
+     * nothing but this test's position in a randomized execution order. Measured with
+     * {@code tests.seed=4C64F1DB366F31C3}, where this class's first test was the one holding the oracle: 7 fetch ops on
+     * both sides, i.e. the "derived" side was still running round 2.
+     *
+     * <p>The loop count is not cosmetic. That observation table is <b>per coordinator node</b>, and the REST client
+     * round-robins over all {@code numNodes} of them, so warming once — or even three times on a 3-node cluster — leaves
+     * it to chance whether the node that serves the measured request has an observation. Confirmed on the live 2-node-behind-
+     * a-load-balancer cluster, where the same shape derives from its second execution onward but never on its first.
+     */
+    @SneakyThrows
+    private void armFastPath(String body) {
+        for (int i = 0; i < 12; i++) {
+            search(body);
+        }
+    }
+
+    /** Shard fetch operations one request costs the index (from {@code _stats/search}); the fast path fetches only its legs. */
+    @SneakyThrows
+    private long fetchOpsOf(String body) {
+        long before = fetchOps();
+        search(body);
+        return fetchOps() - before;
+    }
+
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    private long fetchOps() {
+        Response response = client().performRequest(new Request("GET", "/" + INDEX + "/_stats/search"));
+        Map<String, Object> stats = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        Map<String, Object> indices = (Map<String, Object>) stats.get("indices");
+        Map<String, Object> total = (Map<String, Object>) ((Map<String, Object>) indices.get(INDEX)).get("total");
+        return ((Number) ((Map<String, Object>) total.get("search")).get("fetch_total")).longValue();
     }
 
     @SuppressWarnings("unchecked")
@@ -233,7 +287,7 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
      * as before.
      */
     @SneakyThrows
-    public void testTotalHits_whenNoLegReachesTheThreshold_thenTheTailCountsTheUnionExactly() {
+    public void testTotalHits_whenNoLegReachesTheThreshold_thenTheUnionIsCountedExactlyFromRoundOne() {
         prepareIndex();
         String body = "{\"size\":" + WINDOW + ",\"track_total_hits\":" + (DOCS + 5) + ",\"query\":" + fusedQuery(WINDOW) + "}";
 
@@ -241,6 +295,161 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
 
         assertEquals(DOCS, total(response).get("value"));
         assertEquals("eq", total(response).get("relation"));
+        // The count did not come from a Tail: no round 2 fetched anything, where the Tail-kept twin (an aggregation keeps
+        // the Tail and refuses the fast path) fetches its page in round 2. These legs are lexical-only, so what answered
+        // is the count round; testTotalHits_whenLegsAreLexicalOnly_thenACountRoundReplacesTheTail pins that directly.
+        armFastPath(body);
+        long derivedOps = fetchOpsOf(body);
+        long tailKeptOps = fetchOpsOf(withTailKept(body));
+        assertTrue("derived " + derivedOps + " fetch ops vs the Tail-kept twin's " + tailKeptOps, derivedOps < tailKeptOps);
+    }
+
+    /**
+     * A union smaller than the corpus, with legs that overlap partially: {@code place} (the 6 odd documents) and the
+     * document whose text carries the token {@code 3} (odd, so inside {@code place}). Union = 6. The derived count has to
+     * equal what the Tail-kept path (forced by a field-free aggregation) reports for the same request.
+     */
+    public void testTotalHits_whenLegsOverlapPartially_thenTheDerivedCountMatchesTheTailKeptPath() {
+        prepareIndex();
+        String legs = "[{\"term\":{\"" + TEXT_FIELD + "\":\"place\"}},{\"term\":{\"" + TEXT_FIELD + "\":\"3\"}}]";
+        String query = "{\"hybrid\":{\"fusion\":{\"window_size\":"
+            + WINDOW
+            + ",\"normalization\":{\"technique\":\"min_max\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},\"queries\":"
+            + legs
+            + "}}";
+        String derived = "{\"size\":" + WINDOW + ",\"track_total_hits\":" + (DOCS + 5) + ",\"query\":" + query + "}";
+        String tailKept = "{\"size\":"
+            + WINDOW
+            + ",\"track_total_hits\":"
+            + (DOCS + 5)
+            + ",\"aggs\":{\"n\":{\"filter\":{\"match_all\":{}}}},\"query\":"
+            + query
+            + "}";
+
+        Map<String, Object> derivedResponse = search(derived);
+        Map<String, Object> tailKeptResponse = search(tailKept);
+
+        assertEquals(6, total(derivedResponse).get("value"));
+        assertEquals("eq", total(derivedResponse).get("relation"));
+        assertEquals(total(tailKeptResponse), total(derivedResponse));
+        armFastPath(derived);
+        long derivedOps = fetchOpsOf(derived);
+        long tailKeptOps = fetchOpsOf(tailKept);
+        assertTrue("derived " + derivedOps + " fetch ops vs the Tail-kept twin's " + tailKeptOps, derivedOps < tailKeptOps);
+    }
+
+    /**
+     * Three legs — {@code hello} (all), {@code place} (odd), {@code there} (even) — every document counted once although
+     * {@code place} and {@code there} each sit entirely inside {@code hello}: union = DOCS, derived, no Tail.
+     */
+    public void testTotalHits_whenThreeLegsOverlap_thenTheUnionIsCountedOnceFromRoundOne() {
+        prepareIndex();
+        String legs = "[{\"match\":{\""
+            + TEXT_FIELD
+            + "\":\"hello\"}},{\"term\":{\""
+            + TEXT_FIELD
+            + "\":\"place\"}},{\"term\":{\""
+            + TEXT_FIELD
+            + "\":\"there\"}}]";
+        String query = "{\"hybrid\":{\"fusion\":{\"window_size\":"
+            + WINDOW
+            + ",\"normalization\":{\"technique\":\"min_max\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},\"queries\":"
+            + legs
+            + "}}";
+        String body = "{\"size\":" + WINDOW + ",\"track_total_hits\":" + (DOCS + 5) + ",\"query\":" + query + "}";
+
+        Map<String, Object> response = search(body);
+
+        assertEquals(DOCS, total(response).get("value"));
+        assertEquals("eq", total(response).get("relation"));
+        armFastPath(body);
+        long derivedOps = fetchOpsOf(body);
+        long tailKeptOps = fetchOpsOf(withTailKept(body));
+        assertTrue("derived " + derivedOps + " fetch ops vs the Tail-kept twin's " + tailKeptOps, derivedOps < tailKeptOps);
+    }
+
+    /** {@code hit_count} and {@code miss_count} of the index's request cache, from {@code _stats/request_cache}. */
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    private long[] requestCacheCounts() {
+        Response response = client().performRequest(new Request("GET", "/" + INDEX + "/_stats/request_cache"));
+        Map<String, Object> stats = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        Map<String, Object> indices = (Map<String, Object>) stats.get("indices");
+        Map<String, Object> total = (Map<String, Object>) ((Map<String, Object>) indices.get(INDEX)).get("total");
+        Map<String, Object> cache = (Map<String, Object>) total.get("request_cache");
+        return new long[] { ((Number) cache.get("hit_count")).longValue(), ((Number) cache.get("miss_count")).longValue() };
+    }
+
+    /**
+     * The lazy count round, pinned by the trace it leaves rather than by what it reports — the only assertion in this class
+     * that fails if the count round silently stops running. Every test above would still pass with the Tail quietly
+     * restored, because the Tail reports the same total.
+     *
+     * <p>The trace is the <b>request cache</b>. The count round is a {@code size: 0} search, which is exactly the shape core
+     * caches per shard; the legs ({@code size = window_size}) and round 2 are not, so any request-cache activity on this
+     * index during a fused search is the count round and nothing else. So: a lexical-only request that wants a count misses
+     * the cache on its first execution, while the {@code track_total_hits: false} twin — the same request with nothing to
+     * count, running the same legs down the same fast path — touches the cache not at all.
+     *
+     * <p>The threshold is one this class uses nowhere else, so the first execution is guaranteed a cold cache.
+     *
+     * <p>The repeat is <b>logged, not asserted</b>: measured here it is +4 hits / +0 misses on 4 shards, so a workload of
+     * recurring queries does pay for this round once — but a refresh between the two executions changes the shard's reader
+     * cache key and legitimately turns the repeat back into a miss, which is not a defect and must not fail a build.
+     */
+    @SneakyThrows
+    public void testTotalHits_whenLegsAreLexicalOnly_thenACountRoundReplacesTheTailAndIsCached() {
+        prepareIndex();
+        String counted = "{\"size\":" + WINDOW + ",\"track_total_hits\":" + (DOCS + 7) + ",\"query\":" + fusedQuery(WINDOW) + "}";
+        String notCounted = "{\"size\":" + WINDOW + ",\"track_total_hits\":false,\"query\":" + fusedQuery(WINDOW) + "}";
+
+        // Arm the fast path through the twin, not through `counted`. The observation table the gate reads is keyed by index
+        // and _source shape, which both bodies share, so warming either arms both -- and warming the twin leaves `counted`'s
+        // request cache untouched, which the cold-miss assertion below depends on. Warming `counted` here instead is what
+        // made an earlier version of this test fail on tests.seed=D9AD370904EFE661: whichever body is measured first is the
+        // one that is still un-armed, and an un-armed request runs round 2 and fetches its page.
+        armFastPath(notCounted);
+
+        // Phase A: the count round's trace in the request cache -- cold on the first execution, a hit on the second.
+        long[] before = requestCacheCounts();
+        Map<String, Object> first = search(counted);
+        long[] afterCold = requestCacheCounts();
+        Map<String, Object> second = search(counted);
+        long[] afterWarm = requestCacheCounts();
+        // Phase B: the twin's own cache delta, measured around the twin alone. Reading it after any further `counted`
+        // execution would attribute that execution's hits to the twin.
+        long[] twinCacheBefore = requestCacheCounts();
+        search(notCounted);
+        long[] twinCacheAfter = requestCacheCounts();
+        // Phase C: shard fetch operations, one execution each, both bodies armed.
+        long fetchesBefore = fetchOps();
+        search(counted);
+        long countedFetches = fetchOps() - fetchesBefore;
+        fetchesBefore = fetchOps();
+        search(notCounted);
+        long plainFetches = fetchOps() - fetchesBefore;
+
+        assertEquals("the union is every document, counted exactly", DOCS, total(first).get("value"));
+        assertEquals("eq", total(first).get("relation"));
+        assertEquals("and the cached repeat reports the same", total(first), total(second));
+        assertTrue("a size:0 count round was issued: " + (afterCold[1] - before[1]) + " cache misses", afterCold[1] > before[1]);
+        logger.info(
+            "union count cache: cold hits/misses +{}/+{}, warm +{}/+{}",
+            afterCold[0] - before[0],
+            afterCold[1] - before[1],
+            afterWarm[0] - afterCold[0],
+            afterWarm[1] - afterCold[1]
+        );
+        assertEquals("the twin wants no count, so it issues no cacheable round", twinCacheBefore[0], twinCacheAfter[0]);
+        assertEquals("the twin wants no count, so it issues no cacheable round", twinCacheBefore[1], twinCacheAfter[1]);
+        // Both bodies are armed by now, so this compares like with like: the count is size:0, so it adds no shard fetch,
+        // and the Tail it replaced is gone. Were the Tail still there this would still hold -- a Top-only round 2 fetches
+        // the same page -- which is why the cache assertions above, not this one, are what pin the count round's existence.
+        assertEquals("the count wants no documents, so it adds no fetch", plainFetches, countedFetches);
     }
 
     /**
@@ -276,7 +485,7 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     @SuppressWarnings("unchecked")
-    public void testTotalHits_whenProfiled_thenTheCoordinatorEntryShowsTheTailDroppedOnlyWhenALegProvesTheCount() {
+    public void testTotalHits_whenProfiled_thenTheCoordinatorEntryShowsWhenTheTailIsDropped() {
         prepareIndex();
         assertEquals(
             Boolean.FALSE,
@@ -287,7 +496,11 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
             )
         );
         assertEquals(
-            Boolean.TRUE,
+            "no leg reaches the threshold, and these legs are lexical-only — so the COUNT ROUND settles the union and the Tail is "
+                + "dropped even under profile. Only the overlap aggregation is withheld from a profiled request (core's profile "
+                + "breakdown asserts on a profiled aggregating search); the count round carries no aggregation, so a profiled "
+                + "request derives its count exactly as its unprofiled twin does",
+            Boolean.FALSE,
             tailBuilt(
                 search(
                     "{\"profile\":true,\"size\":"

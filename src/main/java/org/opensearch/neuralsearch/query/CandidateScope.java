@@ -376,6 +376,13 @@ final class CandidateScope {
     private boolean legProfiling;
 
     /**
+     * Set when a leg that would have to host the union-count aggregation is not known to match a bounded candidate set.
+     * Not inherited from the request: decided by the fused rewrite from the legs and the mapping — see
+     * {@link #refuseUnionCountForUnknownHost}.
+     */
+    private boolean unionCountHostUnknown;
+
+    /**
      * When set, every leg sub-search runs with {@code explain: true} so the raw score each leg contributed can be
      * described in the user's response. As {@link #legProfiling}: not part of the captured scope, and decided by the fused
      * rewrite from the outer request's {@code explain} flag rather than inherited from it.
@@ -564,6 +571,52 @@ final class CandidateScope {
     }
 
     /**
+     * Whether the legs may carry the union-count aggregation that lets the rewrite derive an EXACT {@code hits.total} from
+     * round 1 when no leg reaches the threshold (see {@code HybridFusionOrchestrator#exactUnionFromLegs}). Needs the legs
+     * to be counting in the first place, and a shape in which an aggregation on a leg counts the same documents the leg's
+     * own total counts: a {@code post_filter} applies to hits but not to aggregations, and a {@code slice} changes what a
+     * leg sees, so either keeps the Tail. Profiled legs carry no aggregation either: core's concurrent-segment profile
+     * breakdown asserts on a profiled search that also aggregates (a pre-existing core defect that takes a test node down),
+     * so a profiled request counts the way it did — the profile describes the Tail-kept path, not this one.
+     */
+    boolean legUnionCountAllowed() {
+        return lazyUnionCountAllowed() && legProfiling == false;
+    }
+
+    /**
+     * Whether the LAZY count round may run — the same conditions as {@link #legUnionCountAllowed} minus profiling.
+     *
+     * <p>Profiling is excluded there and not here for one reason only: core's concurrent-segment profile breakdown asserts
+     * on a profiled search that also <i>aggregates</i>, which takes an assertions-enabled node down. The count round carries
+     * no aggregation, so that defect is not in play and a profiled request can derive its count the same way its unprofiled
+     * twin does — which is what makes the profile's own fast-path verdict describe the request the user actually sent.
+     */
+    boolean lazyUnionCountAllowed() {
+        return Objects.nonNull(legTotalHitsThreshold)
+            && Objects.isNull(postFilter)
+            && Objects.isNull(slice)
+            && unionCountHostUnknown == false;
+    }
+
+    /**
+     * Refuse both ways of deriving the union for this request, leaving round 2's Tail to count it.
+     *
+     * <p>Called when a leg could only be counted by hosting the overlap aggregation but is not known to match a bounded
+     * candidate set — a {@code neural} leg whose field does not resolve, on every targeted index, to a dense vector field.
+     * Such a leg may rewrite to {@code neural_sparse} at the shard, whose match set is every document containing a query
+     * token; hosting an aggregation on it forces the collector to {@code ScoreMode.COMPLETE} and so to visit that whole
+     * match set, with none of the early termination a counted leg gets at the threshold. The cost then grows with the
+     * corpus rather than with the window.
+     *
+     * <p>The fallback is deliberately <b>the Tail, not the count round</b>: the Tail counts with early termination and is
+     * bounded, while putting a {@code neural} leg into the count round's disjunction would re-run its inference and, if it
+     * is dense after all, re-walk its graph — the cost this whole design exists to avoid.
+     */
+    void refuseUnionCountForUnknownHost() {
+        this.unionCountHostUnknown = true;
+    }
+
+    /**
      * Ask every leg built from here on to fetch the user's requested fields for the documents it returns, because the
      * response page will be assembled from the leg hits with no round 2 to fetch it — the fast path.
      *
@@ -579,6 +632,59 @@ final class CandidateScope {
      */
     void enableLegFetch(final SearchSourceBuilder source) {
         this.legFetchSource = source;
+    }
+
+    /**
+     * A count-only request over the legs' disjunction: {@code size: 0}, no fetch, no aggregations, totals tracked to the
+     * request's own threshold. Used by the lazy union count, the correctness fallback for a hybrid whose legs are all
+     * lexical — see {@code HybridFusionOrchestrator#unionCountRequest} for when that applies and why.
+     *
+     * <p>Deliberately not {@link #newLegRequest}: a leg request carries {@code size = window_size}, a fetch source and —
+     * for the eager union count — an aggregation, none of which a count wants. What it does share is every
+     * request-level property that decides WHICH shards and WHICH view are read, and every one that bounds how long the
+     * reading may go on: indices, indices options, search type, routing, preference, partial-results policy, shard-request
+     * limits, the pre-filter threshold, the cancellation budget and the point in time. The PIT matters most: the
+     * count has to be taken against the same immutable view the legs read, or the union it reports can disagree with the
+     * window it is reported for.
+     *
+     * <p>Profiling is never set here even when the legs are profiled. This request carries no aggregation, so it does not
+     * trip core's {@code ConcurrentQueryProfileBreakdown} assertion the way a profiled aggregating leg does — but a
+     * profile of it would be discarded unread, so asking for one only costs.
+     */
+    SearchRequest newUnionCountRequest(final QueryBuilder disjunction, final int threshold) {
+        SearchSourceBuilder countSource = new SearchSourceBuilder().query(disjunction).size(0).from(0).trackTotalHitsUpTo(threshold);
+        countSource.fetchSource(false);
+        if (Objects.nonNull(timeout)) {
+            countSource.timeout(timeout);
+        }
+        if (Objects.nonNull(pointInTimeId)) {
+            countSource.pointInTimeBuilder(new PointInTimeBuilder(pointInTimeId));
+        }
+        SearchRequest countRequest = new SearchRequest(indices).indicesOptions(indicesOptions)
+            .searchType(searchType)
+            .source(countSource)
+            .pipeline(SearchPipelineService.NOOP_PIPELINE_ID);
+        if (Objects.nonNull(routing)) {
+            countRequest.routing(routing);
+        }
+        if (Objects.nonNull(preference)) {
+            countRequest.preference(preference);
+        }
+        if (Objects.nonNull(allowPartialSearchResults)) {
+            countRequest.allowPartialSearchResults(allowPartialSearchResults);
+        }
+        if (maxConcurrentShardRequests > 0) {
+            countRequest.setMaxConcurrentShardRequests(maxConcurrentShardRequests);
+        }
+        if (Objects.nonNull(cancelAfterTimeInterval)) {
+            // The count is a sub-search of this request and has to die with it, or it outlives the request that spawned it
+            // and keeps shard threads busy after cancellation — the same reason a leg carries it (see CLASSIFICATION).
+            countRequest.setCancelAfterTimeInterval(cancelAfterTimeInterval);
+        }
+        if (Objects.nonNull(preFilterShardSize)) {
+            countRequest.setPreFilterShardSize(preFilterShardSize);
+        }
+        return countRequest;
     }
 
     /**

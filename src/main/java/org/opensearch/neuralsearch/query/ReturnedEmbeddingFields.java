@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -74,6 +75,9 @@ final class ReturnedEmbeddingFields {
 
     /** Field types whose values are large by construction and never needed to render a page. */
     static final Set<String> EMBEDDING_FIELD_TYPES = Set.of("knn_vector", "rank_features");
+
+    /** The one embedding field type whose query is a bounded top-k rather than a predicate over a term-defined match set. */
+    static final String DENSE_VECTOR_FIELD_TYPE = "knn_vector";
 
     /**
      * The default extra fetch volume, beyond the page round 2 would have fetched, above which the fast path is refused —
@@ -150,8 +154,11 @@ final class ReturnedEmbeddingFields {
     /** No filter: the document as laid out. */
     private static final Function<Map<String, ?>, Map<String, Object>> PASS_THROUGH = document -> new HashMap<>(document);
 
-    /** What a mapping says, resolved once per mapping version: its embedding paths and its own {@code _source} filter. */
-    private record MappingFacts(long mappingVersion, Map<String, Long> embeddingBytes, Function<
+    /**
+     * What a mapping says, resolved once per mapping version: its embedding paths, which of those are DENSE vector fields,
+     * and its own {@code _source} filter.
+     */
+    private record MappingFacts(long mappingVersion, Map<String, Long> embeddingBytes, Set<String> denseVectorPaths, Function<
         Map<String, ?>,
         Map<String, Object>> sourceFilter) {
     }
@@ -375,6 +382,53 @@ final class ReturnedEmbeddingFields {
         put((Map<String, Object>) child, parts, depth + 1);
     }
 
+    /**
+     * Whether {@code fieldName} is declared a dense vector field ({@code knn_vector}) on <b>every</b> index the request
+     * targets — the question "is a query against this field a bounded top-k, or a predicate over a term-defined match set".
+     *
+     * <p>Asked of a {@code neural} leg, whose writeable name does not answer it: against a dense embedding field such a leg
+     * rewrites to a k-NN query that matches at most {@code k} documents per shard, while against a sparse one it rewrites
+     * to {@code neural_sparse}, matching every document containing a query token. The fused rewrite runs before the legs
+     * are rewritten, so the leg itself cannot be asked; the mapping can.
+     *
+     * <p><b>Unknown is false.</b> An unresolvable index, an unreadable or absent mapping, no indices at all, or one index
+     * out of several declaring the field differently all answer {@code false}. The caller's fallback is the Tail, which
+     * counts with early termination at the threshold, so refusing costs a bounded amount and guessing does not.
+     *
+     * <p>Reads the same per-mapping-version cache the fetch-budget estimate uses, so a repeat is a map lookup.
+     */
+    static boolean isDenseVectorFieldOnEveryTargetedIndex(final SearchRequest request, final String fieldName) {
+        if (Objects.isNull(request) || Objects.isNull(fieldName) || fieldName.isEmpty()) {
+            return false;
+        }
+        List<IndexMetadata> indices;
+        try {
+            indices = NeuralSearchClusterUtil.instance().getIndexMetadataList(request);
+        } catch (Exception e) {
+            log.debug("fused union count: cannot resolve the request's indices, treating the leg's field as not known dense", e);
+            return false;
+        }
+        if (indices.isEmpty()) {
+            return false;
+        }
+        for (IndexMetadata index : indices) {
+            if (Objects.isNull(index)) {
+                return false;
+            }
+            MappingFacts facts;
+            try {
+                facts = factsFor(index);
+            } catch (Exception e) {
+                log.debug("fused union count: cannot read the mapping of [{}], treating the field as not known dense", index.getIndex(), e);
+                return false;
+            }
+            if (Objects.isNull(facts) || facts.denseVectorPaths().contains(fieldName) == false) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static MappingFacts factsFor(final IndexMetadata index) {
         MappingMetadata mapping = index.mapping();
         if (Objects.isNull(mapping)) {
@@ -396,9 +450,10 @@ final class ReturnedEmbeddingFields {
     private static MappingFacts read(final MappingMetadata mapping, final long mappingVersion) {
         Map<String, Object> root = mapping.sourceAsMap();
         Map<String, Long> bytesByPath = new LinkedHashMap<>();
+        Set<String> densePaths = new HashSet<>();
         Object properties = root.get("properties");
         if (properties instanceof Map) {
-            collect((Map<String, Object>) properties, "", bytesByPath);
+            collect((Map<String, Object>) properties, "", bytesByPath, densePaths);
         }
         Function<Map<String, ?>, Map<String, Object>> sourceFilter = PASS_THROUGH;
         Object sourceSpec = root.get("_source");
@@ -414,11 +469,21 @@ final class ReturnedEmbeddingFields {
                 }
             }
         }
-        return new MappingFacts(mappingVersion, Collections.unmodifiableMap(bytesByPath), sourceFilter);
+        return new MappingFacts(
+            mappingVersion,
+            Collections.unmodifiableMap(bytesByPath),
+            Collections.unmodifiableSet(densePaths),
+            sourceFilter
+        );
     }
 
     @SuppressWarnings("unchecked")
-    private static void collect(final Map<String, Object> properties, final String prefix, final Map<String, Long> into) {
+    private static void collect(
+        final Map<String, Object> properties,
+        final String prefix,
+        final Map<String, Long> into,
+        final Set<String> densePaths
+    ) {
         for (Map.Entry<String, Object> entry : properties.entrySet()) {
             if ((entry.getValue() instanceof Map) == false) {
                 continue;
@@ -428,10 +493,13 @@ final class ReturnedEmbeddingFields {
             Object type = field.get("type");
             if (type instanceof String typeName && EMBEDDING_FIELD_TYPES.contains(typeName)) {
                 into.put(path, estimatedBytes(typeName, field));
+                if (DENSE_VECTOR_FIELD_TYPE.equals(typeName)) {
+                    densePaths.add(path);
+                }
             }
             Object children = field.get("properties");
             if (children instanceof Map) {
-                collect((Map<String, Object>) children, path, into);
+                collect((Map<String, Object>) children, path, into, densePaths);
             }
         }
     }

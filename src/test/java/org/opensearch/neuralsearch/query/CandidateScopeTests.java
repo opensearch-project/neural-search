@@ -154,6 +154,121 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertEquals("round 2 returns only the slice", slice, leg.source().slice());
     }
 
+    /**
+     * The count-only request the lazy union count issues. What it must NOT carry is as load-bearing as what it must: a
+     * count that fetched documents or counted to a different threshold would cost more than the Tail it replaces, or
+     * report a total the Tail would not have.
+     */
+    public void testUnionCountRequestCarriesTheScopeThatDecidesWhichShardsAnswer() {
+        SearchRequest request = new SearchRequest(INDEX).indicesOptions(IndicesOptions.lenientExpandOpen())
+            .routing("r1")
+            .preference("_local")
+            .searchType(SearchType.DFS_QUERY_THEN_FETCH)
+            .allowPartialSearchResults(false)
+            .source(
+                new SearchSourceBuilder().timeout(TimeValue.timeValueSeconds(7))
+                    .pointInTimeBuilder(new PointInTimeBuilder("pit-id-42").setKeepAlive(TimeValue.timeValueMinutes(5)))
+            );
+        request.setMaxConcurrentShardRequests(3);
+        request.setPreFilterShardSize(64);
+        request.setCancelAfterTimeInterval(TimeValue.timeValueSeconds(11));
+
+        SearchRequest count = CandidateScope.from(request).newUnionCountRequest(LEG, 10_000);
+
+        assertEquals("a count fetches nothing", 0, count.source().size());
+        assertEquals(0, count.source().from());
+        assertFalse(count.source().fetchSource().fetchSource());
+        assertEquals(Integer.valueOf(10_000), count.source().trackTotalHitsUpTo());
+        assertNull("no aggregation: counting this way is what avoids one", count.source().aggregations());
+        assertFalse("a profile of a discarded request only costs", count.source().profile());
+        assertEquals(LEG, count.source().query());
+        // Everything that decides WHICH shards answer and WHICH view they read has to be inherited, or the count can be
+        // of a different document set than the legs ranked.
+        assertArrayEquals(new String[] { INDEX }, count.indices());
+        assertEquals(IndicesOptions.lenientExpandOpen(), count.indicesOptions());
+        assertEquals("r1", count.routing());
+        assertEquals("_local", count.preference());
+        assertEquals(SearchType.DFS_QUERY_THEN_FETCH, count.searchType());
+        assertEquals(Boolean.FALSE, count.allowPartialSearchResults());
+        assertEquals(3, count.getMaxConcurrentShardRequestsRaw());
+        assertEquals(
+            "the count must die with the request that spawned it",
+            TimeValue.timeValueSeconds(11),
+            count.getCancelAfterTimeInterval()
+        );
+        assertEquals(Integer.valueOf(64), count.getPreFilterShardSize());
+        assertEquals(TimeValue.timeValueSeconds(7), count.source().timeout());
+        assertEquals("the count must read the same immutable view the legs read", "pit-id-42", count.source().pointInTimeBuilder().getId());
+        assertNull("a count never extends the PIT keep-alive", count.source().pointInTimeBuilder().getKeepAlive());
+        assertEquals(SearchPipelineService.NOOP_PIPELINE_ID, count.pipeline());
+    }
+
+    public void testUnionCountRequestLeavesUnsetFieldsUnset() {
+        SearchRequest count = CandidateScope.from(new SearchRequest(INDEX)).newUnionCountRequest(LEG, 500);
+
+        assertNull(count.routing());
+        assertNull(count.preference());
+        assertNull(count.allowPartialSearchResults());
+        assertEquals("0 is core's 'unset' for max_concurrent_shard_requests", 0, count.getMaxConcurrentShardRequestsRaw());
+        assertNull(count.getCancelAfterTimeInterval());
+        assertNull(count.getPreFilterShardSize());
+        assertNull(count.source().timeout());
+        assertNull(count.source().pointInTimeBuilder());
+    }
+
+    /**
+     * {@code legUnionCountAllowed} is the gate on asking the legs to count at all. Each refusal is asserted on its own,
+     * because they protect different things: a {@code post_filter} applies to hits but not to aggregations, a {@code slice}
+     * makes each leg see a different subset, and a profiled leg plus an aggregation trips core's
+     * {@code ConcurrentQueryProfileBreakdown} assertion.
+     */
+    public void testLegUnionCountAllowedRefusesEachShapeOnItsOwn() {
+        assertFalse("the legs were never asked to count", CandidateScope.from(new SearchRequest(INDEX)).legUnionCountAllowed());
+
+        CandidateScope armed = CandidateScope.from(new SearchRequest(INDEX));
+        armed.enableLegTotalHits(10_000);
+        assertTrue(armed.legUnionCountAllowed());
+
+        CandidateScope postFiltered = CandidateScope.from(
+            new SearchRequest(INDEX).source(new SearchSourceBuilder().postFilter(new TermQueryBuilder("grp", "a")))
+        );
+        postFiltered.enableLegTotalHits(10_000);
+        assertFalse(
+            "a post_filter applies to hits but not to aggregations, so the counts would disagree",
+            postFiltered.legUnionCountAllowed()
+        );
+
+        CandidateScope sliced = CandidateScope.from(
+            new SearchRequest(INDEX).source(new SearchSourceBuilder().slice(new SliceBuilder("_id", 1, 4)))
+        );
+        sliced.enableLegTotalHits(10_000);
+        assertFalse("each slice counts a different subset", sliced.legUnionCountAllowed());
+
+        CandidateScope profiled = CandidateScope.from(new SearchRequest(INDEX));
+        profiled.enableLegTotalHits(10_000);
+        profiled.enableLegProfiling();
+        assertFalse("a profiled leg carrying an aggregation kills an assertions-enabled node", profiled.legUnionCountAllowed());
+
+        // A leg that could only be counted by hosting the aggregation, without being known to match a bounded candidate
+        // set, refuses BOTH derivations: the fallback has to be the Tail, whose counting early-terminates at the
+        // threshold, and not the count round, which would re-execute that leg inside a disjunction.
+        // Profiling withholds the AGGREGATION, because a profiled search that also aggregates trips core's breakdown
+        // assertion -- but not the count round, which carries no aggregation, so a profiled request derives its count the
+        // same way its unprofiled twin does.
+        CandidateScope profiledLazy = CandidateScope.from(new SearchRequest(INDEX));
+        profiledLazy.enableLegTotalHits(10_000);
+        profiledLazy.enableLegProfiling();
+        assertFalse("no aggregation under profile", profiledLazy.legUnionCountAllowed());
+        assertTrue("but the count round is still allowed", profiledLazy.lazyUnionCountAllowed());
+
+        CandidateScope unknownHost = CandidateScope.from(new SearchRequest(INDEX));
+        unknownHost.enableLegTotalHits(10_000);
+        assertTrue(unknownHost.legUnionCountAllowed());
+        unknownHost.refuseUnionCountForUnknownHost();
+        assertFalse("an unbounded host is refused outright", unknownHost.legUnionCountAllowed());
+        assertFalse("and so is the count round, which would re-execute that leg in a disjunction", unknownHost.lazyUnionCountAllowed());
+    }
+
     public void testUnsetFieldsAreLeftUnsetOnTheLeg() {
         // An unset value must not be forced onto a leg: the leg has to resolve the same default the outer request would.
         SearchRequest leg = CandidateScope.from(new SearchRequest(INDEX)).newLegRequest(LEG, 50);

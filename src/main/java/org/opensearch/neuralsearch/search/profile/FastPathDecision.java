@@ -76,6 +76,14 @@ public final class FastPathDecision {
     public static final String COUNT_NOT_SETTLED = "count_not_settled";
 
     /**
+     * The count could have been derived, but not while profiling: the overlap aggregation a hybrid with an ANN leg needs is
+     * withheld from a profiled request because core's concurrent-segment profile breakdown asserts on a profiled search that
+     * also aggregates. Distinct from {@link #COUNT_NOT_SETTLED} so that a profile does not report "no leg proved the count"
+     * for a request whose unprofiled twin derives it — the verdict would then describe a request the user did not send.
+     */
+    public static final String COUNT_UNAVAILABLE_UNDER_PROFILE = "count_unavailable_under_profile";
+
+    /**
      * One refusal before it is recorded: the reason and the detail that names what caused it. What the checks that read
      * a request feature by feature return, so the pair travels as one value instead of a two-element array.
      */
