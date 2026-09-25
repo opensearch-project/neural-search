@@ -12,6 +12,7 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
 import org.opensearch.neuralsearch.highlight.batch.HighlightContext;
+import org.opensearch.neuralsearch.highlight.utils.HighlightValueUtils;
 import org.opensearch.neuralsearch.processor.highlight.SentenceHighlightingRequest;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -59,6 +60,7 @@ public class HighlightContextBuilder {
         return HighlightContext.builder()
             .requests(rows.requests)
             .validHits(rows.validHits)
+            .elementIndices(rows.elementIndices)
             .fieldNames(rows.fieldNames)
             .preTags(rows.preTags)
             .postTags(rows.postTags)
@@ -79,9 +81,9 @@ public class HighlightContextBuilder {
         RowAccumulator rows
     ) {
         for (SearchHit hit : topHits) {
-            String text = extractSourceText(hit, target.getFieldName());
-            if (text == null || text.isEmpty()) continue;
-            rows.add(target, hit, modelId, queryText, text);
+            List<String> elements = extractSourceElements(hit, target.getFieldName());
+            if (elements.isEmpty()) continue;
+            rows.add(target, hit, modelId, queryText, elements);
         }
     }
 
@@ -107,9 +109,9 @@ public class HighlightContextBuilder {
                 continue;
             }
             for (SearchHit innerHit : bucket.getHits()) {
-                String text = extractSourceText(innerHit, leafField);
-                if (text == null || text.isEmpty()) continue;
-                rows.add(target, innerHit, modelId, queryText, text);
+                List<String> elements = extractSourceElements(innerHit, leafField);
+                if (elements.isEmpty()) continue;
+                rows.add(target, innerHit, modelId, queryText, elements);
             }
         }
     }
@@ -138,31 +140,19 @@ public class HighlightContextBuilder {
     }
 
     /**
-     * Reads a string value from a hit's {@code _source} under {@code fieldName}.
-     * Falls back to the leaf name when the dotted path is absent, because inner
-     * hit sources key by leaf, not the fully qualified name.
+     * Reads highlightable source elements, falling back to the leaf field name for inner hits.
      */
-    private static String extractSourceText(SearchHit hit, String fieldName) {
-        if (hit == null) return null;
+    private static List<String> extractSourceElements(SearchHit hit, String fieldName) {
+        if (hit == null) return List.of();
         Map<String, Object> source = hit.getSourceAsMap();
-        if (source == null) return null;
+        if (source == null) return List.of();
         Object value = source.get(fieldName);
         if (value == null) {
             int dot = fieldName.lastIndexOf('.');
             if (dot >= 0) value = source.get(fieldName.substring(dot + 1));
-            if (value == null) return null;
+            if (value == null) return List.of();
         }
-        if (value instanceof String) return (String) value;
-        if (value instanceof List) {
-            StringBuilder sb = new StringBuilder();
-            for (Object v : (List<?>) value) {
-                if (v == null) continue;
-                if (sb.length() > 0) sb.append(' ');
-                sb.append(v);
-            }
-            return sb.toString();
-        }
-        return value.toString();
+        return HighlightValueUtils.toTextElements(value);
     }
 
     private static String stripNestedPrefix(String fieldName, String path) {
@@ -196,22 +186,32 @@ public class HighlightContextBuilder {
     private static final class RowAccumulator {
         final List<SentenceHighlightingRequest> requests = new ArrayList<>();
         final List<SearchHit> validHits = new ArrayList<>();
+        final List<Integer> elementIndices = new ArrayList<>();
         final List<String> fieldNames = new ArrayList<>();
         final List<String> preTags = new ArrayList<>();
         final List<String> postTags = new ArrayList<>();
         final List<Integer> noMatchSizes = new ArrayList<>();
         final List<String> encoders = new ArrayList<>();
 
-        void add(SemanticHighlightTarget target, SearchHit targetHit, String modelId, String queryText, String contextText) {
-            requests.add(SentenceHighlightingRequest.builder().modelId(modelId).question(queryText).context(contextText).build());
-            validHits.add(targetHit);
-            fieldNames.add(target.getFieldName());
-            preTags.add(target.getPreTag() != null ? target.getPreTag() : SemanticHighlightingConstants.DEFAULT_PRE_TAG);
-            postTags.add(target.getPostTag() != null ? target.getPostTag() : SemanticHighlightingConstants.DEFAULT_POST_TAG);
-            noMatchSizes.add(
-                intOption(target, SemanticHighlightingConstants.NO_MATCH_SIZE, SemanticHighlightingConstants.DEFAULT_NO_MATCH_SIZE)
-            );
-            encoders.add(stringOption(target, SemanticHighlightingConstants.ENCODER, SemanticHighlightingConstants.DEFAULT_ENCODER));
+        void add(SemanticHighlightTarget target, SearchHit targetHit, String modelId, String queryText, List<String> contextElements) {
+            for (int elementIndex = 0; elementIndex < contextElements.size(); elementIndex++) {
+                requests.add(
+                    SentenceHighlightingRequest.builder()
+                        .modelId(modelId)
+                        .question(queryText)
+                        .context(contextElements.get(elementIndex))
+                        .build()
+                );
+                validHits.add(targetHit);
+                elementIndices.add(elementIndex);
+                fieldNames.add(target.getFieldName());
+                preTags.add(target.getPreTag() != null ? target.getPreTag() : SemanticHighlightingConstants.DEFAULT_PRE_TAG);
+                postTags.add(target.getPostTag() != null ? target.getPostTag() : SemanticHighlightingConstants.DEFAULT_POST_TAG);
+                noMatchSizes.add(
+                    intOption(target, SemanticHighlightingConstants.NO_MATCH_SIZE, SemanticHighlightingConstants.DEFAULT_NO_MATCH_SIZE)
+                );
+                encoders.add(stringOption(target, SemanticHighlightingConstants.ENCODER, SemanticHighlightingConstants.DEFAULT_ENCODER));
+            }
         }
     }
 }

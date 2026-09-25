@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.any;
 import static org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.mockClusterService;
 
+import org.opensearch.OpenSearchParseException;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.ClusterState;
@@ -148,6 +149,51 @@ public class NeuralSearchClusterUtilTests extends OpenSearchTestCase {
             () -> neuralSearchClusterUtil.getIndexMapping(new String[] {})
         );
         assertEquals("No valid index found to extract mapping", exception.getMessage());
+    }
+
+    public void testGetAllIndexMappings_skipsIndicesWithoutAReadableMapping() {
+        final ClusterService clusterService = mock(ClusterService.class);
+        final ClusterState clusterState = mock(ClusterState.class);
+        final Metadata metadata = mock(Metadata.class);
+        final IndexMetadata mapped = mock(IndexMetadata.class);
+        final IndexMetadata unmapped = mock(IndexMetadata.class);
+        final IndexMetadata unparseable = mock(IndexMetadata.class);
+        final MappingMetadata mappingMetadata = mock(MappingMetadata.class);
+        final MappingMetadata brokenMappingMetadata = mock(MappingMetadata.class);
+        final Map<String, Object> mapping = Map.of("properties", Map.of("title", Map.of("type", "text")));
+
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.indices()).thenReturn(Map.of("mapped-index", mapped, "unmapped-index", unmapped, "unparseable-index", unparseable));
+        when(mapped.mapping()).thenReturn(mappingMetadata);
+        when(mappingMetadata.sourceAsMap()).thenReturn(mapping);
+        when(unmapped.mapping()).thenReturn(null);
+        when(unparseable.mapping()).thenReturn(brokenMappingMetadata);
+        when(brokenMappingMetadata.sourceAsMap()).thenThrow(new OpenSearchParseException("broken mapping"));
+
+        final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
+
+        final List<Map<String, Object>> mappings = neuralSearchClusterUtil.getAllIndexMappings();
+
+        assertEquals(List.of(mapping), mappings);
+    }
+
+    public void testGetAllIndexMappings_whenNoIndices_thenEmpty() {
+        final ClusterService clusterService = mock(ClusterService.class);
+        final ClusterState clusterState = mock(ClusterState.class);
+        final Metadata metadata = mock(Metadata.class);
+
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(metadata.indices()).thenReturn(Map.of());
+
+        final NeuralSearchClusterUtil neuralSearchClusterUtil = NeuralSearchClusterUtil.instance();
+        final IndexNameExpressionResolver indexNameExpressionResolver = new IndexNameExpressionResolver(new ThreadContext(Settings.EMPTY));
+        neuralSearchClusterUtil.initialize(clusterService, indexNameExpressionResolver);
+
+        assertTrue(neuralSearchClusterUtil.getAllIndexMappings().isEmpty());
     }
 
     public void testGetClusterService_thenSuccess() {

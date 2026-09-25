@@ -25,7 +25,13 @@ public class SparseDocValuesFormat extends DocValuesFormat {
 
     @Override
     public DocValuesConsumer fieldsConsumer(SegmentWriteState state) throws IOException {
-        return new SparseDocValuesConsumer(state, delegate.fieldsConsumer(state), new MergeHelper());
+        MergeHelper mergeHelper = new MergeHelper();
+        return new BaseSparseDocValuesConsumer(
+            delegate.fieldsConsumer(state),
+            new SparseDocValuesConsumer(state, mergeHelper),
+            new NativeDocValuesConsumer(state, mergeHelper),
+            mergeHelper
+        );
     }
 
     @Override

@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hc.core5.http.ParseException;
@@ -17,18 +18,27 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.SparseTestCommon;
 import org.opensearch.neuralsearch.plugin.NeuralSearch;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseForwardIndex;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * Base Integration tests for seismic feature
+ * Base Integration tests for seismic feature.
+ *
+ * <p>Subclasses are parameterized over {@link SparseEngine}: every sparse index this class creates
+ * is configured with {@link #engine}, so a single test body runs once per engine. A subclass opts in
+ * by declaring a {@link ParametersFactory} method returning {@link #allEngines()} (or
+ * {@link #luceneEngineOnly()} when the feature under test has no native counterpart) and forwarding
+ * the engine through its constructor.
  */
 public abstract class SparseBaseIT extends BaseNeuralSearchIT {
 
@@ -36,10 +46,57 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     protected static final String SPARSE_MEMORY_USAGE_METRIC_NAME = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE.getNameString();
     protected static final String SPARSE_MEMORY_USAGE_METRIC_PATH = MetricStatName.MEMORY_SPARSE_MEMORY_USAGE.getFullPath();
 
+    /**
+     * The native engine indexes unquantized float32 values, so it neither clips weights to the
+     * ceilings nor rescales scores by them.
+     */
+    protected static final String QUANTIZATION_IS_LUCENE_ONLY = "quantization_ceiling_* is inert on the native engine";
+
+    /**
+     * Engine under test. Injected into every sparse mapping created through this class.
+     */
+    protected final SparseEngine engine;
+
+    public SparseBaseIT(SparseEngine engine) {
+        this.engine = engine;
+    }
+
+    /**
+     * Every engine, the default parameter set for sparse integration tests.
+     */
+    public static Collection<Object[]> allEngines() {
+        return List.of(new Object[] { SparseEngine.LUCENE }, new Object[] { SparseEngine.NATIVE });
+    }
+
+    /**
+     * Only the Lucene engine, for suites covering behavior the native engine does not implement.
+     */
+    public static Collection<Object[]> luceneEngineOnly() {
+        return List.<Object[]>of(new Object[] { SparseEngine.LUCENE });
+    }
+
+    /**
+     * Only the native engine, for suites covering behavior the Lucene engine does not implement.
+     */
+    public static Collection<Object[]> nativeEngineOnly() {
+        return List.<Object[]>of(new Object[] { SparseEngine.NATIVE });
+    }
+
+    /**
+     * Skips the running test unless the engine under test is Lucene. Use for assertions that are
+     * only meaningful on the Lucene engine, e.g. quantized scores or rank_features fallback.
+     */
+    protected void assumeLuceneEngine(String reason) {
+        assumeTrue(reason, SparseEngine.LUCENE == engine);
+    }
+
     @Before
     @Override
     public void setUp() throws Exception {
         super.setUp();
+        // The dynamic gate defaults to off, so every native suite has to open it. Harmless on the
+        // Lucene engine, and set unconditionally so a NATIVE run never depends on test ordering.
+        updateClusterSettings(SparseSettings.SPARSE_NATIVE_ENGINE_ENABLED, true);
     }
 
     protected void createSparseIndex(
@@ -50,7 +107,30 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         float clusterRatio,
         int approximateThreshold
     ) throws IOException {
-        SparseTestCommon.createSparseIndex(client(), indexName, fieldName, nPostings, alpha, clusterRatio, approximateThreshold);
+        SparseTestCommon.createSparseIndex(client(), engine, indexName, fieldName, nPostings, alpha, clusterRatio, approximateThreshold);
+    }
+
+    /** Single shard, no replica, with the forward index layout the native engine should build. */
+    protected void createSparseIndex(
+        String indexName,
+        String fieldName,
+        SparseForwardIndex forwardIndex,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold
+    ) throws IOException {
+        SparseTestCommon.createSparseIndex(
+            client(),
+            engine,
+            forwardIndex,
+            indexName,
+            fieldName,
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold
+        );
     }
 
     protected void createSparseIndex(
@@ -65,6 +145,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     ) throws IOException {
         SparseTestCommon.createSparseIndex(
             client(),
+            engine,
             indexName,
             fieldName,
             nPostings,
@@ -87,6 +168,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     ) throws IOException {
         SparseTestCommon.createNestedSparseIndex(
             client(),
+            engine,
             indexName,
             nestedFieldName,
             sparseFieldName,
@@ -112,6 +194,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
     ) throws IOException {
         SparseTestCommon.createNestedSparseIndex(
             client(),
+            engine,
             indexName,
             nestedFieldName,
             sparseFieldName,
@@ -138,7 +221,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
 
     protected String prepareIndexMapping(int nPostings, float alpha, float clusterRatio, int approximateThreshold, String sparseFieldName)
         throws IOException {
-        return SparseTestCommon.prepareIndexMapping(nPostings, alpha, clusterRatio, approximateThreshold, sparseFieldName);
+        return SparseTestCommon.prepareIndexMapping(engine, nPostings, alpha, clusterRatio, approximateThreshold, sparseFieldName);
     }
 
     protected String prepareIndexMapping(
@@ -151,6 +234,7 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         String sparseFieldName
     ) throws IOException {
         return SparseTestCommon.prepareIndexMapping(
+            engine,
             nPostings,
             alpha,
             clusterRatio,
@@ -161,6 +245,50 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         );
     }
 
+    protected String prepareMixedNestedFieldsIndexMapping(
+        String sparseAnnParentField,
+        String plainNeuralSparseParentField,
+        String nestedChunkField,
+        String sparseFieldName,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold
+    ) throws IOException {
+        return SparseTestCommon.prepareMixedNestedFieldsIndexMapping(
+            engine,
+            sparseAnnParentField,
+            plainNeuralSparseParentField,
+            nestedChunkField,
+            sparseFieldName,
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold
+        );
+    }
+
+    protected String prepareMixedFieldTypeIndexMapping(
+        String parentField,
+        String rankFeaturesField,
+        String sparseVectorField,
+        int nPostings,
+        float alpha,
+        float clusterRatio,
+        int approximateThreshold
+    ) throws IOException {
+        return SparseTestCommon.prepareMixedFieldTypeIndexMapping(
+            engine,
+            parentField,
+            rankFeaturesField,
+            sparseVectorField,
+            nPostings,
+            alpha,
+            clusterRatio,
+            approximateThreshold
+        );
+    }
+
     @SneakyThrows
     protected List<Map<String, Float>> prepareIngestDocuments(int docCount) {
         return SparseTestCommon.prepareIngestDocuments(docCount);
@@ -168,12 +296,12 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     protected void prepareSparseIndex(String index, String sparseField, String textField) {
-        SparseTestCommon.prepareSparseIndex(client(), index, sparseField, textField);
+        SparseTestCommon.prepareSparseIndex(client(), engine, index, sparseField, textField);
     }
 
     @SneakyThrows
     protected void prepareMultiShardReplicasIndex(String index, String sparseField, String textField, int shards, int replicas) {
-        SparseTestCommon.prepareMultiShardReplicasIndex(client(), index, sparseField, textField, shards, replicas);
+        SparseTestCommon.prepareMultiShardReplicasIndex(client(), engine, index, sparseField, textField, shards, replicas);
     }
 
     @SneakyThrows
@@ -183,17 +311,23 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     protected void prepareMixSeismicRankFeaturesIndex(String TEST_INDEX_NAME, String TEST_SPARSE_FIELD_NAME, String TEST_TEXT_FIELD_NAME) {
-        SparseTestCommon.prepareMixSeismicRankFeaturesIndex(client(), TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME);
+        SparseTestCommon.prepareMixSeismicRankFeaturesIndex(
+            client(),
+            engine,
+            TEST_INDEX_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            TEST_TEXT_FIELD_NAME
+        );
     }
 
     @SneakyThrows
     protected void prepareOnlyRankFeaturesIndex(String TEST_INDEX_NAME, String TEST_SPARSE_FIELD_NAME, String TEST_TEXT_FIELD_NAME) {
-        SparseTestCommon.prepareOnlyRankFeaturesIndex(client(), TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME);
+        SparseTestCommon.prepareOnlyRankFeaturesIndex(client(), engine, TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, TEST_TEXT_FIELD_NAME);
     }
 
     @SneakyThrows
     protected void createIndexWithMultipleSeismicFields(String indexName, List<String> fieldNames) {
-        SparseTestCommon.createIndexWithMultipleSeismicFields(client(), indexName, fieldNames);
+        SparseTestCommon.createIndexWithMultipleSeismicFields(client(), engine, indexName, fieldNames);
     }
 
     protected void waitForSegmentMerge(String index) throws InterruptedException {
@@ -354,6 +488,24 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         for (String expected : expectedDescriptions) {
             assertTrue("Explanation should contain: " + expected, foundDescriptions.contains(expected));
         }
+    }
+
+    /**
+     * Asserts that the explanation reports the score the hit was actually ranked by. This is the
+     * assertion that pins the explain arithmetic against the scorer's: explain recomputes the score
+     * from the stored vector, so a formula that drifts from the scorer's (a dropped boost, a
+     * quantization range applied at the wrong ceiling) shows up here and nowhere else.
+     */
+    @SuppressWarnings("unchecked")
+    protected void assertExplanationScoreMatchesHit(Map<String, Object> hit) {
+        Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+        assertNotNull("Explanation should be present", explanation);
+        float hitScore = Float.parseFloat(hit.get("_score").toString());
+        Object explanationValue = explanation.get("value");
+        assertNotNull("Explanation should carry a value", explanationValue);
+        float explainedScore = Float.parseFloat(explanationValue.toString());
+        // Relative, since a score's magnitude depends on the quantization ceilings in play.
+        assertEquals("Explained score should match the hit's score", hitScore, explainedScore, Math.max(1e-4f, Math.abs(hitScore) * 1e-3f));
     }
 
     @SuppressWarnings("unchecked")

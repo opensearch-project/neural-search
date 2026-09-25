@@ -144,16 +144,11 @@ public class SemanticHighlighterEngine {
     public String applyHighlighting(String context, Map<String, Object> highlightResult, String preTag, String postTag) {
         Object highlightsObj = highlightResult.get(MODEL_INFERENCE_RESULT_KEY);
 
-        if (!(highlightsObj instanceof List<?> highlightsList)) {
+        if (highlightsObj instanceof List<?> == false) {
             log.error(String.format(Locale.ROOT, "No valid highlights found in model inference result, highlightsObj: %s", highlightsObj));
             return null;
         }
 
-        if (highlightsList.isEmpty()) {
-            return context;
-        }
-
-        String result = HighlightTagApplier.applyTags(context, (List<Map<String, Object>>) highlightsObj, preTag, postTag);
-        return result != null ? result : context;
+        return HighlightTagApplier.applyTags(context, (List<Map<String, Object>>) highlightsObj, preTag, postTag);
     }
 }

@@ -4,12 +4,15 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import lombok.SneakyThrows;
 import org.junit.After;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -20,6 +23,15 @@ public class SparseCircuitBreakerIT extends SparseBaseIT {
     private static final String TEST_INDEX_NAME = "test-sparse-circuit-breaker";
     private static final String TEST_TEXT_FIELD_NAME = "text";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
+
+    @ParametersFactory(argumentFormatting = "engine=%s")
+    public static Collection<Object[]> parameters() {
+        return allEngines();
+    }
+
+    public SparseCircuitBreakerIT(SparseEngine engine) {
+        super(engine);
+    }
 
     /**
      * Resets circuit breaker to default settings

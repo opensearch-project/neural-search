@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.query.explain;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.LeafReaderContext;
@@ -12,6 +13,7 @@ import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.util.BitSet;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
 import org.junit.Before;
 import org.mockito.Mock;
@@ -22,6 +24,8 @@ import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.query.SparseQueryContext;
 import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -674,6 +678,200 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
             }
         }
         assertTrue("Should have raw score explanation", foundRawScoreExplanation);
+    }
+
+    // ---- native engine paths ----
+
+    /**
+     * The exact float path, which nsparse's inverted index takes for a segment below the approximate
+     * threshold. No quantization step to describe and no rescaling to undo, so the score is the plain
+     * float dot product times the boost.
+     */
+    public void testExplain_ExactFloatScore() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 0.5f, 2, 2.0f));
+
+        Explanation explanation = exactFloatBuilder(encodeVector(Map.of(1, 4.0f, 2, 1.0f))).explain();
+
+        assertTrue("Explanation should match", explanation.isMatch());
+        // 0.5*4.0 + 2.0*1.0 = 4.0, times a boost of 1.0
+        assertEquals(4.0f, explanation.getValue().floatValue(), 0.0001f);
+        assertTrue(
+            "Should say it scored exactly: " + explanation.getDescription(),
+            explanation.getDescription().contains("exact scoring, segment below approximate_threshold")
+        );
+    }
+
+    public void testExplain_ExactFloatScore_TokenContributionsSortedByValue() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f, 2, 1.0f, 3, 1.0f));
+
+        Explanation explanation = exactFloatBuilder(encodeVector(Map.of(1, 1.0f, 2, 9.0f, 3, 5.0f))).explain();
+
+        Explanation dotProduct = findDetail(explanation, "dot product score (exact)");
+        assertNotNull("Should explain the dot product", dotProduct);
+        Explanation[] tokens = dotProduct.getDetails();
+        assertEquals(3, tokens.length);
+        // Largest contribution first, so the tokens that drove the score read at the top
+        assertTrue(tokens[0].getDescription().contains("token '2'"));
+        assertTrue(tokens[1].getDescription().contains("token '3'"));
+        assertTrue(tokens[2].getDescription().contains("token '1'"));
+    }
+
+    public void testExplain_ExactFloatScore_IgnoresQueryTokensAbsentFromDoc() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f, 99, 1000.0f));
+
+        Explanation explanation = exactFloatBuilder(encodeVector(Map.of(1, 2.0f))).explain();
+
+        assertEquals(2.0f, explanation.getValue().floatValue(), 0.0001f);
+        Explanation dotProduct = findDetail(explanation, "dot product score (exact)");
+        assertEquals("Only the shared token contributes", 1, dotProduct.getDetails().length);
+        assertTrue(dotProduct.getDetails()[0].getDescription().contains("token '1'"));
+    }
+
+    public void testExplain_ExactFloatScore_AppliesBoost() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f));
+        BinaryDocValues docValues = encodeVector(Map.of(1, 3.0f));
+
+        Explanation explanation = SparseExplanationBuilder.builder()
+            .context(mockContext)
+            .docId(DOC_ID)
+            .query(mockQuery)
+            .boost(2.0f)
+            .fieldInfo(mockFieldInfo)
+            .reader(mockReader)
+            .nativeEngine(true)
+            .rawDocValues(docValues)
+            .build()
+            .explain();
+
+        assertEquals(6.0f, explanation.getValue().floatValue(), 0.0001f);
+    }
+
+    public void testExplain_ExactFloatScore_DocumentWithoutVector() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f));
+        BinaryDocValues docValues = mock(BinaryDocValues.class);
+        when(docValues.advanceExact(DOC_ID)).thenReturn(false);
+
+        Explanation explanation = exactFloatBuilder(docValues).explain();
+
+        assertFalse("A document without the field cannot match", explanation.isMatch());
+        assertTrue(explanation.getDescription().contains("has no sparse vector"));
+    }
+
+    public void testExplain_ExactFloatScore_NullBinaryValue() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f));
+        BinaryDocValues docValues = mock(BinaryDocValues.class);
+        when(docValues.advanceExact(DOC_ID)).thenReturn(true);
+        when(docValues.binaryValue()).thenReturn(null);
+
+        Explanation explanation = exactFloatBuilder(docValues).explain();
+
+        assertFalse(explanation.isMatch());
+        assertTrue(explanation.getDescription().contains("has no sparse vector"));
+    }
+
+    public void testExplain_ExactFloatScore_ReadFailureIsReportedNotThrown() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f));
+        BinaryDocValues docValues = mock(BinaryDocValues.class);
+        when(docValues.advanceExact(DOC_ID)).thenThrow(new IOException("disk gone"));
+
+        Explanation explanation = exactFloatBuilder(docValues).explain();
+
+        assertFalse(explanation.isMatch());
+        assertTrue(explanation.getDescription().contains("error reading document"));
+        assertTrue(explanation.getDescription().contains("disk gone"));
+    }
+
+    /**
+     * The native engine hands the filter to nsparse as a candidate set instead of post-filtering, so
+     * the same filter has to be described differently from the Lucene path.
+     */
+    public void testExplain_NativeEngine_FilterDescribedAsCandidateSet() throws IOException {
+        when(mockReader.read(DOC_ID)).thenReturn(docVector);
+        Query mockFilterQuery = mock(TermQuery.class);
+        when(mockQuery.getFilter()).thenReturn(mockFilterQuery);
+        when(mockQueryContext.getK()).thenReturn(1);
+
+        FixedBitSet bitSet = new FixedBitSet(10);
+        bitSet.set(DOC_ID);
+        bitSet.set(DOC_ID + 1);
+        String contextId = "native-context";
+        when(mockContext.id()).thenReturn(contextId);
+        when(mockQuery.getFilterResults()).thenReturn(Map.of(contextId, bitSet));
+
+        Explanation explanation = SparseExplanationBuilder.builder()
+            .context(mockContext)
+            .docId(DOC_ID)
+            .query(mockQuery)
+            .boost(BOOST)
+            .fieldInfo(mockFieldInfo)
+            .reader(mockReader)
+            .nativeEngine(true)
+            .build()
+            .explain();
+
+        Explanation filter = findDetail(explanation, "filter");
+        assertNotNull("Should explain the filter", filter);
+        assertTrue(
+            "Should say the search was restricted to the filter: " + filter.getDescription(),
+            filter.getDescription().contains("ANN search restricted to the filtered documents")
+        );
+    }
+
+    public void testExplain_LuceneEngine_FilterDescribedAsPostFilter() throws IOException {
+        when(mockReader.read(DOC_ID)).thenReturn(docVector);
+        Query mockFilterQuery = mock(TermQuery.class);
+        when(mockQuery.getFilter()).thenReturn(mockFilterQuery);
+        when(mockQueryContext.getK()).thenReturn(1);
+
+        FixedBitSet bitSet = new FixedBitSet(10);
+        bitSet.set(DOC_ID);
+        bitSet.set(DOC_ID + 1);
+        String contextId = "lucene-context";
+        when(mockContext.id()).thenReturn(contextId);
+        when(mockQuery.getFilterResults()).thenReturn(Map.of(contextId, bitSet));
+
+        Explanation filter = findDetail(createDefaultBuilder().explain(), "filter");
+        assertNotNull(filter);
+        assertFalse(filter.getDescription().contains("ANN search restricted to the filtered documents"));
+    }
+
+    /** A builder for the exact float path: rawDocValues set instead of relying on the reader. */
+    private SparseExplanationBuilder exactFloatBuilder(BinaryDocValues rawDocValues) {
+        return SparseExplanationBuilder.builder()
+            .context(mockContext)
+            .docId(DOC_ID)
+            .query(mockQuery)
+            .boost(BOOST)
+            .fieldInfo(mockFieldInfo)
+            .reader(mockReader)
+            .nativeEngine(true)
+            .rawDocValues(rawDocValues)
+            .build();
+    }
+
+    /** Doc values holding one vector in the on-disk (token int, weight float) pair encoding. */
+    @SneakyThrows
+    private BinaryDocValues encodeVector(Map<Integer, Float> weights) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (DataOutputStream dos = new DataOutputStream(baos)) {
+            for (Map.Entry<Integer, Float> entry : weights.entrySet()) {
+                dos.writeInt(entry.getKey());
+                dos.writeFloat(entry.getValue());
+            }
+        }
+        BinaryDocValues docValues = mock(BinaryDocValues.class);
+        when(docValues.advanceExact(DOC_ID)).thenReturn(true);
+        when(docValues.binaryValue()).thenReturn(new BytesRef(baos.toByteArray()));
+        return docValues;
+    }
+
+    private Explanation findDetail(Explanation explanation, String descriptionFragment) {
+        for (Explanation detail : explanation.getDetails()) {
+            if (detail.getDescription().contains(descriptionFragment)) {
+                return detail;
+            }
+        }
+        return null;
     }
 
     private SparseExplanationBuilder createDefaultBuilder() throws IOException {

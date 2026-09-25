@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.sparse.codec;
 
 import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.codecs.CompoundFormat;
 import org.apache.lucene.codecs.DocValuesFormat;
 import org.apache.lucene.codecs.FilterCodec;
 import org.apache.lucene.codecs.PostingsFormat;
@@ -39,5 +40,10 @@ public class SparseCodec extends FilterCodec {
     @Override
     public PostingsFormat postingsFormat() {
         return new SparsePostingsFormat(this.delegate.postingsFormat());
+    }
+
+    @Override
+    public CompoundFormat compoundFormat() {
+        return new SparseCompoundFormat(delegate.compoundFormat());
     }
 }
