@@ -1127,6 +1127,350 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         return new org.opensearch.action.search.MultiSearchResponse.Item(response, null);
     }
 
+    /** A leg item carrying a {@code hits.total}, as a leg asked to count to a threshold returns. */
+    private org.opensearch.action.search.MultiSearchResponse.Item countedLegItem(Map<String, Float> idToScore, long total) {
+        org.opensearch.action.search.MultiSearchResponse.Item item = legItem(idToScore);
+        org.opensearch.search.SearchHits hits = new org.opensearch.search.SearchHits(
+            item.getResponse().getHits().getHits(),
+            new org.apache.lucene.search.TotalHits(total, org.apache.lucene.search.TotalHits.Relation.EQUAL_TO),
+            1.0f
+        );
+        org.opensearch.action.search.SearchResponseSections sections = new org.opensearch.action.search.SearchResponseSections(
+            hits,
+            null,
+            null,
+            false,
+            false,
+            null,
+            0
+        );
+        return new org.opensearch.action.search.MultiSearchResponse.Item(
+            new org.opensearch.action.search.SearchResponse(
+                sections,
+                null,
+                1,
+                1,
+                0,
+                10,
+                org.opensearch.action.search.ShardSearchFailure.EMPTY_ARRAY,
+                null
+            ),
+            null
+        );
+    }
+
+    /**
+     * A count-round response: {@code size: 0}, one total, and the shard bookkeeping the caller checks. {@code shardFailures}
+     * and {@code missingShards} are separate on purpose — core reports a failed shard in the failure array but an
+     * <em>unavailable</em> one only as a gap in {@code successfulShards}, and both understate the count.
+     */
+    private org.opensearch.action.search.SearchResponse countResponse(
+        long total,
+        int shardFailures,
+        int missingShards,
+        boolean timedOut,
+        Boolean earlyTerm
+    ) {
+        org.opensearch.search.SearchHits hits = new org.opensearch.search.SearchHits(
+            new org.opensearch.search.SearchHit[0],
+            new org.apache.lucene.search.TotalHits(total, org.apache.lucene.search.TotalHits.Relation.EQUAL_TO),
+            0.0f
+        );
+        org.opensearch.action.search.SearchResponseSections sections = new org.opensearch.action.search.SearchResponseSections(
+            hits,
+            null,
+            null,
+            timedOut,
+            earlyTerm,
+            null,
+            0
+        );
+        org.opensearch.action.search.ShardSearchFailure[] failures = new org.opensearch.action.search.ShardSearchFailure[shardFailures];
+        for (int i = 0; i < shardFailures; i++) {
+            failures[i] = new org.opensearch.action.search.ShardSearchFailure(new IllegalStateException("shard " + i + " failed"));
+        }
+        return new org.opensearch.action.search.SearchResponse(sections, null, 4, 4 - shardFailures - missingShards, 0, 10, failures, null);
+    }
+
+    /**
+     * Drive the fused rewrite to the point where the lazy union count is issued, and hand the count whatever
+     * {@code countAnswer} says: a {@link org.opensearch.action.search.SearchResponse} to answer with, an
+     * {@link Exception} to fail with, or {@code null} to assert the count was never issued at all. Returns the
+     * {@code hits.total} the rewrite published, and records the count request it built.
+     */
+    @SneakyThrows
+    private org.apache.lucene.search.TotalHits runFusedWithCount(
+        Object countAnswer,
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequestOut
+    ) {
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
+        );
+        // The totals consumer is what permits dropping the Tail at all, and so what arms the legs to count.
+        java.util.concurrent.atomic.AtomicReference<org.apache.lucene.search.TotalHits> published =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        builder.fusedTotalHitsConsumer(published::set);
+        // size 3 is not incidental: the derived count can only replace the Tail when the requested page fits inside the
+        // ranked window, and these two legs fuse to 3 documents. At the default size of 10 the count is issued and then
+        // cannot be used, because Tail-only documents would have filled slots 4..10.
+        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(3).query(builder));
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        builder.doRewrite(ctx);
+        assertNotNull(captured.get());
+
+        // Both legs come back exact and far below the default 10 000 threshold, which is what makes the union countable.
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(
+            new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                countedLegItem(Map.of("1", 0.9f, "2", 0.5f), 40),
+                countedLegItem(Map.of("2", 0.8f, "3", 0.4f), 20) },
+            10L
+        );
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
+            l.onResponse(msResponse);
+            return null;
+        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        doAnswer(invocation -> {
+            countRequestOut.set(invocation.getArgument(0));
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            if (countAnswer instanceof Exception) {
+                l.onFailure((Exception) countAnswer);
+            } else {
+                l.onResponse((org.opensearch.action.search.SearchResponse) countAnswer);
+            }
+            return null;
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
+        assertTrue("the rewrite must complete whatever the count did", done.get());
+        return published.get();
+    }
+
+    /**
+     * A {@code neural} leg can only be counted by hosting the overlap aggregation, and whether that is bounded depends on
+     * its field being dense — unknowable from the leg, because the fused rewrite runs before the legs are rewritten. With no
+     * mapping resolving it to a dense vector field, neither derivation may be attempted: no count round is issued and the
+     * Tail counts the union as it did before any of this existed.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenANeuralLegCannotBeProvenDense_thenNeitherDerivationIsAttempted() {
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").build());
+        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        builder.fusion(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
+        );
+        java.util.concurrent.atomic.AtomicReference<org.apache.lucene.search.TotalHits> published =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        builder.fusedTotalHitsConsumer(published::set);
+        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(3).query(builder));
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        builder.doRewrite(ctx);
+
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(
+            new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                countedLegItem(Map.of("1", 0.9f, "2", 0.5f), 40),
+                countedLegItem(Map.of("2", 0.8f, "3", 0.4f), 20) },
+            10L
+        );
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> legSearches =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            legSearches.set(invocation.getArgument(0));
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
+            l.onResponse(msResponse);
+            return null;
+        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        java.util.concurrent.atomic.AtomicBoolean counted = new java.util.concurrent.atomic.AtomicBoolean();
+        doAnswer(invocation -> {
+            counted.set(true);
+            return null;
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
+
+        assertTrue(done.get());
+        assertFalse("no count round may be issued for an unprovable host", counted.get());
+        assertNull("nothing derived, so round 2 keeps its Tail", published.get());
+        // Nor may the legs carry the overlap aggregation, which is the other way the union could have been derived.
+        for (SearchRequest leg : legSearches.get().requests()) {
+            assertNull("no leg may host the overlap aggregation either", leg.source().aggregations());
+        }
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenLegsAreLexicalOnly_thenOneCountRoundSettlesTheTotal() {
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+        org.apache.lucene.search.TotalHits published = runFusedWithCount(countResponse(55, 0, 0, false, null), countRequest);
+
+        assertNotNull("a count round must have been issued for two lexical legs below the threshold", countRequest.get());
+        assertEquals("what core counted is what the response reports", 55L, published.value());
+        assertEquals(org.apache.lucene.search.TotalHits.Relation.EQUAL_TO, published.relation());
+        // The count itself: size 0, no fetch, the legs' disjunction, counted to the request's own threshold.
+        assertEquals(0, countRequest.get().source().size());
+        assertFalse(countRequest.get().source().fetchSource().fetchSource());
+        assertEquals(Integer.valueOf(10000), countRequest.get().source().trackTotalHitsUpTo());
+        assertTrue(countRequest.get().source().query() instanceof org.opensearch.index.query.BoolQueryBuilder);
+        org.opensearch.index.query.BoolQueryBuilder disjunction = (org.opensearch.index.query.BoolQueryBuilder) countRequest.get()
+            .source()
+            .query();
+        assertEquals(2, disjunction.should().size());
+        assertEquals("1", disjunction.minimumShouldMatch());
+        assertNull("no aggregation: counting this way is what avoids one", countRequest.get().source().aggregations());
+    }
+
+    /**
+     * A count that did not see every shard, or stopped early, understates the union — and an understated
+     * {@code hits.total} is worse than a slower request, because round 2 would have counted it correctly. Each of the three
+     * incompleteness signals has to reject the count on its own.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenTheCountRoundIsIncomplete_thenItsTotalIsNotUsed() {
+        for (org.opensearch.action.search.SearchResponse incomplete : List.of(
+            countResponse(55, 1, 0, false, null),         // a shard failed outright
+            countResponse(55, 0, 1, false, null),         // a shard was never reached: zero failures, understated total
+            countResponse(55, 0, 0, true, null),          // timed out
+            countResponse(55, 0, 0, false, Boolean.TRUE)  // terminated early
+        )) {
+            java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
+                new java.util.concurrent.atomic.AtomicReference<>();
+
+            org.apache.lucene.search.TotalHits published = runFusedWithCount(incomplete, countRequest);
+
+            assertNotNull("the count was still issued", countRequest.get());
+            assertNull("an incomplete count is discarded and round 2 counts the union itself", published);
+        }
+    }
+
+    /**
+     * A failure while finishing after the count must surface as a request failure, not be swallowed. The count's own
+     * failure is recovered from — round 2 counts the union itself — but if fusion then throws, that is a real error and the
+     * rewrite's listener has to see it. Asserted on <b>both</b> continuations, because they catch separately: the one that
+     * runs when the count answered, and the one that runs when it failed. Forced here by a leg hit with no shard target,
+     * which fusion rejects because it cannot tell which index the document came from.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenFusionThrowsAfterTheCount_thenTheRequestFailsOnEitherContinuation() {
+        for (boolean countSucceeds : new boolean[] { true, false }) {
+            assertFusionFailureSurfaces(countSucceeds);
+        }
+    }
+
+    @SneakyThrows
+    private void assertFusionFailureSurfaces(boolean countSucceeds) {
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
+        );
+        builder.fusedTotalHitsConsumer(total -> {});
+        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(3).query(builder));
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        builder.doRewrite(ctx);
+
+        // Leg 0 counts, so the count round is issued; leg 1's hit carries no shard target, so fusion throws afterwards.
+        org.opensearch.search.SearchHit orphan = new org.opensearch.search.SearchHit(0, "9", Map.of(), Map.of());
+        orphan.score(0.7f);
+        org.opensearch.search.SearchHits orphanHits = new org.opensearch.search.SearchHits(
+            new org.opensearch.search.SearchHit[] { orphan },
+            new org.apache.lucene.search.TotalHits(20, org.apache.lucene.search.TotalHits.Relation.EQUAL_TO),
+            1.0f
+        );
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(
+            new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                countedLegItem(Map.of("1", 0.9f), 40),
+                new org.opensearch.action.search.MultiSearchResponse.Item(
+                    new org.opensearch.action.search.SearchResponse(
+                        new org.opensearch.action.search.SearchResponseSections(orphanHits, null, null, false, false, null, 0),
+                        null,
+                        1,
+                        1,
+                        0,
+                        10,
+                        org.opensearch.action.search.ShardSearchFailure.EMPTY_ARRAY,
+                        null
+                    ),
+                    null
+                ) },
+            10L
+        );
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
+            l.onResponse(msResponse);
+            return null;
+        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            if (countSucceeds) {
+                l.onResponse(countResponse(55, 0, 0, false, null));
+            } else {
+                l.onFailure(new IllegalStateException("count rejected"));
+            }
+            return null;
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        captured.get()
+            .accept(client, org.opensearch.core.action.ActionListener.wrap(r -> fail("fusion should not have succeeded"), failure::set));
+
+        assertNotNull(
+            "the fusion failure has to reach the listener, not be swallowed (count succeeded: " + countSucceeds + ")",
+            failure.get()
+        );
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenTheCountRoundFails_thenTheRequestStillSucceedsWithRoundTwo() {
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+        // The count is an optimization, never a result the response needs: a failure must not fail a request whose legs
+        // all succeeded. runFusedWithCount fails the test if the rewrite's listener sees an error.
+        org.apache.lucene.search.TotalHits published = runFusedWithCount(
+            new org.opensearch.OpenSearchStatusException("count rejected", org.opensearch.core.rest.RestStatus.TOO_MANY_REQUESTS),
+            countRequest
+        );
+
+        assertNotNull(countRequest.get());
+        assertNull("nothing derived, so round 2 keeps its Tail exactly as before this optimization existed", published);
+    }
+
     @SneakyThrows
     public void testDoRewriteFused_endToEnd_asyncActionProducesFusedQuery() {
         // Drives the full round-1 → round-2 lifecycle: capture the registered async action, run it with a mock client

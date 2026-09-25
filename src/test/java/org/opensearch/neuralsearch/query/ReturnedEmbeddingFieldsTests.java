@@ -88,6 +88,91 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
         NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
     }
 
+    /**
+     * The question a {@code neural} leg cannot answer about itself: is its field a bounded top-k (dense) or a predicate over
+     * a term-defined match set (sparse)? Only a field declared {@code knn_vector} on EVERY targeted index answers yes; every
+     * other answer, including "cannot tell", is no, because the caller's fallback (the Tail) is bounded and a wrong yes is
+     * not.
+     */
+    public void testIsDenseVectorFieldOnEveryTargetedIndex_onlyAKnnVectorEverywhereAnswersYes() {
+        cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1));
+
+        assertTrue(ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "vec"));
+        assertTrue(
+            "a nested dense field is addressed by its full path",
+            ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "emb.inner")
+        );
+        assertFalse(
+            "a text field is not a vector field",
+            ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "text")
+        );
+        assertFalse(
+            "a field the mapping does not declare at all",
+            ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "absent")
+        );
+        assertFalse(
+            "no field name",
+            ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), null)
+        );
+        assertFalse(
+            "no field name",
+            ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "")
+        );
+        assertFalse("no request", ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(null, "vec"));
+    }
+
+    public void testIsDenseVectorFieldOnEveryTargetedIndex_sparseAndMixedMappingsAnswerNo() {
+        // rank_features is an embedding field but NOT a bounded one: a query against it matches every document carrying a
+        // query token, which is exactly the case this test exists to exclude.
+        cluster(index("sparse-index", SPARSE_MAPPING, 1));
+        assertFalse(
+            "rank_features is an embedding field but not a dense one",
+            ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(new SearchRequest("sparse-index"), "sparse")
+        );
+
+        // One index out of several declaring the field differently is "cannot tell", and cannot tell is no.
+        cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1), index(TEXT_INDEX, TEXT_MAPPING, 1));
+        assertFalse(
+            "dense on one index and absent on another is not dense everywhere",
+            ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(new SearchRequest(VECTOR_INDEX, TEXT_INDEX), "vec")
+        );
+    }
+
+    public void testIsDenseVectorFieldOnEveryTargetedIndex_anIndexResolvedButGoneFromTheStateAnswersNo() {
+        // Resolved a moment ago, absent from the metadata now: nothing can be established about its mapping.
+        cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1));
+        Metadata clusterMetadata = mock(Metadata.class);
+        ClusterState state = mock(ClusterState.class);
+        ClusterService clusterService = mock(ClusterService.class);
+        when(clusterService.state()).thenReturn(state);
+        when(state.metadata()).thenReturn(clusterMetadata);
+        when(clusterMetadata.index(any(Index.class))).thenReturn(null);
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        when(resolver.concreteIndices(any(ClusterState.class), any(IndicesRequest.class))).thenReturn(
+            new Index[] { new Index(VECTOR_INDEX, VECTOR_INDEX + "-uuid") }
+        );
+        NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
+
+        assertFalse(ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "vec"));
+    }
+
+    public void testIsDenseVectorFieldOnEveryTargetedIndex_unresolvableClusterStateAnswersNo() {
+        cluster(index(VECTOR_INDEX, VECTOR_MAPPING, 1));
+        assertTrue(ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "vec"));
+
+        // No cluster service at all: the lookup throws inside and must answer no rather than propagate.
+        NeuralSearchClusterUtil.instance().initialize(null, null);
+        assertFalse(ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "vec"));
+
+        // Resolves to no indices at all.
+        cluster();
+        assertFalse(ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "vec"));
+
+        // An index with no mapping: nothing is known about any field.
+        cluster(index(VECTOR_INDEX, null, 1));
+        assertFalse(ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request(new SearchSourceBuilder()), "vec"));
+    }
+
     private static IndexMetadata index(String name, String mapping, long mappingVersion) {
         return index(name, mapping, mappingVersion, null);
     }
