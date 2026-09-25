@@ -16,6 +16,7 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.sort.SortBuilders;
+import org.opensearch.search.sort.SortOrder;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -66,6 +67,7 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION, NUMBER_OF_SHARDS_ONE);
         testCollapse_whenE2E_thenSuccessful();
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
+        testCollapse_whenScoreThenFieldSort_thenDeterministicHead();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
 
         // For min_score=0.5005f, it filters out 1 doc
@@ -76,11 +78,24 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION, NUMBER_OF_SHARDS_FIVE);
         testCollapse_whenE2E_thenSuccessful();
         testCollapse_whenE2E_andSortEnabled_thenSuccessful();
+        testCollapse_whenScoreThenFieldSort_thenDeterministicHead();
         testCollapse_whenE2EWithInnerHits_thenSuccessful();
         testCollapse_whenShardHasNoDocuments_thenSuccessful();
 
         // For min_score=0.5005f, it filters out no docs;
         testCollapse_whenE2E_withMinScore_thenSuccessful(0.5005f, 1, 2);
+    }
+
+    @SneakyThrows
+    public void testCollapse_whenScoreThenFieldSortAndDistinctGroupsEnabled_thenDeterministicHead() {
+        // The [_score, field] relaxation also admits the distinct-groups collector, which elects each group's
+        // head through the sort comparators, so an exact _score tie must fall through to the field there too.
+        createTestIndexAndIngestDocuments(DEFAULT_INDEX_CONFIGURATION, NUMBER_OF_SHARDS_ONE);
+        updateIndexSettings(
+            COLLAPSE_TEST_INDEX,
+            Settings.builder().put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true)
+        );
+        testCollapse_whenScoreThenFieldSort_thenDeterministicHead();
     }
 
     @SneakyThrows
@@ -763,6 +778,65 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
         assertTrue(responseString.indexOf("Vanilla") < responseString.indexOf("Chocolate"));
     }
 
+    /**
+     * end-to-end: hybrid query + collapse with sort {@code [_score desc, price asc]}.
+     *
+     * <p>Before the feature this request was rejected up front by {@code validateSortCriteria}
+     * ("_score sort criteria cannot be applied with any other criteria"). It must now be accepted:
+     * {@code _score} stays primary (relevance order preserved) and {@code price} is a tiebreaker
+     * consulted only on an exact fused-score tie, pinning a deterministic collapse group head.
+     *
+     * <p>Docs 1 and 2 are both "Chocolate Cake"/"cakes". Both sub-queries are wrapped in {@code constant_score}
+     * so their scores do not depend on per-shard IDF: the two docs tie exactly on any shard layout, and the tie
+     * must be broken by {@code price asc}, so the surviving "Chocolate Cake" head is the cheaper doc (price 15,
+     * not 18). On multiple shards this also exercises the coordinator merge path and the ScoreCombiner
+     * tiebreaker-preservation fix.
+     */
+    private void testCollapse_whenScoreThenFieldSort_thenDeterministicHead() {
+        var hybridQuery = new HybridQueryBuilder().add(
+            QueryBuilders.constantScoreQuery(QueryBuilders.matchQuery(TEST_TEXT_FIELD_ITEM, "Chocolate Cake"))
+        ).add(QueryBuilders.constantScoreQuery(QueryBuilders.matchQuery(TEST_TEXT_FIELD_CATEGORY, "cakes")));
+
+        CollapseContext collapseContext = new CollapseContext(TEST_TEXT_FIELD_ITEM, null, null);
+
+        // [_score desc, price asc] — the combination that used to be rejected for hybrid queries
+        Map<String, Object> searchResponse = search(
+            COLLAPSE_TEST_INDEX,
+            hybridQuery,
+            null,
+            10,
+            Map.of("search_pipeline", SEARCH_PIPELINE),
+            null,
+            null,
+            List.of(SortBuilders.scoreSort(), SortBuilders.fieldSort(TEST_FLOAT_FIELD).order(SortOrder.ASC)),
+            false,
+            null,
+            0,
+            null,
+            null,
+            null,
+            null,
+            collapseContext,
+            null
+        );
+
+        // Accepted (no IllegalArgumentException) and collapse still removes the "Chocolate Cake" duplicate
+        String responseString = searchResponse.toString();
+        assertTrue(isCollapseDuplicateRemoved(responseString, "Chocolate Cake"));
+
+        // _score stays primary: scores must be in descending order across the collapsed heads
+        List<Double> headScores = getCollapsedHeadScores(searchResponse);
+        assertFalse("expected at least one collapsed head", headScores.isEmpty());
+        for (int i = 1; i < headScores.size(); i++) {
+            assertTrue("collapsed heads must stay ordered by _score desc", headScores.get(i) <= headScores.get(i - 1));
+        }
+
+        // Docs 1 (price 18) and 2 (price 15) tie on fused score; price-asc tiebreak → head is price 15.
+        Double chocolateHeadPrice = getCollapsedHeadSortPrice(searchResponse, "Chocolate Cake");
+        assertNotNull("Chocolate Cake head should be present", chocolateHeadPrice);
+        assertEquals("tie must be broken by price asc (cheaper doc becomes the head)", 15.0, chocolateHeadPrice, DELTA_FOR_SCORE_ASSERTION);
+    }
+
     private void testCollapse_whenE2EWithInnerHits_thenSuccessful() {
         var hybridQuery = new HybridQueryBuilder().add(QueryBuilders.matchQuery(TEST_TEXT_FIELD_ITEM, "Chocolate Cake"))
             .add(QueryBuilders.boolQuery().must(QueryBuilders.matchQuery(TEST_TEXT_FIELD_CATEGORY, "cakes")));
@@ -1235,6 +1309,45 @@ public class HybridCollapseIT extends BaseNeuralSearchIT {
                 .toString();
             default -> throw new IllegalStateException("Unexpected value: " + configuration);
         };
+    }
+
+    /**
+     * Returns the {@code _score} of each collapsed head hit, in response order.
+     */
+    private List<Double> getCollapsedHeadScores(Map<String, Object> collapseResponse) {
+        List<Double> scores = new ArrayList<>();
+        Map<String, Object> hits = (Map<String, Object>) collapseResponse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        for (Map<String, Object> actualHit : actualHits) {
+            scores.add(((Number) actualHit.get("_score")).doubleValue());
+        }
+        return scores;
+    }
+
+    /**
+     * Returns the trailing sort value (the {@code price} tiebreaker) of the collapsed head whose
+     * collapse value matches {@code collapseValue}, read from the hit's typed {@code sort} array, or
+     * null if not found. The sort array mirrors {@code [_score, price]}, so index 1 is the tiebreaker.
+     */
+    private Double getCollapsedHeadSortPrice(Map<String, Object> collapseResponse, String collapseValue) {
+        Map<String, Object> hits = (Map<String, Object>) collapseResponse.get("hits");
+        List<Map<String, Object>> actualHits = (List<Map<String, Object>>) hits.get("hits");
+        for (Map<String, Object> actualHit : actualHits) {
+            Map<String, Object> fields = (Map<String, Object>) actualHit.get("fields");
+            ArrayList<Object> items = (ArrayList<Object>) fields.get("item");
+            boolean matches = false;
+            for (Object item : items) {
+                if (collapseValue.equals(item.toString())) {
+                    matches = true;
+                    break;
+                }
+            }
+            if (matches) {
+                List<Object> sortValues = (List<Object>) actualHit.get("sort");
+                return ((Number) sortValues.get(1)).doubleValue();
+            }
+        }
+        return null;
     }
 
     private Map<String, Double> getCollapseValueWithScoreMap(Map<String, Object> collapseResponse) {
