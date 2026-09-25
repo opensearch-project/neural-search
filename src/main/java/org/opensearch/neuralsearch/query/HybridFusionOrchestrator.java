@@ -22,6 +22,7 @@ import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.search.MultiSearchRequest;
 import org.opensearch.action.search.MultiSearchResponse;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.common.logging.HeaderWarning;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -190,7 +191,19 @@ final class HybridFusionOrchestrator {
      * name-carrying already handles exactly; such a request keeps counting the way it did.
      */
     static int[] unionCountOrder(List<QueryBuilder> legs) {
-        if (legs.size() < 2 || legs.size() > MAX_LEGS_FOR_UNION_COUNT) {
+        // Exactly one ANN leg and exactly one predicate leg, and no wider shape. Two invariants then hold by
+        // construction rather than by luck of the ordering:
+        //
+        // a filter never contains an ANN leg — so no HNSW graph is re-walked and no inference re-run in round 1;
+        // a predicate leg never hosts — so no collector is forced to ScoreMode.COMPLETE, which would cost it
+        // WAND/block-max skipping and `track_total_hits` early termination and
+        // make it scan its entire match set.
+        //
+        // Both fail for wider shapes, which is why they keep the Tail. With two or more ANN legs, one has to appear
+        // inside another's filter. With one ANN leg and two or more predicate legs, the second leg in counting order is a
+        // predicate leg and has to host — and that cost grows with the corpus, on requests that a leg's own `gte` proof
+        // already served Tail-free. Zero ANN legs needs no host at all and is counted by {@link #unionCountRequest}.
+        if (legs.size() != 2) {
             return null;
         }
         for (QueryBuilder leg : legs) {
@@ -204,26 +217,20 @@ final class HybridFusionOrchestrator {
                 return null;
             }
         }
-        // Lexical-only hybrids are counted by the LAZY union count instead (see unionCountRequest). Here the last leg in
-        // counting order hosts nothing and every earlier leg is lexical, so the filter would be evaluated over a lexical
-        // leg's FULL match set rather than an ANN leg's <= k candidates -- the one shape where this cost is unbounded in
-        // corpus size. A single count-only round is cheap there and needs no aggregation at all.
-        if (lexicalOnlyLegs(legs)) {
-            return null;
-        }
-        int[] order = new int[legs.size()];
-        int next = 0;
+        int annLeg = -1;
         for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
             if (isMaterializableLeg(legs.get(legIndex))) {
-                order[next++] = legIndex;
+                if (annLeg >= 0) {
+                    return null;
+                }
+                annLeg = legIndex;
             }
         }
-        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
-            if (isMaterializableLeg(legs.get(legIndex)) == false) {
-                order[next++] = legIndex;
-            }
+        if (annLeg < 0) {
+            return null;
         }
-        return order;
+        // The ANN leg first: it is the host, and the host is the leg whose matches the filter is evaluated over.
+        return new int[] { annLeg, 1 - annLeg };
     }
 
     /**
@@ -241,17 +248,10 @@ final class HybridFusionOrchestrator {
         if (position < 0 || position == countingOrder.length - 1) {
             return;
         }
-        QueryBuilder laterLegs;
-        if (position == countingOrder.length - 2) {
-            laterLegs = legs.get(countingOrder[position + 1]);
-        } else {
-            BoolQueryBuilder anyLater = new BoolQueryBuilder().minimumShouldMatch(1);
-            for (int i = position + 1; i < countingOrder.length; i++) {
-                anyLater.should(legs.get(countingOrder[i]));
-            }
-            laterLegs = anyLater;
-        }
-        legSource.aggregation(AggregationBuilders.filter(UNION_COUNT_AGG_PREFIX + legIndex, laterLegs));
+        // One later leg, always: unionCountOrder admits a two-leg shape only, so the filter is that leg itself and never
+        // a disjunction. A wider shape would need a disjunction here and is refused there instead.
+        QueryBuilder laterLeg = legs.get(countingOrder[position + 1]);
+        legSource.aggregation(AggregationBuilders.filter(UNION_COUNT_AGG_PREFIX + legIndex, laterLeg));
     }
 
     /**
@@ -277,6 +277,50 @@ final class HybridFusionOrchestrator {
             }
         }
         return false;
+    }
+
+    /**
+     * Whether a sub-search counted over every shard and ran to completion — the precondition for treating its
+     * {@code hits.total} as a fact rather than a floor.
+     *
+     * <p>Applies to the legs and to the count round alike, and the asymmetry it removes was a real one: the count round
+     * refused an incomplete answer from the start, while the legs' own counts were taken at face value even though
+     * {@link #groupLegHits} deliberately tolerates a leg that lost shards under {@code allow_partial_search_results}, and a
+     * soft-timed-out leg reports its truncated count with relation {@code EQUAL_TO}. Either undercounts, and an undercount
+     * fed through inclusion–exclusion produces a {@code hits.total} that claims to be exact.
+     *
+     * <p>Shard accounting is one check, not the two it looks like it should be: {@code successful + skipped == total}.
+     * {@code getFailedShards()} is only the length of the shard-failure array, and core deliberately does <i>not</i> count an
+     * unavailable shard as a failed one — it leaves it out of {@code successfulShards}
+     * ({@code SearchResponse#getFailedShards}). Since a shard that failed is likewise absent from {@code successfulShards},
+     * complete accounting already implies no failures, and testing the counters alone also avoids depending on an array a
+     * response is not obliged to populate. Skipped shards are fine: they were pre-filtered as unable to match, so they
+     * contribute nothing to any count.
+     */
+    static boolean answeredCompletely(SearchResponse response) {
+        if (Objects.isNull(response)) {
+            return false;
+        }
+        return response.getSuccessfulShards() + response.getSkippedShards() == response.getTotalShards()
+            && response.isTimedOut() == false
+            && response.isTerminatedEarly() != Boolean.TRUE;
+    }
+
+    /** As above for one leg of the fan-out: a failed item, or one whose response did not answer completely. */
+    private static boolean legAnsweredCompletely(MultiSearchResponse.Item item) {
+        return Objects.nonNull(item) && item.isFailure() == false && answeredCompletely(item.getResponse());
+    }
+
+    /**
+     * Whether this shape would have derived its count from the legs' overlap aggregation, and lost it only to profiling.
+     * Used to label the refusal, not to decide it: the aggregation is withheld either way (see
+     * {@code CandidateScope#legUnionCountAllowed}).
+     */
+    private static boolean profiledLegsWithheldTheAggregation(SearchSourceBuilder source, List<QueryBuilder> legs, int windowSize) {
+        return Objects.nonNull(source)
+            && source.profile()
+            && Objects.nonNull(legTotalHitsThreshold(source, windowSize))
+            && Objects.nonNull(unionCountOrder(legs));
     }
 
     /** True when no leg is an ANN leg, i.e. every leg's match set is a real predicate rather than a top-k. */
@@ -314,10 +358,13 @@ final class HybridFusionOrchestrator {
         MultiSearchResponse.Item[] items,
         int windowSize
     ) {
-        if (Objects.isNull(scope) || scope.legUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
+        if (Objects.isNull(scope) || scope.lazyUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
             return null;
         }
-        if (items.length != legs.size() || legs.size() < 2 || lexicalOnlyLegs(legs) == false) {
+        // Zero ANN legs, two or more of them, and no more than the fan-out this is worth doing for. An ANN leg in the
+        // disjunction would be re-executed by the count — a graph walk and, for `neural`, a second inference — so such a
+        // hybrid is served by the eager aggregation on the ANN host (two legs) or by the Tail (anything wider).
+        if (items.length != legs.size() || legs.size() < 2 || legs.size() > MAX_LEGS_FOR_UNION_COUNT || lexicalOnlyLegs(legs) == false) {
             return null;
         }
         Integer threshold = legTotalHitsThreshold(source, windowSize);
@@ -341,7 +388,7 @@ final class HybridFusionOrchestrator {
         BoolQueryBuilder disjunction = new BoolQueryBuilder().minimumShouldMatch(1);
         for (int leg = 0; leg < legs.size(); leg++) {
             MultiSearchResponse.Item item = items[leg];
-            if (Objects.isNull(item) || item.isFailure() || Objects.isNull(item.getResponse())) {
+            if (legAnsweredCompletely(item) == false) {
                 return null;
             }
             TotalHits own = item.getResponse().getHits().getTotalHits();
@@ -380,7 +427,7 @@ final class HybridFusionOrchestrator {
         for (int position = 0; position < countingOrder.length; position++) {
             int legIndex = countingOrder[position];
             MultiSearchResponse.Item item = items[legIndex];
-            if (Objects.isNull(item) || Objects.isNull(item.getResponse()) || Objects.isNull(item.getResponse().getHits())) {
+            if (legAnsweredCompletely(item) == false || Objects.isNull(item.getResponse().getHits())) {
                 return null;
             }
             TotalHits own = item.getResponse().getHits().getTotalHits();
@@ -1583,9 +1630,15 @@ final class HybridFusionOrchestrator {
             return;
         }
         if (countSettled == false) {
+            // Distinguish "nothing could have proved it" from "it was provable, but the aggregation that would have proved it
+            // is withheld while profiling" — otherwise a profiled request is told the count is unprovable when its
+            // unprofiled twin derives it fine.
+            boolean withheldByProfile = profiledLegsWithheldTheAggregation(source, legs, windowSize);
             decision.refuse(
-                FastPathDecision.COUNT_NOT_SETTLED,
-                "the request wants a count beyond the window and no leg reported enough matches to prove it"
+                withheldByProfile ? FastPathDecision.COUNT_UNAVAILABLE_UNDER_PROFILE : FastPathDecision.COUNT_NOT_SETTLED,
+                withheldByProfile
+                    ? "the count is derivable for this shape, but the overlap aggregation is withheld from a profiled request"
+                    : "the request wants a count beyond the window and no leg reported enough matches to prove it"
             );
         }
     }

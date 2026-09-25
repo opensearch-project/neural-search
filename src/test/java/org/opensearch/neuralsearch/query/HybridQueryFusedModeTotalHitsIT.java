@@ -485,7 +485,7 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
      */
     @SneakyThrows
     @SuppressWarnings("unchecked")
-    public void testTotalHits_whenProfiled_thenTheCoordinatorEntryShowsTheTailDroppedOnlyWhenALegProvesTheCount() {
+    public void testTotalHits_whenProfiled_thenTheCoordinatorEntryShowsWhenTheTailIsDropped() {
         prepareIndex();
         assertEquals(
             Boolean.FALSE,
@@ -496,10 +496,11 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
             )
         );
         assertEquals(
-            "no leg reaches the threshold: profiled legs carry no overlap aggregation (core's profile breakdown asserts on a profiled "
-                + "aggregating search), so the profiled request keeps the Tail — the unprofiled request derives the count, see the "
-                + "fetch-op tests",
-            Boolean.TRUE,
+            "no leg reaches the threshold, and these legs are lexical-only — so the COUNT ROUND settles the union and the Tail is "
+                + "dropped even under profile. Only the overlap aggregation is withheld from a profiled request (core's profile "
+                + "breakdown asserts on a profiled aggregating search); the count round carries no aggregation, so a profiled "
+                + "request derives its count exactly as its unprofiled twin does",
+            Boolean.FALSE,
             tailBuilt(
                 search(
                     "{\"profile\":true,\"size\":"

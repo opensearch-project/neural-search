@@ -363,14 +363,18 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
 
     /** What the legs decide, read off their actual answers: six documents cannot prove a count of 10,000. */
     @SneakyThrows
-    public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheVerdictIsCountNotSettled() {
+    public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheVerdictSaysWhyTheCountIsUnavailable() {
         ensureDataset(INDEX, 1);
         prime(INDEX, "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3}");
 
         Map<String, Object> verdict = fastPathVerdict(search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3")));
 
         assertEquals(Boolean.FALSE, verdict.get("would_take"));
-        assertEquals("count_not_settled", verdict.get("refused_by"));
+        // This shape (one ANN leg, one predicate leg) derives its count from an overlap aggregation on the ANN leg, and that
+        // aggregation is withheld from a profiled request because core's concurrent-segment profile breakdown asserts on a
+        // profiled search that also aggregates. So the count is unavailable HERE while being derivable for the same request
+        // unprofiled -- which is what this verdict has to say, rather than blaming the legs for not proving it.
+        assertEquals("count_unavailable_under_profile", verdict.get("refused_by"));
         assertEquals(Boolean.FALSE, verdict.get("count_settled"));
         assertNotNull("the volume had passed before the legs decided", verdict.get("fetch_estimate_bytes"));
     }

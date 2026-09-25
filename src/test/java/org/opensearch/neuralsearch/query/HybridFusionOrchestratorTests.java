@@ -2593,6 +2593,99 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         return new MultiSearchResponse.Item(response, null);
     }
 
+    /** A leg item that answered on fewer shards than it searched, or did not run to completion. */
+    private MultiSearchResponse.Item degradedLegItem(TotalHits total, InternalAggregation overlap, int missingShards, boolean timedOut) {
+        SearchHits searchHits = new SearchHits(new SearchHit[0], total, 1.0f);
+        InternalAggregations aggregations = overlap == null ? null : InternalAggregations.from(List.of(overlap));
+        SearchResponseSections sections = new SearchResponseSections(searchHits, aggregations, null, timedOut, false, null, 0);
+        SearchResponse response = new SearchResponse(sections, null, 4, 4 - missingShards, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    /**
+     * A leg that lost a shard, or was cut short by a soft timeout, reports a TRUNCATED count with relation {@code eq}. Fed
+     * through inclusion-exclusion that produces a {@code hits.total} that claims to be exact and is not — and because the
+     * fast path then assembles the page itself, nothing in the response marks it partial. The Tail has to count instead.
+     */
+    public void testExactUnionFromLegs_refusesALegThatDidNotAnswerOnEveryShard() {
+        QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
+        List<QueryBuilder> legs = List.of(ann, new MatchQueryBuilder("text", "hello"));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHitsUpTo(10_000);
+        InternalAggregation overlap = overlapAggregation(overlapName(0), 1494);
+
+        assertEquals(
+            "the control: every shard answered",
+            new TotalHits(5405, TotalHits.Relation.EQUAL_TO),
+            HybridFusionOrchestrator.exactUnionFromLegs(
+                source,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(4899), overlap, 0, false), degradedLegItem(eq(2000), null, 0, false) },
+                legs,
+                100
+            )
+        );
+        assertNull(
+            "the hosting leg lost a shard: its own count and its overlap both undercount",
+            HybridFusionOrchestrator.exactUnionFromLegs(
+                source,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(4899), overlap, 1, false), degradedLegItem(eq(2000), null, 0, false) },
+                legs,
+                100
+            )
+        );
+        assertNull(
+            "the other leg lost a shard",
+            HybridFusionOrchestrator.exactUnionFromLegs(
+                source,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(4899), overlap, 0, false), degradedLegItem(eq(2000), null, 1, false) },
+                legs,
+                100
+            )
+        );
+        assertNull(
+            "a soft timeout truncates the count but still reports relation eq",
+            HybridFusionOrchestrator.exactUnionFromLegs(
+                source,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(4899), overlap, 0, true), degradedLegItem(eq(2000), null, 0, false) },
+                legs,
+                100
+            )
+        );
+    }
+
+    public void testUnionCountRequest_refusesALegThatDidNotAnswerOnEveryShard() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchSourceBuilder source = new SearchSourceBuilder().size(100).trackTotalHitsUpTo(10_000);
+
+        assertNotNull(
+            "the control",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(10), null, 0, false), degradedLegItem(eq(3), null, 0, false) },
+                100
+            )
+        );
+        assertNull(
+            "a leg that lost a shard cannot be shown to be below the threshold either",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(10), null, 1, false), degradedLegItem(eq(3), null, 0, false) },
+                100
+            )
+        );
+    }
+
+    public void testAnsweredCompletely_isOneShardAccountingCheckPlusCompletion() {
+        // successful + skipped == total already implies no failures: a shard that failed is absent from successfulShards.
+        assertTrue(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 0, false).getResponse()));
+        assertFalse(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 1, false).getResponse()));
+        assertFalse(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 0, true).getResponse()));
+        assertFalse(HybridFusionOrchestrator.answeredCompletely(null));
+    }
+
     private static String overlapName(int legIndex) {
         return HybridFusionOrchestrator.UNION_COUNT_AGG_PREFIX + legIndex;
     }
@@ -2602,8 +2695,10 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
         QueryBuilder term = new TermQueryBuilder("text", "place");
 
-        assertArrayEquals(new int[] { 1, 0, 2 }, HybridFusionOrchestrator.unionCountOrder(List.of(lexical, ann, term)));
+        // The ONE shape the eager aggregation serves: one ANN leg, one predicate leg, the ANN leg hosting.
         assertArrayEquals(new int[] { 1, 0 }, HybridFusionOrchestrator.unionCountOrder(List.of(lexical, ann)));
+        assertArrayEquals(new int[] { 0, 1 }, HybridFusionOrchestrator.unionCountOrder(List.of(ann, lexical)));
+
         assertNull("one leg has no union to count", HybridFusionOrchestrator.unionCountOrder(List.of(lexical)));
         assertNull(
             "a named leg would register its name from the filter",
@@ -2617,19 +2712,35 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             "a nested hybrid cannot be embedded in another leg's filter: the shard would reject the whole leg with a 400",
             HybridFusionOrchestrator.unionCountOrder(List.of(ann, new HybridQueryBuilder().add(term)))
         );
+        // The two shapes that made a filter unbounded, or put an ANN leg inside one. Both keep the Tail.
+        assertNull(
+            "one ANN leg and two predicate legs: the second leg in counting order would be a predicate leg, and hosting"
+                + " forces its collector to ScoreMode.COMPLETE — no WAND skipping, no threshold early termination, a full"
+                + " match-set scan whose cost grows with the corpus",
+            HybridFusionOrchestrator.unionCountOrder(List.of(ann, lexical, term))
+        );
+        assertNull(
+            "two ANN legs: one would have to sit inside the other's filter, re-walking its graph (and for `neural`,"
+                + " re-running inference) in round 1 — the cost this design exists to avoid",
+            HybridFusionOrchestrator.unionCountOrder(List.of(ann, new KNNQueryBuilder("vec2", new float[] { 3f, 4f }, 10)))
+        );
+        assertNull(
+            "and neither is rescued by adding a predicate leg",
+            HybridFusionOrchestrator.unionCountOrder(List.of(ann, new KNNQueryBuilder("vec2", new float[] { 3f, 4f }, 10), lexical))
+        );
     }
 
-    public void testBuildLegMultiSearch_countingLegsCarryOneOverlapAggregationEachExceptTheLast() {
+    public void testBuildLegMultiSearch_theAnnLegHostsTheOnlyAggregationAndThePredicateLegHostsNothing() {
         QueryBuilder lexical = new MatchQueryBuilder("text", "hello");
         QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
-        QueryBuilder term = new TermQueryBuilder("text", "place");
-        List<QueryBuilder> legs = List.of(lexical, ann, term);
+        List<QueryBuilder> legs = List.of(lexical, ann);
         CandidateScope scope = CandidateScope.from(new SearchRequest(INDEX).source(new SearchSourceBuilder().trackTotalHitsUpTo(500)));
         scope.enableLegTotalHits(500);
 
         MultiSearchRequest ms = HybridFusionOrchestrator.buildLegMultiSearch(scope, legs, 50);
 
-        // counting order is ann (1), lexical (0), term (2): ann hosts "lexical OR term", lexical hosts "term", term hosts nothing
+        // The ANN leg hosts a filter over the predicate leg — evaluated over at most k candidates per shard — and the
+        // predicate leg carries nothing, so its collector keeps WAND skipping and its threshold early termination.
         FilterAggregationBuilder onAnn = (FilterAggregationBuilder) ms.requests()
             .get(1)
             .source()
@@ -2638,21 +2749,33 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             .iterator()
             .next();
         assertEquals(overlapName(1), onAnn.getName());
-        assertTrue(onAnn.getFilter() instanceof BoolQueryBuilder);
-        assertEquals(List.of(lexical, term), ((BoolQueryBuilder) onAnn.getFilter()).should());
-        assertEquals("1", ((BoolQueryBuilder) onAnn.getFilter()).minimumShouldMatch());
-        FilterAggregationBuilder onLexical = (FilterAggregationBuilder) ms.requests()
-            .get(0)
-            .source()
-            .aggregations()
-            .getAggregatorFactories()
-            .iterator()
-            .next();
-        assertEquals(overlapName(0), onLexical.getName());
-        assertEquals(term, onLexical.getFilter());
-        assertNull("the last leg in counting order counts nothing beyond itself", ms.requests().get(2).source().aggregations());
+        assertEquals("one later leg, so the filter is that leg and not a disjunction", lexical, onAnn.getFilter());
+        assertNull("a predicate leg never hosts", ms.requests().get(0).source().aggregations());
         for (SearchRequest leg : ms.requests()) {
             assertEquals("the legs still count to the threshold", Integer.valueOf(500), leg.source().trackTotalHitsUpTo());
+        }
+    }
+
+    /** The shapes finding 1 of the review named: no leg may carry an aggregation, so nothing scans an unbounded match set. */
+    public void testBuildLegMultiSearch_noLegHostsForTheShapesThatWouldBeUnbounded() {
+        QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
+        QueryBuilder ann2 = new KNNQueryBuilder("vec2", new float[] { 3f, 4f }, 10);
+        QueryBuilder title = new MatchQueryBuilder("title", "hello");
+        QueryBuilder body = new MatchQueryBuilder("body", "world");
+        for (List<QueryBuilder> legs : List.of(
+            List.of(ann, title, body),   // a predicate leg would have hosted
+            List.of(ann, ann2),          // an ANN leg would have sat inside a filter
+            List.of(ann, ann2, title),
+            List.of(title, body, new TermQueryBuilder("text", "place")) // lexical-only: the count round, no host
+        )) {
+            CandidateScope scope = CandidateScope.from(new SearchRequest(INDEX).source(new SearchSourceBuilder().trackTotalHitsUpTo(500)));
+            scope.enableLegTotalHits(500);
+
+            MultiSearchRequest ms = HybridFusionOrchestrator.buildLegMultiSearch(scope, legs, 50);
+
+            for (int i = 0; i < ms.requests().size(); i++) {
+                assertNull("leg " + i + " of " + legs.size() + " must carry no aggregation", ms.requests().get(i).source().aggregations());
+            }
         }
     }
 
@@ -2718,23 +2841,20 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         );
     }
 
-    public void testExactUnionFromLegs_threeLegs_countsEachDocumentOnceInCountingOrder() {
+    public void testExactUnionFromLegs_refusesThreeLegsBecauseNoLegMayHost() {
         QueryBuilder lexical = new MatchQueryBuilder("text", "hello");
         QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
         QueryBuilder term = new TermQueryBuilder("text", "place");
         List<QueryBuilder> legs = List.of(lexical, ann, term);
         SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHitsUpTo(10_000);
-        // counting order ann(1), lexical(0), term(2): ann 800 of which 300 also in lexical-or-term; lexical 1200 of which 200
-        // also in term; term 500 → 500 + 1000 + 500 = 2000
+        // Even with every aggregation an older counting order would have produced, this shape has no legal host: the
+        // read side agrees with the attach side, so the Tail counts the union.
         MultiSearchResponse.Item[] items = {
             countingLegItem(eq(1200), overlapAggregation(overlapName(0), 200)),
             countingLegItem(eq(800), overlapAggregation(overlapName(1), 300)),
             countingLegItem(eq(500), null) };
 
-        assertEquals(
-            new TotalHits(2000, TotalHits.Relation.EQUAL_TO),
-            HybridFusionOrchestrator.exactUnionFromLegs(source, items, legs, 100)
-        );
+        assertNull(HybridFusionOrchestrator.exactUnionFromLegs(source, items, legs, 100));
     }
 
     public void testExactUnionFromLegs_atOrPastTheThreshold_reportsTheCappedCount() {

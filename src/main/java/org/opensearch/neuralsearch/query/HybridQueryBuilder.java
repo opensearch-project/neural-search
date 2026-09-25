@@ -884,18 +884,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         try {
                             // A count is only usable if it saw every shard and finished: a partial or truncated count
                             // understates the union, and reporting an understated total is worse than keeping round 2,
-                            // which counts it itself. Null hands the request back to the Tail unchanged.
-                            //
-                            // Shard accounting takes two checks, not one. `getFailedShards()` is the length of the shard-
-                            // failure array, and core deliberately does NOT count an unavailable shard as a failed one --
-                            // it simply leaves it out of `successfulShards` (SearchResponse#getFailedShards). So a count
-                            // that never reached a shard reports zero failures and an understated total. Skipped shards
-                            // are fine: they were pre-filtered as unable to match, so they contribute nothing to count.
-                            boolean everyShardAnswered = countResponse.getFailedShards() == 0
-                                && countResponse.getSuccessfulShards() + countResponse.getSkippedShards() == countResponse.getTotalShards();
-                            boolean complete = everyShardAnswered
-                                && countResponse.isTimedOut() == false
-                                && countResponse.isTerminatedEarly() != Boolean.TRUE;
+                            // which counts it itself. Null hands the request back to the Tail unchanged. The same
+                            // predicate is applied to the legs' own counts — see HybridFusionOrchestrator#answeredCompletely.
+                            boolean complete = HybridFusionOrchestrator.answeredCompletely(countResponse);
                             fuseAndFinish.accept(complete ? countResponse.getHits().getTotalHits() : null);
                         } catch (Exception e) {
                             listener.onFailure(e);

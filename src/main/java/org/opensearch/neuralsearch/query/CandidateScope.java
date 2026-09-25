@@ -580,10 +580,21 @@ final class CandidateScope {
      * so a profiled request counts the way it did — the profile describes the Tail-kept path, not this one.
      */
     boolean legUnionCountAllowed() {
+        return lazyUnionCountAllowed() && legProfiling == false;
+    }
+
+    /**
+     * Whether the LAZY count round may run — the same conditions as {@link #legUnionCountAllowed} minus profiling.
+     *
+     * <p>Profiling is excluded there and not here for one reason only: core's concurrent-segment profile breakdown asserts
+     * on a profiled search that also <i>aggregates</i>, which takes an assertions-enabled node down. The count round carries
+     * no aggregation, so that defect is not in play and a profiled request can derive its count the same way its unprofiled
+     * twin does — which is what makes the profile's own fast-path verdict describe the request the user actually sent.
+     */
+    boolean lazyUnionCountAllowed() {
         return Objects.nonNull(legTotalHitsThreshold)
             && Objects.isNull(postFilter)
             && Objects.isNull(slice)
-            && legProfiling == false
             && unionCountHostUnknown == false;
     }
 
@@ -630,8 +641,9 @@ final class CandidateScope {
      *
      * <p>Deliberately not {@link #newLegRequest}: a leg request carries {@code size = window_size}, a fetch source and —
      * for the eager union count — an aggregation, none of which a count wants. What it does share is every
-     * request-level property that decides WHICH shards and WHICH view are read: indices, indices options, search type,
-     * routing, preference, partial-results policy, shard-request limits and the point in time. The PIT matters most: the
+     * request-level property that decides WHICH shards and WHICH view are read, and every one that bounds how long the
+     * reading may go on: indices, indices options, search type, routing, preference, partial-results policy, shard-request
+     * limits, the pre-filter threshold, the cancellation budget and the point in time. The PIT matters most: the
      * count has to be taken against the same immutable view the legs read, or the union it reports can disagree with the
      * window it is reported for.
      *
@@ -663,6 +675,14 @@ final class CandidateScope {
         }
         if (maxConcurrentShardRequests > 0) {
             countRequest.setMaxConcurrentShardRequests(maxConcurrentShardRequests);
+        }
+        if (Objects.nonNull(cancelAfterTimeInterval)) {
+            // The count is a sub-search of this request and has to die with it, or it outlives the request that spawned it
+            // and keeps shard threads busy after cancellation — the same reason a leg carries it (see CLASSIFICATION).
+            countRequest.setCancelAfterTimeInterval(cancelAfterTimeInterval);
+        }
+        if (Objects.nonNull(preFilterShardSize)) {
+            countRequest.setPreFilterShardSize(preFilterShardSize);
         }
         return countRequest;
     }

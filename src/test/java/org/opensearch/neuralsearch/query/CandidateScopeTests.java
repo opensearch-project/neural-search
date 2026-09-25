@@ -170,6 +170,8 @@ public class CandidateScopeTests extends OpenSearchTestCase {
                     .pointInTimeBuilder(new PointInTimeBuilder("pit-id-42").setKeepAlive(TimeValue.timeValueMinutes(5)))
             );
         request.setMaxConcurrentShardRequests(3);
+        request.setPreFilterShardSize(64);
+        request.setCancelAfterTimeInterval(TimeValue.timeValueSeconds(11));
 
         SearchRequest count = CandidateScope.from(request).newUnionCountRequest(LEG, 10_000);
 
@@ -189,6 +191,12 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertEquals(SearchType.DFS_QUERY_THEN_FETCH, count.searchType());
         assertEquals(Boolean.FALSE, count.allowPartialSearchResults());
         assertEquals(3, count.getMaxConcurrentShardRequestsRaw());
+        assertEquals(
+            "the count must die with the request that spawned it",
+            TimeValue.timeValueSeconds(11),
+            count.getCancelAfterTimeInterval()
+        );
+        assertEquals(Integer.valueOf(64), count.getPreFilterShardSize());
         assertEquals(TimeValue.timeValueSeconds(7), count.source().timeout());
         assertEquals("the count must read the same immutable view the legs read", "pit-id-42", count.source().pointInTimeBuilder().getId());
         assertNull("a count never extends the PIT keep-alive", count.source().pointInTimeBuilder().getKeepAlive());
@@ -202,6 +210,8 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertNull(count.preference());
         assertNull(count.allowPartialSearchResults());
         assertEquals("0 is core's 'unset' for max_concurrent_shard_requests", 0, count.getMaxConcurrentShardRequestsRaw());
+        assertNull(count.getCancelAfterTimeInterval());
+        assertNull(count.getPreFilterShardSize());
         assertNull(count.source().timeout());
         assertNull(count.source().pointInTimeBuilder());
     }
@@ -242,11 +252,21 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         // A leg that could only be counted by hosting the aggregation, without being known to match a bounded candidate
         // set, refuses BOTH derivations: the fallback has to be the Tail, whose counting early-terminates at the
         // threshold, and not the count round, which would re-execute that leg inside a disjunction.
+        // Profiling withholds the AGGREGATION, because a profiled search that also aggregates trips core's breakdown
+        // assertion -- but not the count round, which carries no aggregation, so a profiled request derives its count the
+        // same way its unprofiled twin does.
+        CandidateScope profiledLazy = CandidateScope.from(new SearchRequest(INDEX));
+        profiledLazy.enableLegTotalHits(10_000);
+        profiledLazy.enableLegProfiling();
+        assertFalse("no aggregation under profile", profiledLazy.legUnionCountAllowed());
+        assertTrue("but the count round is still allowed", profiledLazy.lazyUnionCountAllowed());
+
         CandidateScope unknownHost = CandidateScope.from(new SearchRequest(INDEX));
         unknownHost.enableLegTotalHits(10_000);
         assertTrue(unknownHost.legUnionCountAllowed());
         unknownHost.refuseUnionCountForUnknownHost();
         assertFalse("an unbounded host is refused outright", unknownHost.legUnionCountAllowed());
+        assertFalse("and so is the count round, which would re-execute that leg in a disjunction", unknownHost.lazyUnionCountAllowed());
     }
 
     public void testUnsetFieldsAreLeftUnsetOnTheLeg() {
