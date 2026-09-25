@@ -397,8 +397,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     // Update minScore from the evicted entry's score. Only propagated for descending
                     // score sort: under ascending the evicted entry is the highest kept score, and
                     // HybridBulkScorer prunes on this shared array, so propagating it would drop the
-                    // low-scoring docs that ascending should keep.
-                    if (isSortByScoreDescending) {
+                    // low-scoring docs that ascending should keep. Also only for single-key [_score]: with a
+                    // [_score, field] tiebreak, a doc tying the evicted score can still win on the field, but
+                    // HybridBulkScorer keeps only score > minScore and would drop it in a later window.
+                    if (isSortByScoreDescending && sort.getSort().length == 1) {
                         minScoreThresholds[subQuery] = Math.max(minScoreThresholds[subQuery], evictedScore);
                         compoundQueryScorer.getMinScores()[subQuery] = Math.max(compoundQueryScorer.getMinScores()[subQuery], evictedScore);
                     }

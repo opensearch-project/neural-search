@@ -94,9 +94,9 @@ public class HybridSearchCollapseUtil {
     /**
      * Whether {@code _score} is the primary sort key AND descending. For a SCORE sort field {@code reverse == false}
      * is the natural highest-first (descending) order; OpenSearch maps {@code _score} order:asc to {@code reverse == true}.
-     * The hybrid+collapse relaxation accepts only this form: the collapse collector's min-competitive-score pruning
-     * ({@code minScoreThresholds} / {@code HybridSubQueryScorer#getMinScores}) assumes score-descending and does not
-     * consult the reverse flag, so an ascending {@code _score} could prune competitive docs and yield a wrong group head.
+     * The hybrid+collapse {@code [_score, field]} relaxation deliberately accepts only this form: a tiebreaker on a
+     * least-relevant-first ordering has no clear use case, so ascending {@code _score} with a field is left out of scope.
+     * The collapse collector also uses this to decide whether min-competitive-score feedback is valid.
      *
      * @param sortFields the sort keys (may be {@code null}/empty)
      * @return {@code true} iff the first sort key is a descending {@link SortField.Type#SCORE}

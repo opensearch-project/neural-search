@@ -16,9 +16,13 @@ import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
+import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.FieldDoc;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.LeafCollector;
+import org.apache.lucene.search.MatchAllDocsQuery;
+import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.Weight;
@@ -27,6 +31,9 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.index.mapper.KeywordFieldMapper;
 import org.opensearch.index.mapper.NumberFieldMapper;
+import org.opensearch.neuralsearch.query.HybridBulkScorer;
+import org.opensearch.neuralsearch.query.HybridQuery;
+import org.opensearch.neuralsearch.query.HybridQueryContext;
 import org.opensearch.neuralsearch.query.HybridQueryScorer;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
@@ -1505,6 +1512,122 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
 
         // Propagation is still wanted for descending sort
         assertTrue("minScores should be raised for descending sort", hybridScorer.getMinScores()[0] > 0.0f);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenSortByScoreDescendingThenField_thenMinScoresNotPropagatedToScorer() throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+
+        for (int i = 0; i < 4; i++) {
+            addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+
+        // [_score desc, integerField asc]: ties on _score are competitive because the field can win them
+        Sort sort = new Sort(SortField.FIELD_SCORE, new SortField(INT_FIELD_NAME, SortField.Type.INT));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            2,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO)
+        );
+
+        Weight weight = mock(Weight.class);
+        collector.setWeight(weight);
+
+        HybridSubQueryScorer hybridScorer = new HybridSubQueryScorer(1);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        LeafCollector leafCollector = collector.getLeafCollector(context);
+        leafCollector.setScorer(hybridScorer);
+
+        // Same eviction-forcing input as the single-key descending test above
+        float[] scores = new float[] { 0.5f, 1.0f, 9.0f, 10.0f };
+        for (int i = 0; i < scores.length; i++) {
+            hybridScorer.resetScores();
+            hybridScorer.getSubQueryScores()[0] = scores[i];
+            leafCollector.collect(i);
+        }
+
+        // HybridBulkScorer keeps only score > minScore, so propagating the evicted score would drop docs in
+        // later windows that tie it but win on the field. Not observable through topDocs() in a single window.
+        assertEquals(0.0f, hybridScorer.getMinScores()[0], 0.0f);
+
+        reader.close();
+        writer.close();
+        directory.close();
+    }
+
+    public void testCollapse_whenScoreTiedAcrossBulkScorerWindowsAndSortByScoreThenField_thenTopNByTiebreaker() throws IOException {
+        // Drives a real HybridQuery through HybridBulkScorer, which scores in 4096-doc windows and keeps only
+        // score > minScores[subQuery]. Every doc ties at score 1.0 (MatchAllDocsQuery), so the [_score desc,
+        // integerField asc] order is decided by the field alone. integerField = docCount - i, so the winners are
+        // the LAST docs, all in the second window. If the collector fed the evicted (tied) score back as the
+        // min-competitive score, the second window would be dropped entirely and the survivors would come from the
+        // end of the first window instead.
+        final int docCount = 5000;
+        final int topNGroups = 5;
+
+        Directory directory = newDirectory();
+        // LogMergePolicy merges adjacent segments only, so forceMerge keeps insertion order and the
+        // winners stay in the second window
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig().setMergePolicy(newLogMergePolicy()));
+        for (int i = 0; i < docCount; i++) {
+            addKeywordDoc(writer, i, "text" + i, docCount - i, "group" + i);
+        }
+        writer.forceMerge(1);
+        writer.commit();
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+        assertEquals("fixture must be a single segment spanning multiple windows", 1, reader.leaves().size());
+
+        Sort sort = new Sort(SortField.FIELD_SCORE, new SortField(INT_FIELD_NAME, SortField.Type.INT));
+        KeywordFieldMapper.KeywordFieldType fieldType = new KeywordFieldMapper.KeywordFieldType(COLLAPSE_FIELD_NAME);
+
+        HybridCollapsingTopDocsCollector<?> collector = HybridCollapsingTopDocsCollector.createKeyword(
+            COLLAPSE_FIELD_NAME,
+            fieldType,
+            sort,
+            topNGroups,
+            new HitsThresholdChecker(Integer.MAX_VALUE)
+        );
+
+        IndexSearcher searcher = new IndexSearcher(reader);
+        HybridQuery hybridQuery = new HybridQuery(
+            List.of(new MatchAllDocsQuery()),
+            HybridQueryContext.builder().paginationDepth(topNGroups).build()
+        );
+        Weight weight = hybridQuery.createWeight(searcher, ScoreMode.COMPLETE, 1.0f);
+        collector.setWeight(weight);
+
+        LeafReaderContext context = reader.leaves().getFirst();
+        BulkScorer bulkScorer = weight.scorerSupplier(context).bulkScorer();
+        assertTrue("expected the hybrid bulk scorer", bulkScorer instanceof HybridBulkScorer);
+        bulkScorer.score(collector.getLeafCollector(context), null, 0, DocIdSetIterator.NO_MORE_DOCS);
+
+        List<CollapseTopFieldDocs> topDocs = collector.topDocs();
+        assertEquals(1, topDocs.size());
+        CollapseTopFieldDocs result = topDocs.get(0);
+        assertEquals(topNGroups, result.scoreDocs.length);
+
+        // Smallest integerField values are 1..5 (docs 4999..4995), all in the second window
+        Set<Integer> survivors = new HashSet<>();
+        for (int i = 0; i < result.scoreDocs.length; i++) {
+            FieldDoc fieldDoc = (FieldDoc) result.scoreDocs[i];
+            assertEquals("all docs tie on _score", 1.0f, fieldDoc.score, 0.0f);
+            survivors.add(((Number) fieldDoc.fields[1]).intValue());
+        }
+        assertEquals(Set.of(1, 2, 3, 4, 5), survivors);
 
         reader.close();
         writer.close();

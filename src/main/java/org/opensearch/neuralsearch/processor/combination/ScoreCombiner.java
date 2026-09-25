@@ -250,8 +250,9 @@ public class ScoreCombiner {
 
                     if (isSortByScore) {
                         Float normalizedScore = combinedNormalizedScoresByDocId.get(fieldDoc.doc);
-                        if (fieldDoc.fields == null || fieldDoc.fields.length <= 1) {
-                            // Single-key [_score] sort (or no field values) — original behavior
+                        // fields is never null here
+                        if (fieldDoc.fields.length <= 1) {
+                            // Single-key [_score] sort — original behavior
                             sortFields = new Object[] { normalizedScore };
                         } else {
                             // Multi-key [_score, field] sort — _score is always the primary key (index 0),
