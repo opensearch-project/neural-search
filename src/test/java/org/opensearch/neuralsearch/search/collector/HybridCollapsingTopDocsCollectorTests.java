@@ -488,14 +488,9 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
      * <p>Sorting by {@code [_score, <field>]} (score primary, field as a tiebreaker consulted only on
      * an exact score tie) must be accepted by the collapse collector and collect without throwing.
      *
-     * <p>This is the core CCE regression test. Today the collector sets {@code isSortByScore = true}
-     * whenever ANY sort key is SCORE, but for a multi-key sort it builds a plain
-     * {@code MultiLeafFieldComparator}. The {@code isSortByScore} branches in {@code addNewEntry} /
-     * {@code updateExistingEntry} then cast that comparator to {@code HybridLeafFieldComparator},
-     * which fails with an AssertionError (assertions enabled) or ClassCastException. The fix is to
-     * hybrid-wrap only the SCORE sub-comparator inside the multi-key comparator.
-     *
-     * <p><b>TDD status: RED.</b> This test fails until the collector's multi-key score handling is fixed.
+     * <p>Regression guard for the multi-key score path: the collector wraps only the SCORE sub-comparator
+     * (index 0) of the {@code MultiLeafFieldComparator} in a {@code HybridLeafFieldComparator} and feeds
+     * per-sub-query scores through that wrapper, so a multi-key sort never casts the composite comparator.
      */
     public void testCollapse_whenSortByScoreThenField_thenCollectsWithoutThrowing() throws IOException {
         Directory directory = newDirectory();
@@ -563,13 +558,13 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
     }
 
     /**
-     * on an exact score tie, the trailing field must break the tie deterministically.
+     * On an exact score tie, the trailing field must break the tie deterministically.
      *
      * <p>Every doc shares the same per-sub-query score, so the primary key is fully tied. The sort
-     * is {@code [_score DESC, integerField ASC]}, so the collapse collector must fall back to the
-     * integer field (ascending) instead of an unstable doc-id order — giving a deterministic group head.
-     *
-     * <p><b>TDD status: RED.</b> Fails until multi-key score handling is fixed in the collector.
+     * is {@code [_score DESC, integerField ASC]}, so the collector must order the kept entries by the
+     * integer field (ascending) instead of an unstable doc-id order. Each doc is its own group, so this
+     * pins the tie-broken order of entries; election of a head within one group happens at the
+     * coordinator and is covered in {@code CollapseDataCollectorTests}.
      */
     public void testCollapse_whenScoreTie_thenFieldBreaksTieDeterministically() throws IOException {
         Directory directory = newDirectory();
@@ -640,14 +635,12 @@ public class HybridCollapsingTopDocsCollectorTests extends HybridCollectorTestCa
     }
 
     /**
-     * with a {@code [_score, field]} sort, ranking must still use the PER-SUB-QUERY score
+     * With a {@code [_score, field]} sort, ranking must still use the PER-SUB-QUERY score
      * (via the hybrid-wrapped SCORE sub-comparator), not the compound sum across sub-queries.
      *
      * <p>Two sub-queries with inverted score patterns: verifying each sub-query's results are ranked
      * by that sub-query's own score confirms the SCORE child inside the multi-key comparator reads
      * the individual sub-query score.
-     *
-     * <p><b>TDD status: RED.</b> Fails until multi-key score handling is fixed in the collector.
      */
     public void testCollapse_whenSortByScoreThenFieldMultipleSubQueries_thenPerSubQueryScoresCorrect() throws IOException {
         Directory directory = newDirectory();

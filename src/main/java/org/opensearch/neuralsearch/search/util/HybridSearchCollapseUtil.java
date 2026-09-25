@@ -96,7 +96,9 @@ public class HybridSearchCollapseUtil {
      * is the natural highest-first (descending) order; OpenSearch maps {@code _score} order:asc to {@code reverse == true}.
      * The hybrid+collapse {@code [_score, field]} relaxation deliberately accepts only this form: a tiebreaker on a
      * least-relevant-first ordering has no clear use case, so ascending {@code _score} with a field is left out of scope.
-     * The collapse collector also uses this to decide whether min-competitive-score feedback is valid.
+     * The collapse collector also uses this as one of two conditions for sending min-competitive-score feedback: it
+     * feeds the evicted score back only when this holds AND the sort is single-key {@code [_score]}. With a
+     * {@code [_score, field]} tiebreak, a doc tying the evicted score can still win on the field, so feedback is off.
      *
      * @param sortFields the sort keys (may be {@code null}/empty)
      * @return {@code true} iff the first sort key is a descending {@link SortField.Type#SCORE}
