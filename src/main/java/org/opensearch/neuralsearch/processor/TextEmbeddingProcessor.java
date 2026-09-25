@@ -29,6 +29,7 @@ import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ROUTING_FIELD;
 
 /**
  * This processor is used for user input data text embedding processing, model_id can be used to indicate which model user use,
@@ -79,13 +80,18 @@ public final class TextEmbeddingProcessor extends InferenceProcessor {
         // if skipExisting flag is turned on, eligible inference texts will be compared and filtered after embeddings are copied
         Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         Object id = ingestDocument.getSourceAndMetadata().get(ID_FIELD);
+        Object routing = ingestDocument.getSourceAndMetadata().get(ROUTING_FIELD);
         if (Objects.isNull(index) || Objects.isNull(id)) {
             generateAndSetInference(ingestDocument, processMap, inferenceList, handler);
             return;
         }
+        GetRequest getRequest = new GetRequest(index.toString(), id.toString());
+        if (Objects.nonNull(routing)) {
+            getRequest.routing(routing.toString());
+        }
         openSearchClient.execute(
             GetAction.INSTANCE,
-            new GetRequest(index.toString(), id.toString()),
+            getRequest,
             ActionListener.wrap(
                 response -> reuseOrGenerateEmbedding(
                     response,

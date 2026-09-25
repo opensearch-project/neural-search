@@ -53,6 +53,7 @@ import java.util.stream.IntStream;
 import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ROUTING_FIELD;
 
 /**
  * The abstract class for text processing use cases. Users provide a field name map and a model id.
@@ -454,25 +455,33 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     protected MultiGetRequest buildMultiGetRequest(List<DataForInference> dataForInferences) {
         MultiGetRequest multiGetRequest = new MultiGetRequest();
         for (DataForInference dataForInference : dataForInferences) {
-            Object index = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
-            Object id = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata().get(ID_FIELD);
+            Map<String, Object> sourceAndMetadata = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata();
+            Object index = sourceAndMetadata.get(INDEX_FIELD);
+            Object id = sourceAndMetadata.get(ID_FIELD);
+            Object routing = sourceAndMetadata.get(ROUTING_FIELD);
             if (Objects.nonNull(index) && Objects.nonNull(id)) {
-                multiGetRequest.add(index.toString(), id.toString());
+                MultiGetRequest.Item item = new MultiGetRequest.Item(index.toString(), id.toString());
+                if (Objects.nonNull(routing)) {
+                    item.routing(routing.toString());
+                }
+                multiGetRequest.add(item);
             }
         }
         return multiGetRequest;
     }
 
     /**
-     * This method creates a map of documents from MultiGetItemResponse where the key is document ID and value is corresponding document
+     * This method creates a map of documents from MultiGetItemResponse where the key is document ID and value is corresponding document.
+     * Items that failed or that do not exist are skipped so the document falls back to inference instead of failing.
      * @param multiGetItemResponses, array of responses from Multi Get Request
      * */
     protected Map<String, Map<String, Object>> createDocumentMap(MultiGetItemResponse[] multiGetItemResponses) {
         Map<String, Map<String, Object>> existingDocuments = new HashMap<>();
         for (MultiGetItemResponse item : multiGetItemResponses) {
-            String id = item.getId();
-            Map<String, Object> existingDocument = item.getResponse().getSourceAsMap();
-            existingDocuments.put(id, existingDocument);
+            if (item.isFailed() || Objects.isNull(item.getResponse()) || item.getResponse().isExists() == false) {
+                continue;
+            }
+            existingDocuments.put(item.getId(), item.getResponse().getSourceAsMap());
         }
         return existingDocuments;
     }

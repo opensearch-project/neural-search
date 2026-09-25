@@ -16,4 +16,8 @@ public class DocFieldNames {
      * field name of the doc id
      */
     public static final String ID_FIELD = "_id";
+    /**
+     * field name of the doc routing
+     */
+    public static final String ROUTING_FIELD = "_routing";
 }
