@@ -8,6 +8,7 @@ import org.junit.After;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.index.IndexModule;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 import org.opensearch.threadpool.ThreadPool;
 
@@ -32,9 +33,15 @@ public class SparseSettingsTests extends AbstractSparseTestBase {
 
     /** Initializes the singleton as a node started with these two flag values would be. */
     private void initializeWith(boolean featureEnabled, boolean dynamicEnabled) {
+        initializeWith(featureEnabled, dynamicEnabled, true);
+    }
+
+    /** As above, but for a node that also has core's mmap permission set. */
+    private void initializeWith(boolean featureEnabled, boolean dynamicEnabled, boolean allowMmap) {
         Settings nodeSettings = Settings.builder()
             .put(SparseSettings.SPARSE_NATIVE_ENGINE_FEATURE_ENABLED, featureEnabled)
             .put(SparseSettings.SPARSE_NATIVE_ENGINE_ENABLED, dynamicEnabled)
+            .put(IndexModule.NODE_STORE_ALLOW_MMAP.getKey(), allowMmap)
             .build();
         // Every node-scoped sparse setting: IS_SPARSE_INDEX_SETTING is index-scoped and cannot go
         // into ClusterSettings, the rest are what a real node registers.
@@ -43,7 +50,8 @@ public class SparseSettingsTests extends AbstractSparseTestBase {
             Set.of(
                 SparseSettings.SPARSE_NATIVE_ENGINE_FEATURE_ENABLED_SETTING,
                 SparseSettings.SPARSE_NATIVE_ENGINE_ENABLED_SETTING,
-                SparseSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING
+                SparseSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
+                IndexModule.NODE_STORE_ALLOW_MMAP
             )
         );
         ClusterService clusterService = mock(ClusterService.class);
@@ -81,6 +89,37 @@ public class SparseSettingsTests extends AbstractSparseTestBase {
     public void testEnabledOnlyWhenBothGatesAreOpen() {
         initializeWith(true, true);
         assertTrue(SparseSettings.state().isNativeEngineEnabled());
+        assertNull(SparseSettings.state().nativeEngineDisabledReason());
+    }
+
+    /**
+     * The engine mmaps the engine file itself and has no other read path, so a node that disallows
+     * mmap has to refuse the feature outright rather than fall back.
+     */
+    public void testDisabledWhenTheNodeDisallowsMmap() {
+        initializeWith(true, true, false);
+
+        assertFalse(SparseSettings.state().isNativeEngineEnabled());
+        assertEquals(SparseSettings.MMAP_DISALLOWED_REASON, SparseSettings.state().nativeEngineDisabledReason());
+    }
+
+    /** The reason has to name the setting, since it is not one of ours. */
+    public void testMmapReasonNamesTheCoreSetting() {
+        assertTrue(SparseSettings.MMAP_DISALLOWED_REASON, SparseSettings.MMAP_DISALLOWED_REASON.contains("node.store.allow_mmap"));
+    }
+
+    /**
+     * With both closed the plugin's own flags are reported: they are what an operator who wants the
+     * engine on should change first, and mmap permission is core's to decide.
+     */
+    public void testTheFlagsAreReportedBeforeMmapPermission() {
+        initializeWith(false, false, false);
+
+        assertEquals(SparseSettings.NATIVE_ENGINE_DISABLED_REASON, SparseSettings.state().nativeEngineDisabledReason());
+    }
+
+    public void testMmapIsAllowedByDefault() {
+        assertTrue(IndexModule.NODE_STORE_ALLOW_MMAP.getDefault(Settings.EMPTY));
     }
 
     public void testDisabledWhenOnlyTheFeatureFlagIsOn() {

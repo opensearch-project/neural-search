@@ -29,8 +29,10 @@ namespace {
 struct OffHeap {
     int64_t addr[3] = {0, 0, 0};
 
-    std::vector<int32_t>* indices() {
-        return reinterpret_cast<std::vector<int32_t>*>(addr[0]);
+    // slot [0] is the CSR indptr accumulator, widened to int64 (nsparse offset_t)
+    // so the cumulative nnz offset can exceed INT32_MAX.
+    std::vector<int64_t>* indices() {
+        return reinterpret_cast<std::vector<int64_t>*>(addr[0]);
     }
     std::vector<int32_t>* tokens() {
         return reinterpret_cast<std::vector<int32_t>*>(addr[1]);
@@ -61,7 +63,7 @@ TEST(TransferVectorsTest, FirstCallAllocatesAndCopies) {
     ASSERT_NE(off.addr[1], 0);
     ASSERT_NE(off.addr[2], 0);
 
-    EXPECT_EQ(*off.indices(), (std::vector<int32_t>{0, 2, 3}));
+    EXPECT_EQ(*off.indices(), (std::vector<int64_t>{0, 2, 3}));
     EXPECT_EQ(*off.tokens(), (std::vector<int32_t>{5, 9, 7}));
     EXPECT_EQ(*off.values(), (std::vector<float>{1.0f, 2.0f, 3.0f}));
 }
@@ -84,7 +86,7 @@ TEST(TransferVectorsTest, SecondCallAppendsAndOffsetsIndptr) {
                     tok2.size(), w2.data(), w2.size());
 
     // Expected merged CSR: [0,2,3] then 4(=1+3), 6(=3+3).
-    EXPECT_EQ(*off.indices(), (std::vector<int32_t>{0, 2, 3, 4, 6}));
+    EXPECT_EQ(*off.indices(), (std::vector<int64_t>{0, 2, 3, 4, 6}));
     EXPECT_EQ(*off.tokens(), (std::vector<int32_t>{5, 9, 7, 2, 4, 6}));
     EXPECT_EQ(*off.values(),
               (std::vector<float>{1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f}));
@@ -134,7 +136,7 @@ TEST(TransferVectorsTest, EmptyAppendDoesNotCorruptIndptr) {
     transferVectors(off.addr, indptrEmpty.data(), indptrEmpty.size(), nullptr, 0,
                     nullptr, 0);
 
-    EXPECT_EQ(*off.indices(), (std::vector<int32_t>{0, 3}));
+    EXPECT_EQ(*off.indices(), (std::vector<int64_t>{0, 3}));
     EXPECT_EQ(off.tokens()->size(), 3u);
 }
 
@@ -154,7 +156,7 @@ TEST(TransferVectorsTest, ZeroLengthFirstCallLeavesBuffersUsable) {
     transferVectors(off.addr, indptr.data(), indptr.size(), tok.data(),
                     tok.size(), w.data(), w.size());
 
-    EXPECT_EQ(*off.indices(), (std::vector<int32_t>{0, 3, 7}));
+    EXPECT_EQ(*off.indices(), (std::vector<int64_t>{0, 3, 7}));
     EXPECT_EQ(off.tokens()->size(), 7u);
 }
 
@@ -165,7 +167,7 @@ TEST(TransferVectorsTest, LeadingZeroOnlyFirstCallDoesNotDoubleCount) {
     std::vector<int32_t> indptrZero = {0};
     transferVectors(off.addr, indptrZero.data(), indptrZero.size(), nullptr, 0,
                     nullptr, 0);
-    EXPECT_EQ(*off.indices(), (std::vector<int32_t>{0}));
+    EXPECT_EQ(*off.indices(), (std::vector<int64_t>{0}));
 
     std::vector<int32_t> indptr = {0, 3, 7};
     std::vector<int32_t> tok = {1, 2, 3, 4, 5, 6, 7};
@@ -173,7 +175,7 @@ TEST(TransferVectorsTest, LeadingZeroOnlyFirstCallDoesNotDoubleCount) {
     transferVectors(off.addr, indptr.data(), indptr.size(), tok.data(),
                     tok.size(), w.data(), w.size());
 
-    EXPECT_EQ(*off.indices(), (std::vector<int32_t>{0, 3, 7}));
+    EXPECT_EQ(*off.indices(), (std::vector<int64_t>{0, 3, 7}));
 }
 
 TEST(FreeVectorsTest, FreesAndZeroesEveryAddress) {

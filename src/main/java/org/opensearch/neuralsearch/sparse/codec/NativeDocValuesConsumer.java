@@ -82,12 +82,13 @@ public class NativeDocValuesConsumer extends SparseVectorBinaryConsumer {
         // A merge of pre-existing native segments is the one write that outlives the ingest gate, and
         // it would load the JNI library. Skip it: the raw vectors still reach disk through the
         // delegate consumer, so re-enabling and force-merging rebuilds the native index.
-        if (SparseSettings.state().isNativeEngineEnabled() == false) {
+        String disabledReason = SparseSettings.state().nativeEngineDisabledReason();
+        if (disabledReason != null) {
             log.warn(
                 "Skipping native sparse index for field [{}] in segment [{}]: {}",
                 field.getName(),
                 state.segmentInfo.name,
-                SparseSettings.NATIVE_ENGINE_DISABLED_REASON
+                disabledReason
             );
             return true;
         }

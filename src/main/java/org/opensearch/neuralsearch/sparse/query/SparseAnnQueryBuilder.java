@@ -293,14 +293,12 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
     static void validateNativeEngineEnabled(MappedFieldType fieldType) {
         if (fieldType instanceof SparseVectorFieldType sparseVectorFieldType && sparseVectorFieldType.getSparseMethodContext() != null) {
             String engine = sparseVectorFieldType.getSparseMethodContext().getSparseEngine();
-            if (SparseEngine.NATIVE.getName().equalsIgnoreCase(engine) && SparseSettings.state().isNativeEngineEnabled() == false) {
+            String disabledReason = SparseEngine.NATIVE.getName().equalsIgnoreCase(engine)
+                ? SparseSettings.state().nativeEngineDisabledReason()
+                : null;
+            if (disabledReason != null) {
                 throw new IllegalArgumentException(
-                    "["
-                        + NAME
-                        + "] query on field ["
-                        + sparseVectorFieldType.name()
-                        + "] cannot run: "
-                        + SparseSettings.NATIVE_ENGINE_DISABLED_REASON
+                    "[" + NAME + "] query on field [" + sparseVectorFieldType.name() + "] cannot run: " + disabledReason
                 );
             }
         }

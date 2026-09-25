@@ -291,8 +291,10 @@ void insertToIndex(int64_t indexAddress, const int32_t* ids, int numIds,
     // the range check below and add_with_ids/build() can all throw, and every one
     // of those paths must still free them. Java has already dropped its only
     // handle (the raw addresses), so anything not freed here is unreachable.
-    std::unique_ptr<std::vector<int32_t>> indptr(
-        reinterpret_cast<std::vector<int32_t>*>(indicesAddress));
+    // indptr is the CSR nnz-offset vector, stored 64-bit (nsparse offset_t = int64_t) by
+    // transferVectors so the cumulative offset can exceed INT32_MAX.
+    std::unique_ptr<std::vector<int64_t>> indptr(
+        reinterpret_cast<std::vector<int64_t>*>(indicesAddress));
     std::unique_ptr<std::vector<int32_t>> tokens(
         reinterpret_cast<std::vector<int32_t>*>(tokensAddress));
     std::unique_ptr<std::vector<float>> values(
@@ -315,7 +317,7 @@ void insertToIndex(int64_t indexAddress, const int32_t* ids, int numIds,
 
     omp_set_num_threads(threadCount);
     index->add_with_ids(static_cast<nsparse::idx_t>(numIds),
-                        reinterpret_cast<const nsparse::idx_t*>(indptr->data()),
+                        reinterpret_cast<const nsparse::offset_t*>(indptr->data()),
                         termTokens.data(), values->data(),
                         reinterpret_cast<const nsparse::idx_t*>(ids));
 
@@ -384,8 +386,8 @@ void queryIndex(int64_t indexAddress, const int32_t* tokens,
     }
 
     // Build single-query CSR indptr: [0, numTokens]
-    nsparse::idx_t indptr[2] = {0,
-                                static_cast<nsparse::idx_t>(termTokens.size())};
+    nsparse::offset_t indptr[2] = {0,
+                                static_cast<nsparse::offset_t>(termTokens.size())};
 
     std::unique_ptr<nsparse::SearchParameters> params =
         methodParameters.empty() ? nullptr
@@ -412,8 +414,8 @@ void queryIndexWithFilter(
     }
 
     // Build single-query CSR indptr: [0, numTokens]
-    nsparse::idx_t indptr[2] = {0,
-                                static_cast<nsparse::idx_t>(termTokens.size())};
+    nsparse::offset_t indptr[2] = {0,
+                                static_cast<nsparse::offset_t>(termTokens.size())};
 
     // Convert int64_t filter IDs to idx_t (int32_t)
     std::vector<nsparse::idx_t> idxFilterIds(filterIds,

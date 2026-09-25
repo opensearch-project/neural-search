@@ -27,7 +27,7 @@ import java.util.List;
  *
  * <pre>
  *   int64  header[3]        rows, cols, nnz
- *   int32  indptr[rows + 1] idx_t
+ *   int64  indptr[rows + 1] offset_t
  *   uint16 indices[nnz]     term_t
  *          &lt;padding to 4&gt;   present iff nnz is odd
  *   value  values[nnz]      uint8 codes, or float32
@@ -59,8 +59,9 @@ import java.util.List;
  * A CSR file cannot be written in one forward pass: {@code nnz} and {@code cols} are only known after
  * the last document, and the indices and the values are separate sections while the doc values hand
  * them over interleaved. So the two nnz-sized arrays go to their own scratch files as they stream,
- * {@code indptr} stays on the heap (4 bytes per row), and {@link #finish} assembles them. Peak heap
- * is one vector plus indptr; the cost is writing the nnz arrays twice.
+ * {@code indptr} stays on the heap (8 bytes per row: it is {@code offset_t}, int64), and
+ * {@link #finish} assembles them. Peak heap is one vector plus indptr; the cost is writing the nnz
+ * arrays twice.
  */
 class CsrSparseVectorsFile implements Closeable {
 
@@ -89,8 +90,10 @@ class CsrSparseVectorsFile implements Closeable {
     private IndexOutput indicesScratch;
     private IndexOutput valuesScratch;
 
-    /** Prefix sums of the per-row nnz, so {@code indptr[0] == 0} and {@code indptr[rows] == nnz}. */
-    private int[] indptr = new int[1024];
+    /** Prefix sums of the per-row nnz, so {@code indptr[0] == 0} and {@code indptr[rows] == nnz}.
+     *  64-bit: the cumulative nnz can exceed INT_MAX (native offset_t is int64), and the on-disk
+     *  .csr indptr is read as int64 by nsparse read_csr. */
+    private long[] indptr = new long[1024];
     private int rows;
     private long nnz;
 
@@ -184,15 +187,10 @@ class CsrSparseVectorsFile implements Closeable {
             }
         }
         nnz += tokens.size();
-        // idx_t is int32, so the running offset has to fit one. Checked per row rather than only in
-        // finish() so the failure names a bound the caller can act on before the file is assembled.
-        if (nnz > Integer.MAX_VALUE) {
-            throw new IllegalStateException(
-                "sparse segment has " + nnz + " non-zeros, more than the native engine's 32-bit CSR offsets hold"
-            );
-        }
+        // The native offset type is int64 (offset_t), so the cumulative nnz only needs to fit a long
+        // (Lucene bounds a segment's total terms well under that anyway). No INT_MAX cap.
         indptr = ArrayUtil.grow(indptr, rows + 2);
-        indptr[++rows] = (int) nnz;
+        indptr[++rows] = nnz;
     }
 
     /**
@@ -235,7 +233,7 @@ class CsrSparseVectorsFile implements Closeable {
             csrOutput.writeLong(dimension);
             csrOutput.writeLong(nnz);
             for (int row = 0; row <= rows; row++) {
-                csrOutput.writeInt(indptr[row]);
+                csrOutput.writeLong(indptr[row]);
             }
             copyScratch(csrOutput, indicesName);
             // The mapped reader reinterprets the values in place, so they have to start on a 4-byte

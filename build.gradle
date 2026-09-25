@@ -742,7 +742,7 @@ task updateVersion {
         if (isPatchVersionBump) {
             println "Detected patch version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot}), will skip adding to BWC version arrays"
         } else if (isMinorVersionBump) {
-            println "Detected minor version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot}), will skip updating bwc.bundle.version"
+            println "Detected minor version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot})"
         } else if (isMajorVersionBump) {
             println "Detected major version bump (${currentVersionWithoutSnapshot} -> ${newVersionWithoutSnapshot})"
         }
@@ -757,8 +757,9 @@ task updateVersion {
         )
 
         // Step 4: Update gradle.properties - systemProp.bwc.bundle.version
-        // Only update for major version bumps
-        if (isMajorVersionBump) {
+        // Update for minor and major version bumps to point at the previous released version.
+        // Skip for patch bumps (e.g. 3.7.0 -> 3.7.1) since the previous released version is unchanged.
+        if (!isPatchVersionBump) {
             ant.replaceregexp(
                 file: 'gradle.properties',
                 match: "systemProp.bwc.bundle.version=${currentBwcBundleVersion}",
@@ -768,7 +769,7 @@ task updateVersion {
             )
             println "Updated systemProp.bwc.bundle.version to ${currentVersionWithoutSnapshot}"
         } else {
-            println "Skipped updating systemProp.bwc.bundle.version (only updated for major version bumps)"
+            println "Skipped updating systemProp.bwc.bundle.version (only updated for minor and major version bumps)"
         }
 
         // Step 5: Update backwards_compatibility_tests_workflow.yml - opensearch_version

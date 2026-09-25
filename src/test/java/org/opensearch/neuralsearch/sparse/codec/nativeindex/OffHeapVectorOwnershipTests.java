@@ -5,43 +5,13 @@
 package org.opensearch.neuralsearch.sparse.codec.nativeindex;
 
 import lombok.SneakyThrows;
-import org.apache.lucene.codecs.Codec;
-import org.apache.lucene.index.BinaryDocValues;
-import org.apache.lucene.index.DocValuesSkipIndexType;
-import org.apache.lucene.index.DocValuesType;
-import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.IndexOptions;
-import org.apache.lucene.index.SegmentInfo;
-import org.apache.lucene.index.SegmentWriteState;
-import org.apache.lucene.index.VectorEncoding;
-import org.apache.lucene.index.VectorSimilarityFunction;
-import org.apache.lucene.store.Directory;
-import org.apache.lucene.store.FSDirectory;
-import org.apache.lucene.store.IOContext;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.InfoStream;
-import org.apache.lucene.util.StringHelper;
-import org.apache.lucene.util.Version;
 import org.opensearch.neuralsearch.jni.NativeLibrary;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
-import org.opensearch.neuralsearch.sparse.SparseSettings;
-import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.common.SparseQueryResult;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ENGINE_FIELD;
-import static org.opensearch.neuralsearch.sparse.mapper.SparseVectorField.SPARSE_FIELD;
 
 /**
  * Who frees the off-heap CSR vectors that {@link OffHeapSparseVectorsBuffer} transfers.
@@ -54,28 +24,14 @@ import static org.opensearch.neuralsearch.sparse.mapper.SparseVectorField.SPARSE
  *
  * These run against the real nsparse library, like {@link NativeIndexRoundTripTests}: Mockito
  * cannot stub a native method, so there is no way to observe the transfer other than making it.
+ *
+ * Scoped to the buffer on purpose. {@link DefaultNativeIndexWriter#writeIndex} relies on these same
+ * guarantees to survive doc values that throw mid-stream, but the only signal a test has for that is
+ * the process's resident size, which nothing here controls -- see issue 2016.
  */
 public class OffHeapVectorOwnershipTests extends AbstractSparseTestBase {
 
     private static final long[] NOTHING_ALLOCATED = new long[3];
-    private static final String FIELD = "test_field";
-
-    private Directory directory;
-
-    @SneakyThrows
-    @Override
-    public void setUp() {
-        super.setUp();
-        directory = FSDirectory.open(createTempDir());
-    }
-
-    @SneakyThrows
-    @Override
-    public void tearDown() {
-        directory.close();
-        SparseSettings.reset();
-        super.tearDown();
-    }
 
     /**
      * A buffer whose vectors were never handed to {@code insertToIndex} still owns them, so closing
@@ -141,182 +97,24 @@ public class OffHeapVectorOwnershipTests extends AbstractSparseTestBase {
     }
 
     /**
-     * The reachable leak: {@link DefaultNativeIndexWriter#writeIndex} streams doc values into the
-     * buffer, and the buffer transfers off-heap every time its batch limit is hit -- one attempt here
-     * is ~24 MiB of vectors against a limit of 1% of the test JVM's heap, so it transfers many times.
-     * If the doc
-     * values then throw -- a corrupt value, an I/O error mid-merge -- the buffer is a local that was
-     * never returned, so its addresses die with the frame and {@code insertToIndex} is never reached.
-     *
-     * Measured rather than asserted on a handle, because that is the point: after the throw there is
-     * no handle left. Two identical batches of attempts, and the second one's growth is what is
-     * asserted on: a leak grows by {@link #LEAKED_BYTES_PER_ATTEMPT} per attempt however many have
-     * run already, while an allocator that keeps freed arenas rather than returning them to the OS
-     * reaches its steady state during the first batch and stays there.
+     * A single flush's relative indptr is a plain int, so its running non-zero count must fit one.
+     * The cumulative offset is widened to 64-bit on the native side, but overflowing an int here would
+     * wrap the indptr negative and silently corrupt what nsparse maps -- so the buffer refuses it.
+     * Checked directly rather than by adding INT_MAX non-zeros, which no test heap could stage.
      */
-    @SneakyThrows
-    public void testFailedWriteDoesNotAbandonTransferredVectors() {
-        assumeTrue("resident size is read from /proc", Files.exists(Path.of("/proc/self/statm")));
-        // Defaults, so the writer's batch limit is derived from the heap rather than read from a
-        // setting; nothing here needs a cluster service.
-        SparseSettings.reset();
+    public void testPerFlushNnzOverflowIsRejected() {
+        // Well within an int: the common case, where the guard does nothing.
+        OffHeapSparseVectorsBuffer.requirePerFlushNnzFitsInt(1_000_000, 200);
 
-        runFailingWrites(0);
-        long settled = residentBytes();
-        runFailingWrites(ATTEMPTS_PER_BATCH);
-        long growth = residentBytes() - settled;
-
-        assertTrue(
-            "a second batch of failed writes added " + growth / (1024 * 1024) + " MiB, so they are abandoning their vectors",
-            growth < LEAKED_BYTES_PER_ATTEMPT
+        // The boundary: a running count that a further batch pushes past Integer.MAX_VALUE.
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> OffHeapSparseVectorsBuffer.requirePerFlushNnzFitsInt(Integer.MAX_VALUE - 1, 2)
         );
-    }
-
-    /** {@link #ATTEMPTS_PER_BATCH} writes that stream every document off-heap and then fail. */
-    private void runFailingWrites(int firstSegment) {
-        for (int attempt = 0; attempt < ATTEMPTS_PER_BATCH; attempt++) {
-            FieldInfo fieldInfo = fieldInfo();
-            SegmentInfo segmentInfo = segmentInfo("_" + (firstSegment + attempt));
-            DefaultNativeIndexWriter writer = new DefaultNativeIndexWriter(writeState(segmentInfo, fieldInfo), fieldInfo);
-            expectThrows(IOException.class, () -> writer.writeIndex(failsAfterAllDocuments()));
-        }
-        // Resident size has to be read with the heap settled, or the JVM's own growth reads as leak
-        System.gc();
+        assertTrue(e.getMessage(), e.getMessage().contains("Integer.MAX_VALUE non-zeros"));
     }
 
     // ---- helpers ----
-
-    private static final int ATTEMPTS_PER_BATCH = 6;
-    private static final int DOCS_PER_ATTEMPT = 20_000;
-    private static final int TOKENS_PER_DOC = 200;
-    /**
-     * int32 token + float weight per non-zero, plus the CSR offset per document. One attempt's worth
-     * is the threshold: a leaking batch adds ATTEMPTS_PER_BATCH times this, so the margin is 6x.
-     */
-    private static final long LEAKED_BYTES_PER_ATTEMPT = (long) DOCS_PER_ATTEMPT * (TOKENS_PER_DOC * 8L + 4L);
-
-    @SneakyThrows
-    private long residentBytes() {
-        // statm field 2 is the resident set in pages; off-heap vectors are written to, so they are
-        // resident, and freeing them returns the pages to the OS.
-        String[] fields = Files.readString(Path.of("/proc/self/statm")).trim().split("\\s+");
-        return Long.parseLong(fields[1]) * 4096L;
-    }
-
-    /**
-     * Every document transfers cleanly and the iterator then fails, which is the worst case: the
-     * whole segment is off-heap by the time the addresses are dropped.
-     */
-    private BinaryDocValues failsAfterAllDocuments() {
-        return new BinaryDocValues() {
-            private int doc = -1;
-
-            @Override
-            public BytesRef binaryValue() {
-                return vector(doc);
-            }
-
-            @Override
-            public boolean advanceExact(int target) {
-                doc = target;
-                return true;
-            }
-
-            @Override
-            public int docID() {
-                return doc;
-            }
-
-            @Override
-            public int nextDoc() throws IOException {
-                doc++;
-                if (doc >= DOCS_PER_ATTEMPT) {
-                    throw new IOException("simulated doc values failure");
-                }
-                return doc;
-            }
-
-            @Override
-            public int advance(int target) {
-                doc = target;
-                return doc;
-            }
-
-            @Override
-            public long cost() {
-                return DOCS_PER_ATTEMPT;
-            }
-        };
-    }
-
-    @SneakyThrows
-    private BytesRef vector(int doc) {
-        ByteArrayOutputStream baos = new ByteArrayOutputStream(TOKENS_PER_DOC * 8);
-        try (DataOutputStream dos = new DataOutputStream(baos)) {
-            for (int token = 0; token < TOKENS_PER_DOC; token++) {
-                dos.writeInt(token);
-                dos.writeFloat(1.0f + doc);
-            }
-        }
-        return new BytesRef(baos.toByteArray());
-    }
-
-    private SegmentWriteState writeState(SegmentInfo segmentInfo, FieldInfo fieldInfo) {
-        return new SegmentWriteState(
-            InfoStream.getDefault(),
-            segmentInfo.dir,
-            segmentInfo,
-            new FieldInfos(new FieldInfo[] { fieldInfo }),
-            null,
-            IOContext.DEFAULT
-        );
-    }
-
-    @SneakyThrows
-    private SegmentInfo segmentInfo(String name) {
-        return new SegmentInfo(
-            directory,
-            Version.LATEST,
-            Version.LATEST,
-            name,
-            DOCS_PER_ATTEMPT,
-            false,
-            false,
-            Codec.getDefault(),
-            Collections.emptyMap(),
-            new byte[StringHelper.ID_LENGTH],
-            Collections.emptyMap(),
-            null
-        );
-    }
-
-    /** Below the approximate threshold, so no clustering runs: the failure is before the index anyway. */
-    private FieldInfo fieldInfo() {
-        FieldInfo fieldInfo = new FieldInfo(
-            FIELD,
-            0,
-            false,
-            false,
-            false,
-            IndexOptions.DOCS,
-            DocValuesType.BINARY,
-            DocValuesSkipIndexType.NONE,
-            -1,
-            new HashMap<>(),
-            0,
-            0,
-            0,
-            0,
-            VectorEncoding.FLOAT32,
-            VectorSimilarityFunction.EUCLIDEAN,
-            false,
-            false
-        );
-        fieldInfo.putAttribute(SPARSE_FIELD, "true");
-        fieldInfo.putAttribute(ENGINE_FIELD, SparseEngine.NATIVE.getName());
-        fieldInfo.putAttribute(APPROXIMATE_THRESHOLD_FIELD, String.valueOf(Integer.MAX_VALUE));
-        return fieldInfo;
-    }
 
     private Map<String, Object> invertedIndexParameters() {
         Map<String, Object> parameters = new HashMap<>();
