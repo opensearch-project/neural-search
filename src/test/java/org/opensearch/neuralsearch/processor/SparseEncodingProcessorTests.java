@@ -421,6 +421,53 @@ public class SparseEncodingProcessorTests extends InferenceProcessorTestCase {
         verify(handler).accept(any(IngestDocument.class), isNull());
     }
 
+    public void testExecute_whenSkipExistingAndRoutingPresent_thenGetRequestCarriesRouting() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("_id", "1");
+        sourceAndMetadata.put("_routing", "user-a");
+        sourceAndMetadata.put(KEY1, VALUE1);
+        sourceAndMetadata.put(KEY2, VALUE2);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        SparseEncodingProcessor processor = createInstance(true);
+        mockUpdateDocument(ingestDocument);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
+            listener.onResponse(dataAsMapList);
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
+        processor.execute(ingestDocument, mock(BiConsumer.class));
+
+        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(openSearchClient).execute(isA(GetAction.class), getRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals("user-a", getRequestCaptor.getValue().routing());
+    }
+
+    public void testExecute_whenSkipExistingAndNoRouting_thenGetRequestHasNoRouting() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("_id", "1");
+        sourceAndMetadata.put(KEY1, VALUE1);
+        sourceAndMetadata.put(KEY2, VALUE2);
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        SparseEncodingProcessor processor = createInstance(true);
+        mockUpdateDocument(ingestDocument);
+        List<Map<String, ?>> dataAsMapList = createMockMapResultWithWordToken(2);
+        doAnswer(invocation -> {
+            ActionListener<List<Map<String, ?>>> listener = invocation.getArgument(1);
+            listener.onResponse(dataAsMapList);
+            return null;
+        }).when(mlCommonsClientAccessor)
+            .inferenceSentencesWithMapResult(argThat(request -> request.getInputTexts() != null), isA(ActionListener.class));
+        processor.execute(ingestDocument, mock(BiConsumer.class));
+
+        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(openSearchClient).execute(isA(GetAction.class), getRequestCaptor.capture(), isA(ActionListener.class));
+        assertNull(getRequestCaptor.getValue().routing());
+    }
+
     public void testExecute_skip_existing_flag_null_id_successful() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
