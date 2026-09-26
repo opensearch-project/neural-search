@@ -30,6 +30,13 @@ public enum EventStatName implements StatName {
     ),
     /** Tracks skipped executions of ingest processor for existing embeddings */
     SKIP_EXISTING_EXECUTIONS("skip_existing_executions", "processors.ingest", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),
+    /** Tracks failed existing-document lookups, which silently degrade skip_existing to full inference */
+    SKIP_EXISTING_LOOKUP_FAILURES(
+        "skip_existing_lookup_failures",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_9_0
+    ),
     TEXT_CHUNKING_PROCESSOR_EXECUTIONS(
         "text_chunking_executions",
         "processors.ingest",

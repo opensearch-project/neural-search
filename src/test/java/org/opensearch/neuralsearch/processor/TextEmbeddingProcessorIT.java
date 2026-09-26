@@ -17,6 +17,12 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
+import lombok.SneakyThrows;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.common.xcontent.XContentType;
 import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
 import org.opensearch.index.query.QueryBuilder;
@@ -94,6 +100,76 @@ public class TextEmbeddingProcessorIT extends BaseNeuralSearchIT {
         updateDocument(INDEX_NAME, UPDATE_DOC1, "1");
         assertEquals(1, getDocCount(INDEX_NAME));
         assertEquals(2, getDocById(INDEX_NAME, "1").get("_version"));
+    }
+
+    public void testTextEmbeddingProcessor_whenRoutingRequired_thenSkipExistingReusesEmbedding() throws Exception {
+        String modelId = uploadTextEmbeddingModel();
+        loadAndWaitForModelToBeReady(modelId);
+        createPipelineProcessor(modelId, PIPELINE_NAME, ProcessorType.TEXT_EMBEDDING_WITH_SKIP_EXISTING);
+        createIndexWithPipeline(INDEX_NAME, "IndexMappingsWithRequiredRouting.json", PIPELINE_NAME);
+
+        // Single document. Without routing on the skip_existing lookup this fails with
+        // routing_missing_exception, even though the write itself carries routing.
+        ingestDocumentWithRouting(INDEX_NAME, String.format(LOCALE, INGEST_DOC1, "success"), "1", "user-a");
+        assertEquals(1, getDocCount(INDEX_NAME));
+        Map<String, Object> firstIngest = getDocByIdWithRouting(INDEX_NAME, "1", "user-a");
+
+        // Re-ingest the same document. The lookup must find it on the routed shard so the embedding is reused rather than regenerated.
+        ingestDocumentWithRouting(INDEX_NAME, String.format(LOCALE, INGEST_DOC1, "success"), "1", "user-a");
+        Map<String, Object> secondIngest = getDocByIdWithRouting(INDEX_NAME, "1", "user-a");
+        assertEquals(2, secondIngest.get("_version"));
+        assertEquals(
+            "embedding should be reused on a routed index",
+            ((Map<String, Object>) firstIngest.get("_source")).get("passage_embedding"),
+            ((Map<String, Object>) secondIngest.get("_source")).get("passage_embedding")
+        );
+
+        // Bulk path. Without routing on the multi-get this failed with null_pointer_exception.
+        // Bulk requires one JSON object per line, so the pretty-printed fixtures are compacted.
+        String bulkPayload = String.format(
+            LOCALE,
+            "{ \"index\": { \"_index\": \"%s\", \"_id\": \"2\" } }%n%s%n{ \"index\": { \"_index\": \"%s\", \"_id\": \"3\" } }%n%s%n",
+            INDEX_NAME,
+            String.format(LOCALE, INGEST_DOC1, "success").replaceAll("\\n\\s*", ""),
+            INDEX_NAME,
+            String.format(LOCALE, INGEST_DOC2, "success").replaceAll("\\n\\s*", "")
+        );
+        bulkIngest(bulkPayload, PIPELINE_NAME, "user-a");
+        assertEquals(3, getDocCount(INDEX_NAME));
+
+        Map<String, Object> bulkFirst = getDocByIdWithRouting(INDEX_NAME, "2", "user-a");
+        bulkIngest(bulkPayload, PIPELINE_NAME, "user-a");
+        Map<String, Object> bulkSecond = getDocByIdWithRouting(INDEX_NAME, "2", "user-a");
+        assertEquals(2, bulkSecond.get("_version"));
+        assertEquals(
+            "embedding should be reused on the bulk path for a routed index",
+            ((Map<String, Object>) bulkFirst.get("_source")).get("passage_embedding"),
+            ((Map<String, Object>) bulkSecond.get("_source")).get("passage_embedding")
+        );
+    }
+
+    /**
+     * Ingests a document with an explicit routing value. Needed because an index with
+     * {@code _routing.required} rejects any write or read that omits routing.
+     */
+    @SneakyThrows
+    private void ingestDocumentWithRouting(final String indexName, final String doc, final String id, final String routing) {
+        Request request = new Request("POST", "/" + indexName + "/_doc/" + id + "?routing=" + routing + "&refresh=true");
+        request.setJsonEntity(doc);
+        Response response = client().performRequest(request);
+        int status = response.getStatusLine().getStatusCode();
+        assertTrue(
+            request.getEndpoint() + ": failed with " + status,
+            status == RestStatus.CREATED.getStatus() || status == RestStatus.OK.getStatus()
+        );
+    }
+
+    @SneakyThrows
+    private Map<String, Object> getDocByIdWithRouting(final String indexName, final String id, final String routing) {
+        Request request = new Request("GET", "/" + indexName + "/_doc/" + id + "?routing=" + routing);
+        Response response = client().performRequest(request);
+        assertEquals(request.getEndpoint() + ": failed", RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
+        return createParser(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity())).map();
     }
 
     public void testTextEmbeddingProcessor_batch() throws Exception {
