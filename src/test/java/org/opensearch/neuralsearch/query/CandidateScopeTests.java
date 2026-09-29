@@ -188,7 +188,10 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertEquals(IndicesOptions.lenientExpandOpen(), count.indicesOptions());
         assertEquals("r1", count.routing());
         assertEquals("_local", count.preference());
-        assertEquals(SearchType.DFS_QUERY_THEN_FETCH, count.searchType());
+        // searchType is the ONE property the count overrides instead of inheriting: under DFS core would give this
+        // unscored size:0 count its own pre-round per shard, and IndicesService#canCache refuses anything but
+        // QUERY_THEN_FETCH, forfeiting the request-cache hit that makes a repeat free.
+        assertEquals("a count has no scores to distribute term statistics for", SearchType.QUERY_THEN_FETCH, count.searchType());
         assertEquals(Boolean.FALSE, count.allowPartialSearchResults());
         assertEquals(3, count.getMaxConcurrentShardRequestsRaw());
         assertEquals(
@@ -236,7 +239,7 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         readers.put("indicesOptions", SearchRequest::indicesOptions);
         readers.put("routing", SearchRequest::routing);
         readers.put("preference", SearchRequest::preference);
-        readers.put("searchType", SearchRequest::searchType);
+        // searchType is deliberately NOT forwarded -- see the exclusion assertion after this loop.
         readers.put("allowPartialSearchResults", SearchRequest::allowPartialSearchResults);
         readers.put("maxConcurrentShardRequests", SearchRequest::getMaxConcurrentShardRequestsRaw);
         readers.put("preFilterShardSize", SearchRequest::getPreFilterShardSize);
@@ -260,6 +263,11 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertFalse("a count needs no _source", count.source().fetchSource().fetchSource());
         assertNull("a count carries no aggregation", count.source().aggregations());
         assertEquals("a count counts to the request's threshold", Integer.valueOf(10_000), count.source().trackTotalHitsUpTo());
+        // searchType: a leg inherits DFS because term statistics change its scores and therefore the window; a count has no
+        // scores, and inheriting DFS would buy it a pre-round per shard AND make it uncacheable (IndicesService#canCache
+        // admits only QUERY_THEN_FETCH), forfeiting the request-cache hit that makes a repeated count free.
+        assertEquals(SearchType.DFS_QUERY_THEN_FETCH, leg.searchType());
+        assertEquals("the one property the count overrides rather than inherits", SearchType.QUERY_THEN_FETCH, count.searchType());
     }
 
     public void testUnionCountRequestLeavesUnsetFieldsUnset() {

@@ -599,14 +599,16 @@ final class CandidateScope {
     /**
      * A count-only request over the legs' disjunction: {@code size: 0}, no fetch, no aggregations, totals tracked to the
      * request's own threshold. Used by the lazy union count — see {@code HybridFusionOrchestrator#unionCountRequest} for
-     * which shapes it is issued for and why it never costs more than the round 2 Tail it replaces.
+     * which shapes it is issued for, and for what it costs relative to the round 2 Tail it replaces (never more
+     * per-document shard work; on the un-armed path, one extra serial round).
      *
      * <p>Deliberately not {@link #newLegRequest}: a leg request carries {@code size = window_size} and a fetch source,
      * neither of which a count wants. What it does share is every request-level property that decides WHICH shards and
-     * WHICH view are read, and every one that bounds how long the reading may go on: indices, indices options, search
-     * type, routing, preference, partial-results policy, shard-request limits, the pre-filter threshold, the cancellation
-     * budget and the point in time. The PIT matters most: the count has to be taken against the same immutable view the
-     * legs read, or the union it reports can disagree with the window it is reported for.
+     * WHICH view are read, and every one that bounds how long the reading may go on: indices, indices options, routing,
+     * preference, partial-results policy, shard-request limits, the pre-filter threshold, the cancellation budget and the
+     * point in time. The PIT matters most: the count has to be taken against the same immutable view the legs read, or the
+     * union it reports can disagree with the window it is reported for. {@code searchType} is the documented exception —
+     * see the comment at the override below.
      *
      * <p>Profiling is never set here even when the legs are profiled: a profile of this request would be discarded
      * unread, so asking for one only costs.
@@ -620,8 +622,14 @@ final class CandidateScope {
         if (Objects.nonNull(pointInTimeId)) {
             countSource.pointInTimeBuilder(new PointInTimeBuilder(pointInTimeId));
         }
+        // searchType is deliberately NOT inherited — the one request-level property the count overrides rather than copies.
+        // Under dfs_query_then_fetch core would give this unscored size:0 count its own DFS pre-round on every shard (it only
+        // drops DFS for single-shard or suggest-only requests), where the Tail rode on round 2's DFS, already paid for. Worse,
+        // DFS makes the count uncacheable: IndicesService#canCache requires QUERY_THEN_FETCH, so inheriting it would forfeit
+        // the request-cache hit that is the reason a repeat of this round is free. A count has no scores to distribute term
+        // statistics for, so pinning QUERY_THEN_FETCH cannot change its answer.
         SearchRequest countRequest = new SearchRequest(indices).indicesOptions(indicesOptions)
-            .searchType(searchType)
+            .searchType(SearchType.QUERY_THEN_FETCH)
             .source(countSource)
             .pipeline(SearchPipelineService.NOOP_PIPELINE_ID);
         if (Objects.nonNull(routing)) {

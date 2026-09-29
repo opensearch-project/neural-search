@@ -189,20 +189,29 @@ final class HybridFusionOrchestrator {
      * without a guard, and a null there would be an invariant violation worth failing on rather than a case to tolerate.
      * This method returns a verdict rather than throwing, so it costs nothing to be total over its input.
      *
-     * <p>Shard accounting is one check, not the two it looks like it should be: {@code successful + skipped == total}.
-     * {@code getFailedShards()} is only the length of the shard-failure array, and core deliberately does <i>not</i> count an
-     * unavailable shard as a failed one — it leaves it out of {@code successfulShards}
-     * ({@code SearchResponse#getFailedShards}). Since a shard that failed is likewise absent from {@code successfulShards},
-     * complete accounting already implies no failures, and testing the counters alone also avoids depending on an array a
-     * response is not obliged to populate. Skipped shards are fine: they were pre-filtered as unable to match, so they
-     * contribute nothing to any count.
+     * <p>Shard accounting is <b>one</b> counter comparison, {@code successful == total}, and the reason is a core detail that
+     * is easy to get backwards: <b>a skipped shard is counted as successful too.</b>
+     * {@code AbstractSearchAsyncAction#skipShard} increments {@code successfulOps} <i>and</i> {@code skippedOps}, and
+     * {@code buildSearchResponse} passes {@code successfulOps} as {@code successfulShards} and {@code skippedOps} separately
+     * as {@code skippedShards}. So {@code skippedShards} is a subset of {@code successfulShards}, not a disjoint bucket, and
+     * adding the two would over-count: one skipped shard of three gives {@code 3 + 1 != 3} and would refuse a search that
+     * answered completely. That is the shape {@code can_match} produces routinely — pre-filtering runs for any multi-shard
+     * search touching a read-only index (UltraWarm, rolled-over ISM indices, searchable snapshots) and skips a shard wherever
+     * a leg cannot match, which is why getting this wrong disables the optimization on whole classes of deployment rather
+     * than in a corner.
+     *
+     * <p>{@code successful == total} is sufficient on its own. Only two places increment {@code successfulOps} — a skipped
+     * shard and a consumed result — so a shard that failed or was unavailable is absent from it, and completeness already
+     * implies no failures. That also avoids depending on {@code getFailedShards()}, which is only the length of an array a
+     * response is not obliged to populate. Skipped shards are fine on the merits as well: they were pre-filtered as unable
+     * to match, so they contribute nothing to any count.
      */
     static boolean answeredCompletely(SearchResponse response) {
         if (Objects.isNull(response)) {
             return false;
         }
         return Objects.nonNull(response.getHits())
-            && response.getSuccessfulShards() + response.getSkippedShards() == response.getTotalShards()
+            && response.getSuccessfulShards() == response.getTotalShards()
             && response.isTimedOut() == false
             && response.isTerminatedEarly() != Boolean.TRUE;
     }
@@ -223,16 +232,30 @@ final class HybridFusionOrchestrator {
      * request instead is bounded by the sum of the legs' own counts (below {@code legs * threshold} documents, since each
      * is below the threshold), is request-cacheable, and terminates early at the threshold.
      *
-     * <p><b>Why it never costs more than what it replaces.</b> The count re-executes each leg, but so does the Tail — with
-     * one exception. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/{@code neural_knn} leg the window did
-     * <em>not</em> truncate with an address of the hits it returned, so for that leg the Tail walks no graph while the
-     * count's disjunction would. What that walk buys differs by path, so only one of them is refused: on the
-     * <b>armed</b> path settling the total makes round 2 a {@code match_none} and the page is assembled from round 1, so
-     * the count buys away an entire round trip (round 2's query and its page fetch); on the <b>un-armed</b> path round 2
-     * runs regardless and the count is a third round whose only saving is a Tail clause that for this leg is a cheap ids
-     * lookup. The un-armed case is refused. Note that a {@code k} large enough to fill the window cannot be assumed
-     * instead: a shard holding fewer documents than {@code k}, a {@code knn} {@code filter}, a small corpus, and radial
-     * knn (which has no {@code k} at all) all come back short.
+     * <p><b>What it costs relative to the Tail it replaces.</b> In <em>per-document shard work</em> it is never more: the
+     * count re-executes each leg, but so does the Tail. In <em>round trips</em> that is only true on the armed path, and the
+     * difference is the whole reason the ANN rule below is per-path:
+     * <ul>
+     *   <li><b>armed</b> — settling the total makes round 2 a {@code match_none} and the page is assembled from round 1, so
+     *       the count replaces a round trip (round 2's query <i>and</i> its page fetch) rather than adding one.</li>
+     *   <li><b>un-armed</b> — round 2 runs regardless, Top-only instead of Top+Tail, so the count is a <b>third serial
+     *       round</b>: two rounds become three, and shard tasks go from {@code (legs + 1) * shards} to
+     *       {@code (legs + 2) * shards}. The Tail's work used to ride inside round 2, so this is added fixed overhead
+     *       (measured at about +2 ms p50 cold). It is still taken for most leg shapes, because it drops the Tail from round
+     *       2 — but it is <b>not</b> free, and shapes that reach here without arming are ordinary rather than exotic:
+     *       {@code profile}, any {@code sort} (including an explicit {@code _score desc}, which derived totals allow and
+     *       {@link #requestShapeAllowsFastPath} refuses), {@code rescore}, {@code script_fields}, a leg with
+     *       {@code inner_hits}, the first request of each {@code _source} shape per coordinator node
+     *       ({@code SOURCE_SIZE_UNOBSERVED}), and a request over the fetch budget.</li>
+     * </ul>
+     *
+     * <p>One leg shape makes that difference decisive. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/
+     * {@code neural_knn} leg the window did <em>not</em> truncate with an address of the hits it returned, so for that leg
+     * the Tail walks no graph while the count's disjunction would. Armed, one graph walk buys away a round trip and is
+     * worth it; un-armed, it is a third round whose only saving is a Tail clause that for this leg is a cheap ids lookup —
+     * so the un-armed case is refused. Note that a {@code k} large enough to fill the window cannot be assumed instead: a
+     * shard holding fewer documents than {@code k}, a {@code knn} {@code filter}, a small corpus, and radial knn (which has
+     * no {@code k} at all) all come back short.
      *
      * <p><b>What it buys beyond cost.</b> Core computes the value <em>and the relation</em>, so the threshold-boundary
      * arithmetic this class otherwise does by hand cannot be wrong here; and with no aggregation in the request there is
@@ -307,7 +330,14 @@ final class HybridFusionOrchestrator {
         // dropping anything else — so it is available here from the responses alone, with no fusion and none of its timing
         // or explanation side effects. Checked last because it reads every leg's hits, which the loop above has just
         // established are there.
-        if (requestedPageEnd(source) > rankedCountFromLegs(items, windowSize)) {
+        int rankedCount = rankedCountFromLegs(items, windowSize);
+        // Nothing fused: round 2 is a match_none either way and buildSubstitute returns before it reads a count, so issuing
+        // one would be a distributed round for nothing. Reachable without the page test catching it, because a size: 0
+        // request asks for page end 0 and `0 > 0` is false.
+        if (rankedCount == 0) {
+            return null;
+        }
+        if (requestedPageEnd(source) > rankedCount) {
             return null;
         }
         return scope.newUnionCountRequest(disjunction, threshold);
@@ -421,7 +451,7 @@ final class HybridFusionOrchestrator {
     /**
      * As above, with the union a lazy count-only round established ({@code null} when none ran). The un-armed path needs it
      * for the same reason the armed one does: round 2 keeps its Tail purely to count unless something already knows the
-     * count, and for a lexical-only hybrid the count round is the only thing that can know it.
+     * count, and once no leg's own count proves the union the count round is the only thing that can know it.
      */
     static QueryBuilder buildFusedQuery(
         SearchSourceBuilder source,

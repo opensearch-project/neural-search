@@ -2608,11 +2608,109 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     public void testAnsweredCompletely_isOneShardAccountingCheckPlusCompletion() {
-        // successful + skipped == total already implies no failures: a shard that failed is absent from successfulShards.
+        // successful == total already implies no failures: a shard that failed is absent from successfulShards.
         assertTrue(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 0, false).getResponse()));
         assertFalse(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 1, false).getResponse()));
         assertFalse(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 0, true).getResponse()));
         assertFalse(HybridFusionOrchestrator.answeredCompletely(null));
+    }
+
+    /** A response with core's own shard accounting: {@code successfulShards} INCLUDES the skipped ones. */
+    private SearchResponse shardAccountedResponse(int total, int successful, int skipped) {
+        SearchHits hits = new SearchHits(new SearchHit[0], eq(0), 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(hits, null, null, false, false, null, 0);
+        return new SearchResponse(sections, null, total, successful, skipped, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+    }
+
+    /**
+     * A skipped shard must not make a complete answer look incomplete. {@code AbstractSearchAsyncAction#skipShard}
+     * increments {@code successfulOps} <b>and</b> {@code skippedOps}, and {@code buildSearchResponse} reports the first as
+     * {@code successfulShards} and the second as {@code skippedShards} — so skipped is a SUBSET of successful, and
+     * {@code successful + skipped == total} over-counts and refuses a search that answered everywhere.
+     *
+     * <p>This is not a corner: {@code can_match} pre-filtering runs for any multi-shard search touching a read-only index
+     * (UltraWarm, rolled-over ISM indices, searchable snapshots) and skips a shard wherever a leg cannot match, so the old
+     * arithmetic disabled the optimization outright on time-series and log-style deployments. Every other fixture here uses
+     * {@code skipped = 0}, which is why nothing caught it.
+     */
+    public void testAnsweredCompletely_treatsASkippedShardAsAnswered() {
+        assertTrue(
+            "4 of 4 answered, one of them by being skipped",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 4, 1))
+        );
+        assertTrue(
+            "every shard skipped is still every shard accounted for",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 4, 4))
+        );
+        assertTrue("no skips at all", HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 4, 0)));
+        assertFalse(
+            "one shard neither answered nor was skipped",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 3, 0))
+        );
+        assertFalse(
+            "a skip does not make up for a shard that never answered",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 3, 1))
+        );
+    }
+
+    /** The same rule where it actually bites: a leg whose can_match skipped a shard must still be counted. */
+    public void testUnionCountRequest_servesLegsWhoseCanMatchSkippedAShard() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        assertNotNull(
+            "a skipped shard is a shard that answered, so the union is still countable",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { skippedShardLegItem(eq(10), 1), skippedShardLegItem(eq(3), 2) },
+                100,
+                true
+            )
+        );
+    }
+
+    /** A leg item that answered on every shard, some of them by being skipped as unable to match. */
+    private MultiSearchResponse.Item skippedShardLegItem(TotalHits total, int skipped) {
+        int emitted = (int) Math.min(total.value(), 100);
+        SearchHit[] hits = new SearchHit[emitted];
+        for (int i = 0; i < emitted; i++) {
+            hits[i] = hitFrom(i, INDEX, "skp-" + (countingLegItems++) + "-" + i, 1.0f - i / 1000.0f);
+        }
+        SearchHits searchHits = new SearchHits(hits, total, 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        // total 4, successful 4 -- of which `skipped` were skipped, exactly as core reports it.
+        SearchResponse response = new SearchResponse(sections, null, 4, 4, skipped, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    /**
+     * Nothing fused: round 2 is a {@code match_none} either way and {@code buildSubstitute} returns before it reads a count,
+     * so issuing one is a distributed round for nothing. The page test alone does not catch it — a {@code size: 0} request
+     * asks for page end 0, and {@code 0 > 0} is false.
+     */
+    public void testUnionCountRequest_refusedWhenTheLegsRankedNothing() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchSourceBuilder sizeZero = new SearchSourceBuilder().size(0).trackTotalHitsUpTo(10_000);
+
+        assertNull(
+            "no candidates, so there is nothing a count could settle for",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(sizeZero),
+                sizeZero,
+                legs,
+                new MultiSearchResponse.Item[] { countingLegItem(eq(0), null), countingLegItem(eq(0), null) },
+                100,
+                true
+            )
+        );
+        // The same size: 0 request WITH candidates is still served -- the refusal above is about the empty legs, not the size.
+        SearchSourceBuilder alsoSizeZero = new SearchSourceBuilder().size(0).trackTotalHitsUpTo(10_000);
+        assertNotNull(
+            "a size: 0 request that fused something still wants its count",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(alsoSizeZero), alsoSizeZero, legs, lexicalItems(eq(10), eq(3)), 100, true)
+        );
     }
 
     /** The shapes finding 1 of the review named: no leg may carry an aggregation, so nothing scans an unbounded match set. */
