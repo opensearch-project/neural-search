@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Bug Fixes
 * [Hybrid Query] Fix hybrid `collapse` sorted by ascending `_score` returning wrong documents and an undercounted `hits.total` on shards with more than 4,096 matching documents ([#1795](https://github.com/opensearch-project/neural-search/issues/1795))
+* [Ingest Processors] Pass `_routing` to the `skip_existing` lookup so writes to indices with required or custom routing no longer fail or silently re-embed ([#2024](https://github.com/opensearch-project/neural-search/issues/2024))
 
 ### Infrastructure
 

@@ -28,6 +28,8 @@ import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.optimization.InferenceFilter;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.util.ProcessorDocumentUtils;
 import org.opensearch.neuralsearch.util.TokenWeightUtil;
 import org.opensearch.neuralsearch.util.prune.PruneType;
@@ -53,6 +55,7 @@ import java.util.stream.IntStream;
 import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ROUTING_FIELD;
 
 /**
  * The abstract class for text processing use cases. Users provide a field name map and a model id.
@@ -454,25 +457,47 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     protected MultiGetRequest buildMultiGetRequest(List<DataForInference> dataForInferences) {
         MultiGetRequest multiGetRequest = new MultiGetRequest();
         for (DataForInference dataForInference : dataForInferences) {
-            Object index = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
-            Object id = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata().get(ID_FIELD);
+            Map<String, Object> sourceAndMetadata = dataForInference.getIngestDocumentWrapper().getIngestDocument().getSourceAndMetadata();
+            Object index = sourceAndMetadata.get(INDEX_FIELD);
+            Object id = sourceAndMetadata.get(ID_FIELD);
+            Object routing = sourceAndMetadata.get(ROUTING_FIELD);
             if (Objects.nonNull(index) && Objects.nonNull(id)) {
-                multiGetRequest.add(index.toString(), id.toString());
+                MultiGetRequest.Item item = new MultiGetRequest.Item(index.toString(), id.toString());
+                if (Objects.nonNull(routing)) {
+                    item.routing(routing.toString());
+                }
+                multiGetRequest.add(item);
             }
         }
         return multiGetRequest;
     }
 
     /**
-     * This method creates a map of documents from MultiGetItemResponse where the key is document ID and value is corresponding document
+     * This method creates a map of documents from MultiGetItemResponse where the key is document ID and value is corresponding document.
+     * A failed lookup is logged and counted, then skipped so the document falls back to inference rather than failing.
+     * A document that simply does not exist is skipped silently, since that is the expected new-document case.
      * @param multiGetItemResponses, array of responses from Multi Get Request
      * */
     protected Map<String, Map<String, Object>> createDocumentMap(MultiGetItemResponse[] multiGetItemResponses) {
         Map<String, Map<String, Object>> existingDocuments = new HashMap<>();
         for (MultiGetItemResponse item : multiGetItemResponses) {
-            String id = item.getId();
-            Map<String, Object> existingDocument = item.getResponse().getSourceAsMap();
-            existingDocuments.put(id, existingDocument);
+            if (item.isFailed() || Objects.isNull(item.getResponse())) {
+                EventStatsManager.increment(EventStatName.SKIP_EXISTING_LOOKUP_FAILURES);
+                log.debug(
+                    String.format(
+                        Locale.ROOT,
+                        "Existing document lookup failed for index [%s] id [%s], falling back to inference. Root cause: %s",
+                        item.getIndex(),
+                        item.getId(),
+                        Objects.nonNull(item.getFailure()) ? item.getFailure().getMessage() : "unknown"
+                    )
+                );
+                continue;
+            }
+            if (item.getResponse().isExists() == false) {
+                continue;
+            }
+            existingDocuments.put(item.getId(), item.getResponse().getSourceAsMap());
         }
         return existingDocuments;
     }

@@ -272,6 +272,13 @@ public enum EventStatName implements StatName {
         "processors.search",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_3_0
+    ),
+    /** Tracks failed existing-document lookups, which silently degrade skip_existing to full inference */
+    SKIP_EXISTING_LOOKUP_FAILURES(
+        "skip_existing_lookup_failures",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_9_0
     );
 
     private final String nameString;
