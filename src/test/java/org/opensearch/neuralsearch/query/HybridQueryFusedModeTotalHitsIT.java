@@ -22,11 +22,11 @@ import lombok.SneakyThrows;
  *
  * <p>A fused request that sets nothing but wants a count beyond its window used to carry the Tail for that count alone.
  * Now the legs count up to the request's threshold, and the Tail is dropped whenever the union's count can be had without
- * it. Three sources answer, in order of cost: a leg whose own count already exceeded the threshold proves the union does
- * too (core caps a tracked count at the threshold, so both paths say {@code {threshold, gte}}); a hybrid with an ANN leg
- * derives the union from overlap aggregations the legs carried; and a <b>lexical-only</b> hybrid whose legs all came back
- * exact and short of the threshold settles it with one {@code size: 0} count round over the legs' disjunction — cheap
- * there, where no ANN graph is walked twice, which is why the aggregations are not attached to that shape at all.
+ * it. Two sources answer, in order of cost: a leg whose own count already exceeded the threshold proves the union does
+ * too (core caps a tracked count at the threshold, so both paths say {@code {threshold, gte}}); otherwise, when every leg
+ * came back exact and short of the threshold, one {@code size: 0} count round over the legs' disjunction settles it. That
+ * round is issued whatever the leg shapes are, with one exception — an ANN leg the window did not truncate, which the Tail
+ * would have replaced with an ids clause, so counting it would add a graph walk the Tail does not do.
  * These tests pin that the visible response is the same whichever answered, and that the shapes where the Tail's documents
  * (not just its count) are part of the answer keep it.
  *
@@ -302,6 +302,37 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
         long derivedOps = fetchOpsOf(body);
         long tailKeptOps = fetchOpsOf(withTailKept(body));
         assertTrue("derived " + derivedOps + " fetch ops vs the Tail-kept twin's " + tailKeptOps, derivedOps < tailKeptOps);
+    }
+
+    /**
+     * The count round answering in the <b>capped</b> regime — the one case no other test here reaches. Every capped case
+     * elsewhere is answered by a leg's own {@code gte} proof or by the ranked window, and every case the count round
+     * answers stays below the threshold, so a count request built <i>without</i> {@code trackTotalHitsUpTo(threshold)}
+     * would satisfy all of them.
+     *
+     * <p>Two disjoint 6-document legs ({@code place} = the odd documents, {@code there} = the even ones) at a threshold of
+     * 10: each leg's own count is exact and below 10, so no leg proves anything and the count round is issued; the union is
+     * 12, so core caps it and must report {@code {10, gte}}. An uncapped count would report {@code {12, eq}} and disagree
+     * with the Tail-kept twin, which is the assertion below.
+     */
+    @SneakyThrows
+    public void testTotalHits_whenTheCountedUnionCrossesTheThreshold_thenItIsCappedLikeTheTailKeptPath() {
+        prepareIndex();
+        int threshold = 10;
+        String legs = "[{\"term\":{\"" + TEXT_FIELD + "\":\"place\"}},{\"term\":{\"" + TEXT_FIELD + "\":\"there\"}}]";
+        String query = "{\"hybrid\":{\"fusion\":{\"window_size\":"
+            + WINDOW
+            + ",\"normalization\":{\"technique\":\"min_max\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},\"queries\":"
+            + legs
+            + "}}";
+        String body = "{\"size\":" + WINDOW + ",\"track_total_hits\":" + threshold + ",\"query\":" + query + "}";
+
+        Map<String, Object> derived = search(body);
+        Map<String, Object> tailKept = search(withTailKept(body));
+
+        assertEquals("the union of 12 is capped at the request's threshold", threshold, total(derived).get("value"));
+        assertEquals("and reported as a lower bound, not an exact count", "gte", total(derived).get("relation"));
+        assertEquals("which is what the Tail-kept path reports for the same request", total(tailKept), total(derived));
     }
 
     /**

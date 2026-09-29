@@ -853,14 +853,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         legTimeoutConsumer.accept(timings.anyLegTimedOut());
                     }
                     // The lazy union count: one size:0 round over the legs' disjunction, issued only for the shapes
-                    // HybridFusionOrchestrator#unionCountRequest accepts — a lexical-only hybrid whose legs all came back
-                    // exact and below the threshold, wanting a count the window cannot supply. Null for everything else,
-                    // including every hybrid with an ANN leg (there the count would re-walk the graph, which is the whole
-                    // reason round 2 was worth removing) and every request that is not taking the fast path anyway.
+                    // HybridFusionOrchestrator#unionCountRequest accepts — every leg back exact and below the threshold,
+                    // the requested page inside what the legs ranked, and a count the window cannot supply. Leg shape is
+                    // not itself a filter: a lexical leg and an ANN leg that filled its window are both re-executed by
+                    // the Tail this replaces, so counting them costs no extra graph walk. The one refusal is an ANN leg
+                    // the window did NOT truncate, which the Tail would have materialized into an ids clause — see that
+                    // method for why the guarantee is exact rather than a k-vs-window assumption.
                     // Not gated on fastPathArmed: round 2 keeps its Tail purely to count whether or not the fast path
                     // arms, so the count is worth having on both paths. Gating it on arming would make an un-armed
-                    // lexical-only request carry the full Tail that the aggregation form dropped — a regression, caught
-                    // by HybridQueryFusedModeTotalHitsIT when its fetch-op oracle ran first in a randomized order.
+                    // request carry a full Tail purely to count — a regression, caught by
+                    // HybridQueryFusedModeTotalHitsIT when its fetch-op oracle ran first in a randomized order.
                     SearchRequest unionCountSearch = HybridFusionOrchestrator.unionCountRequest(
                         candidateScope,
                         searchRequest.source(),
@@ -908,6 +910,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         }
                     }));
                 } catch (Exception dispatchFailure) {
+                    // Closed here too, so the span measures the attempt rather than reading as "no count was tried". A
+                    // synchronous dispatch throw is near-instant, so the value is small but not absent — which is the
+                    // difference a profile reader needs from a request where the gate refused and no round was issued.
+                    timings.unionCountWaitNanos(System.nanoTime() - unionCountStart);
                     log.debug("fused hybrid union count could not be dispatched; keeping round 2 for totals", dispatchFailure);
                     try {
                         fuseAndFinish.accept(null);

@@ -10,6 +10,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
@@ -28,6 +30,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.ArrayList;
 import java.util.Optional;
 import java.util.Set;
@@ -1203,6 +1206,15 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         Object countAnswer,
         java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequestOut
     ) {
+        return runFusedWithCount(countAnswer, countRequestOut, 3);
+    }
+
+    @SneakyThrows
+    private org.apache.lucene.search.TotalHits runFusedWithCount(
+        Object countAnswer,
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequestOut,
+        int size
+    ) {
         initClusterUtilWithMaxResultWindow(10000);
         HybridQueryBuilder builder = fusedBuilder(
             new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
@@ -1215,10 +1227,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             fusions.incrementAndGet();
             published.set(total);
         });
-        // size 3 is not incidental: the derived count can only replace the Tail when the requested page fits inside the
-        // ranked window, and these two legs fuse to 3 documents. At the default size of 10 the count is issued and then
-        // cannot be used, because Tail-only documents would have filled slots 4..10.
-        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(3).query(builder));
+        // The default size of 3 is not incidental: the count is only issued when the requested page fits inside what the
+        // legs ranked, and these two legs fuse to 3 documents. A larger size is how the negative control makes the gate
+        // refuse -- the count is then never issued at all, rather than issued and discarded.
+        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(size).query(builder));
         QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
         when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
         when(ctx.getSearchRequest()).thenReturn(searchRequest);
@@ -1249,7 +1261,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         doAnswer(invocation -> {
             countRequestOut.set(invocation.getArgument(0));
             org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
-            if (countAnswer instanceof Exception) {
+            if (Objects.isNull(countAnswer)) {
+                // Null asks for the negative control: reaching here at all is the failure, because the gate was supposed
+                // to refuse before anything was dispatched.
+                fail("no count round should have been issued for this request");
+            } else if (countAnswer instanceof Exception) {
                 l.onFailure((Exception) countAnswer);
             } else {
                 l.onResponse((org.opensearch.action.search.SearchResponse) countAnswer);
@@ -1264,17 +1280,26 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             .accept(client, org.opensearch.core.action.ActionListener.wrap(r -> notified.incrementAndGet(), e -> fail(e.getMessage())));
         assertEquals("the rewrite listener must be notified exactly once, whatever the count did", 1, notified.get());
         assertEquals("and the fused query must be published exactly once", 1, fusions.get());
+        if (Objects.isNull(countAnswer)) {
+            // Belt and braces alongside the fail() in the stub: this catches a dispatch that happened on another thread or
+            // with a listener the stub did not invoke.
+            verify(client, never()).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }
         return published.get();
     }
 
     /**
-     * A {@code neural} leg is counted like any other. It used to be refused, because it could only be counted by hosting an
-     * overlap aggregation and whether that was bounded depended on its field being dense — unknowable from the leg, since
-     * the fused rewrite runs before the legs are rewritten. With the aggregation gone the question is moot: the count round
-     * re-executes the leg, dense or sparse, exactly as the Tail it replaces would have, so no mapping has to be resolved.
+     * A {@code neural} leg is counted on exactly the condition the Tail would have re-executed it on: that the window did
+     * not truncate it. Short of the window, {@code legInTailForm} replaces it with an ids clause, so the Tail walks no
+     * graph (and runs no second inference) while the count's disjunction would — the count would ADD that cost rather
+     * than move it, so it is refused. This is the default shape, since a {@code neural} leg's default {@code k} is far
+     * below the default window of 100. The filled-window case is the other arm below.
+     *
+     * <p>No mapping is resolved either way: dense vs sparse stopped mattering when the overlap aggregation went, and the
+     * test asserts no leg carries one.
      */
     @SneakyThrows
-    public void testDoRewriteFused_whenALegIsNeural_thenTheCountRoundStillServesIt() {
+    public void testDoRewriteFused_whenANeuralLegIsShortOfTheWindow_thenTheCountIsRefused() {
         initClusterUtilWithMaxResultWindow(10000);
         HybridQueryBuilder builder = new HybridQueryBuilder();
         builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").build());
@@ -1328,18 +1353,100 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
 
         assertTrue(done.get());
-        assertTrue("a neural leg is counted by the count round like any other", counted.get());
-        assertEquals("what core counted is what the response reports", 55L, published.get().value());
-        // The neural leg goes into the disjunction verbatim -- the Tail would have re-executed it the same way.
+        // The neural leg returned 2 hits against the default window of 100, so the Tail would have materialized it.
+        assertFalse("a neural leg short of the window must not be re-executed by the count round", counted.get());
+        assertNull("no count ran, so the Tail counts and nothing is published", published.get());
+        // And no leg carries an aggregation any more -- that mechanism is gone, so nothing is attached speculatively.
+        for (SearchRequest leg : legSearches.get().requests()) {
+            assertNull("no leg carries an overlap aggregation", leg.source().aggregations());
+        }
+    }
+
+    /**
+     * The other arm: a {@code neural} leg the window truncated is kept verbatim by the Tail, so the count re-executes
+     * exactly what round 2 would have and costs no extra graph walk. It goes into the disjunction as the real query.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenANeuralLegFilledTheWindow_thenTheCountRoundServesIt() {
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").build());
+        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        builder.fusion(
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
+        );
+        java.util.concurrent.atomic.AtomicReference<org.apache.lucene.search.TotalHits> published =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        builder.fusedTotalHitsConsumer(published::set);
+        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(3).query(builder));
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        builder.doRewrite(ctx);
+
+        // The neural leg fills the default window of 100; the lexical leg stays short, which is fine -- a lexical leg is
+        // re-executed by the Tail whatever its size, so it is never the reason to refuse.
+        Map<String, Float> filled = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < 100; i++) {
+            filled.put("n" + i, 1.0f - i / 1000.0f);
+        }
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(
+            new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                countedLegItem(filled, 4000),
+                countedLegItem(Map.of("2", 0.8f, "3", 0.4f), 20) },
+            10L
+        );
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
+            l.onResponse(msResponse);
+            return null;
+        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            countRequest.set(invocation.getArgument(0));
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            l.onResponse(countResponse(4055, 0, 0, false, null));
+            return null;
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
+
+        assertTrue(done.get());
+        assertNotNull("a neural leg the window truncated is counted: the Tail would have re-executed it too", countRequest.get());
+        assertEquals("what core counted is what the response reports", 4055L, published.get().value());
         org.opensearch.index.query.BoolQueryBuilder disjunction = (org.opensearch.index.query.BoolQueryBuilder) countRequest.get()
             .source()
             .query();
         assertEquals(2, disjunction.should().size());
         assertEquals("neural", disjunction.should().get(0).getWriteableName());
-        // And no leg carries an aggregation any more -- that mechanism is gone, so nothing is attached speculatively.
-        for (SearchRequest leg : legSearches.get().requests()) {
-            assertNull("no leg carries an overlap aggregation", leg.source().aggregations());
-        }
+    }
+
+    /**
+     * The wiring-level negative control: when the gate refuses, no search must be dispatched at all. Every other test in
+     * this group proves the count ran; none proved the converse, so a gate that leaked would have gone unnoticed. Uses the
+     * {@code null} {@code countAnswer} mode the helper advertises, which had no caller.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenTheGateRefuses_thenNoCountSearchIsDispatched() {
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
+            new java.util.concurrent.atomic.AtomicReference<>();
+
+        // A page beyond what the legs ranked: these two legs fuse to 3 documents, and a size of 50 cannot be served from
+        // them, so unionCountRequest refuses before anything is issued.
+        org.apache.lucene.search.TotalHits published = runFusedWithCount(null, countRequest, 50);
+
+        assertNull("the gate refused, so no count request was ever built", countRequest.get());
+        assertNull("and nothing was published: round 2 keeps its Tail and counts for itself", published);
     }
 
     @SneakyThrows

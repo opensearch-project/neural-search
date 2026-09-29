@@ -151,8 +151,9 @@ final class ReturnedEmbeddingFields {
     private static final Function<Map<String, ?>, Map<String, Object>> PASS_THROUGH = document -> new HashMap<>(document);
 
     /**
-     * What a mapping says, resolved once per mapping version: its embedding paths, which of those are DENSE vector fields,
-     * and its own {@code _source} filter.
+     * What a mapping says, resolved once per mapping version: the estimated JSON width of each embedding path, and the
+     * {@code _source} filter that strips those paths. Dense and sparse embeddings are not tracked apart — each path
+     * carries its own byte estimate, which is all the budget arithmetic needs.
      */
     private record MappingFacts(long mappingVersion, Map<String, Long> embeddingBytes, Function<
         Map<String, ?>,

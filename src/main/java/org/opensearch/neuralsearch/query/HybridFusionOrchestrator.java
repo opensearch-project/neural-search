@@ -166,10 +166,11 @@ final class HybridFusionOrchestrator {
     // ---- hits.total from round 1: one count-only round over the legs' disjunction ----
 
     /**
-     * The widest fan-out the count round is issued for: past this many legs its disjunction re-executes more leg queries
-     * than the Tail it would replace, so the Tail counts instead. Read by {@link #unionCountRequest} alone. Defensive —
-     * {@code HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES} caps a hybrid at 5 legs, so it is not reachable through the
-     * REST or gRPC API; it bounds the algorithm where the algorithm lives.
+     * The widest fan-out the count round is issued for: a bound on the size of the {@code bool} disjunction it builds, one
+     * {@code should} clause per leg. Not a comparison against the Tail — the Tail carries the same {@code n} legs, so the
+     * clause count is the same either way; this caps the algorithm's own input. Read by {@link #unionCountRequest} alone.
+     * Defensive — {@code HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES} caps a hybrid at 5 legs, so it is not reachable
+     * through the REST or gRPC API; it bounds the algorithm where the algorithm lives.
      */
     static final int MAX_LEGS_FOR_UNION_COUNT = 8;
 
@@ -181,7 +182,12 @@ final class HybridFusionOrchestrator {
      * refused an incomplete answer from the start, while the legs' own counts were taken at face value even though
      * {@link #groupLegHits} deliberately tolerates a leg that lost shards under {@code allow_partial_search_results}, and a
      * soft-timed-out leg reports its truncated count with relation {@code EQUAL_TO}. Either undercounts, and an undercount
-     * fed through inclusion–exclusion produces a {@code hits.total} that claims to be exact.
+     * published as the union's own count produces a {@code hits.total} that claims to be exact.
+     *
+     * <p>The {@code getHits()} check is <b>defensive only</b>. A coordinator always sets the hits section on a search
+     * response, and the leg path relies on that: {@link #groupLegHits} dereferences {@code getResponse().getHits()}
+     * without a guard, and a null there would be an invariant violation worth failing on rather than a case to tolerate.
+     * This method returns a verdict rather than throwing, so it costs nothing to be total over its input.
      *
      * <p>Shard accounting is one check, not the two it looks like it should be: {@code successful + skipped == total}.
      * {@code getFailedShards()} is only the length of the shard-failure array, and core deliberately does <i>not</i> count an
@@ -207,22 +213,27 @@ final class HybridFusionOrchestrator {
     }
 
     /**
-     * The count-only round 2 for a lexical-only hybrid, or {@code null} when it does not apply.
+     * The count-only round 2 that settles {@code hits.total} so round 2 can drop its Tail, or {@code null} when it does
+     * not apply. Once round 1 has shown every leg exact and short of the threshold, a single {@code size: 0} count over
+     * the legs' disjunction answers the union directly.
      *
-     * <p><b>Why a separate round rather than the eager aggregation.</b> For a hybrid with an ANN leg the eager overlap
-     * aggregation rides that leg and is bounded by its {@code k} candidates per shard, which is cheap. For a
-     * <em>lexical-only</em> hybrid a lexical leg would host it and the filter would be evaluated over that leg's full
-     * match set — the one shape whose cost is unbounded in corpus size. Instead, once round 1 has shown every leg exact
-     * and short of the threshold, a single {@code size: 0} count over the legs' disjunction settles the union directly.
+     * <p><b>Why a count round rather than counting during round 1.</b> Deriving the union from the legs alone needs the
+     * legs to report their overlap, which means attaching work to a leg sub-search. Riding a lexical leg means evaluating
+     * it over that leg's full match set — the one shape whose cost is unbounded in corpus size. One {@code size: 0}
+     * request instead is bounded by the sum of the legs' own counts (below {@code legs * threshold} documents, since each
+     * is below the threshold), is request-cacheable, and terminates early at the threshold.
      *
-     * <p><b>Why this is cheap here and not in general.</b> It is only issued when every leg's own count is below the
-     * threshold, so the disjunction it counts is bounded by the sum of those counts — below {@code legs * threshold}
-     * documents. It is also only issued for lexical legs, so no ANN graph is walked a second time: that is exactly why
-     * this is the fallback for lexical-only hybrids and not the general design.
+     * <p><b>Why it never costs more than the Tail it replaces.</b> The count re-executes each leg, but so does the Tail —
+     * with one exception, which this method refuses. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/
+     * {@code neural_knn} leg the window did <em>not</em> truncate with an address of the hits it returned, so for that leg
+     * the Tail walks no graph while the count's disjunction would. Refusing there (same test as {@code legInTailForm}:
+     * fewer hits than the window) keeps the guarantee exact rather than approximate — a {@code k} large enough to fill the
+     * window is not a condition that can be assumed, since a shard holding fewer documents than {@code k}, a {@code knn}
+     * {@code filter}, a small corpus, or radial knn (which has no {@code k} at all) all come back short.
      *
      * <p><b>What it buys beyond cost.</b> Core computes the value <em>and the relation</em>, so the threshold-boundary
-     * arithmetic this class does by hand for the eager path cannot be wrong here; and with no aggregation in the request
-     * there is no profile-plus-aggregation combination to avoid, so a profiled request is not refused.
+     * arithmetic this class otherwise does by hand cannot be wrong here; and with no aggregation in the request there is
+     * no profile-plus-aggregation combination to avoid, so a profiled request is not refused.
      */
     static SearchRequest unionCountRequest(
         CandidateScope scope,
@@ -234,11 +245,8 @@ final class HybridFusionOrchestrator {
         if (Objects.isNull(scope) || scope.legUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
             return null;
         }
-        // Two or more legs, and no more than the fan-out this is worth doing for. Every leg shape is served, ANN legs
-        // included: the count re-executes them, but so does the Tail it replaces -- legInTailForm keeps an ANN leg
-        // verbatim whenever the window truncated it, and a kNN leg asked for k >= window / shards always fills the
-        // window. So the graph is walked the same number of times either way, and the count skips the Tail's fetch and
-        // counts with early termination at the threshold.
+        // Two or more legs, and no more than the fan-out this is worth doing for. Every leg shape is eligible; the
+        // per-leg loop below refuses the one case where the Tail is cheaper than the count.
         if (items.length != legs.size() || legs.size() < 2 || legs.size() > MAX_LEGS_FOR_UNION_COUNT) {
             return null;
         }
@@ -251,7 +259,8 @@ final class HybridFusionOrchestrator {
             return null;
         }
         for (QueryBuilder leg : legs) {
-            // Same refusals the eager path applies: a named leg, or a leg that cannot be nested at all.
+            // A named leg, or a leg that cannot be nested at all, is refused: the disjunction would register a name the
+            // count never reports, and a hybrid is illegal anywhere but the root query.
             if (carriesQueryName(leg) || leg instanceof HybridQueryBuilder || leg instanceof HybridFusionQueryBuilder) {
                 return null;
             }
@@ -266,6 +275,15 @@ final class HybridFusionOrchestrator {
             // Inexact means the leg's own match set is already past the threshold, so the union is too and
             // totalHitsFromLegs has already answered; a value at or past the threshold says the same.
             if (Objects.isNull(own) || own.relation() != TotalHits.Relation.EQUAL_TO || own.value() >= threshold) {
+                return null;
+            }
+            // The one shape where the Tail is cheaper than the count: an ANN leg the window did not truncate is
+            // materialized by legInTailForm into an address of the hits it returned, so the Tail walks no graph for it,
+            // while the disjunction below would re-execute the real query and walk it. Re-executing an ANN leg is only
+            // free when the Tail would have re-executed it too, which is exactly when it filled the window — so this
+            // applies legInTailForm's own test, for the same reason. Without it the default shape
+            // (hybrid{match, knn(k=10)}, window 100) pays a graph walk per shard that the Tail would not have.
+            if (isMaterializableLeg(legs.get(leg)) && item.getResponse().getHits().getHits().length < windowSize) {
                 return null;
             }
             disjunction.should(legs.get(leg));
@@ -413,7 +431,7 @@ final class HybridFusionOrchestrator {
         timings.rankedDocs(ranked.ids().length);
         // Not armed, so nothing here depends on the verdict — but a profiled request's report of its unprofiled twin
         // still needs what the legs decided, read off the same answers the unprofiled twin would have had.
-        decideFastPathAfterLegs(timings.fastPath(), source, items, legs, ranked, windowSize, countedUnion);
+        decideFastPathAfterLegs(timings.fastPath(), source, items, ranked, windowSize, countedUnion);
         return buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer, countedUnion);
     }
 
@@ -1188,17 +1206,6 @@ final class HybridFusionOrchestrator {
     }
 
     /**
-     * The {@code hits.total} round 2 would have reported with the Tail, when the legs already prove it — else {@code null}.
-     *
-     * <p>Core caps a tracked count at the threshold: a union with more matches than the threshold is reported as
-     * {@code {threshold, gte}}, whatever its size ({@code SearchPhaseController.TopDocsStats#getTotalHits}). A leg's
-     * match set is a subset of the union and its own count is capped the same way, so a leg that reports
-     * {@code gte} — which core emits only when the leg alone exceeded the threshold — proves the union does too, and
-     * {@code {threshold, gte}} is exactly what the Tail would have produced. Anything else (every leg exact and below the
-     * threshold, a leg that was not asked to count, a leg landing exactly on the threshold with {@code eq}) leaves the
-     * union's count genuinely unknown, and the Tail is kept so the response is unchanged.
-     */
-    /**
      * How many documents the legs will fuse to: the distinct {@code (_index, _id)} count across their returned hits, cut to
      * the window. Equal to {@code ranked.ids().length} by construction — {@link #toRankedDocs} sorts the same key set and
      * cuts it to {@code windowSize} without dropping anything else — but derived from the responses alone, so it can be
@@ -1214,6 +1221,17 @@ final class HybridFusionOrchestrator {
         return Math.min(keys.size(), windowSize);
     }
 
+    /**
+     * The {@code hits.total} round 2 would have reported with the Tail, when the legs already prove it — else {@code null}.
+     *
+     * <p>Core caps a tracked count at the threshold: a union with more matches than the threshold is reported as
+     * {@code {threshold, gte}}, whatever its size ({@code SearchPhaseController.TopDocsStats#getTotalHits}). A leg's
+     * match set is a subset of the union and its own count is capped the same way, so a leg that reports
+     * {@code gte} — which core emits only when the leg alone exceeded the threshold — proves the union does too, and
+     * {@code {threshold, gte}} is exactly what the Tail would have produced. Anything else (every leg exact and below the
+     * threshold, a leg that was not asked to count, a leg landing exactly on the threshold with {@code eq}) leaves the
+     * union's count genuinely unknown, and the Tail is kept so the response is unchanged.
+     */
     static TotalHits totalHitsFromLegs(SearchSourceBuilder source, TotalHits[] legTotalHits, int windowSize) {
         Integer threshold = legTotalHitsThreshold(source, windowSize);
         if (Objects.isNull(threshold)) {
@@ -1428,14 +1446,6 @@ final class HybridFusionOrchestrator {
     }
 
     /**
-     * Completes a {@link #decideFastPathBeforeLegs verdict} with what only the legs' answers decide: whether anything was
-     * ranked, whether the requested page lies inside the ranked window, and whether the count the request wants is
-     * settled — disabled, inside the window, or proved by a leg (see {@link #totalHitsForFastPath}). Evaluated identically
-     * on the armed path, where it decides the fallback, and on the two-round path of a profiled request, where it
-     * completes the report; a decision already refused before the legs is left as it is. {@code countedUnion} is the union
-     * a lazy count-only round established, or {@code null} when none ran.
-     */
-    /**
      * A derived total the response may carry: one that cannot contradict the page it is reported with.
      *
      * <p>Every leg, and the count round, is an independently routed read. Without a {@code point_in_time} the count can land
@@ -1461,11 +1471,18 @@ final class HybridFusionOrchestrator {
         return null;
     }
 
+    /**
+     * Completes a {@link #decideFastPathBeforeLegs verdict} with what only the legs' answers decide: whether anything was
+     * ranked, whether the requested page lies inside the ranked window, and whether the count the request wants is
+     * settled — disabled, inside the window, or proved by a leg (see {@link #totalHitsForFastPath}). Evaluated identically
+     * on the armed path, where it decides the fallback, and on the two-round path of a profiled request, where it
+     * completes the report; a decision already refused before the legs is left as it is. {@code countedUnion} is the union
+     * a lazy count-only round established, or {@code null} when none ran.
+     */
     static void decideFastPathAfterLegs(
         FastPathDecision decision,
         SearchSourceBuilder source,
         MultiSearchResponse.Item[] items,
-        List<QueryBuilder> legs,
         RankedDocs ranked,
         int windowSize,
         TotalHits countedUnion
@@ -1606,8 +1623,8 @@ final class HybridFusionOrchestrator {
 
     /**
      * As above, with {@code countedUnion} the union a lazy count-only round already established — the answer to
-     * {@link #unionCountRequest}, or {@code null} when no such round ran (every shape but a lexical-only hybrid, and any
-     * request the count refused). When present it is preferred over every derived total: core computed both the value and
+     * {@link #unionCountRequest}, or {@code null} when no such round ran (any request that method refused, or one whose
+     * count failed or came back incomplete). When present it is preferred over every derived total: core computed both the value and
      * the relation against the same threshold, for the legs' own disjunction, so it is what round 2's Tail would have
      * reported rather than an inference about it.
      */
@@ -1650,7 +1667,7 @@ final class HybridFusionOrchestrator {
         // The verdict is recorded on the timings' decision (the profile's account of it) and read back here, so the
         // report and the behaviour cannot disagree.
         FastPathDecision decision = Objects.nonNull(timings.fastPath()) ? timings.fastPath() : new FastPathDecision();
-        decideFastPathAfterLegs(decision, source, items, legs, ranked, windowSize, countedUnion);
+        decideFastPathAfterLegs(decision, source, items, ranked, windowSize, countedUnion);
         if (ranked.ids().length == 0) {
             // Nothing fused: match_none either way, and the consumers learn nothing was derived or assembled.
             if (Objects.nonNull(totalHitsConsumer)) {

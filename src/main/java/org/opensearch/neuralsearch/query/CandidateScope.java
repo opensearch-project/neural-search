@@ -598,20 +598,18 @@ final class CandidateScope {
 
     /**
      * A count-only request over the legs' disjunction: {@code size: 0}, no fetch, no aggregations, totals tracked to the
-     * request's own threshold. Used by the lazy union count, the correctness fallback for a hybrid whose legs are all
-     * lexical — see {@code HybridFusionOrchestrator#unionCountRequest} for when that applies and why.
+     * request's own threshold. Used by the lazy union count — see {@code HybridFusionOrchestrator#unionCountRequest} for
+     * which shapes it is issued for and why it never costs more than the round 2 Tail it replaces.
      *
-     * <p>Deliberately not {@link #newLegRequest}: a leg request carries {@code size = window_size}, a fetch source and —
-     * for the eager union count — an aggregation, none of which a count wants. What it does share is every
-     * request-level property that decides WHICH shards and WHICH view are read, and every one that bounds how long the
-     * reading may go on: indices, indices options, search type, routing, preference, partial-results policy, shard-request
-     * limits, the pre-filter threshold, the cancellation budget and the point in time. The PIT matters most: the
-     * count has to be taken against the same immutable view the legs read, or the union it reports can disagree with the
-     * window it is reported for.
+     * <p>Deliberately not {@link #newLegRequest}: a leg request carries {@code size = window_size} and a fetch source,
+     * neither of which a count wants. What it does share is every request-level property that decides WHICH shards and
+     * WHICH view are read, and every one that bounds how long the reading may go on: indices, indices options, search
+     * type, routing, preference, partial-results policy, shard-request limits, the pre-filter threshold, the cancellation
+     * budget and the point in time. The PIT matters most: the count has to be taken against the same immutable view the
+     * legs read, or the union it reports can disagree with the window it is reported for.
      *
-     * <p>Profiling is never set here even when the legs are profiled. This request carries no aggregation, so it does not
-     * trip core's {@code ConcurrentQueryProfileBreakdown} assertion the way a profiled aggregating leg does — but a
-     * profile of it would be discarded unread, so asking for one only costs.
+     * <p>Profiling is never set here even when the legs are profiled: a profile of this request would be discarded
+     * unread, so asking for one only costs.
      */
     SearchRequest newUnionCountRequest(final QueryBuilder disjunction, final int threshold) {
         SearchSourceBuilder countSource = new SearchSourceBuilder().query(disjunction).size(0).from(0).trackTotalHitsUpTo(threshold);
@@ -639,8 +637,10 @@ final class CandidateScope {
             countRequest.setMaxConcurrentShardRequests(maxConcurrentShardRequests);
         }
         if (Objects.nonNull(cancelAfterTimeInterval)) {
-            // The count is a sub-search of this request and has to die with it, or it outlives the request that spawned it
-            // and keeps shard threads busy after cancellation — the same reason a leg carries it (see CLASSIFICATION).
+            // A wall-clock bound on how long the count may run, propagated for the same reason a leg carries it (see
+            // CLASSIFICATION). It is NOT cancellation propagation: like the legs, the count is dispatched without a parent
+            // task, so cancelling the user's search does not reach it, and this only helps when the user set a budget at
+            // all. It bounds the count's lifetime; it does not tie it to the request's.
             countRequest.setCancelAfterTimeInterval(cancelAfterTimeInterval);
         }
         if (Objects.nonNull(preFilterShardSize)) {
