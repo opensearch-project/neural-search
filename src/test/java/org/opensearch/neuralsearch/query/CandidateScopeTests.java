@@ -244,29 +244,13 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         sliced.enableLegTotalHits(10_000);
         assertFalse("each slice counts a different subset", sliced.legUnionCountAllowed());
 
+        // Profiling is NOT a refusal. It was, while the union came from an aggregation the legs carried -- core's
+        // concurrent-segment profile breakdown asserts on a profiled search that also aggregates. The count round carries
+        // no aggregation, so a profiled request derives its count exactly as its unprofiled twin does.
         CandidateScope profiled = CandidateScope.from(new SearchRequest(INDEX));
         profiled.enableLegTotalHits(10_000);
         profiled.enableLegProfiling();
-        assertFalse("a profiled leg carrying an aggregation kills an assertions-enabled node", profiled.legUnionCountAllowed());
-
-        // A leg that could only be counted by hosting the aggregation, without being known to match a bounded candidate
-        // set, refuses BOTH derivations: the fallback has to be the Tail, whose counting early-terminates at the
-        // threshold, and not the count round, which would re-execute that leg inside a disjunction.
-        // Profiling withholds the AGGREGATION, because a profiled search that also aggregates trips core's breakdown
-        // assertion -- but not the count round, which carries no aggregation, so a profiled request derives its count the
-        // same way its unprofiled twin does.
-        CandidateScope profiledLazy = CandidateScope.from(new SearchRequest(INDEX));
-        profiledLazy.enableLegTotalHits(10_000);
-        profiledLazy.enableLegProfiling();
-        assertFalse("no aggregation under profile", profiledLazy.legUnionCountAllowed());
-        assertTrue("but the count round is still allowed", profiledLazy.lazyUnionCountAllowed());
-
-        CandidateScope unknownHost = CandidateScope.from(new SearchRequest(INDEX));
-        unknownHost.enableLegTotalHits(10_000);
-        assertTrue(unknownHost.legUnionCountAllowed());
-        unknownHost.refuseUnionCountForUnknownHost();
-        assertFalse("an unbounded host is refused outright", unknownHost.legUnionCountAllowed());
-        assertFalse("and so is the count round, which would re-execute that leg in a disjunction", unknownHost.lazyUnionCountAllowed());
+        assertTrue("a profiled request still derives its count", profiled.legUnionCountAllowed());
     }
 
     public void testUnsetFieldsAreLeftUnsetOnTheLeg() {

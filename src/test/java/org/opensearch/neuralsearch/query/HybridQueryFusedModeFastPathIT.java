@@ -831,18 +831,21 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
 
     /** A 768-dim vector whose first component is {@code lead} and the rest 1.0, as a JSON array. */
     /**
-     * The ANN-hosted overlap aggregation, end to end on a real multi-shard index — the mechanism every other test here
-     * exercises only through hand-built {@code MultiSearchResponse} items.
+     * The count round on a hybrid that has an ANN leg — the shape the count round only began serving when the overlap
+     * aggregation was removed, and the one every other test here reaches only through hand-built
+     * {@code MultiSearchResponse} items.
      *
-     * <p>A {@code knn} + lexical hybrid with default totals derives its {@code hits.total} from one filter aggregation
-     * carried by the {@code knn} leg: the ANN leg's own count, minus how many of its candidates the lexical leg also
-     * matches, plus the lexical leg's count. What has to hold is that the derived object equals what the Tail-kept twin
-     * reports — value AND relation — on a 2-shard index, where the aggregation's {@code doc_count} and the leg's
-     * {@code totalHits} are reduced across shards independently. Asserted below and above the threshold, since the two
-     * report different relations.
+     * <p>A {@code knn} + lexical hybrid with default totals settles its {@code hits.total} with one {@code size: 0} count
+     * over the legs' disjunction. That re-executes the {@code knn} leg, which is why it was once refused — but the Tail it
+     * replaces re-executes the same leg verbatim ({@code legInTailForm} keeps an ANN leg whenever the window truncated it,
+     * and a leg asked for {@code k >= window / shards} always fills the window), so the graph is walked the same number of
+     * times either way and the count skips the Tail's fetch.
+     *
+     * <p>What has to hold is that the counted object equals what the Tail-kept twin reports — value AND relation — on a
+     * 2-shard index, asserted below and above the threshold, since the two report different relations.
      */
     @SneakyThrows
-    public void testTotalHits_whenAnAnnLegHostsTheOverlapAggregation_thenTheDerivedTotalMatchesTheTailKeptTwin() {
+    public void testTotalHits_whenAHybridWithAnAnnLegIsCounted_thenTheTotalMatchesTheTailKeptTwin() {
         String index = INDEX + "-ann-host";
         if (indexExists(index) == false) {
             createIndex(

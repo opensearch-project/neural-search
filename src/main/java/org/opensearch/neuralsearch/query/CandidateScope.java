@@ -376,13 +376,6 @@ final class CandidateScope {
     private boolean legProfiling;
 
     /**
-     * Set when a leg that would have to host the union-count aggregation is not known to match a bounded candidate set.
-     * Not inherited from the request: decided by the fused rewrite from the legs and the mapping — see
-     * {@link #refuseUnionCountForUnknownHost}.
-     */
-    private boolean unionCountHostUnknown;
-
-    /**
      * When set, every leg sub-search runs with {@code explain: true} so the raw score each leg contributed can be
      * described in the user's response. As {@link #legProfiling}: not part of the captured scope, and decided by the fused
      * rewrite from the outer request's {@code explain} flag rather than inherited from it.
@@ -571,49 +564,18 @@ final class CandidateScope {
     }
 
     /**
-     * Whether the legs may carry the union-count aggregation that lets the rewrite derive an EXACT {@code hits.total} from
-     * round 1 when no leg reaches the threshold (see {@code HybridFusionOrchestrator#exactUnionFromLegs}). Needs the legs
-     * to be counting in the first place, and a shape in which an aggregation on a leg counts the same documents the leg's
-     * own total counts: a {@code post_filter} applies to hits but not to aggregations, and a {@code slice} changes what a
-     * leg sees, so either keeps the Tail. Profiled legs carry no aggregation either: core's concurrent-segment profile
-     * breakdown asserts on a profiled search that also aggregates (a pre-existing core defect that takes a test node down),
-     * so a profiled request counts the way it did — the profile describes the Tail-kept path, not this one.
+     * Whether the legs may be counted toward a union this rewrite derives, letting round 2 run without the Tail (see
+     * {@code HybridFusionOrchestrator#unionCountRequest}). Needs the legs to be counting in the first place, and a shape in
+     * which a count over the legs' disjunction counts the same documents the legs' own totals do: a {@code post_filter}
+     * applies to hits but not to a count, and a {@code slice} changes what each leg sees, so either keeps the Tail.
+     *
+     * <p>Profiling is deliberately NOT excluded. It was, while the union was derived from an aggregation the legs carried —
+     * core's concurrent-segment profile breakdown asserts on a profiled search that also aggregates, which takes an
+     * assertions-enabled node down. The count round carries no aggregation, so a profiled request derives its count exactly
+     * as its unprofiled twin does, and the profile's own fast-path verdict describes the request the user actually sent.
      */
     boolean legUnionCountAllowed() {
-        return lazyUnionCountAllowed() && legProfiling == false;
-    }
-
-    /**
-     * Whether the LAZY count round may run — the same conditions as {@link #legUnionCountAllowed} minus profiling.
-     *
-     * <p>Profiling is excluded there and not here for one reason only: core's concurrent-segment profile breakdown asserts
-     * on a profiled search that also <i>aggregates</i>, which takes an assertions-enabled node down. The count round carries
-     * no aggregation, so that defect is not in play and a profiled request can derive its count the same way its unprofiled
-     * twin does — which is what makes the profile's own fast-path verdict describe the request the user actually sent.
-     */
-    boolean lazyUnionCountAllowed() {
-        return Objects.nonNull(legTotalHitsThreshold)
-            && Objects.isNull(postFilter)
-            && Objects.isNull(slice)
-            && unionCountHostUnknown == false;
-    }
-
-    /**
-     * Refuse both ways of deriving the union for this request, leaving round 2's Tail to count it.
-     *
-     * <p>Called when a leg could only be counted by hosting the overlap aggregation but is not known to match a bounded
-     * candidate set — a {@code neural} leg whose field does not resolve, on every targeted index, to a dense vector field.
-     * Such a leg may rewrite to {@code neural_sparse} at the shard, whose match set is every document containing a query
-     * token; hosting an aggregation on it forces the collector to {@code ScoreMode.COMPLETE} and so to visit that whole
-     * match set, with none of the early termination a counted leg gets at the threshold. The cost then grows with the
-     * corpus rather than with the window.
-     *
-     * <p>The fallback is deliberately <b>the Tail, not the count round</b>: the Tail counts with early termination and is
-     * bounded, while putting a {@code neural} leg into the count round's disjunction would re-run its inference and, if it
-     * is dense after all, re-walk its graph — the cost this whole design exists to avoid.
-     */
-    void refuseUnionCountForUnknownHost() {
-        this.unionCountHostUnknown = true;
+        return Objects.nonNull(legTotalHitsThreshold) && Objects.isNull(postFilter) && Objects.isNull(slice);
     }
 
     /**

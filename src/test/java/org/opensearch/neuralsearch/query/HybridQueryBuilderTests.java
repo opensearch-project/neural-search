@@ -1260,13 +1260,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     /**
-     * A {@code neural} leg can only be counted by hosting the overlap aggregation, and whether that is bounded depends on
-     * its field being dense — unknowable from the leg, because the fused rewrite runs before the legs are rewritten. With no
-     * mapping resolving it to a dense vector field, neither derivation may be attempted: no count round is issued and the
-     * Tail counts the union as it did before any of this existed.
+     * A {@code neural} leg is counted like any other. It used to be refused, because it could only be counted by hosting an
+     * overlap aggregation and whether that was bounded depended on its field being dense — unknowable from the leg, since
+     * the fused rewrite runs before the legs are rewritten. With the aggregation gone the question is moot: the count round
+     * re-executes the leg, dense or sparse, exactly as the Tail it replaces would have, so no mapping has to be resolved.
      */
     @SneakyThrows
-    public void testDoRewriteFused_whenANeuralLegCannotBeProvenDense_thenNeitherDerivationIsAttempted() {
+    public void testDoRewriteFused_whenALegIsNeural_thenTheCountRoundStillServesIt() {
         initClusterUtilWithMaxResultWindow(10000);
         HybridQueryBuilder builder = new HybridQueryBuilder();
         builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").build());
@@ -1306,8 +1306,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             return null;
         }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         java.util.concurrent.atomic.AtomicBoolean counted = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
+            new java.util.concurrent.atomic.AtomicReference<>();
         doAnswer(invocation -> {
             counted.set(true);
+            countRequest.set(invocation.getArgument(0));
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            l.onResponse(countResponse(55, 0, 0, false, null));
             return null;
         }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
 
@@ -1315,11 +1320,17 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
 
         assertTrue(done.get());
-        assertFalse("no count round may be issued for an unprovable host", counted.get());
-        assertNull("nothing derived, so round 2 keeps its Tail", published.get());
-        // Nor may the legs carry the overlap aggregation, which is the other way the union could have been derived.
+        assertTrue("a neural leg is counted by the count round like any other", counted.get());
+        assertEquals("what core counted is what the response reports", 55L, published.get().value());
+        // The neural leg goes into the disjunction verbatim -- the Tail would have re-executed it the same way.
+        org.opensearch.index.query.BoolQueryBuilder disjunction = (org.opensearch.index.query.BoolQueryBuilder) countRequest.get()
+            .source()
+            .query();
+        assertEquals(2, disjunction.should().size());
+        assertEquals("neural", disjunction.should().get(0).getWriteableName());
+        // And no leg carries an aggregation any more -- that mechanism is gone, so nothing is attached speculatively.
         for (SearchRequest leg : legSearches.get().requests()) {
-            assertNull("no leg may host the overlap aggregation either", leg.source().aggregations());
+            assertNull("no leg carries an overlap aggregation", leg.source().aggregations());
         }
     }
 

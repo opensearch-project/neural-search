@@ -361,21 +361,22 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         assertEquals("the default budget", 1L << 20, ((Number) verdict.get("fetch_budget_bytes")).longValue());
     }
 
-    /** What the legs decide, read off their actual answers: six documents cannot prove a count of 10,000. */
+    /**
+     * A profiled request reports the verdict its UNPROFILED twin would get. That is only true because the union is settled by
+     * a count round, which carries no aggregation: while it was settled by an aggregation the legs carried, profiling had to
+     * withhold it (core's concurrent-segment profile breakdown asserts on a profiled search that also aggregates), and the
+     * profile then said the count was unprovable for a request that derives it fine without {@code profile: true}.
+     */
     @SneakyThrows
-    public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheVerdictSaysWhyTheCountIsUnavailable() {
+    public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheCountRoundStillSettlesIt() {
         ensureDataset(INDEX, 1);
         prime(INDEX, "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3}");
 
         Map<String, Object> verdict = fastPathVerdict(search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3")));
 
-        assertEquals(Boolean.FALSE, verdict.get("would_take"));
-        // This shape (one ANN leg, one predicate leg) derives its count from an overlap aggregation on the ANN leg, and that
-        // aggregation is withheld from a profiled request because core's concurrent-segment profile breakdown asserts on a
-        // profiled search that also aggregates. So the count is unavailable HERE while being derivable for the same request
-        // unprofiled -- which is what this verdict has to say, rather than blaming the legs for not proving it.
-        assertEquals("count_unavailable_under_profile", verdict.get("refused_by"));
-        assertEquals(Boolean.FALSE, verdict.get("count_settled"));
+        assertEquals("the count round runs under profile, so the verdict is the unprofiled one", Boolean.TRUE, verdict.get("would_take"));
+        assertNull(verdict.get("refused_by"));
+        assertEquals(Boolean.TRUE, verdict.get("count_settled"));
         assertNotNull("the volume had passed before the legs decided", verdict.get("fetch_estimate_bytes"));
     }
 

@@ -50,10 +50,6 @@ import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchService;
-import org.opensearch.search.aggregations.Aggregation;
-import org.opensearch.search.aggregations.AggregationBuilders;
-import org.opensearch.search.aggregations.Aggregations;
-import org.opensearch.search.aggregations.bucket.SingleBucketAggregation;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.sort.ScoreSortBuilder;
@@ -159,125 +155,21 @@ final class HybridFusionOrchestrator {
      */
     static MultiSearchRequest buildLegMultiSearch(CandidateScope scope, List<QueryBuilder> legs, int windowSize) {
         MultiSearchRequest multiSearchRequest = new MultiSearchRequest();
-        int[] countingOrder = scope.legUnionCountAllowed() ? unionCountOrder(legs) : null;
-        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
-            SearchRequest legRequest = scope.newLegRequest(legs.get(legIndex), windowSize);
-            if (Objects.nonNull(countingOrder)) {
-                attachUnionCountAggregation(legRequest.source(), legIndex, legs, countingOrder);
-            }
-            multiSearchRequest.add(legRequest);
+        for (QueryBuilder leg : legs) {
+            multiSearchRequest.add(scope.newLegRequest(leg, windowSize));
         }
         return multiSearchRequest;
     }
 
-    // ---- exact hits.total from round 1: leg counts + per-leg overlap with the later legs ----
+    // ---- hits.total from round 1: one count-only round over the legs' disjunction ----
 
-    /** Name of the aggregation on leg {@code i} that counts its matches also matched by a later leg (counting order). */
-    static final String UNION_COUNT_AGG_PREFIX = "_fusion_overlap_with_later_legs_";
-    /** Above this many legs the aggregation filters grow past what a leg should carry; the Tail counts instead. */
+    /**
+     * The widest fan-out the count round is issued for: past this many legs its disjunction re-executes more leg queries
+     * than the Tail it would replace, so the Tail counts instead. Read by {@link #unionCountRequest} alone. Defensive —
+     * {@code HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES} caps a hybrid at 5 legs, so it is not reachable through the
+     * REST or gRPC API; it bounds the algorithm where the algorithm lives.
+     */
     static final int MAX_LEGS_FOR_UNION_COUNT = 8;
-
-    /**
-     * The order in which the legs are counted for the union, or null when the legs cannot be counted this way. Every leg
-     * hosts one aggregation whose filter is the disjunction of the legs AFTER it in this order; the union is then the sum
-     * over legs of (own count − overlap with later legs), each document counted exactly once by the first leg (in this
-     * order) that matches it. ANN legs go first: their match set is {@code k} per shard, so the filter — the other legs'
-     * queries — is evaluated over at most that many documents on each shard, and the lexical legs that follow host filters
-     * over lexical legs only. Were a lexical leg to host an ANN leg in its filter, the filter would re-walk the HNSW graph on
-     * every shard — the very cost the Tail pays and this path exists to avoid.
-     *
-     * <p>Null when there is only one leg, too many, or any leg carries a {@code _name}: the filter would register that name
-     * on the hosting leg's hits and change what {@code matched_queries} the fast path reports, which the Tail-form
-     * name-carrying already handles exactly; such a request keeps counting the way it did.
-     */
-    static int[] unionCountOrder(List<QueryBuilder> legs) {
-        // Exactly one ANN leg and exactly one predicate leg, and no wider shape. Two invariants then hold by
-        // construction rather than by luck of the ordering:
-        //
-        // a filter never contains an ANN leg — so no HNSW graph is re-walked and no inference re-run in round 1;
-        // a predicate leg never hosts — so no collector is forced to ScoreMode.COMPLETE, which would cost it
-        // WAND/block-max skipping and `track_total_hits` early termination and
-        // make it scan its entire match set.
-        //
-        // Both fail for wider shapes, which is why they keep the Tail. With two or more ANN legs, one has to appear
-        // inside another's filter. With one ANN leg and two or more predicate legs, the second leg in counting order is a
-        // predicate leg and has to host — and that cost grows with the corpus, on requests that a leg's own `gte` proof
-        // already served Tail-free. Zero ANN legs needs no host at all and is counted by {@link #unionCountRequest}.
-        if (legs.size() != 2) {
-            return null;
-        }
-        for (QueryBuilder leg : legs) {
-            if (carriesQueryName(leg)) {
-                return null;
-            }
-            // A nested hybrid is illegal wherever it is not the root query, so embedding one in another leg's
-            // aggregation filter makes the shard reject the whole leg with a 400 — strictly worse than the Tail it
-            // was meant to replace. Refuse and let the Tail run, as for every other unsupported leg shape.
-            if (leg instanceof HybridQueryBuilder || leg instanceof HybridFusionQueryBuilder) {
-                return null;
-            }
-        }
-        int annLeg = -1;
-        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
-            if (isMaterializableLeg(legs.get(legIndex))) {
-                if (annLeg >= 0) {
-                    return null;
-                }
-                annLeg = legIndex;
-            }
-        }
-        if (annLeg < 0) {
-            return null;
-        }
-        // The ANN leg first: it is the host, and the host is the leg whose matches the filter is evaluated over.
-        return new int[] { annLeg, 1 - annLeg };
-    }
-
-    /**
-     * Adds to leg {@code legIndex}'s request the aggregation counting how many of its matches a LATER leg (counting order)
-     * also matches. The last leg in that order counts nothing beyond itself and carries no aggregation. Aggregation
-     * collection is not subject to the top-{@code size} pruning of the hit collector, so the count is exact.
-     */
-    static void attachUnionCountAggregation(SearchSourceBuilder legSource, int legIndex, List<QueryBuilder> legs, int[] countingOrder) {
-        int position = -1;
-        for (int i = 0; i < countingOrder.length; i++) {
-            if (countingOrder[i] == legIndex) {
-                position = i;
-            }
-        }
-        if (position < 0 || position == countingOrder.length - 1) {
-            return;
-        }
-        // One later leg, always: unionCountOrder admits a two-leg shape only, so the filter is that leg itself and never
-        // a disjunction. A wider shape would need a disjunction here and is refused there instead.
-        QueryBuilder laterLeg = legs.get(countingOrder[position + 1]);
-        legSource.aggregation(AggregationBuilders.filter(UNION_COUNT_AGG_PREFIX + legIndex, laterLeg));
-    }
-
-    /**
-     * Whether any leg would have to host the union-count aggregation without being known to match a bounded candidate set —
-     * a {@code neural} leg whose field is not a dense vector field on every targeted index.
-     *
-     * <p>{@code knn} and {@code neural_knn} are bounded by construction. {@code neural} is not answerable from its name: it
-     * rewrites to a k-NN query against a dense field and to {@code neural_sparse} against a sparse one, and this runs
-     * before the legs are rewritten. A sparse host is the one shape where the aggregation's cost grows with the corpus
-     * instead of the window, because an aggregation forces the collector to visit the host's entire match set.
-     *
-     * <p>Only the <i>host</i> is at issue. A leg that is not a host candidate at all — lexical, {@code neural_sparse} — is
-     * counted by the lazy count round instead, which is bounded and needs no host (see {@link #unionCountRequest}).
-     */
-    static boolean anyLegWouldHostWithoutKnownBounds(List<QueryBuilder> legs, SearchRequest request) {
-        if (Objects.isNull(legs)) {
-            return false;
-        }
-        for (QueryBuilder leg : legs) {
-            if (leg instanceof NeuralQueryBuilder neural
-                && ReturnedEmbeddingFields.isDenseVectorFieldOnEveryTargetedIndex(request, neural.fieldName()) == false) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     /**
      * Whether a sub-search counted over every shard and ran to completion — the precondition for treating its
@@ -301,7 +193,8 @@ final class HybridFusionOrchestrator {
         if (Objects.isNull(response)) {
             return false;
         }
-        return response.getSuccessfulShards() + response.getSkippedShards() == response.getTotalShards()
+        return Objects.nonNull(response.getHits())
+            && response.getSuccessfulShards() + response.getSkippedShards() == response.getTotalShards()
             && response.isTimedOut() == false
             && response.isTerminatedEarly() != Boolean.TRUE;
     }
@@ -309,28 +202,6 @@ final class HybridFusionOrchestrator {
     /** As above for one leg of the fan-out: a failed item, or one whose response did not answer completely. */
     private static boolean legAnsweredCompletely(MultiSearchResponse.Item item) {
         return Objects.nonNull(item) && item.isFailure() == false && answeredCompletely(item.getResponse());
-    }
-
-    /**
-     * Whether this shape would have derived its count from the legs' overlap aggregation, and lost it only to profiling.
-     * Used to label the refusal, not to decide it: the aggregation is withheld either way (see
-     * {@code CandidateScope#legUnionCountAllowed}).
-     */
-    private static boolean profiledLegsWithheldTheAggregation(SearchSourceBuilder source, List<QueryBuilder> legs, int windowSize) {
-        return Objects.nonNull(source)
-            && source.profile()
-            && Objects.nonNull(legTotalHitsThreshold(source, windowSize))
-            && Objects.nonNull(unionCountOrder(legs));
-    }
-
-    /** True when no leg is an ANN leg, i.e. every leg's match set is a real predicate rather than a top-k. */
-    static boolean lexicalOnlyLegs(List<QueryBuilder> legs) {
-        for (QueryBuilder leg : legs) {
-            if (isMaterializableLeg(leg)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -358,13 +229,15 @@ final class HybridFusionOrchestrator {
         MultiSearchResponse.Item[] items,
         int windowSize
     ) {
-        if (Objects.isNull(scope) || scope.lazyUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
+        if (Objects.isNull(scope) || scope.legUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
             return null;
         }
-        // Zero ANN legs, two or more of them, and no more than the fan-out this is worth doing for. An ANN leg in the
-        // disjunction would be re-executed by the count — a graph walk and, for `neural`, a second inference — so such a
-        // hybrid is served by the eager aggregation on the ANN host (two legs) or by the Tail (anything wider).
-        if (items.length != legs.size() || legs.size() < 2 || legs.size() > MAX_LEGS_FOR_UNION_COUNT || lexicalOnlyLegs(legs) == false) {
+        // Two or more legs, and no more than the fan-out this is worth doing for. Every leg shape is served, ANN legs
+        // included: the count re-executes them, but so does the Tail it replaces -- legInTailForm keeps an ANN leg
+        // verbatim whenever the window truncated it, and a kNN leg asked for k >= window / shards always fills the
+        // window. So the graph is walked the same number of times either way, and the count skips the Tail's fetch and
+        // counts with early termination at the threshold.
+        if (items.length != legs.size() || legs.size() < 2 || legs.size() > MAX_LEGS_FOR_UNION_COUNT) {
             return null;
         }
         Integer threshold = legTotalHitsThreshold(source, windowSize);
@@ -400,64 +273,6 @@ final class HybridFusionOrchestrator {
             disjunction.should(legs.get(leg));
         }
         return scope.newUnionCountRequest(disjunction, threshold);
-    }
-
-    /**
-     * The exact size of the legs' union, from round 1 alone: for each leg in counting order, its own exact count minus
-     * the documents a later leg also matched (its overlap aggregation), summed. Null unless every leg's count is exact
-     * ({@code eq} — a leg at {@code gte} is the threshold proof's case, see {@link #totalHitsFromLegs}) and every hosting
-     * leg returned its aggregation; a union at or past the threshold is reported the way core reports a capped count,
-     * {@code {threshold, gte}}.
-     */
-    static TotalHits exactUnionFromLegs(
-        SearchSourceBuilder source,
-        MultiSearchResponse.Item[] items,
-        List<QueryBuilder> legs,
-        int windowSize
-    ) {
-        Integer threshold = legTotalHitsThreshold(source, windowSize);
-        if (Objects.isNull(threshold) || Objects.isNull(items) || items.length != legs.size()) {
-            return null;
-        }
-        int[] countingOrder = unionCountOrder(legs);
-        if (Objects.isNull(countingOrder)) {
-            return null;
-        }
-        long union = 0;
-        for (int position = 0; position < countingOrder.length; position++) {
-            int legIndex = countingOrder[position];
-            MultiSearchResponse.Item item = items[legIndex];
-            if (legAnsweredCompletely(item) == false || Objects.isNull(item.getResponse().getHits())) {
-                return null;
-            }
-            TotalHits own = item.getResponse().getHits().getTotalHits();
-            if (Objects.isNull(own) || own.relation() != TotalHits.Relation.EQUAL_TO) {
-                return null;
-            }
-            long onlyThisLeg = own.value();
-            if (position < countingOrder.length - 1) {
-                Aggregations aggregations = item.getResponse().getAggregations();
-                Aggregation overlap = Objects.isNull(aggregations) ? null : aggregations.get(UNION_COUNT_AGG_PREFIX + legIndex);
-                if ((overlap instanceof SingleBucketAggregation) == false) {
-                    return null;
-                }
-                onlyThisLeg -= ((SingleBucketAggregation) overlap).getDocCount();
-                if (onlyThisLeg < 0) {
-                    // The aggregation saw more of this leg's documents than the leg counted: the two ran against different
-                    // reader states. Nothing here is trustworthy; let the Tail count.
-                    return null;
-                }
-            }
-            union += onlyThisLeg;
-        }
-        // Strictly greater: core's SearchPhaseController.TopDocsStats#getTotalHits reports {threshold, eq} when
-        // totalHits <= trackTotalHitsUpTo, and Lucene only flips a relation to gte on totalHits > threshold. A union of
-        // exactly `threshold` is therefore exactly known, and reporting gte for it would disagree with the Tail-kept
-        // twin of the same request.
-        if (union > threshold) {
-            return new TotalHits(threshold, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
-        }
-        return new TotalHits(union, TotalHits.Relation.EQUAL_TO);
     }
 
     /**
@@ -632,9 +447,6 @@ final class HybridFusionOrchestrator {
             // The counted union first: core computed both its value and its relation for the legs' own disjunction, so it
             // is the count round 2 would have produced rather than an inference about it.
             derivedTotalHits = Objects.nonNull(countedUnion) ? countedUnion : totalHitsFromLegs(source, legTotalHits(items), windowSize);
-            if (Objects.isNull(derivedTotalHits)) {
-                derivedTotalHits = exactUnionFromLegs(source, items, legs, windowSize);
-            }
             tailNeeded = Objects.isNull(derivedTotalHits);
         }
         if (Objects.nonNull(totalHitsConsumer)) {
@@ -1618,8 +1430,7 @@ final class HybridFusionOrchestrator {
         boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
         boolean countSettled = totalsDisabled
             || Objects.nonNull(countedUnion)
-            || Objects.nonNull(totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize))
-            || Objects.nonNull(exactUnionFromLegs(source, items, legs, windowSize));
+            || Objects.nonNull(totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize));
         decision.countSettled(countSettled);
         int pageEnd = requestedPageEnd(source);
         if (pageEnd > ranked.ids().length) {
@@ -1630,15 +1441,9 @@ final class HybridFusionOrchestrator {
             return;
         }
         if (countSettled == false) {
-            // Distinguish "nothing could have proved it" from "it was provable, but the aggregation that would have proved it
-            // is withheld while profiling" — otherwise a profiled request is told the count is unprovable when its
-            // unprofiled twin derives it fine.
-            boolean withheldByProfile = profiledLegsWithheldTheAggregation(source, legs, windowSize);
             decision.refuse(
-                withheldByProfile ? FastPathDecision.COUNT_UNAVAILABLE_UNDER_PROFILE : FastPathDecision.COUNT_NOT_SETTLED,
-                withheldByProfile
-                    ? "the count is derivable for this shape, but the overlap aggregation is withheld from a profiled request"
-                    : "the request wants a count beyond the window and no leg reported enough matches to prove it"
+                FastPathDecision.COUNT_NOT_SETTLED,
+                "the request wants a count beyond the window and no leg reported enough matches to prove it"
             );
         }
     }
@@ -1817,9 +1622,6 @@ final class HybridFusionOrchestrator {
             totalHits = Objects.nonNull(countedUnion)
                 ? countedUnion
                 : totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize);
-            if (Objects.isNull(totalHits)) {
-                totalHits = exactUnionFromLegs(source, items, legs, windowSize);
-            }
         }
         long assembleStart = System.nanoTime();
         SearchHits page = assemblePage(ranked, source, totalHits);

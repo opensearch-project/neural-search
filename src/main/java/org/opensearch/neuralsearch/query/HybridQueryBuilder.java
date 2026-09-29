@@ -744,15 +744,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }
 
-        // A leg that could only be counted by hosting the overlap aggregation has to be known to match a bounded candidate
-        // set, or neither way of deriving the union is safe to attempt and the Tail counts it as it always did. The one leg
-        // type this is not decidable from is `neural`: dense, it becomes a bounded k-NN query; sparse, it becomes a
-        // neural_sparse query matching every document with a query token, and hosting an aggregation on that visits the
-        // whole match set. Resolved from the mapping rather than from the leg, because the legs are not rewritten yet.
-        if (HybridFusionOrchestrator.anyLegWouldHostWithoutKnownBounds(legs, searchRequest)) {
-            candidateScope.refuseUnionCountForUnknownHost();
-        }
-
         // The fast path: a consumer was attached because, as submitted, this hybrid was the request's query in a shape that
         // needs no shard-side round over the fused ranking; both are re-checked here against the executing request (see
         // isRequestQuery above and HybridFusionOrchestrator#requestShapeAllowsFastPath). What is left to check is the legs — a named leg
