@@ -59,6 +59,13 @@ public final class FusedCoordinatorTimings {
     /** Sorting the fused scores and cutting to the window. */
     private long rankWindowNanos;
 
+    /**
+     * Dispatching the union count round and waiting for it, when one was issued. Elapsed, not additional: like
+     * {@link #fanOutWaitNanos} it contains a distributed round the shards also report themselves. Zero when no count ran —
+     * which is most requests, since the count is only issued when it can replace the Tail.
+     */
+    private long unionCountWaitNanos;
+
     /** Building the query round 2 runs: the {@code _id}-addressed Top clauses, and the Tail when one is needed. */
     private long substituteBuildNanos;
 
@@ -121,6 +128,6 @@ public final class FusedCoordinatorTimings {
 
     /** The whole coordinator span for this hybrid: building the fan-out, waiting on it, and fusing what came back. */
     public long totalNanos() {
-        return fanOutBuildNanos + fanOutWaitNanos + fusionNanos();
+        return fanOutBuildNanos + fanOutWaitNanos + unionCountWaitNanos + fusionNanos();
     }
 }

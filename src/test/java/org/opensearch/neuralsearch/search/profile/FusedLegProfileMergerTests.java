@@ -199,11 +199,14 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
 
         Map<String, Long> breakdown = node.getTimeBreakdown();
         assertEquals(
-            List.of("fan_out_build", "fan_out_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
+            List.of("fan_out_build", "fan_out_wait", "union_count_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
             new ArrayList<>(breakdown.keySet())
         );
         assertEquals(Long.valueOf(20L), breakdown.get("fan_out_build"));
         assertEquals(Long.valueOf(30L), breakdown.get("fan_out_wait"));
+        // The count round is issued only when it can replace the Tail, so most requests report zero for it — but the phase
+        // is always present, because a profiled request that DOES run it would otherwise under-report by a whole round trip.
+        assertEquals(Long.valueOf(0L), breakdown.get("union_count_wait"));
         assertEquals(Long.valueOf(40L), breakdown.get("window_merge"));
         assertEquals(Long.valueOf(50L), breakdown.get("fuse_scores"));
         assertEquals(Long.valueOf(60L), breakdown.get("rank_window"));

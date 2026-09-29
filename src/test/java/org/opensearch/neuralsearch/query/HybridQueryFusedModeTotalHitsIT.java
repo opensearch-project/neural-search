@@ -287,7 +287,7 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
      * as before.
      */
     @SneakyThrows
-    public void testTotalHits_whenNoLegReachesTheThreshold_thenTheUnionIsCountedExactlyFromRoundOne() {
+    public void testTotalHits_whenNoLegReachesTheThreshold_thenTheCountRoundSettlesTheUnionExactly() {
         prepareIndex();
         String body = "{\"size\":" + WINDOW + ",\"track_total_hits\":" + (DOCS + 5) + ",\"query\":" + fusedQuery(WINDOW) + "}";
 
@@ -342,7 +342,7 @@ public class HybridQueryFusedModeTotalHitsIT extends BaseNeuralSearchIT {
      * Three legs — {@code hello} (all), {@code place} (odd), {@code there} (even) — every document counted once although
      * {@code place} and {@code there} each sit entirely inside {@code hello}: union = DOCS, derived, no Tail.
      */
-    public void testTotalHits_whenThreeLegsOverlap_thenTheUnionIsCountedOnceFromRoundOne() {
+    public void testTotalHits_whenThreeLegsOverlap_thenEveryDocumentIsCountedOnce() {
         prepareIndex();
         String legs = "[{\"match\":{\""
             + TEXT_FIELD

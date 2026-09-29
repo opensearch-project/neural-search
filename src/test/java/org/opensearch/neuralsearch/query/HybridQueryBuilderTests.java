@@ -1210,7 +1210,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // The totals consumer is what permits dropping the Tail at all, and so what arms the legs to count.
         java.util.concurrent.atomic.AtomicReference<org.apache.lucene.search.TotalHits> published =
             new java.util.concurrent.atomic.AtomicReference<>();
-        builder.fusedTotalHitsConsumer(published::set);
+        java.util.concurrent.atomic.AtomicInteger fusions = new java.util.concurrent.atomic.AtomicInteger();
+        builder.fusedTotalHitsConsumer(total -> {
+            fusions.incrementAndGet();
+            published.set(total);
+        });
         // size 3 is not incidental: the derived count can only replace the Tail when the requested page fits inside the
         // ranked window, and these two legs fuse to 3 documents. At the default size of 10 the count is issued and then
         // cannot be used, because Tail-only documents would have filled slots 4..10.
@@ -1253,9 +1257,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             return null;
         }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
 
-        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
-        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
-        assertTrue("the rewrite must complete whatever the count did", done.get());
+        // Counters rather than flags: the core change is a new conditional async hop, so exactly-once is the property worth
+        // pinning. The cross-branch half is already covered by failing on the branch not expected; this covers the rest.
+        java.util.concurrent.atomic.AtomicInteger notified = new java.util.concurrent.atomic.AtomicInteger();
+        captured.get()
+            .accept(client, org.opensearch.core.action.ActionListener.wrap(r -> notified.incrementAndGet(), e -> fail(e.getMessage())));
+        assertEquals("the rewrite listener must be notified exactly once, whatever the count did", 1, notified.get());
+        assertEquals("and the fused query must be published exactly once", 1, fusions.get());
         return published.get();
     }
 

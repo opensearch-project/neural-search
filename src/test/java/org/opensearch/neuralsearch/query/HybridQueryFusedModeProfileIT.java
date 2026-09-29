@@ -152,7 +152,7 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         Map<String, Object> breakdown = mapAt(node, "breakdown");
         assertEquals(
             "the phases of a coordinator fusion",
-            Set.of("fan_out_build", "fan_out_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
+            Set.of("fan_out_build", "fan_out_wait", "union_count_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
             breakdown.keySet()
         );
         long summed = breakdown.values().stream().mapToLong(value -> ((Number) value).longValue()).sum();

@@ -841,6 +841,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     }
                     listener.onResponse(null);
                 };
+                SearchRequest countRequest;
                 try {
                     collectLegProfiles(multiSearchResponse);
                     collectLegTimings(multiSearchResponse, timings);
@@ -871,7 +872,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         fuseAndFinish.accept(null);
                         return;
                     }
-                    client.search(unionCountSearch, ActionListener.wrap(countResponse -> {
+                    countRequest = unionCountSearch;
+                } catch (Exception e) {
+                    listener.onFailure(e);
+                    return;
+                }
+                // Issued OUTSIDE the try above on purpose: that catch fails the request, and a throw from dispatching the
+                // count must not fail a request whose legs all succeeded — the count is an optimization, and the fallback a
+                // few lines down is to let round 2 count instead. Core routes this to onFailure in practice; this makes the
+                // contract hold even if it did not.
+                long unionCountStart = System.nanoTime();
+                try {
+                    client.search(countRequest, ActionListener.wrap(countResponse -> {
+                        timings.unionCountWaitNanos(System.nanoTime() - unionCountStart);
                         try {
                             // A count is only usable if it saw every shard and finished: a partial or truncated count
                             // understates the union, and reporting an understated total is worse than keeping round 2,
@@ -886,6 +899,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         // from its own Tail. So a failed count falls back to round 2 rather than failing a request whose
                         // legs all succeeded — the response is the pre-L9 one, which is correct by construction.
                     }, countFailure -> {
+                        timings.unionCountWaitNanos(System.nanoTime() - unionCountStart);
                         log.debug("fused hybrid union count failed; keeping round 2 for totals", countFailure);
                         try {
                             fuseAndFinish.accept(null);
@@ -893,8 +907,13 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                             listener.onFailure(e);
                         }
                     }));
-                } catch (Exception e) {
-                    listener.onFailure(e);
+                } catch (Exception dispatchFailure) {
+                    log.debug("fused hybrid union count could not be dispatched; keeping round 2 for totals", dispatchFailure);
+                    try {
+                        fuseAndFinish.accept(null);
+                    } catch (Exception e) {
+                        listener.onFailure(e);
+                    }
                 }
                 // Whole-MultiSearch transport failure (cancellation, rejection, coordinator error) — not a per-leg
                 // Item failure. Frame it as the user's hybrid/fused query rather than surfacing a bare multiSearch

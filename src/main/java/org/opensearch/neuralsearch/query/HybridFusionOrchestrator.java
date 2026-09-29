@@ -9,11 +9,13 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.TotalHits;
@@ -244,12 +246,8 @@ final class HybridFusionOrchestrator {
         if (Objects.isNull(threshold)) {
             return null;
         }
-        // Nothing to buy unless a derived count could actually replace the Tail for this request's shape, and unless the
-        // page could fit the window at all. Both are necessary conditions for the fast path
-        // (requestShapeAllowsDerivedTotalHits / the page bound in decideFastPathAfterLegs); issuing a count for a request
-        // that is going to fall back regardless would be pure cost. The page test is against the window rather than the
-        // ranked count, which is not known here -- so it is necessary, not sufficient, and the real bound still decides.
-        if (requestShapeAllowsDerivedTotalHits(source) == false || requestedPageEnd(source) > windowSize) {
+        // Nothing to buy unless a derived count could actually replace the Tail for this request's shape.
+        if (requestShapeAllowsDerivedTotalHits(source) == false) {
             return null;
         }
         for (QueryBuilder leg : legs) {
@@ -271,6 +269,16 @@ final class HybridFusionOrchestrator {
                 return null;
             }
             disjunction.should(legs.get(leg));
+        }
+        // The page has to fit inside what the legs actually ranked, or the derivation is refused later
+        // (onlyTotalsNeedTheTail / the page bound in decideFastPathAfterLegs) and the count is paid for and discarded. This
+        // test is EXACT rather than the window bound it replaces: the ranked count is the number of distinct documents
+        // across the legs' returned hits cut to the window, which toRankedDocs computes from the same key set without
+        // dropping anything else — so it is available here from the responses alone, with no fusion and none of its timing
+        // or explanation side effects. Checked last because it reads every leg's hits, which the loop above has just
+        // established are there.
+        if (requestedPageEnd(source) > rankedCountFromLegs(items, windowSize)) {
+            return null;
         }
         return scope.newUnionCountRequest(disjunction, threshold);
     }
@@ -447,6 +455,7 @@ final class HybridFusionOrchestrator {
             // The counted union first: core computed both its value and its relation for the legs' own disjunction, so it
             // is the count round 2 would have produced rather than an inference about it.
             derivedTotalHits = Objects.nonNull(countedUnion) ? countedUnion : totalHitsFromLegs(source, legTotalHits(items), windowSize);
+            derivedTotalHits = totalHitsNotBelowThePage(derivedTotalHits, ranked.ids().length);
             tailNeeded = Objects.isNull(derivedTotalHits);
         }
         if (Objects.nonNull(totalHitsConsumer)) {
@@ -1189,6 +1198,22 @@ final class HybridFusionOrchestrator {
      * threshold, a leg that was not asked to count, a leg landing exactly on the threshold with {@code eq}) leaves the
      * union's count genuinely unknown, and the Tail is kept so the response is unchanged.
      */
+    /**
+     * How many documents the legs will fuse to: the distinct {@code (_index, _id)} count across their returned hits, cut to
+     * the window. Equal to {@code ranked.ids().length} by construction — {@link #toRankedDocs} sorts the same key set and
+     * cuts it to {@code windowSize} without dropping anything else — but derived from the responses alone, so it can be
+     * asked before fusion runs and without re-running it.
+     */
+    private static int rankedCountFromLegs(MultiSearchResponse.Item[] items, int windowSize) {
+        Set<String> keys = new HashSet<>();
+        for (MultiSearchResponse.Item item : items) {
+            for (SearchHit hit : item.getResponse().getHits().getHits()) {
+                keys.add(documentKey(hit));
+            }
+        }
+        return Math.min(keys.size(), windowSize);
+    }
+
     static TotalHits totalHitsFromLegs(SearchSourceBuilder source, TotalHits[] legTotalHits, int windowSize) {
         Integer threshold = legTotalHitsThreshold(source, windowSize);
         if (Objects.isNull(threshold)) {
@@ -1410,6 +1435,32 @@ final class HybridFusionOrchestrator {
      * completes the report; a decision already refused before the legs is left as it is. {@code countedUnion} is the union
      * a lazy count-only round established, or {@code null} when none ran.
      */
+    /**
+     * A derived total the response may carry: one that cannot contradict the page it is reported with.
+     *
+     * <p>Every leg, and the count round, is an independently routed read. Without a {@code point_in_time} the count can land
+     * on a shard copy that has not applied a refresh the legs' copy had, or has applied a delete it had not, so a count
+     * labelled exact can come back SMALLER than the number of documents the legs ranked — and the page is assembled from the
+     * legs. A response with ten hits and {@code "total": 9} is a contradiction a client can see, and pagination computed from
+     * the total then disagrees with the page it was given.
+     *
+     * <p>Refusing such a count costs nothing real: in a consistent view every ranked document matches some leg, so the union
+     * is never below the ranked count; and where the union exceeds the threshold the value reported IS the threshold, which
+     * {@link #legTotalHitsThreshold} keeps above the window and therefore above the ranked count. So this rejects only
+     * genuinely skewed reads, and the Tail — one execution, counting what it returns — answers them instead. A rejection is
+     * visible where every other refusal is: the coordinator profile entry reports the Tail as built and the fast path as
+     * refused for an unsettled count.
+     */
+    private static TotalHits totalHitsNotBelowThePage(TotalHits derived, int rankedCount) {
+        if (Objects.isNull(derived)) {
+            return null;
+        }
+        if (derived.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO || derived.value() >= rankedCount) {
+            return derived;
+        }
+        return null;
+    }
+
     static void decideFastPathAfterLegs(
         FastPathDecision decision,
         SearchSourceBuilder source,
@@ -1429,7 +1480,7 @@ final class HybridFusionOrchestrator {
         Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
         boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
         boolean countSettled = totalsDisabled
-            || Objects.nonNull(countedUnion)
+            || Objects.nonNull(totalHitsNotBelowThePage(countedUnion, ranked.ids().length))
             || Objects.nonNull(totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize));
         decision.countSettled(countSettled);
         int pageEnd = requestedPageEnd(source);
@@ -1619,8 +1670,9 @@ final class HybridFusionOrchestrator {
         boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
         TotalHits totalHits = null;
         if (totalsDisabled == false) {
-            totalHits = Objects.nonNull(countedUnion)
-                ? countedUnion
+            TotalHits counted = totalHitsNotBelowThePage(countedUnion, ranked.ids().length);
+            totalHits = Objects.nonNull(counted)
+                ? counted
                 : totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize);
         }
         long assembleStart = System.nanoTime();

@@ -203,6 +203,65 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertEquals(SearchPipelineService.NOOP_PIPELINE_ID, count.pipeline());
     }
 
+    /**
+     * {@code newUnionCountRequest} is a second hand-maintained copy of the propagation policy, so a PROPAGATED field added to
+     * {@code newLegRequest} and forgotten here would make the count read a different document set than the legs — silently,
+     * because no existing test derives a forwarding assertion from a field's disposition.
+     *
+     * <p>This pins the two against each other by reading every request-level property off both sub-searches built from one
+     * fully-populated request. Anything a leg carries, the count carries, unless it is on the exclusion list below with a
+     * reason — and each exclusion is a property of the count's own shape (it fetches nothing and counts everything), not of
+     * which shards it reads.
+     */
+    public void testUnionCountRequestForwardsEverythingTheLegRequestDoes() {
+        SearchRequest request = new SearchRequest(INDEX).indicesOptions(IndicesOptions.lenientExpandOpen())
+            .routing("r1")
+            .preference("_local")
+            .searchType(SearchType.DFS_QUERY_THEN_FETCH)
+            .allowPartialSearchResults(false)
+            .source(
+                new SearchSourceBuilder().timeout(TimeValue.timeValueSeconds(7))
+                    .pointInTimeBuilder(new PointInTimeBuilder("pit-id-42").setKeepAlive(TimeValue.timeValueMinutes(5)))
+            );
+        request.setMaxConcurrentShardRequests(3);
+        request.setPreFilterShardSize(64);
+        request.setCancelAfterTimeInterval(TimeValue.timeValueSeconds(11));
+        CandidateScope scope = CandidateScope.from(request);
+
+        SearchRequest leg = scope.newLegRequest(LEG, 50);
+        SearchRequest count = scope.newUnionCountRequest(LEG, 10_000);
+
+        Map<String, java.util.function.Function<SearchRequest, Object>> readers = new java.util.LinkedHashMap<>();
+        readers.put("indices", r -> List.of(r.indices()));
+        readers.put("indicesOptions", SearchRequest::indicesOptions);
+        readers.put("routing", SearchRequest::routing);
+        readers.put("preference", SearchRequest::preference);
+        readers.put("searchType", SearchRequest::searchType);
+        readers.put("allowPartialSearchResults", SearchRequest::allowPartialSearchResults);
+        readers.put("maxConcurrentShardRequests", SearchRequest::getMaxConcurrentShardRequestsRaw);
+        readers.put("preFilterShardSize", SearchRequest::getPreFilterShardSize);
+        readers.put("cancelAfterTimeInterval", SearchRequest::getCancelAfterTimeInterval);
+        readers.put("pipeline", SearchRequest::pipeline);
+        readers.put("source.timeout", r -> r.source().timeout());
+        readers.put("source.pointInTimeBuilder.id", r -> r.source().pointInTimeBuilder().getId());
+        readers.put("source.pointInTimeBuilder.keepAlive", r -> r.source().pointInTimeBuilder().getKeepAlive());
+
+        for (Map.Entry<String, java.util.function.Function<SearchRequest, Object>> reader : readers.entrySet()) {
+            assertEquals(
+                "the count must read the same document set as the legs, and [" + reader.getKey() + "] decides part of that",
+                reader.getValue().apply(leg),
+                reader.getValue().apply(count)
+            );
+        }
+
+        // The exclusions, each a property of what a count IS rather than of which shards it reads:
+        assertEquals("a leg fetches a window of hits; a count fetches none", 0, count.source().size());
+        assertEquals(50, leg.source().size());
+        assertFalse("a count needs no _source", count.source().fetchSource().fetchSource());
+        assertNull("a count carries no aggregation", count.source().aggregations());
+        assertEquals("a count counts to the request's threshold", Integer.valueOf(10_000), count.source().trackTotalHitsUpTo());
+    }
+
     public void testUnionCountRequestLeavesUnsetFieldsUnset() {
         SearchRequest count = CandidateScope.from(new SearchRequest(INDEX)).newUnionCountRequest(LEG, 500);
 

@@ -9,6 +9,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import org.apache.lucene.search.Explanation;
@@ -2546,8 +2547,18 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     // ---- L9: exact hits.total from round 1 (leg counts + overlap aggregations) ----
 
     /** A leg item with an exact ({@code eq}) or capped ({@code gte}) total and, optionally, its overlap aggregation. */
+    private int countingLegItems = 0;
+
     private MultiSearchResponse.Item countingLegItem(TotalHits total, InternalAggregation overlap) {
-        SearchHits searchHits = new SearchHits(new SearchHit[0], total, 1.0f);
+        // A real leg returns min(its match count, window) hits, so a fixture that reports a total and no hits is a shape no
+        // shard produces — and the count round's page test reads those hits. Emit ids unique across calls, so two legs of a
+        // fixture fuse to the sum of their hits rather than to one overlapping set.
+        int emitted = Objects.isNull(total) ? 0 : (int) Math.min(total.value(), 100);
+        SearchHit[] hits = new SearchHit[emitted];
+        for (int i = 0; i < emitted; i++) {
+            hits[i] = hitFrom(i, INDEX, "cli-" + (countingLegItems++) + "-" + i, 1.0f - i / 1000.0f);
+        }
+        SearchHits searchHits = new SearchHits(hits, total, 1.0f);
         InternalAggregations aggregations = overlap == null ? null : InternalAggregations.from(List.of(overlap));
         SearchResponseSections sections = new SearchResponseSections(searchHits, aggregations, null, false, false, null, 0);
         SearchResponse response = new SearchResponse(sections, null, 1, 1, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
@@ -2556,7 +2567,12 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
 
     /** A leg item that answered on fewer shards than it searched, or did not run to completion. */
     private MultiSearchResponse.Item degradedLegItem(TotalHits total, InternalAggregation overlap, int missingShards, boolean timedOut) {
-        SearchHits searchHits = new SearchHits(new SearchHit[0], total, 1.0f);
+        int emitted = Objects.isNull(total) ? 0 : (int) Math.min(total.value(), 100);
+        SearchHit[] hits = new SearchHit[emitted];
+        for (int i = 0; i < emitted; i++) {
+            hits[i] = hitFrom(i, INDEX, "deg-" + (countingLegItems++) + "-" + i, 1.0f - i / 1000.0f);
+        }
+        SearchHits searchHits = new SearchHits(hits, total, 1.0f);
         InternalAggregations aggregations = overlap == null ? null : InternalAggregations.from(List.of(overlap));
         SearchResponseSections sections = new SearchResponseSections(searchHits, aggregations, null, timedOut, false, null, 0);
         SearchResponse response = new SearchResponse(sections, null, 4, 4 - missingShards, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
@@ -2565,7 +2581,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
 
     public void testUnionCountRequest_refusesALegThatDidNotAnswerOnEveryShard() {
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
-        SearchSourceBuilder source = new SearchSourceBuilder().size(100).trackTotalHitsUpTo(10_000);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
 
         assertNotNull(
             "the control",
@@ -2682,7 +2698,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     public void testUnionCountRequest_legsBelowTheThreshold_countsTheDisjunctionAndNothingElse() {
         QueryBuilder hello = new MatchQueryBuilder("text", "hello");
         QueryBuilder place = new TermQueryBuilder("text", "place");
-        SearchSourceBuilder source = new SearchSourceBuilder().size(100).trackTotalHitsUpTo(10_000);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
 
         SearchRequest count = HybridFusionOrchestrator.unionCountRequest(
             armedScope(source),
@@ -2706,12 +2722,114 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertEquals(SearchPipelineService.NOOP_PIPELINE_ID, count.pipeline());
     }
 
+    /**
+     * v-I1: a derived total may never come back below the page it is reported with. Each leg and the count are
+     * independently routed reads, so without a PIT the count can land on a copy missing a refresh the legs' copy had and
+     * return a value below the ranked count — a response with more hits than its own `total`, which a client can see.
+     */
+    public void testBuildFusedResult_discardsACountedUnionBelowTheRankedCount() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(40)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.4f)), eq(20))
+        );
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        // The legs fuse to 3 documents. A count of 2 contradicts the page, so it is refused and the Tail counts instead.
+        FusedCoordinatorTimings refused = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult skewed = fusedResult(source, ms, legs, 10, true, new TotalHits[1], refused, eq(2));
+        assertFalse("a count below the ranked page is not usable", skewed.tookFastPath());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, refused.fastPath().refusedBy());
+
+        // Exactly at the ranked count is consistent and stands.
+        FusedCoordinatorTimings atTheEdge = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult edge = fusedResult(source, ms, legs, 10, true, new TotalHits[1], atTheEdge, eq(3));
+        assertTrue(edge.tookFastPath());
+        assertEquals(eq(3), edge.assembledHits().getTotalHits());
+
+        // A capped count is never "below": the threshold is above the window, hence above anything ranked.
+        FusedCoordinatorTimings capped = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult gteResult = fusedResult(source, ms, legs, 10, true, new TotalHits[1], capped, gte(10_000));
+        assertTrue(gteResult.tookFastPath());
+        assertEquals(gte(10_000), gteResult.assembledHits().getTotalHits());
+    }
+
+    /**
+     * v-I3: the count is only worth issuing when the page fits what the legs actually ranked. Gating on the window instead
+     * left every request whose legs fuse to fewer than {@code from + size} documents paying for a count it then discarded.
+     */
+    public void testUnionCountRequest_refusesWhenTheLegsRankedFewerDocumentsThanThePage() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        List<QueryBuilder> legs = List.of(hello, place);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(10).trackTotalHitsUpTo(10_000);
+
+        // Two legs returning the same two documents fuse to 2 — short of a page of 10 — so the count would be discarded.
+        assertNull(
+            "the legs ranked 2 documents for a page of 10",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] {
+                    legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(40)),
+                    legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.8f, "2", 0.4f)), eq(20)) },
+                100
+            )
+        );
+        assertNull(
+            "a query matching nothing is the common case of the same thing",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { legItemWithTotal(Map.of(), eq(0)), legItemWithTotal(Map.of(), eq(0)) },
+                100
+            )
+        );
+        // Ten distinct documents across the legs is exactly the page, so the count is worth issuing.
+        Map<String, Float> five = new LinkedHashMap<>();
+        Map<String, Float> fiveMore = new LinkedHashMap<>();
+        for (int i = 0; i < 5; i++) {
+            five.put("a" + i, 0.9f - i / 100.0f);
+            fiveMore.put("b" + i, 0.8f - i / 100.0f);
+        }
+        assertNotNull(
+            "the legs ranked exactly the page",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { legItemWithTotal(five, eq(40)), legItemWithTotal(fiveMore, eq(20)) },
+                100
+            )
+        );
+    }
+
+    /** v-T5(a): the fan-out bound belongs to the count round, and is now asserted where the constant is actually read. */
+    public void testUnionCountRequest_refusesAFanOutWiderThanTheBound() {
+        List<QueryBuilder> many = new ArrayList<>();
+        for (int i = 0; i <= HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT; i++) {
+            many.add(new TermQueryBuilder("text", "t" + i));
+        }
+        MultiSearchResponse.Item[] items = new MultiSearchResponse.Item[many.size()];
+        for (int i = 0; i < items.length; i++) {
+            items[i] = legItemWithTotal(new LinkedHashMap<>(Map.of("d" + i, 0.5f)), eq(3));
+        }
+        SearchSourceBuilder source = new SearchSourceBuilder().size(1).trackTotalHitsUpTo(10_000);
+
+        assertNull(
+            "past the bound the disjunction re-executes more leg queries than the Tail it would replace",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, many, items, 100)
+        );
+    }
+
     public void testUnionCountRequest_refusedForEveryShapeTheCountCannotSettle() {
         QueryBuilder hello = new MatchQueryBuilder("text", "hello");
         QueryBuilder place = new TermQueryBuilder("text", "place");
         QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
         List<QueryBuilder> lexical = List.of(hello, place);
-        SearchSourceBuilder source = new SearchSourceBuilder().size(100).trackTotalHitsUpTo(10_000);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
 
         // An ANN leg is SERVED, not refused: the count re-executes it, but so does the Tail it replaces, and the count
         // skips the Tail's fetch. Refusing it would have meant keeping the Tail, which is strictly dearer.
@@ -2817,7 +2935,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     public void testUnionCountRequest_readsTheSameViewAsTheLegs() {
         QueryBuilder hello = new MatchQueryBuilder("text", "hello");
         QueryBuilder place = new TermQueryBuilder("text", "place");
-        SearchSourceBuilder source = new SearchSourceBuilder().size(100).trackTotalHitsUpTo(10_000);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
         SearchRequest request = new SearchRequest(INDEX).source(source).routing("r1").preference("_local");
         request.allowPartialSearchResults(false);
         CandidateScope scope = CandidateScope.from(request);
@@ -2899,7 +3017,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         QueryBuilder hello = new MatchQueryBuilder("text", "hello");
         QueryBuilder place = new TermQueryBuilder("text", "place");
         List<QueryBuilder> legs = List.of(hello, place);
-        SearchSourceBuilder source = new SearchSourceBuilder().size(100).trackTotalHitsUpTo(10_000);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
         CandidateScope scope = armedScope(source);
 
         assertNull("no scope", HybridFusionOrchestrator.unionCountRequest(null, source, legs, lexicalItems(eq(10), eq(3)), 100));
