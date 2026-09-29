@@ -2653,6 +2653,104 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         );
     }
 
+    /**
+     * The minimum cluster wiring a {@code NeuralQueryBuilder} needs to be constructed at all: its builder validates the
+     * semantic-field feature against the cluster's minimum node version.
+     */
+    private void initClusterMinVersionForNeuralLegs() {
+        org.opensearch.cluster.node.DiscoveryNodes nodes = org.mockito.Mockito.mock(org.opensearch.cluster.node.DiscoveryNodes.class);
+        org.mockito.Mockito.when(nodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.CURRENT);
+        org.opensearch.cluster.ClusterState clusterState = org.mockito.Mockito.mock(org.opensearch.cluster.ClusterState.class);
+        org.mockito.Mockito.when(clusterState.getNodes()).thenReturn(nodes);
+        org.opensearch.cluster.service.ClusterService clusterService = org.mockito.Mockito.mock(
+            org.opensearch.cluster.service.ClusterService.class
+        );
+        org.mockito.Mockito.when(clusterService.state()).thenReturn(clusterState);
+        org.opensearch.neuralsearch.util.NeuralSearchClusterUtil.instance()
+            .initialize(clusterService, org.mockito.Mockito.mock(org.opensearch.cluster.metadata.IndexNameExpressionResolver.class));
+    }
+
+    /**
+     * A short {@code neural} leg is refused on <b>both</b> paths, unlike a short {@code knn} leg which is refused only
+     * un-armed. The difference is what re-executing it costs: the count's disjunction is built from the ORIGINAL leg
+     * builders, whose {@code vectorSupplier()} round 1 never set ({@code rewriteQueryAgainstKnnField} returns a NEW builder
+     * holding the {@code SetOnce}), so rewriting the count re-enters the inference branch and calls the model a second time
+     * — and {@code MLCommonsClientAccessor} caches model metadata, not embeddings. Against a remote connector that is a
+     * network call and per-call spend, which the knn measurement (+4 ms allowed vs +8 ms refused) says nothing about.
+     */
+    public void testUnionCountRequest_refusesAShortNeuralLegOnBothPathsButAShortKnnLegOnlyUnarmed() {
+        initClusterMinVersionForNeuralLegs();
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder neural = NeuralQueryBuilder.builder().fieldName("vec").queryText("shoes").modelId("m1").k(10).build();
+        QueryBuilder knn = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        for (boolean armed : new boolean[] { true, false }) {
+            assertNull(
+                "a short neural leg would cost a second inference, armed=" + armed,
+                HybridFusionOrchestrator.unionCountRequest(
+                    armedScope(source),
+                    source,
+                    List.of(neural, hello),
+                    lexicalItems(eq(10), eq(3)),
+                    100,
+                    armed
+                )
+            );
+        }
+        // The same shape with knn instead: served when armed, because knn carries its vector and only re-walks a graph.
+        assertNotNull(
+            "a short knn leg is a graph walk, which armed buys away a round trip",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(knn, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        assertNull(
+            "and un-armed it is a third round, so refused",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(knn, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                false
+            )
+        );
+    }
+
+    /**
+     * The premise the rule above rests on, asserted rather than argued: a {@code neural} leg that FILLED the window IS
+     * admitted, and what enters the disjunction is the user's own builder with {@code vectorSupplier() == null} — so
+     * rewriting it infers again. That is fine there only because {@code legInTailForm} keeps a window-filling leg verbatim,
+     * so round 2's Tail carries the same unresolved builder and pays the same inference. If this ever started carrying a
+     * resolved copy, the short-leg refusal above would be measuring the wrong thing.
+     */
+    public void testUnionCountRequest_admitsAFilledNeuralLegAsTheUnresolvedOriginal() {
+        initClusterMinVersionForNeuralLegs();
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        NeuralQueryBuilder neural = NeuralQueryBuilder.builder().fieldName("vec").queryText("shoes").modelId("m1").k(100).build();
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        SearchRequest count = HybridFusionOrchestrator.unionCountRequest(
+            armedScope(source),
+            source,
+            List.of(neural, hello),
+            lexicalItems(eq(100), eq(3)),
+            100,
+            true
+        );
+
+        assertNotNull("a filled neural leg is re-executed by the Tail too, so counting it is cost-neutral", count);
+        BoolQueryBuilder disjunction = (BoolQueryBuilder) count.source().query();
+        assertSame("the count carries the user's own leg, not a resolved copy", neural, disjunction.should().get(0));
+        assertNull("whose vector is still unresolved, so a rewrite of it would infer", neural.vectorSupplier());
+    }
+
     /** The same rule where it actually bites: a leg whose can_match skipped a shard must still be counted. */
     public void testUnionCountRequest_servesLegsWhoseCanMatchSkippedAShard() {
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));

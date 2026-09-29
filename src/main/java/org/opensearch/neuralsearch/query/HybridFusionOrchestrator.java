@@ -305,21 +305,28 @@ final class HybridFusionOrchestrator {
                 return null;
             }
             // An ANN leg the window did NOT truncate is the one leg the Tail does not re-execute: legInTailForm replaces it
-            // with an address of the hits it returned, so the Tail walks no graph for it while the disjunction below would.
-            // Whether paying that walk is worth it depends on what the count replaces, and the two paths differ:
+            // with an address of the hits it returned, so the Tail neither walks its graph nor re-runs its inference, while
+            // the disjunction below would do both. What that re-execution is worth depends on what the count replaces AND on
+            // what re-executing this particular leg costs:
             //
-            // armed — settling the total makes round 2 a match_none and the page is assembled from round 1, so the
-            // count replaces a whole round trip (round 2's query AND its page fetch). One graph walk for one
-            // fewer round trip, and the count is request-cacheable on a repeat.
-            // un-armed — round 2 runs either way, Top-only instead of Top+Tail. The count is then a THIRD round whose
-            // only saving is a Tail clause that, for this leg, is a cheap ids lookup. That is a regression.
+            // armed, no inference (knn / neural_knn) — settling the total makes round 2 a match_none and the page is
+            // assembled from round 1, so the count replaces a whole round trip (round 2's query AND its page fetch) for one
+            // graph walk, and is request-cacheable on a repeat. Measured on WANDS: +4 ms allowing it against +8 ms refusing.
+            // un-armed — round 2 runs either way, Top-only instead of Top+Tail, so the count is a THIRD round whose only
+            // saving is a Tail clause that for this leg is a cheap ids lookup.
+            // any path, with inference (neural) — the count's copy of the leg is the ORIGINAL builder, whose vectorSupplier
+            // is still null (rewriteQueryAgainstKnnField returns a NEW builder holding the SetOnce), so rewriting the count
+            // re-enters the inference branch and calls the model a second time; MLCommonsClientAccessor caches model
+            // metadata, not embeddings. For a remote connector that is a network call, per-call spend and a second chance to
+            // throttle — categorically unlike a local graph walk, and not something the knn measurement above speaks to.
             //
-            // So refuse exactly the un-armed case. A leg that filled the window is served on both paths, because there the
-            // Tail re-executes it too and the walk is not extra at all.
-            if (fastPathArmed == false
-                && isMaterializableLeg(legs.get(leg))
-                && item.getResponse().getHits().getHits().length < windowSize) {
-                return null;
+            // So: refuse a short materializable leg un-armed, and refuse it on either path when it carries inference. A leg
+            // that FILLED the window is served on both paths and inference or not, because there the Tail keeps it verbatim
+            // and re-executes — and re-infers — exactly as the count would.
+            if (isMaterializableLeg(legs.get(leg)) && item.getResponse().getHits().getHits().length < windowSize) {
+                if (fastPathArmed == false || carriesInference(legs.get(leg))) {
+                    return null;
+                }
             }
             disjunction.should(legs.get(leg));
         }
@@ -1087,6 +1094,22 @@ final class HybridFusionOrchestrator {
     private static boolean isMaterializableLeg(QueryBuilder leg) {
         String name = leg.getWriteableName();
         return KNNQueryBuilder.NAME.equals(name) || NeuralQueryBuilder.NAME.equals(name) || NeuralKNNQueryBuilder.NAME.equals(name);
+    }
+
+    /**
+     * Whether re-executing this leg costs a <b>model inference</b> on top of whatever it reads. Only {@code neural} does:
+     * {@code knn} carries its vector in the request, and {@code neural_knn} ({@link NeuralKNNQueryBuilder}) wraps a
+     * {@link KNNQueryBuilder} whose vector is already resolved.
+     *
+     * <p>It matters because the count round's disjunction is built from the <b>original</b> leg builders — round 1 rewrites
+     * a copy ({@code NeuralQueryBuilder#rewriteQueryAgainstKnnField} returns a new builder holding the {@code SetOnce}),
+     * leaving the original's {@code vectorSupplier()} null — so rewriting the count re-enters the inference branch and calls
+     * the model again. Nothing caches the result: {@code MLCommonsClientAccessor} caches {@code MLModel} metadata, not
+     * embeddings. Against a remote connector that is a network round trip, per-call spend, and another throttle path, which
+     * is why it is weighed differently from a local graph walk even where one round trip would be saved.
+     */
+    private static boolean carriesInference(QueryBuilder leg) {
+        return NeuralQueryBuilder.NAME.equals(leg.getWriteableName());
     }
 
     /**
