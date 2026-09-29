@@ -367,9 +367,11 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
      * withhold it (core's concurrent-segment profile breakdown asserts on a profiled search that also aggregates), and the
      * profile then said the count was unprovable for a request that derives it fine without {@code profile: true}.
      *
-     * <p>The window is narrowed to {@code TOTAL_DOCS / 2} so the kNN leg FILLS it. That is the condition on which the count
-     * round accepts an ANN leg at all: a leg the window truncated is kept verbatim by the Tail, so the count re-executes
-     * only what round 2 would have. The short-leg case is the test below.
+     * <p>The window is narrowed to {@code TOTAL_DOCS / 2} so the kNN leg FILLS it. That matters because a profiled request
+     * runs round 2 regardless, so it is un-armed — and for an un-armed request the count round refuses an ANN leg the
+     * window did not truncate (the Tail materializes such a leg, so the count would be a third round buying only an ids
+     * lookup). A leg that filled the window is re-executed by the Tail too, so it is counted on either path. The
+     * short-leg case is the test below.
      */
     @SneakyThrows
     public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheCountRoundStillSettlesIt() {
@@ -387,13 +389,16 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * The other side of that rule, end to end: an ANN leg the window did NOT truncate is refused by the count round,
-     * because {@code legInTailForm} would have replaced it with an ids clause and the Tail then walks no graph — so
-     * counting it would add a graph walk instead of moving one. Here {@code TOTAL_DOCS} (6) is below the window (10), which
-     * is the small-corpus form of the default shape (a {@code knn} leg whose {@code k} is well under the window).
+     * The other side of that rule, end to end. A profiled request is un-armed — it runs round 2 to produce the profile — so
+     * an ANN leg the window did NOT truncate is refused: {@code legInTailForm} turns that leg into an ids clause, so round
+     * 2's Tail walks no graph for it and the count would be a third round whose only saving is that ids lookup. Measured
+     * on the live cluster, allowing it on the ARMED path instead is worth +3 ms against +8 ms for refusing, because there
+     * the count removes round 2 altogether; un-armed there is no round to remove.
+     *
+     * <p>Here {@code TOTAL_DOCS} (6) is below the window (10), which is the small-corpus form of the default shape.
      */
     @SneakyThrows
-    public void testProfiledFusedHybrid_whenAnAnnLegIsShortOfTheWindow_thenTheCountIsRefused() {
+    public void testProfiledFusedHybrid_whenAnUnarmedAnnLegIsShortOfTheWindow_thenTheCountIsRefused() {
         ensureDataset(INDEX, 1);
         prime(INDEX, "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3}");
 

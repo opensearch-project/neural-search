@@ -2590,7 +2590,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { degradedLegItem(eq(10), null, 0, false), degradedLegItem(eq(3), null, 0, false) },
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -2600,7 +2601,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { degradedLegItem(eq(10), null, 1, false), degradedLegItem(eq(3), null, 0, false) },
-                100
+                100,
+                true
             )
         );
     }
@@ -2705,7 +2707,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             source,
             List.of(hello, place),
             lexicalItems(eq(4899), eq(2000)),
-            100
+            100,
+            true
         );
 
         assertNotNull("both legs came back exact and below the threshold, so one count settles the union", count);
@@ -2779,7 +2782,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 new MultiSearchResponse.Item[] {
                     legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(40)),
                     legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.8f, "2", 0.4f)), eq(20)) },
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -2789,7 +2793,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { legItemWithTotal(Map.of(), eq(0)), legItemWithTotal(Map.of(), eq(0)) },
-                100
+                100,
+                true
             )
         );
         // Ten distinct documents across the legs is exactly the page, so the count is worth issuing.
@@ -2806,7 +2811,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { legItemWithTotal(five, eq(40)), legItemWithTotal(fiveMore, eq(20)) },
-                100
+                100,
+                true
             )
         );
     }
@@ -2825,7 +2831,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 lexicalLegs(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT),
                 countingLegItems(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT),
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -2835,7 +2842,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 lexicalLegs(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT + 1),
                 countingLegItems(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT + 1),
-                100
+                100,
+                true
             )
         );
     }
@@ -2865,12 +2873,32 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         List<QueryBuilder> lexical = List.of(hello, place);
         SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
 
-        // An ANN leg the window did NOT truncate is refused: legInTailForm would have replaced it with an ids clause, so
-        // the Tail walks no graph for it while the count's disjunction would — the count would ADD a walk, not move one.
-        // 10 hits against a window of 100 is the default shape (knn k=10 on a few shards, window 100).
+        // A short ANN leg (10 hits against a window of 100 — the default shape, knn k=10 on a few shards) is the one leg
+        // the Tail does not re-execute, so what the count's graph walk buys depends on the path. UN-ARMED it is a third
+        // round saving only a cheap ids clause, so it is refused...
         assertNull(
-            "a short ANN leg is materialized by the Tail, so counting it costs a graph walk the Tail does not pay",
-            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, List.of(ann, hello), lexicalItems(eq(10), eq(3)), 100)
+            "un-armed, a short ANN leg makes the count a third round whose only saving is an ids lookup",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(ann, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                false
+            )
+        );
+        // ...but ARMED the count settles the total, round 2 becomes a match_none, and a whole round trip (query and page
+        // fetch) goes away for one graph walk. That trade is worth taking, so the same shape is served.
+        assertNotNull(
+            "armed, the count buys away round 2 entirely, which is worth one graph walk",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(ann, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
         );
 
         // An ANN leg that FILLED the window is served: the Tail keeps it verbatim, so both paths re-execute it and the
@@ -2880,21 +2908,22 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             source,
             List.of(ann, hello),
             lexicalItems(eq(100), eq(3)),
-            100
+            100,
+            true
         );
         assertNotNull("an ANN leg the window truncated is counted: the Tail would have re-executed it too", withFilledAnn);
         assertEquals(List.of(ann, hello), ((BoolQueryBuilder) withFilledAnn.source().query()).should());
         assertNull(
             "a leg already past the threshold proves the union is too: totalHitsFromLegs answers, no round needed",
-            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(gte(10_000), eq(3)), 100)
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(gte(10_000), eq(3)), 100, true)
         );
         assertNull(
             "a leg landing ON the threshold: its own count is capped, so the disjunction's would tell us nothing new",
-            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(eq(10_000), eq(3)), 100)
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(eq(10_000), eq(3)), 100, true)
         );
         assertNull(
             "a leg that was not asked to count",
-            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(null, eq(3)), 100)
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(null, eq(3)), 100, true)
         );
         assertNull(
             "one leg is not a union",
@@ -2903,7 +2932,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 List.of(hello),
                 new MultiSearchResponse.Item[] { countingLegItem(eq(10), null) },
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -2913,7 +2943,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 List.of(hello, new TermQueryBuilder("text", "place").queryName("p")),
                 lexicalItems(eq(10), eq(3)),
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -2923,7 +2954,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 List.of(hello, new HybridQueryBuilder().add(place)),
                 lexicalItems(eq(10), eq(3)),
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -2936,7 +2968,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                     new HybridFusionQueryBuilder(new String[] { "d1" }, new String[] { INDEX }, new float[] { 1.0f }, List.of(place))
                 ),
                 lexicalItems(eq(10), eq(3)),
-                100
+                100,
+                true
             )
         );
         SearchSourceBuilder aggregating = new SearchSourceBuilder().size(3)
@@ -2944,17 +2977,31 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             .aggregation(AggregationBuilders.filter("a", new MatchAllQueryBuilder()));
         assertNull(
             "an aggregating request needs the Tail for its own reasons, so a count buys it nothing",
-            HybridFusionOrchestrator.unionCountRequest(armedScope(aggregating), aggregating, lexical, lexicalItems(eq(10), eq(3)), 100)
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(aggregating),
+                aggregating,
+                lexical,
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
         );
         SearchSourceBuilder pastTheWindow = new SearchSourceBuilder().from(90).size(100).trackTotalHitsUpTo(10_000);
         assertNull(
             "the page cannot be served from the window, so the request falls back whatever the count says",
-            HybridFusionOrchestrator.unionCountRequest(armedScope(pastTheWindow), pastTheWindow, lexical, lexicalItems(eq(10), eq(3)), 100)
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(pastTheWindow),
+                pastTheWindow,
+                lexical,
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
         );
         SearchSourceBuilder totalsOff = new SearchSourceBuilder().size(3).trackTotalHits(false);
         assertNull(
             "no count is wanted at all",
-            HybridFusionOrchestrator.unionCountRequest(armedScope(totalsOff), totalsOff, lexical, lexicalItems(eq(10), eq(3)), 100)
+            HybridFusionOrchestrator.unionCountRequest(armedScope(totalsOff), totalsOff, lexical, lexicalItems(eq(10), eq(3)), 100, true)
         );
         SearchSourceBuilder shallowThreshold = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(50);
         assertNull(
@@ -2964,14 +3011,15 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 shallowThreshold,
                 lexical,
                 lexicalItems(eq(10), eq(3)),
-                100
+                100,
+                true
             )
         );
         CandidateScope unarmed = CandidateScope.from(new SearchRequest(INDEX).source(source));
         assertFalse(unarmed.legUnionCountAllowed());
         assertNull(
             "the legs were not asked to count, so their relations prove nothing",
-            HybridFusionOrchestrator.unionCountRequest(unarmed, source, lexical, lexicalItems(eq(10), eq(3)), 100)
+            HybridFusionOrchestrator.unionCountRequest(unarmed, source, lexical, lexicalItems(eq(10), eq(3)), 100, true)
         );
         assertNull(
             "a failed leg: the request is about to fail anyway",
@@ -2982,7 +3030,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 new MultiSearchResponse.Item[] {
                     new MultiSearchResponse.Item(null, new IllegalStateException("leg failed")),
                     countingLegItem(eq(3), null) },
-                100
+                100,
+                true
             )
         );
     }
@@ -3001,7 +3050,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             source,
             List.of(hello, place),
             lexicalItems(eq(10), eq(3)),
-            100
+            100,
+            true
         );
 
         assertNotNull(count);
@@ -3075,9 +3125,9 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
         CandidateScope scope = armedScope(source);
 
-        assertNull("no scope", HybridFusionOrchestrator.unionCountRequest(null, source, legs, lexicalItems(eq(10), eq(3)), 100));
-        assertNull("no items", HybridFusionOrchestrator.unionCountRequest(scope, source, legs, null, 100));
-        assertNull("no legs", HybridFusionOrchestrator.unionCountRequest(scope, source, null, lexicalItems(eq(10), eq(3)), 100));
+        assertNull("no scope", HybridFusionOrchestrator.unionCountRequest(null, source, legs, lexicalItems(eq(10), eq(3)), 100, true));
+        assertNull("no items", HybridFusionOrchestrator.unionCountRequest(scope, source, legs, null, 100, true));
+        assertNull("no legs", HybridFusionOrchestrator.unionCountRequest(scope, source, null, lexicalItems(eq(10), eq(3)), 100, true));
         assertNull(
             "one item per leg or the leg-to-item mapping is not the one the union is computed over",
             HybridFusionOrchestrator.unionCountRequest(
@@ -3085,7 +3135,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { countingLegItem(eq(10), null) },
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -3095,7 +3146,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { uncountedLegItem(), countingLegItem(eq(3), null) },
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -3105,7 +3157,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { null, countingLegItem(eq(3), null) },
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -3116,7 +3169,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 source,
                 legs,
                 new MultiSearchResponse.Item[] { new MultiSearchResponse.Item(null, null), countingLegItem(eq(3), null) },
-                100
+                100,
+                true
             )
         );
         assertNull(
@@ -3129,7 +3183,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                     new HybridFusionQueryBuilder(new String[0], new String[0], new float[0], List.of(), List.of(), List.of(), null)
                 ),
                 lexicalItems(eq(10), eq(3)),
-                100
+                100,
+                true
             )
         );
     }

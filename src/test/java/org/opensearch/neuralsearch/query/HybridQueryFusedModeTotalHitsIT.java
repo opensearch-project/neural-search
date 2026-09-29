@@ -25,8 +25,9 @@ import lombok.SneakyThrows;
  * it. Two sources answer, in order of cost: a leg whose own count already exceeded the threshold proves the union does
  * too (core caps a tracked count at the threshold, so both paths say {@code {threshold, gte}}); otherwise, when every leg
  * came back exact and short of the threshold, one {@code size: 0} count round over the legs' disjunction settles it. That
- * round is issued whatever the leg shapes are, with one exception — an ANN leg the window did not truncate, which the Tail
- * would have replaced with an ids clause, so counting it would add a graph walk the Tail does not do.
+ * round is issued whatever the leg shapes are, with one exception — an ANN leg the window did not truncate, on an
+ * <b>un-armed</b> request. That leg is the only one the Tail does not re-execute (it becomes an ids clause), so there the
+ * count would be a third round buying only a cheap ids lookup; armed, it buys away round 2 altogether and is taken.
  * These tests pin that the visible response is the same whichever answered, and that the shapes where the Tail's documents
  * (not just its count) are part of the answer keep it.
  *

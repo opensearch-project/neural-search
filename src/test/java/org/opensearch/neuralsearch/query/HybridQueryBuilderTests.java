@@ -1289,17 +1289,17 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     /**
-     * A {@code neural} leg is counted on exactly the condition the Tail would have re-executed it on: that the window did
-     * not truncate it. Short of the window, {@code legInTailForm} replaces it with an ids clause, so the Tail walks no
-     * graph (and runs no second inference) while the count's disjunction would — the count would ADD that cost rather
-     * than move it, so it is refused. This is the default shape, since a {@code neural} leg's default {@code k} is far
-     * below the default window of 100. The filled-window case is the other arm below.
+     * A {@code neural} leg short of the window, on an <b>un-armed</b> request. {@code legInTailForm} replaces such a leg
+     * with an ids clause, so the Tail walks no graph (and runs no second inference) for it — and un-armed, round 2 runs
+     * regardless, so the count would be a third round buying only that ids lookup. Refused. This is the default shape,
+     * since a {@code neural} leg's default {@code k} is far below the default window of 100. This request is un-armed
+     * because it sets only {@code fusedTotalHitsConsumer}; arming also needs {@code fusedHitsConsumer}.
      *
      * <p>No mapping is resolved either way: dense vs sparse stopped mattering when the overlap aggregation went, and the
      * test asserts no leg carries one.
      */
     @SneakyThrows
-    public void testDoRewriteFused_whenANeuralLegIsShortOfTheWindow_thenTheCountIsRefused() {
+    public void testDoRewriteFused_whenAnUnarmedNeuralLegIsShortOfTheWindow_thenTheCountIsRefused() {
         initClusterUtilWithMaxResultWindow(10000);
         HybridQueryBuilder builder = new HybridQueryBuilder();
         builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").build());
@@ -1364,7 +1364,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     /**
      * The other arm: a {@code neural} leg the window truncated is kept verbatim by the Tail, so the count re-executes
-     * exactly what round 2 would have and costs no extra graph walk. It goes into the disjunction as the real query.
+     * exactly what round 2 would have and costs no extra graph walk. It goes into the disjunction as the real query, and
+     * unlike the case above this holds whether or not the request armed.
      */
     @SneakyThrows
     public void testDoRewriteFused_whenANeuralLegFilledTheWindow_thenTheCountRoundServesIt() {

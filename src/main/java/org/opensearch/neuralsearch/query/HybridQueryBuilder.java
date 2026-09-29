@@ -859,16 +859,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     // the Tail this replaces, so counting them costs no extra graph walk. The one refusal is an ANN leg
                     // the window did NOT truncate, which the Tail would have materialized into an ids clause — see that
                     // method for why the guarantee is exact rather than a k-vs-window assumption.
-                    // Not gated on fastPathArmed: round 2 keeps its Tail purely to count whether or not the fast path
-                    // arms, so the count is worth having on both paths. Gating it on arming would make an un-armed
-                    // request carry a full Tail purely to count — a regression, caught by
-                    // HybridQueryFusedModeTotalHitsIT when its fetch-op oracle ran first in a randomized order.
+                    // Issued on both paths, not only the armed one: round 2 keeps its Tail purely to count whether or not
+                    // the fast path arms, so gating the whole thing on arming would make an un-armed request carry a full
+                    // Tail purely to count — a regression, caught by HybridQueryFusedModeTotalHitsIT when its fetch-op
+                    // oracle ran first in a randomized order. Arming is passed down because it changes the cost of exactly
+                    // one leg shape (a short ANN leg), not because it gates the round.
                     SearchRequest unionCountSearch = HybridFusionOrchestrator.unionCountRequest(
                         candidateScope,
                         searchRequest.source(),
                         legs,
                         multiSearchResponse.getResponses(),
-                        window
+                        window,
+                        fastPathArmed
                     );
                     if (Objects.isNull(unionCountSearch)) {
                         fuseAndFinish.accept(null);

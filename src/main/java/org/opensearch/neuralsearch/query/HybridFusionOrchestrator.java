@@ -223,13 +223,16 @@ final class HybridFusionOrchestrator {
      * request instead is bounded by the sum of the legs' own counts (below {@code legs * threshold} documents, since each
      * is below the threshold), is request-cacheable, and terminates early at the threshold.
      *
-     * <p><b>Why it never costs more than the Tail it replaces.</b> The count re-executes each leg, but so does the Tail —
-     * with one exception, which this method refuses. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/
-     * {@code neural_knn} leg the window did <em>not</em> truncate with an address of the hits it returned, so for that leg
-     * the Tail walks no graph while the count's disjunction would. Refusing there (same test as {@code legInTailForm}:
-     * fewer hits than the window) keeps the guarantee exact rather than approximate — a {@code k} large enough to fill the
-     * window is not a condition that can be assumed, since a shard holding fewer documents than {@code k}, a {@code knn}
-     * {@code filter}, a small corpus, or radial knn (which has no {@code k} at all) all come back short.
+     * <p><b>Why it never costs more than what it replaces.</b> The count re-executes each leg, but so does the Tail — with
+     * one exception. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/{@code neural_knn} leg the window did
+     * <em>not</em> truncate with an address of the hits it returned, so for that leg the Tail walks no graph while the
+     * count's disjunction would. What that walk buys differs by path, so only one of them is refused: on the
+     * <b>armed</b> path settling the total makes round 2 a {@code match_none} and the page is assembled from round 1, so
+     * the count buys away an entire round trip (round 2's query and its page fetch); on the <b>un-armed</b> path round 2
+     * runs regardless and the count is a third round whose only saving is a Tail clause that for this leg is a cheap ids
+     * lookup. The un-armed case is refused. Note that a {@code k} large enough to fill the window cannot be assumed
+     * instead: a shard holding fewer documents than {@code k}, a {@code knn} {@code filter}, a small corpus, and radial
+     * knn (which has no {@code k} at all) all come back short.
      *
      * <p><b>What it buys beyond cost.</b> Core computes the value <em>and the relation</em>, so the threshold-boundary
      * arithmetic this class otherwise does by hand cannot be wrong here; and with no aggregation in the request there is
@@ -240,7 +243,8 @@ final class HybridFusionOrchestrator {
         SearchSourceBuilder source,
         List<QueryBuilder> legs,
         MultiSearchResponse.Item[] items,
-        int windowSize
+        int windowSize,
+        boolean fastPathArmed
     ) {
         if (Objects.isNull(scope) || scope.legUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
             return null;
@@ -277,13 +281,21 @@ final class HybridFusionOrchestrator {
             if (Objects.isNull(own) || own.relation() != TotalHits.Relation.EQUAL_TO || own.value() >= threshold) {
                 return null;
             }
-            // The one shape where the Tail is cheaper than the count: an ANN leg the window did not truncate is
-            // materialized by legInTailForm into an address of the hits it returned, so the Tail walks no graph for it,
-            // while the disjunction below would re-execute the real query and walk it. Re-executing an ANN leg is only
-            // free when the Tail would have re-executed it too, which is exactly when it filled the window — so this
-            // applies legInTailForm's own test, for the same reason. Without it the default shape
-            // (hybrid{match, knn(k=10)}, window 100) pays a graph walk per shard that the Tail would not have.
-            if (isMaterializableLeg(legs.get(leg)) && item.getResponse().getHits().getHits().length < windowSize) {
+            // An ANN leg the window did NOT truncate is the one leg the Tail does not re-execute: legInTailForm replaces it
+            // with an address of the hits it returned, so the Tail walks no graph for it while the disjunction below would.
+            // Whether paying that walk is worth it depends on what the count replaces, and the two paths differ:
+            //
+            // armed — settling the total makes round 2 a match_none and the page is assembled from round 1, so the
+            // count replaces a whole round trip (round 2's query AND its page fetch). One graph walk for one
+            // fewer round trip, and the count is request-cacheable on a repeat.
+            // un-armed — round 2 runs either way, Top-only instead of Top+Tail. The count is then a THIRD round whose
+            // only saving is a Tail clause that, for this leg, is a cheap ids lookup. That is a regression.
+            //
+            // So refuse exactly the un-armed case. A leg that filled the window is served on both paths, because there the
+            // Tail re-executes it too and the walk is not extra at all.
+            if (fastPathArmed == false
+                && isMaterializableLeg(legs.get(leg))
+                && item.getResponse().getHits().getHits().length < windowSize) {
                 return null;
             }
             disjunction.should(legs.get(leg));
