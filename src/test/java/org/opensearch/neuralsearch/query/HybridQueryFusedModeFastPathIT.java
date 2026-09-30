@@ -600,6 +600,11 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     }
 
     @SuppressWarnings("unchecked")
+    private static Map<String, Object> total(Map<String, Object> response) {
+        return (Map<String, Object>) ((Map<String, Object>) response.get("hits")).get("total");
+    }
+
+    @SuppressWarnings("unchecked")
     private static List<String> ids(Map<String, Object> response) {
         List<Map<String, Object>> hitList = (List<Map<String, Object>>) hits(response).get("hits");
         return hitList.stream().map(h -> (String) h.get("_id")).collect(Collectors.toList());
@@ -825,6 +830,87 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     }
 
     /** A 768-dim vector whose first component is {@code lead} and the rest 1.0, as a JSON array. */
+    /**
+     * The count round on a hybrid that has an ANN leg — the shape the count round only began serving when the overlap
+     * aggregation was removed, and the one every other test here reaches only through hand-built
+     * {@code MultiSearchResponse} items.
+     *
+     * <p>A {@code knn} + lexical hybrid with default totals settles its {@code hits.total} with one {@code size: 0} count
+     * over the legs' disjunction. That re-executes the {@code knn} leg, which is why it was once refused — but the Tail it
+     * replaces re-executes the same leg verbatim ({@code legInTailForm} keeps an ANN leg whenever the window truncated it,
+     * and a leg asked for {@code k >= window / shards} always fills the window), so the graph is walked the same number of
+     * times either way and the count skips the Tail's fetch.
+     *
+     * <p>What has to hold is that the counted object equals what the Tail-kept twin reports — value AND relation — on a
+     * 2-shard index, asserted below and above the threshold, since the two report different relations.
+     */
+    @SneakyThrows
+    public void testTotalHits_whenAHybridWithAnAnnLegIsCounted_thenTheTotalMatchesTheTailKeptTwin() {
+        String index = INDEX + "-ann-host";
+        if (indexExists(index) == false) {
+            createIndex(
+                index,
+                "{\"settings\":{\"index\":{\"knn\":true,\"number_of_shards\":2,\"number_of_replicas\":0}},"
+                    + "\"mappings\":{\"properties\":{\""
+                    + TEXT_FIELD
+                    + "\":{\"type\":\"text\"},\"vec\":{\"type\":\"knn_vector\",\"dimension\":768,"
+                    + "\"method\":{\"name\":\"hnsw\",\"space_type\":\"l2\",\"engine\":\"lucene\"}}}}}"
+            );
+            for (int i = 1; i <= DOCS; i++) {
+                Request request = new Request("PUT", "/" + index + "/_doc/" + i + "?refresh=true");
+                // Every document matches the lexical leg; only the odd ones carry "place", so the legs' match sets differ
+                // and the overlap the aggregation counts is a real subset rather than everything.
+                request.setJsonEntity(
+                    "{\""
+                        + TEXT_FIELD
+                        + "\":\""
+                        + (i % 2 == 1 ? "hello place " + i : "hello there " + i)
+                        + "\",\"vec\":"
+                        + vector768(1.0f + i / 10.0f)
+                        + "}"
+                );
+                client().performRequest(request);
+            }
+        }
+        int window = 10;
+        String legs = "[{\"knn\":{\"vec\":{\"vector\":"
+            + vector768(1.05f)
+            + ",\"k\":"
+            + window
+            + "}}},"
+            + "{\"term\":{\""
+            + TEXT_FIELD
+            + "\":\"place\"}}]";
+        String query = "{\"hybrid\":{\"fusion\":{\"window_size\":"
+            + window
+            + ",\"normalization\":{\"technique\":\"min_max\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},\"queries\":"
+            + legs
+            + "}}";
+
+        // Two thresholds: one the union cannot reach (so the derived total is exact) and one it clears (so both paths
+        // report the capped {threshold, gte}).
+        for (int threshold : new int[] { DOCS + 5, 2 }) {
+            String derived = "{\"size\":3,\"_source\":false,\"track_total_hits\":" + threshold + ",\"query\":" + query + "}";
+            // A field-free aggregation forces the Tail and refuses the fast path, so this is the same request counted the
+            // old way -- the only oracle that can catch a wrong value or a wrong relation.
+            String tailKept = "{\"size\":3,\"_source\":false,\"track_total_hits\":"
+                + threshold
+                + ",\"aggs\":{\"n\":{\"filter\":{\"match_all\":{}}}},\"query\":"
+                + query
+                + "}";
+
+            Map<String, Object> derivedResponse = searchIndex(index, derived);
+            Map<String, Object> tailKeptResponse = searchIndex(index, tailKept);
+
+            assertEquals(
+                "threshold " + threshold + ": the ANN-hosted derivation must equal what the Tail counts",
+                total(tailKeptResponse),
+                total(derivedResponse)
+            );
+            assertEquals("and the page itself is unchanged", ids(tailKeptResponse), ids(derivedResponse));
+        }
+    }
+
     private static String vector768(float lead) {
         StringBuilder sb = new StringBuilder("[").append(lead);
         for (int d = 1; d < 768; d++) {

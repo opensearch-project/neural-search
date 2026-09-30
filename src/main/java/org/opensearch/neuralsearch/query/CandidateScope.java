@@ -564,6 +564,28 @@ final class CandidateScope {
     }
 
     /**
+     * Whether the legs may be counted toward a union this rewrite derives, letting round 2 run without the Tail (see
+     * {@code HybridFusionOrchestrator#unionCountRequest}). Needs the legs to be counting in the first place, and a shape in
+     * which a count over the legs' disjunction counts the same documents the legs' own totals do: a {@code post_filter}
+     * applies to hits but not to a count, and a {@code slice} changes what each leg sees, so either keeps the Tail.
+     *
+     * <p>Profiling is not excluded <i>here</i>, and does not need to be: this only says the request's shape admits a count.
+     * Whether one is issued is decided by {@code unionCountRequest}, which issues it for an armed request alone — and a
+     * profiled request is never armed, because {@code profile: true} is one of the shapes that keep two rounds. So a
+     * profiled request reaches this predicate, passes it, and still runs no count round. What its profile then reports about
+     * a count nothing else settled is {@code FastPathDecision#COUNT_ROUND_NOT_RUN_UNDER_PROFILE} when the twin's round would
+     * have been issued, and the plainer {@code FastPathDecision#COUNT_NOT_SETTLED} when it would not — a short {@code neural}
+     * leg, or more legs than the count is worth issuing for, are refused whether or not the request is profiled. An earlier
+     * revision excluded
+     * profiling here for an unrelated reason — the union was then derived from an aggregation the legs carried, and core's
+     * concurrent-segment profile breakdown asserts on a profiled search that also aggregates, taking an assertions-enabled
+     * node down. The count round carries no aggregation, so that exclusion is gone.
+     */
+    boolean legUnionCountAllowed() {
+        return Objects.nonNull(legTotalHitsThreshold) && Objects.isNull(postFilter) && Objects.isNull(slice);
+    }
+
+    /**
      * Ask every leg built from here on to fetch the user's requested fields for the documents it returns, because the
      * response page will be assembled from the leg hits with no round 2 to fetch it — the fast path.
      *
@@ -579,6 +601,67 @@ final class CandidateScope {
      */
     void enableLegFetch(final SearchSourceBuilder source) {
         this.legFetchSource = source;
+    }
+
+    /**
+     * A count-only request over the legs' disjunction: {@code size: 0}, no fetch, no aggregations, totals tracked to the
+     * request's own threshold. Used by the lazy union count — see {@code HybridFusionOrchestrator#unionCountRequest} for
+     * which shapes it is issued for, and for what it costs relative to the round 2 Tail it replaces (never more
+     * per-document shard work, and issued only where it removes round 2 outright rather than adding a round to it).
+     *
+     * <p>Deliberately not {@link #newLegRequest}: a leg request carries {@code size = window_size} and a fetch source,
+     * neither of which a count wants. What it does share is every request-level property that decides WHICH shards and
+     * WHICH view are read, and every one that bounds how long the reading may go on: indices, indices options, routing,
+     * preference, partial-results policy, shard-request limits, the pre-filter threshold, the cancellation budget and the
+     * point in time. The PIT matters most: the count has to be taken against the same immutable view the legs read, or the
+     * union it reports can disagree with the window it is reported for. {@code searchType} is the documented exception —
+     * see the comment at the override below.
+     *
+     * <p>Profiling is never set here even when the legs are profiled: a profile of this request would be discarded
+     * unread, so asking for one only costs.
+     */
+    SearchRequest newUnionCountRequest(final QueryBuilder disjunction, final int threshold) {
+        SearchSourceBuilder countSource = new SearchSourceBuilder().query(disjunction).size(0).from(0).trackTotalHitsUpTo(threshold);
+        countSource.fetchSource(false);
+        if (Objects.nonNull(timeout)) {
+            countSource.timeout(timeout);
+        }
+        if (Objects.nonNull(pointInTimeId)) {
+            countSource.pointInTimeBuilder(new PointInTimeBuilder(pointInTimeId));
+        }
+        // searchType is deliberately NOT inherited — the one request-level property the count overrides rather than copies.
+        // Under dfs_query_then_fetch core would give this unscored size:0 count its own DFS pre-round on every shard (it only
+        // drops DFS for single-shard or suggest-only requests), where the Tail rode on round 2's DFS, already paid for. Worse,
+        // DFS makes the count uncacheable: IndicesService#canCache requires QUERY_THEN_FETCH, so inheriting it would forfeit
+        // the request-cache hit that is the reason a repeat of this round is free. A count has no scores to distribute term
+        // statistics for, so pinning QUERY_THEN_FETCH cannot change its answer.
+        SearchRequest countRequest = new SearchRequest(indices).indicesOptions(indicesOptions)
+            .searchType(SearchType.QUERY_THEN_FETCH)
+            .source(countSource)
+            .pipeline(SearchPipelineService.NOOP_PIPELINE_ID);
+        if (Objects.nonNull(routing)) {
+            countRequest.routing(routing);
+        }
+        if (Objects.nonNull(preference)) {
+            countRequest.preference(preference);
+        }
+        if (Objects.nonNull(allowPartialSearchResults)) {
+            countRequest.allowPartialSearchResults(allowPartialSearchResults);
+        }
+        if (maxConcurrentShardRequests > 0) {
+            countRequest.setMaxConcurrentShardRequests(maxConcurrentShardRequests);
+        }
+        if (Objects.nonNull(cancelAfterTimeInterval)) {
+            // A wall-clock bound on how long the count may run, propagated for the same reason a leg carries it (see
+            // CLASSIFICATION). It is NOT cancellation propagation: like the legs, the count is dispatched without a parent
+            // task, so cancelling the user's search does not reach it, and this only helps when the user set a budget at
+            // all. It bounds the count's lifetime; it does not tie it to the request's.
+            countRequest.setCancelAfterTimeInterval(cancelAfterTimeInterval);
+        }
+        if (Objects.nonNull(preFilterShardSize)) {
+            countRequest.setPreFilterShardSize(preFilterShardSize);
+        }
+        return countRequest;
     }
 
     /**

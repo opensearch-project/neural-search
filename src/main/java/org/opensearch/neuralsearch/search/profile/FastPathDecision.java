@@ -21,10 +21,11 @@ import lombok.experimental.Accessors;
  * {@code profile: true} is one of the shapes that keep two rounds. What this reports for a profiled request is the
  * decision the <b>same request without {@code profile}</b> gets on this coordinator — not a simulation: every condition
  * before the legs run (the request's shape, its legs, the resolved pipeline, the fetch volume from this coordinator's
- * observed {@code _source} sizes) is evaluated exactly as the unprofiled request evaluates it, and the conditions after
- * the legs run ({@link #countSettled}, the page fitting the ranked window) are read off the legs' actual answers, which
- * are the same under profile. The one thing that is per coordinator — which {@code _source} sizes it has observed — is
- * also what the unprofiled request would have met on the coordinator that served this one.
+ * observed {@code _source} sizes) is evaluated exactly as the unprofiled request evaluates it, and the conditions after the
+ * legs run (the page fitting the ranked window, and {@link #countSettled} except where only the count round could have
+ * settled it — see below) are read off the legs' actual answers, which are the same under profile. The one thing that is per
+ * coordinator — which {@code _source} sizes it has observed — is also what the unprofiled request would have met on the
+ * coordinator that served this one.
  *
  * <p>One precondition is the exception: whether this hybrid is the request's own query. A profiled request is marked as
  * the root whatever its shape, while an unprofiled one is marked by the hits consumer the filter attaches only when the
@@ -33,12 +34,25 @@ import lombok.experimental.Accessors;
  * twin would have stopped one check earlier at {@link #NESTED_HYBRID}. For the request as submitted the verdict is the
  * same either way and only the reason differs, the reported one being the more specific.
  *
- * <p>Where the two can differ on {@code would_take} is the one thing neither reads at the same moment. The twin's gate is
+ * <p>One way the two can differ on {@code would_take} is the one thing neither reads at the same moment. The twin's gate is
  * two shape reads — the filter's, of the request as submitted, and the rewrite's, after the search pipeline's request
  * processors have run — because the consumer the filter attaches is also what arms the path. This report is the rewrite's
  * read alone. So a processor that <i>adds</i> a refusing feature is reported faithfully, while one that <i>removes</i> the
  * feature the filter refused on leaves the twin no consumer to arm, and this reports {@code would_take: true} for a
  * request that runs two rounds. No processor in this plugin rewrites those features; core's {@code script} processor can.
+ *
+ * <p>The count round is the other, and it differs in the opposite direction. {@link #countSettled} has three sources, and
+ * only one of them is path-dependent: totals being disabled and a leg proving the count both settle it under {@code profile}
+ * exactly as without, and are read off the legs' actual answers like every other post-legs condition. The third is a
+ * separate count-only round, issued for armed requests alone — armed it buys a whole round back, un-armed it would be a
+ * third round costing more than the Tail it removes — which a profiled request therefore never issues. So {@code
+ * count_settled} is unaffected except on the requests where only that round could have proved the count: there it stays
+ * {@code false}, describing the request that ran, while the reason becomes {@link #COUNT_ROUND_NOT_RUN_UNDER_PROFILE}
+ * instead of {@link #COUNT_NOT_SETTLED} when the twin <i>would</i> have issued the round — so the profile says the count is
+ * derivable for the unprofiled request without claiming it was derived for this one. {@code would_take} is {@code false}
+ * there and cannot be made {@code true}: whether the twin's count settles depends on what that round answers, which is
+ * unknowable without issuing it. So for this one reason {@code would_take} describes the request that ran too, and the
+ * reason alone speaks for the twin.
  *
  * <p>{@link #refusedBy} is {@code null} while nothing has refused; the reasons are checked in the order the fast path
  * checks them, and the first to fail is the one reported. Optional facts are set when they were evaluated:
@@ -74,6 +88,13 @@ public final class FastPathDecision {
     public static final String PAGE_BEYOND_WINDOW = "page_beyond_window";
     /** The request wants a count beyond the window and no leg proved it. */
     public static final String COUNT_NOT_SETTLED = "count_not_settled";
+    /**
+     * The request wants a count beyond the window, and the count-only round that would have proved it was not issued
+     * because {@code profile: true} keeps two rounds and that round is only worth issuing for an armed request. Reported
+     * in place of {@link #COUNT_NOT_SETTLED} only when the unprofiled twin <i>would</i> have issued it, so the two
+     * reasons distinguish "no leg can prove this count" from "this count is derivable, just not for a profiled request".
+     */
+    public static final String COUNT_ROUND_NOT_RUN_UNDER_PROFILE = "count_round_not_run_under_profile";
 
     /**
      * One refusal before it is recorded: the reason and the detail that names what caused it. What the checks that read
@@ -87,6 +108,13 @@ public final class FastPathDecision {
     private Long fetchEstimateBytes;
     private Long fetchBudgetBytes;
     private Boolean countSettled;
+    /**
+     * Whether the unprofiled twin would have issued the count-only round this request did not. Set only where it can be
+     * answered — an un-armed profiled request, from the same gate the twin's count goes through — and left {@code false}
+     * everywhere else, including on the armed path, where the round either ran or was refused for a reason of its own.
+     * Not rendered: it selects between two {@link #refusedBy} reasons rather than being a fact about the request.
+     */
+    private boolean twinWouldHaveCounted;
 
     /** Nothing has refused yet — the verdict so far is the fast path. */
     public boolean allowsSoFar() {

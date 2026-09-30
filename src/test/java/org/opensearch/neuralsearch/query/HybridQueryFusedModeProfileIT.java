@@ -152,7 +152,7 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         Map<String, Object> breakdown = mapAt(node, "breakdown");
         assertEquals(
             "the phases of a coordinator fusion",
-            Set.of("fan_out_build", "fan_out_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
+            Set.of("fan_out_build", "fan_out_wait", "union_count_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
             breakdown.keySet()
         );
         long summed = breakdown.values().stream().mapToLong(value -> ((Number) value).longValue()).sum();
@@ -361,18 +361,61 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         assertEquals("the default budget", 1L << 20, ((Number) verdict.get("fetch_budget_bytes")).longValue());
     }
 
-    /** What the legs decide, read off their actual answers: six documents cannot prove a count of 10,000. */
+    /**
+     * <b>A profiled request never runs the count round, and that is by design.</b> The count is issued only when the fast
+     * path arms, because un-armed it is a third serial round doing work the Tail would have done inside round 2 — measured
+     * on WANDS at {@code +5 ms} cold against {@code +3 ms} for keeping the Tail. Producing a profile requires round 2, so a
+     * profiled request is un-armed by construction and therefore keeps its Tail and counts with it.
+     *
+     * <p>The consequence worth knowing before debugging this code: {@code profile: true} <b>cannot observe the armed
+     * path</b>. {@code union_count_wait} is always 0 in a profile, and the fast-path verdict always reports a refusal. The
+     * armed path has to be measured by latency or by the request-cache side channel instead — a profiled probe of a build
+     * that allows the count looks identical to one that refuses it.
+     *
+     * <p>So the verdict has to say which of those two it is, or it would describe a request whose count is in fact
+     * derivable as one whose count nothing can prove. That is what {@code count_round_not_run_under_profile} is for, and
+     * pinning it here is the only end-to-end assertion that the reason reported is the twin's and not this request's.
+     * {@code would_take} and {@code count_settled} stay {@code false}, because they describe the request that ran — see
+     * {@code FastPathDecision} for why {@code would_take} cannot honestly be flipped.
+     *
+     * <p>What must still hold is that profiling changes the path and not the answer, which is what this asserts against the
+     * unprofiled twin.
+     */
     @SneakyThrows
-    public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheVerdictIsCountNotSettled() {
+    @SuppressWarnings("unchecked")
+    public void testProfiledFusedHybrid_isUnarmedSoTheCountRoundIsNotIssued() {
         ensureDataset(INDEX, 1);
-        prime(INDEX, "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3}");
+        int window = TOTAL_DOCS / 2;
+        String body = fusedHybrid(window, knnLeg(window), termLeg());
+        prime(INDEX, "{\"query\":" + body + ",\"size\":" + window + "}");
 
-        Map<String, Object> verdict = fastPathVerdict(search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3")));
+        Map<String, Object> profiledResponse = search(INDEX, profiled(body, "\"size\":" + window));
+        Map<String, Object> verdict = fastPathVerdict(profiledResponse);
 
-        assertEquals(Boolean.FALSE, verdict.get("would_take"));
-        assertEquals("count_not_settled", verdict.get("refused_by"));
-        assertEquals(Boolean.FALSE, verdict.get("count_settled"));
-        assertNotNull("the volume had passed before the legs decided", verdict.get("fetch_estimate_bytes"));
+        // would_take describes the request that ran, and for this one reason it has to: whether the twin's count settles
+        // depends on what the count round answers, which is unknowable without issuing it. The REASON is what speaks for
+        // the twin — count_round_not_run_under_profile rather than count_not_settled says the count is derivable for the
+        // unprofiled request and was simply not established for this one. Pinned as a literal, because the whole point of
+        // the reason is which of the two it is.
+        assertEquals("a profile needs round 2, so the request is un-armed", Boolean.FALSE, verdict.get("would_take"));
+        assertEquals(
+            "these legs are lexical-and-knn with no leg proving the count, so the twin's count round would have been issued",
+            "count_round_not_run_under_profile",
+            verdict.get("refused_by")
+        );
+        assertEquals(
+            "no count round ran, so nothing settled the union for the request that ran",
+            Boolean.FALSE,
+            verdict.get("count_settled")
+        );
+
+        // The answer is unchanged by profiling: the Tail counted instead, and reports the same total.
+        Map<String, Object> plain = search(INDEX, "{\"query\":" + body + ",\"size\":" + window + "}");
+        assertEquals(
+            "profiling changes the path, never the total",
+            ((Map<String, Object>) ((Map<String, Object>) plain.get("hits")).get("total")).get("value"),
+            ((Map<String, Object>) ((Map<String, Object>) profiledResponse.get("hits")).get("total")).get("value")
+        );
     }
 
     /** Each refusal the request itself causes is named — the feature, the leg, or the nesting — before anything is weighed. */
@@ -471,7 +514,12 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
 
     /** A materializable ANN leg: in the Tail it is replaced by an address of the hits it returned. */
     private String knnLeg() {
-        return "{\"knn\":{\"" + VECTOR_FIELD + "\":{\"vector\":[1.1,1.0],\"k\":" + WINDOW_SIZE + "}}}";
+        return knnLeg(WINDOW_SIZE);
+    }
+
+    /** A kNN leg with an explicit {@code k}, for the cases where filling the window (or not) is the subject. */
+    private String knnLeg(final int k) {
+        return "{\"knn\":{\"" + VECTOR_FIELD + "\":{\"vector\":[1.1,1.0],\"k\":" + k + "}}}";
     }
 
     /** A leg that matches every document, kept as a real query in the Tail. */
@@ -481,8 +529,13 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
 
     /** A fused hybrid over the given legs. The {@code fusion} block is inline, so it resolves at every nesting level. */
     private String fusedHybrid(final String... legs) {
+        return fusedHybrid(WINDOW_SIZE, legs);
+    }
+
+    /** As above with an explicit window, for the cases where whether a leg fills it is the subject. */
+    private String fusedHybrid(final int windowSize, final String... legs) {
         return "{\"hybrid\":{\"fusion\":{\"window_size\":"
-            + WINDOW_SIZE
+            + windowSize
             + ",\"normalization\":{\"technique\":\"min_max\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},"
             + "\"queries\":["
             + String.join(",", legs)

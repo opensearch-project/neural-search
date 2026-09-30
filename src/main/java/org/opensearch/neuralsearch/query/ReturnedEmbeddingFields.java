@@ -21,6 +21,7 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.common.regex.Regex;
+import org.opensearch.common.settings.SettingsException;
 import org.opensearch.common.xcontent.support.XContentMapValues;
 import org.opensearch.core.index.Index;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
@@ -150,7 +151,11 @@ final class ReturnedEmbeddingFields {
     /** No filter: the document as laid out. */
     private static final Function<Map<String, ?>, Map<String, Object>> PASS_THROUGH = document -> new HashMap<>(document);
 
-    /** What a mapping says, resolved once per mapping version: its embedding paths and its own {@code _source} filter. */
+    /**
+     * What a mapping says, resolved once per mapping version: the estimated JSON width of each embedding path, and the
+     * {@code _source} filter that strips those paths. Dense and sparse embeddings are not tracked apart — each path
+     * carries its own byte estimate, which is all the budget arithmetic needs.
+     */
     private record MappingFacts(long mappingVersion, Map<String, Long> embeddingBytes, Function<
         Map<String, ?>,
         Map<String, Object>> sourceFilter) {
@@ -183,13 +188,39 @@ final class ReturnedEmbeddingFields {
     /**
      * The budget in force, read off the cluster settings so an operator's update applies to the next request; the
      * setting's own default where there is no cluster service to read (unit tests, or a node still starting).
+     *
+     * <p>A failure to read falls back to the default rather than propagating. This is a <b>cost heuristic</b> — it decides
+     * whether the fast path is worth arming, never what the response says — so a settings lookup must not be able to fail a
+     * search. Besides a missing cluster service, {@code get} throws {@code SettingsException} when the setting is not
+     * registered on the {@link ClusterSettings} instance in force, or is registered in another scope. The plugin registers
+     * it at load, before any {@link ClusterService} exists, so on a node that finished starting neither is reachable; what
+     * is reachable is a test holding a {@link ClusterSettings} built from a subset of the registry. Left caught rather than
+     * asserted because the alternative is a 400 raised from a latency decision.
+     *
+     * <p>Deliberately <b>not</b> catching more than that. A bad <i>value</i> surfaces as {@code IllegalArgumentException}
+     * from {@code Setting#get}, not as a {@code SettingsException} — but the same parse runs at write time
+     * ({@code AbstractScopedSettings#validate} ends by calling {@code Setting#get}, and node settings are validated at
+     * startup), so a value outside this setting's bounds is rejected with a 400 on the update that tried to set it and cannot
+     * reach a read <b>on a node that declares these bounds</b>. Nothing re-parses it later: no update consumer is registered
+     * for it, and applying cluster state does not validate. So narrowing the bounds in
+     * {@link NeuralSearchSettings#HYBRID_FUSION_FAST_PATH_FETCH_BUDGET} would need a migration, because an already-persisted
+     * value would then throw from this read on a new node rather than being caught here. Swallowing it would only hide that.
      */
     static long fastPathFetchBudgetBytes() {
         ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
         if (Objects.isNull(clusterService) || Objects.isNull(clusterService.getClusterSettings())) {
             return FAST_PATH_EXTRA_FETCH_BUDGET_BYTES;
         }
-        return clusterService.getClusterSettings().get(NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET).getBytes();
+        try {
+            return clusterService.getClusterSettings().get(NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET).getBytes();
+        } catch (SettingsException unregistered) {
+            log.debug(
+                "fused fast path: [{}] is not readable from the cluster settings in force, weighing the fetch volume against the default budget",
+                NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET.getKey(),
+                unregistered
+            );
+            return FAST_PATH_EXTRA_FETCH_BUDGET_BYTES;
+        }
     }
 
     /**

@@ -199,16 +199,48 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
 
         Map<String, Long> breakdown = node.getTimeBreakdown();
         assertEquals(
-            List.of("fan_out_build", "fan_out_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
+            List.of("fan_out_build", "fan_out_wait", "union_count_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
             new ArrayList<>(breakdown.keySet())
         );
         assertEquals(Long.valueOf(20L), breakdown.get("fan_out_build"));
         assertEquals(Long.valueOf(30L), breakdown.get("fan_out_wait"));
+        // The count round is issued only when it can replace the Tail, so most requests report zero for it — but the phase
+        // is always present, because a profiled request that DOES run it would otherwise under-report by a whole round trip.
+        assertEquals(Long.valueOf(0L), breakdown.get("union_count_wait"));
         assertEquals(Long.valueOf(40L), breakdown.get("window_merge"));
         assertEquals(Long.valueOf(50L), breakdown.get("fuse_scores"));
         assertEquals(Long.valueOf(60L), breakdown.get("rank_window"));
         assertEquals(Long.valueOf(70L), breakdown.get("substitute_build"));
         assertEquals("nothing is counted twice", node.getTime(), breakdown.values().stream().mapToLong(Long::longValue).sum());
+    }
+
+    /**
+     * The count round's span, on a request that actually ran one. The zero above would also pass with the span deleted or
+     * with its term dropped from {@code totalNanos()}, so this is the case that pins both: a non-zero value has to be
+     * rendered, and it has to be inside the reported total.
+     */
+    public void testForHybridTiming_whenTheCountRoundRan_thenItsWaitIsReportedAndInsideTheTotal() {
+        FusedLegProfileMerger merger = new FusedLegProfileMerger();
+        FusedCoordinatorTimings withCount = timings().unionCountWaitNanos(25L);
+        merger.forHybridTiming("hybrid_0").accept(withCount);
+
+        ProfileResult node = merger.mergedProfileResults(responseWithProfile(null))
+            .getShardResults()
+            .get("[coordinator][fused:hybrid_0]")
+            .getQueryProfileResults()
+            .get(0)
+            .getQueryResults()
+            .get(0);
+
+        Map<String, Long> breakdown = node.getTimeBreakdown();
+        assertEquals("the count round's wait is what it measured", Long.valueOf(25L), breakdown.get("union_count_wait"));
+        assertEquals(
+            "and the coordinator total includes it, so a profiled request that counts does not under-report a round trip",
+            node.getTime(),
+            breakdown.values().stream().mapToLong(Long::longValue).sum()
+        );
+        // 20 + 30 + 40 + 50 + 60 + 70 = 270 for the spans the fixture sets, plus the count round's 25.
+        assertEquals("the count round's wait is added to the total rather than absorbed into another span", 295L, node.getTime());
     }
 
     /** {@code debug} carries what is not a duration — including each leg's own {@code took} and timeout flag. */

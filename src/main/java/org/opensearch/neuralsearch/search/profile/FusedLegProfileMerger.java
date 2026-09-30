@@ -216,6 +216,7 @@ public final class FusedLegProfileMerger {
         Map<String, Long> breakdown = new LinkedHashMap<>();
         breakdown.put("fan_out_build", timings.fanOutBuildNanos());
         breakdown.put("fan_out_wait", timings.fanOutWaitNanos());
+        breakdown.put("union_count_wait", timings.unionCountWaitNanos());
         breakdown.put("window_merge", timings.windowMergeNanos());
         breakdown.put("fuse_scores", timings.fuseScoresNanos());
         breakdown.put("rank_window", timings.rankWindowNanos());

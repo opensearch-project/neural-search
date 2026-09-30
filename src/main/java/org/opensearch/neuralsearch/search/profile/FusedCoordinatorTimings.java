@@ -24,9 +24,11 @@ import lombok.experimental.Accessors;
  * {@code HybridQueryBuilder} times the fan-out around it, {@code HybridFusionOrchestrator} times the fusion phases inside
  * it, and {@link FusedLegProfileMerger} renders it as a profile entry.
  *
- * <p>Mutable and single-writer: one instance per fused hybrid per request, written on the rewrite thread and on the leg
- * MultiSearch response thread (never both at once — the fan-out span is closed before the response callback writes
- * anything), then read once when the entry is synthesized. Always constructed, even when the request is not profiled, so
+ * <p>Mutable and single-writer: one instance per fused hybrid per request, written from up to three threads in sequence —
+ * the rewrite thread, the leg MultiSearch response thread, and (when a union count round runs) the count's response
+ * thread, which closes {@link #unionCountWaitNanos} and then writes every fusion span. Never two at once: each span is
+ * closed before the next callback is invoked, so the handoff is a sequence rather than sharing. Read once when the entry
+ * is synthesized. Always constructed, even when the request is not profiled, so
  * that the orchestrator never has to null-check; an unprofiled request throws away everything here except
  * {@link #anyLegTimedOut()}, which is reported on the response itself rather than in the profile section.
  */
@@ -58,6 +60,13 @@ public final class FusedCoordinatorTimings {
 
     /** Sorting the fused scores and cutting to the window. */
     private long rankWindowNanos;
+
+    /**
+     * Dispatching the union count round and waiting for it, when one was issued. Elapsed, not additional: like
+     * {@link #fanOutWaitNanos} it contains a distributed round the shards also report themselves. Zero when no count ran —
+     * which is most requests, since the count is only issued when it can replace the Tail.
+     */
+    private long unionCountWaitNanos;
 
     /** Building the query round 2 runs: the {@code _id}-addressed Top clauses, and the Tail when one is needed. */
     private long substituteBuildNanos;
@@ -121,6 +130,6 @@ public final class FusedCoordinatorTimings {
 
     /** The whole coordinator span for this hybrid: building the fan-out, waiting on it, and fusing what came back. */
     public long totalNanos() {
-        return fanOutBuildNanos + fanOutWaitNanos + fusionNanos();
+        return fanOutBuildNanos + fanOutWaitNanos + unionCountWaitNanos + fusionNanos();
     }
 }

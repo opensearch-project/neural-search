@@ -1627,9 +1627,22 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         observeSourceSize(countingShape, 200);
         HybridQueryBuilder counting = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
         counting.fastPathReportRoot(true).fusionTimingConsumer(timings -> published[0] = timings);
+        // The totals consumer is what the filter attaches for any request counting beyond the window, profiled or not, and
+        // it is what lets the legs count — so a profiled request reaches the count gate rather than stopping short of it.
+        // With it attached this is the production shape for the reason below; without it the legs never count and the
+        // plainer count_not_settled would be reported for a request whose count is in fact derivable.
+        counting.fusedTotalHitsConsumer(total -> {});
         driveWholeSource(new SearchRequest(INDEX_NAME).source(countingShape.query(counting)), new ArrayList<>());
-        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, published[0].fastPath().refusedBy());
-        assertEquals(Boolean.FALSE, published[0].fastPath().countSettled());
+        assertEquals(
+            "two lexical legs, neither proving the count: the twin would have issued the count round, and profile is the "
+                + "only thing stopping it",
+            FastPathDecision.COUNT_ROUND_NOT_RUN_UNDER_PROFILE,
+            published[0].fastPath().refusedBy()
+        );
+        assertEquals("nothing settled the count for the request that ran", Boolean.FALSE, published[0].fastPath().countSettled());
+        // The other half — a request whose twin would NOT have counted keeps the plainer count_not_settled — is a unit
+        // assertion on the reason choice: HybridFusionOrchestratorTests
+        // #testDecideFastPathAfterLegs_namesTheProfileAsTheReasonOnlyWhenTheTwinWouldHaveCounted.
     }
 
     /** The budget is read off the cluster settings per request: raised, the same documents pass; zero refuses any fetch. */

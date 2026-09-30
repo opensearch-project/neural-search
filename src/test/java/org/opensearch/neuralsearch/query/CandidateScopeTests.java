@@ -154,6 +154,174 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertEquals("round 2 returns only the slice", slice, leg.source().slice());
     }
 
+    /**
+     * The count-only request the lazy union count issues. What it must NOT carry is as load-bearing as what it must: a
+     * count that fetched documents or counted to a different threshold would cost more than the Tail it replaces, or
+     * report a total the Tail would not have.
+     */
+    public void testUnionCountRequestCarriesTheScopeThatDecidesWhichShardsAnswer() {
+        SearchRequest request = new SearchRequest(INDEX).indicesOptions(IndicesOptions.lenientExpandOpen())
+            .routing("r1")
+            .preference("_local")
+            .searchType(SearchType.DFS_QUERY_THEN_FETCH)
+            .allowPartialSearchResults(false)
+            .source(
+                new SearchSourceBuilder().timeout(TimeValue.timeValueSeconds(7))
+                    .pointInTimeBuilder(new PointInTimeBuilder("pit-id-42").setKeepAlive(TimeValue.timeValueMinutes(5)))
+            );
+        request.setMaxConcurrentShardRequests(3);
+        request.setPreFilterShardSize(64);
+        request.setCancelAfterTimeInterval(TimeValue.timeValueSeconds(11));
+
+        SearchRequest count = CandidateScope.from(request).newUnionCountRequest(LEG, 10_000);
+
+        assertEquals("a count fetches nothing", 0, count.source().size());
+        assertEquals(0, count.source().from());
+        assertFalse(count.source().fetchSource().fetchSource());
+        assertEquals(Integer.valueOf(10_000), count.source().trackTotalHitsUpTo());
+        assertNull("no aggregation: counting this way is what avoids one", count.source().aggregations());
+        assertFalse("a profile of a discarded request only costs", count.source().profile());
+        assertEquals(LEG, count.source().query());
+        // Everything that decides WHICH shards answer and WHICH view they read has to be inherited, or the count can be
+        // of a different document set than the legs ranked.
+        assertArrayEquals(new String[] { INDEX }, count.indices());
+        assertEquals(IndicesOptions.lenientExpandOpen(), count.indicesOptions());
+        assertEquals("r1", count.routing());
+        assertEquals("_local", count.preference());
+        // searchType is the ONE property the count overrides instead of inheriting: under DFS core would give this
+        // unscored size:0 count its own pre-round per shard, and IndicesService#canCache refuses anything but
+        // QUERY_THEN_FETCH, forfeiting the request-cache hit that makes a repeat free.
+        assertEquals("a count has no scores to distribute term statistics for", SearchType.QUERY_THEN_FETCH, count.searchType());
+        assertEquals(Boolean.FALSE, count.allowPartialSearchResults());
+        assertEquals(3, count.getMaxConcurrentShardRequestsRaw());
+        assertEquals(
+            "the count must die with the request that spawned it",
+            TimeValue.timeValueSeconds(11),
+            count.getCancelAfterTimeInterval()
+        );
+        assertEquals(Integer.valueOf(64), count.getPreFilterShardSize());
+        assertEquals(TimeValue.timeValueSeconds(7), count.source().timeout());
+        assertEquals("the count must read the same immutable view the legs read", "pit-id-42", count.source().pointInTimeBuilder().getId());
+        assertNull("a count never extends the PIT keep-alive", count.source().pointInTimeBuilder().getKeepAlive());
+        assertEquals(SearchPipelineService.NOOP_PIPELINE_ID, count.pipeline());
+    }
+
+    /**
+     * {@code newUnionCountRequest} is a second hand-maintained copy of the propagation policy, so a PROPAGATED field added to
+     * {@code newLegRequest} and forgotten here would make the count read a different document set than the legs — silently,
+     * because no existing test derives a forwarding assertion from a field's disposition.
+     *
+     * <p>This pins the two against each other by reading every request-level property off both sub-searches built from one
+     * fully-populated request. Anything a leg carries, the count carries, unless it is on the exclusion list below with a
+     * reason — and each exclusion is a property of the count's own shape (it fetches nothing and counts everything), not of
+     * which shards it reads.
+     */
+    public void testUnionCountRequestForwardsEverythingTheLegRequestDoes() {
+        SearchRequest request = new SearchRequest(INDEX).indicesOptions(IndicesOptions.lenientExpandOpen())
+            .routing("r1")
+            .preference("_local")
+            .searchType(SearchType.DFS_QUERY_THEN_FETCH)
+            .allowPartialSearchResults(false)
+            .source(
+                new SearchSourceBuilder().timeout(TimeValue.timeValueSeconds(7))
+                    .pointInTimeBuilder(new PointInTimeBuilder("pit-id-42").setKeepAlive(TimeValue.timeValueMinutes(5)))
+            );
+        request.setMaxConcurrentShardRequests(3);
+        request.setPreFilterShardSize(64);
+        request.setCancelAfterTimeInterval(TimeValue.timeValueSeconds(11));
+        CandidateScope scope = CandidateScope.from(request);
+
+        SearchRequest leg = scope.newLegRequest(LEG, 50);
+        SearchRequest count = scope.newUnionCountRequest(LEG, 10_000);
+
+        Map<String, java.util.function.Function<SearchRequest, Object>> readers = new java.util.LinkedHashMap<>();
+        readers.put("indices", r -> List.of(r.indices()));
+        readers.put("indicesOptions", SearchRequest::indicesOptions);
+        readers.put("routing", SearchRequest::routing);
+        readers.put("preference", SearchRequest::preference);
+        // searchType is deliberately NOT forwarded -- see the exclusion assertion after this loop.
+        readers.put("allowPartialSearchResults", SearchRequest::allowPartialSearchResults);
+        readers.put("maxConcurrentShardRequests", SearchRequest::getMaxConcurrentShardRequestsRaw);
+        readers.put("preFilterShardSize", SearchRequest::getPreFilterShardSize);
+        readers.put("cancelAfterTimeInterval", SearchRequest::getCancelAfterTimeInterval);
+        readers.put("pipeline", SearchRequest::pipeline);
+        readers.put("source.timeout", r -> r.source().timeout());
+        readers.put("source.pointInTimeBuilder.id", r -> r.source().pointInTimeBuilder().getId());
+        readers.put("source.pointInTimeBuilder.keepAlive", r -> r.source().pointInTimeBuilder().getKeepAlive());
+
+        for (Map.Entry<String, java.util.function.Function<SearchRequest, Object>> reader : readers.entrySet()) {
+            assertEquals(
+                "the count must read the same document set as the legs, and [" + reader.getKey() + "] decides part of that",
+                reader.getValue().apply(leg),
+                reader.getValue().apply(count)
+            );
+        }
+
+        // The exclusions, each a property of what a count IS rather than of which shards it reads:
+        assertEquals("a leg fetches a window of hits; a count fetches none", 0, count.source().size());
+        assertEquals(50, leg.source().size());
+        assertFalse("a count needs no _source", count.source().fetchSource().fetchSource());
+        assertNull("a count carries no aggregation", count.source().aggregations());
+        assertEquals("a count counts to the request's threshold", Integer.valueOf(10_000), count.source().trackTotalHitsUpTo());
+        // searchType: a leg inherits DFS because term statistics change its scores and therefore the window; a count has no
+        // scores, and inheriting DFS would buy it a pre-round per shard AND make it uncacheable (IndicesService#canCache
+        // admits only QUERY_THEN_FETCH), forfeiting the request-cache hit that makes a repeated count free.
+        assertEquals(SearchType.DFS_QUERY_THEN_FETCH, leg.searchType());
+        assertEquals("the one property the count overrides rather than inherits", SearchType.QUERY_THEN_FETCH, count.searchType());
+    }
+
+    public void testUnionCountRequestLeavesUnsetFieldsUnset() {
+        SearchRequest count = CandidateScope.from(new SearchRequest(INDEX)).newUnionCountRequest(LEG, 500);
+
+        assertNull(count.routing());
+        assertNull(count.preference());
+        assertNull(count.allowPartialSearchResults());
+        assertEquals("0 is core's 'unset' for max_concurrent_shard_requests", 0, count.getMaxConcurrentShardRequestsRaw());
+        assertNull(count.getCancelAfterTimeInterval());
+        assertNull(count.getPreFilterShardSize());
+        assertNull(count.source().timeout());
+        assertNull(count.source().pointInTimeBuilder());
+    }
+
+    /**
+     * {@code legUnionCountAllowed} is the gate on asking the legs to count at all. Each refusal is asserted on its own,
+     * because they protect different things: a {@code post_filter} applies to hits but not to aggregations, a {@code slice}
+     * makes each leg see a different subset, and a profiled leg plus an aggregation trips core's
+     * {@code ConcurrentQueryProfileBreakdown} assertion.
+     */
+    public void testLegUnionCountAllowedRefusesEachShapeOnItsOwn() {
+        assertFalse("the legs were never asked to count", CandidateScope.from(new SearchRequest(INDEX)).legUnionCountAllowed());
+
+        CandidateScope armed = CandidateScope.from(new SearchRequest(INDEX));
+        armed.enableLegTotalHits(10_000);
+        assertTrue(armed.legUnionCountAllowed());
+
+        CandidateScope postFiltered = CandidateScope.from(
+            new SearchRequest(INDEX).source(new SearchSourceBuilder().postFilter(new TermQueryBuilder("grp", "a")))
+        );
+        postFiltered.enableLegTotalHits(10_000);
+        assertFalse(
+            "a post_filter applies to hits but not to aggregations, so the counts would disagree",
+            postFiltered.legUnionCountAllowed()
+        );
+
+        CandidateScope sliced = CandidateScope.from(
+            new SearchRequest(INDEX).source(new SearchSourceBuilder().slice(new SliceBuilder("_id", 1, 4)))
+        );
+        sliced.enableLegTotalHits(10_000);
+        assertFalse("each slice counts a different subset", sliced.legUnionCountAllowed());
+
+        // Profiling is NOT a refusal here, and does not need to be: this predicate only says the request's SHAPE admits a
+        // count. Whether one is issued is unionCountRequest's call, and it issues for an armed request alone -- a profiled
+        // request is never armed, so it passes this and still runs no count round. (An earlier revision did refuse
+        // profiling here, for an unrelated reason: the union then came from an aggregation the legs carried, and core's
+        // concurrent-segment profile breakdown asserts on a profiled search that also aggregates.)
+        CandidateScope profiled = CandidateScope.from(new SearchRequest(INDEX));
+        profiled.enableLegTotalHits(10_000);
+        profiled.enableLegProfiling();
+        assertTrue("a profiled request still derives its count", profiled.legUnionCountAllowed());
+    }
+
     public void testUnsetFieldsAreLeftUnsetOnTheLeg() {
         // An unset value must not be forced onto a leg: the leg has to resolve the same default the outer request would.
         SearchRequest leg = CandidateScope.from(new SearchRequest(INDEX)).newLegRequest(LEG, 50);
