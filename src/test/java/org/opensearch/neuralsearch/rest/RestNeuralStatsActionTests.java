@@ -77,6 +77,27 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         client.close();
     }
 
+    /**
+     * The stats a cluster at the build's own version can exchange: everything except the resolver stats, which are gated at
+     * 3.10 while this branch compiles against a 3.8 core and are therefore withheld.
+     *
+     * <p>Deliberately explicit rather than a re-implementation of
+     * {@code RestNeuralStatsAction#statsSupportedByAllNodes} — restating the production filter here would make these tests
+     * pass by construction. It also means <b>this method is what fails when the resolver stats' version is changed</b>: once
+     * they are gated at or below the version in the build, these sets go back to {@code EnumSet.allOf}, and that coupling is
+     * intentional.
+     */
+    private static EnumSet<EventStatName> eventStatsAtBuildVersion() {
+        return EnumSet.complementOf(
+            EnumSet.range(EventStatName.HYBRID_QUERY_FUSION_REQUESTS, EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS)
+        );
+    }
+
+    /** As above for info stats. */
+    private static EnumSet<InfoStatName> infoStatsAtBuildVersion() {
+        return EnumSet.complementOf(EnumSet.of(InfoStatName.HYBRID_FUSION_ENABLED));
+    }
+
     public void test_execute_containsAllStats() throws Exception {
         when(settingsAccessor.isStatsEnabled()).thenReturn(true);
         when(clusterUtil.getClusterMinVersion()).thenReturn(Version.CURRENT);
@@ -92,8 +113,8 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
         // Verify all stats available in current version should match all available stats
         // If this test is failing after adding a new stat, make sure to update the version stat map in MinClusterVersionUtil.
         NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
-        assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
-        assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertEquals(capturedInput.getEventStatNames(), eventStatsAtBuildVersion());
+        assertEquals(capturedInput.getInfoStatNames(), infoStatsAtBuildVersion());
         assertEquals(capturedInput.getMetricStatNames(), EnumSet.allOf(MetricStatName.class));
         assertFalse(capturedInput.isFlatten());
         assertFalse(capturedInput.isIncludeMetadata());
@@ -123,8 +144,8 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
 
         NeuralStatsInput capturedInput = argumentCaptor.getValue().getNeuralStatsInput();
 
-        assertEquals(capturedInput.getEventStatNames(), EnumSet.allOf(EventStatName.class));
-        assertEquals(capturedInput.getInfoStatNames(), EnumSet.allOf(InfoStatName.class));
+        assertEquals(capturedInput.getEventStatNames(), eventStatsAtBuildVersion());
+        assertEquals(capturedInput.getInfoStatNames(), infoStatsAtBuildVersion());
         assertEquals(capturedInput.getMetricStatNames(), EnumSet.allOf(MetricStatName.class));
         assertTrue(capturedInput.isFlatten());
         assertTrue(capturedInput.isIncludeMetadata());
@@ -278,7 +299,8 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
             EnumSet.range(EventStatName.TEXT_EMBEDDING_PROCESSOR_EXECUTIONS, EventStatName.SEISMIC_QUERY_REQUESTS),
             capturedInput.getEventStatNames()
         );
-        assertEquals(EnumSet.allOf(InfoStatName.class), capturedInput.getInfoStatNames());
+        // The resolver's info stat is gated at 3.10, so a 3.4 cluster does not get it either.
+        assertEquals(EnumSet.range(InfoStatName.CLUSTER_VERSION, InfoStatName.AGENTIC_CONTEXT_PROCESSORS), capturedInput.getInfoStatNames());
         assertEquals(EnumSet.allOf(MetricStatName.class), capturedInput.getMetricStatNames());
     }
 

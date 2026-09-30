@@ -71,6 +71,9 @@ import org.opensearch.search.sort.SortBuilders;
 import org.opensearch.search.pipeline.SearchPipelineMetadata;
 import org.opensearch.transport.client.Client;
 import org.opensearch.neuralsearch.search.profile.FastPathDecision;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
@@ -1961,5 +1964,40 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         when(clusterService.state().metadata().custom(SearchPipelineMetadata.TYPE)).thenReturn(
             new SearchPipelineMetadata(Map.of(id, configuration))
         );
+    }
+
+    /**
+     * The technique counters increment on the <b>production route</b>, not only when the counting method is called
+     * directly. This is the one assertion that pins the call site in {@code doRewriteFused}: the technique is not knowable
+     * at parse time for {@code fusion: "pipeline"}, so the increment has to happen at rewrite, and without this a deleted
+     * call would leave every other test in this class green.
+     *
+     * <p>Also pins the relationship the counters are read as: the resolver request counter is incremented at parse and the
+     * technique counters at rewrite, so a request that reaches the rewrite contributes exactly one of each.
+     */
+    @SneakyThrows
+    public void testRewrite_incrementsTheResolverTechniqueCountersOnTheProductionRoute() {
+        NeuralSearchSettingsAccessor statsAccessor = mock(NeuralSearchSettingsAccessor.class);
+        when(statsAccessor.isStatsEnabled()).thenReturn(true);
+        EventStatsManager.instance().initialize(statsAccessor);
+        EventStatsManager.instance().reset();
+
+        SearchSourceBuilder source = new SearchSourceBuilder().size(2).trackTotalHits(false);
+        HybridQueryBuilder hybrid = fused(QueryBuilders.termQuery(TEXT_FIELD_NAME, "a"), QueryBuilders.termQuery(TEXT_FIELD_NAME, "b"));
+        driveWholeSource(new SearchRequest(INDEX_NAME).source(source.query(hybrid)), new ArrayList<>());
+
+        // fused() configures min_max + arithmetic_mean.
+        assertEquals(
+            "the rewrite is what knows the technique, so it is what counts it",
+            1L,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS.getEventStat().getValue()
+        );
+        assertEquals(1L, EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS.getEventStat().getValue());
+        assertEquals(
+            "a technique the request did not use stays at zero",
+            0L,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS.getEventStat().getValue()
+        );
+        assertEquals(0L, EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS.getEventStat().getValue());
     }
 }

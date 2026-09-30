@@ -276,7 +276,102 @@ public enum EventStatName implements StatName {
         "processors.search",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_3_0
+    ),
+
+    // ---- resolver (in-query `fusion`) mode. Appended at the TAIL, which the ordinal contract above requires. ----
+    // These count the resolver ALONGSIDE hybrid_query_requests rather than instead of it: a fused hybrid is parsed by the
+    // same method as a classic one, so it already increments the combined counter, and these answer "how much of that is
+    // the resolver" without a second read.
+
+    /** Counts hybrid query requests that carry an in-query {@code fusion} block (resolver mode) */
+    HYBRID_QUERY_FUSION_REQUESTS(
+        "hybrid_query_with_fusion_requests",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests fused with min_max normalization */
+    HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS(
+        "hybrid_query_fusion_norm_minmax_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests fused with z_score normalization */
+    HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS(
+        "hybrid_query_fusion_norm_zscore_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests fused with l2 normalization */
+    HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS(
+        "hybrid_query_fusion_norm_l2_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /**
+     * Counts resolver-mode requests fused with rrf normalization. Has no classic counterpart: the classic path counts
+     * rrf on the combination side only, so this is a dimension the combined technique counters cannot report.
+     */
+    HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS(
+        "hybrid_query_fusion_norm_rrf_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with arithmetic_mean */
+    HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS(
+        "hybrid_query_fusion_comb_arithmetic_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with rrf */
+    HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS(
+        "hybrid_query_fusion_comb_rrf_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with geometric_mean */
+    HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS(
+        "hybrid_query_fusion_comb_geometric_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with harmonic_mean */
+    HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS(
+        "hybrid_query_fusion_comb_harmonic_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
     );
+
+    /**
+     * The release resolver mode ships in, and therefore the version every fused stat above is gated at.
+     *
+     * <p>Held in a nested class rather than a field of the enum because an enum constant's arguments cannot reference a
+     * static field of its own enum — the constants are initialized first.
+     *
+     * <p>Named with {@link Version#fromString} rather than a {@code Version.V_*} constant <b>deliberately</b>: this branch
+     * compiles against a 3.8 core, whose {@code Version} has no 3.10 constant, and the alternative — gating at
+     * {@code V_3_8_0} because that is what can be spelled — would be a live defect rather than a placeholder.
+     * {@code RestNeuralStatsAction#statsSupportedByAllNodes} sends the leading run of stats whose version is
+     * {@code onOrBefore} the oldest node's, and stops at the first newer one, because a stat enum travels as ordinals and a
+     * filtered set is only readable by an older node if it is a prefix of that node's own enum. Gated at 3.8, these stats
+     * would be sent to a genuine 3.8 node during a rolling upgrade, which has no ordinal for them; gated at 3.10 the run
+     * stops short and they are withheld, which is lossy and safe. {@code fromString} yields an ordinary comparable
+     * {@code Version} (id 137317827) and compares correctly against constants the core does know.
+     *
+     * <p>Swap this for {@code Version.V_3_10_0} once the branch builds against a core that declares it — pure cleanup, the
+     * value is identical.
+     */
+    private static final class FusedStatsVersion {
+        private static final Version VALUE = Version.fromString("3.10.0");
+    }
 
     private final String nameString;
     private final String path;

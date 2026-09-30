@@ -106,7 +106,20 @@ public enum InfoStatName implements StatName {
         Version.V_3_3_0
     ),
     /** Counts agentic context processors */
-    AGENTIC_CONTEXT_PROCESSORS("agentic_context_processors", "processors.search.agentic", InfoStatType.INFO_COUNTER, Version.V_3_3_0);
+    AGENTIC_CONTEXT_PROCESSORS("agentic_context_processors", "processors.search.agentic", InfoStatType.INFO_COUNTER, Version.V_3_3_0),
+
+    /**
+     * Whether resolver (in-query {@code fusion}) mode is turned on for this cluster. The top of the adoption funnel: paired
+     * with {@code query.hybrid.hybrid_query_with_fusion_requests} it separates clusters that enabled the feature from
+     * clusters that then used it, and the gap between those two is the difference between awareness and value. The setting
+     * defaults to off, so without this an unused cluster and an unaware one are indistinguishable.
+     */
+    HYBRID_FUSION_ENABLED("hybrid_fusion_enabled", "query.hybrid", InfoStatType.INFO_BOOLEAN, FusedStatsVersion.VALUE);
+
+    /** See {@code EventStatName.FusedStatsVersion} — same release, same reason it is spelled with {@code fromString}. */
+    private static final class FusedStatsVersion {
+        private static final Version VALUE = Version.fromString("3.10.0");
+    }
 
     private final String nameString;
     private final String path;
