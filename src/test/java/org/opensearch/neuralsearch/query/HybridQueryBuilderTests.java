@@ -1219,6 +1219,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         HybridQueryBuilder builder = fusedBuilder(
             new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
         );
+        // The count round is only issued when the fast path is ARMED (measured: un-armed it is a third serial round that
+        // costs more than the Tail it would drop), and arming needs a fusedHitsConsumer as well as the totals consumer.
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.search.SearchHits> assembled =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        builder.fusedHitsConsumer(assembled::set);
         // The totals consumer is what permits dropping the Tail at all, and so what arms the legs to count.
         java.util.concurrent.atomic.AtomicReference<org.apache.lucene.search.TotalHits> published =
             new java.util.concurrent.atomic.AtomicReference<>();
@@ -1230,7 +1235,12 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // The default size of 3 is not incidental: the count is only issued when the requested page fits inside what the
         // legs ranked, and these two legs fuse to 3 documents. A larger size is how the negative control makes the gate
         // refuse -- the count is then never issued at all, rather than issued and discarded.
-        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(size).query(builder));
+        // _source: false prices the extra fetch volume at 0 bytes, so the learned fetch gate passes any budget and the
+        // request ARMS deterministically. Without it the estimate is unobserved (the gate learns per _source shape per
+        // coordinator node), the request is un-armed, and the count round is not issued at all.
+        SearchRequest searchRequest = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().size(size).fetchSource(false).query(builder)
+        );
         QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
         when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
         when(ctx.getSearchRequest()).thenReturn(searchRequest);
@@ -1285,7 +1295,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             // with a listener the stub did not invoke.
             verify(client, never()).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         }
-        return published.get();
+        // Which object carries the total depends on the path the request took, and both are the same number. Armed and
+        // settled, buildFusedResult assembles the page and deliberately tells the totals consumer null, because the page
+        // carries its own total; un-armed (or refused) the consumer is what reports it.
+        org.opensearch.search.SearchHits page = assembled.get();
+        return Objects.nonNull(page) && Objects.nonNull(page.getTotalHits()) ? page.getTotalHits() : published.get();
     }
 
     /**
@@ -1379,7 +1393,14 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         java.util.concurrent.atomic.AtomicReference<org.apache.lucene.search.TotalHits> published =
             new java.util.concurrent.atomic.AtomicReference<>();
         builder.fusedTotalHitsConsumer(published::set);
-        SearchRequest searchRequest = new SearchRequest("test-index").source(new SearchSourceBuilder().size(3).query(builder));
+        // The count round only runs when the fast path is ARMED, so this test has to arm: a hits consumer, and _source:false
+        // so the learned fetch gate prices the extra volume at 0 bytes and passes any budget.
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.search.SearchHits> assembled =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        builder.fusedHitsConsumer(assembled::set);
+        SearchRequest searchRequest = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().size(3).fetchSource(false).query(builder)
+        );
         QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
         when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
         when(ctx.getSearchRequest()).thenReturn(searchRequest);
@@ -1424,7 +1445,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         assertTrue(done.get());
         assertNotNull("a neural leg the window truncated is counted: the Tail would have re-executed it too", countRequest.get());
-        assertEquals("what core counted is what the response reports", 4055L, published.get().value());
+        org.opensearch.search.SearchHits page = assembled.get();
+        org.apache.lucene.search.TotalHits reported = Objects.nonNull(page) && Objects.nonNull(page.getTotalHits())
+            ? page.getTotalHits()
+            : published.get();
+        assertEquals("what core counted is what the response reports", 4055L, reported.value());
         org.opensearch.index.query.BoolQueryBuilder disjunction = (org.opensearch.index.query.BoolQueryBuilder) countRequest.get()
             .source()
             .query();
@@ -2077,6 +2102,20 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         stubClusterMinVersion(clusterState, Version.CURRENT);
         when(metadata.custom(org.opensearch.search.pipeline.SearchPipelineMetadata.TYPE)).thenReturn(
             new org.opensearch.search.pipeline.SearchPipelineMetadata(Map.of())
+        );
+        // The fast-path fetch gate reads the fetch budget off whatever ClusterService this singleton holds. Register the
+        // setting here so a test that ARMS the fast path is deterministic: NeuralSearchClusterUtil is a singleton, so
+        // without this it can pick up a stub from an earlier test in the same JVM that only knows the k-NN settings, and
+        // `get` then throws "setting has not been registered" depending on test order.
+        when(clusterService.getClusterSettings()).thenReturn(
+            new ClusterSettings(
+                Settings.EMPTY,
+                Set.of(
+                    org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED,
+                    org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES,
+                    org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET
+                )
+            )
         );
         org.opensearch.core.index.Index index = new org.opensearch.core.index.Index("test-index", "uuid-1");
         org.opensearch.cluster.metadata.IndexNameExpressionResolver resolver = mock(
@@ -3253,6 +3292,12 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 .filter(s -> s.getProperties().contains(Setting.Property.NodeScope))
                 .collect(Collectors.toList())
         );
+        // The fused fast-path fetch gate reads its budget off this same ClusterService, so its settings have to be
+        // registered here as well -- otherwise any test that ARMS the fast path dies with "setting has not been
+        // registered" rather than exercising the gate.
+        defaultClusterSettings.add(org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED);
+        defaultClusterSettings.add(org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES);
+        defaultClusterSettings.add(org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET);
         when(clusterService.getClusterSettings()).thenReturn(new ClusterSettings(Settings.EMPTY, defaultClusterSettings));
         KNNSettings.state().setClusterService(clusterService);
     }

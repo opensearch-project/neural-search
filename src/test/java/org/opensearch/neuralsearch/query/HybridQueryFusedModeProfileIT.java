@@ -362,51 +362,41 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * A profiled request reports the verdict its UNPROFILED twin would get. That is only true because the union is settled by
-     * a count round, which carries no aggregation: while it was settled by an aggregation the legs carried, profiling had to
-     * withhold it (core's concurrent-segment profile breakdown asserts on a profiled search that also aggregates), and the
-     * profile then said the count was unprovable for a request that derives it fine without {@code profile: true}.
+     * <b>A profiled request never runs the count round, and that is by design.</b> The count is issued only when the fast
+     * path arms, because un-armed it is a third serial round doing work the Tail would have done inside round 2 — measured
+     * on WANDS at {@code +5 ms} cold against {@code +3 ms} for keeping the Tail. Producing a profile requires round 2, so a
+     * profiled request is un-armed by construction and therefore keeps its Tail and counts with it.
      *
-     * <p>The window is narrowed to {@code TOTAL_DOCS / 2} so the kNN leg FILLS it. That matters because a profiled request
-     * runs round 2 regardless, so it is un-armed — and for an un-armed request the count round refuses an ANN leg the
-     * window did not truncate (the Tail materializes such a leg, so the count would be a third round buying only an ids
-     * lookup). A leg that filled the window is re-executed by the Tail too, so it is counted on either path. The
-     * short-leg case is the test below.
+     * <p>The consequence worth knowing before debugging this code: {@code profile: true} <b>cannot observe the armed
+     * path</b>. {@code union_count_wait} is always 0 in a profile, and the fast-path verdict always reports a refusal. The
+     * armed path has to be measured by latency or by the request-cache side channel instead — a profiled probe of a build
+     * that allows the count looks identical to one that refuses it.
+     *
+     * <p>What must still hold is that profiling changes the path and not the answer, which is what this asserts against the
+     * unprofiled twin.
      */
     @SneakyThrows
-    public void testProfiledFusedHybrid_whenNoLegProvesTheDefaultCount_thenTheCountRoundStillSettlesIt() {
+    @SuppressWarnings("unchecked")
+    public void testProfiledFusedHybrid_isUnarmedSoTheCountRoundIsNotIssued() {
         ensureDataset(INDEX, 1);
         int window = TOTAL_DOCS / 2;
         String body = fusedHybrid(window, knnLeg(window), termLeg());
         prime(INDEX, "{\"query\":" + body + ",\"size\":" + window + "}");
 
-        Map<String, Object> verdict = fastPathVerdict(search(INDEX, profiled(body, "\"size\":" + window)));
+        Map<String, Object> profiledResponse = search(INDEX, profiled(body, "\"size\":" + window));
+        Map<String, Object> verdict = fastPathVerdict(profiledResponse);
 
-        assertEquals("the count round runs under profile, so the verdict is the unprofiled one", Boolean.TRUE, verdict.get("would_take"));
-        assertNull(verdict.get("refused_by"));
-        assertEquals(Boolean.TRUE, verdict.get("count_settled"));
-        assertNotNull("the volume had passed before the legs decided", verdict.get("fetch_estimate_bytes"));
-    }
-
-    /**
-     * The other side of that rule, end to end. A profiled request is un-armed — it runs round 2 to produce the profile — so
-     * an ANN leg the window did NOT truncate is refused: {@code legInTailForm} turns that leg into an ids clause, so round
-     * 2's Tail walks no graph for it and the count would be a third round whose only saving is that ids lookup. Measured
-     * on the live cluster, allowing it on the ARMED path instead is worth +3 ms against +8 ms for refusing, because there
-     * the count removes round 2 altogether; un-armed there is no round to remove.
-     *
-     * <p>Here {@code TOTAL_DOCS} (6) is below the window (10), which is the small-corpus form of the default shape.
-     */
-    @SneakyThrows
-    public void testProfiledFusedHybrid_whenAnUnarmedAnnLegIsShortOfTheWindow_thenTheCountIsRefused() {
-        ensureDataset(INDEX, 1);
-        prime(INDEX, "{\"query\":" + fusedHybrid(knnLeg(), termLeg()) + ",\"size\":3}");
-
-        Map<String, Object> verdict = fastPathVerdict(search(INDEX, profiled(fusedHybrid(knnLeg(), termLeg()), "\"size\":3")));
-
+        assertEquals("a profile needs round 2, so the request is un-armed", Boolean.FALSE, verdict.get("would_take"));
+        assertNotNull("and the verdict says which shape refused it", verdict.get("refused_by"));
         assertEquals("no count round ran, so nothing settled the union", Boolean.FALSE, verdict.get("count_settled"));
-        assertEquals("count_not_settled", verdict.get("refused_by"));
-        assertEquals("so round 2 keeps its Tail and counts for itself", Boolean.FALSE, verdict.get("would_take"));
+
+        // The answer is unchanged by profiling: the Tail counted instead, and reports the same total.
+        Map<String, Object> plain = search(INDEX, "{\"query\":" + body + ",\"size\":" + window + "}");
+        assertEquals(
+            "profiling changes the path, never the total",
+            ((Map<String, Object>) ((Map<String, Object>) plain.get("hits")).get("total")).get("value"),
+            ((Map<String, Object>) ((Map<String, Object>) profiledResponse.get("hits")).get("total")).get("value")
+        );
     }
 
     /** Each refusal the request itself causes is named — the feature, the leg, or the nesting — before anything is weighed. */

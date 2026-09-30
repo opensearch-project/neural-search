@@ -187,13 +187,23 @@ final class ReturnedEmbeddingFields {
     /**
      * The budget in force, read off the cluster settings so an operator's update applies to the next request; the
      * setting's own default where there is no cluster service to read (unit tests, or a node still starting).
+     *
+     * <p>Every failure mode falls back to the default rather than propagating. This is a <b>cost heuristic</b> — it decides
+     * whether the fast path is worth arming, never what the response says — so a settings lookup must not be able to fail a
+     * search. Besides a missing cluster service, {@code get} throws {@code SettingsException} when the setting is not
+     * registered on the {@link ClusterSettings} instance in force, which is reachable on a node whose registration has not
+     * completed and which otherwise turns an optimization decision into a 500.
      */
     static long fastPathFetchBudgetBytes() {
         ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
         if (Objects.isNull(clusterService) || Objects.isNull(clusterService.getClusterSettings())) {
             return FAST_PATH_EXTRA_FETCH_BUDGET_BYTES;
         }
-        return clusterService.getClusterSettings().get(NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET).getBytes();
+        try {
+            return clusterService.getClusterSettings().get(NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET).getBytes();
+        } catch (RuntimeException unreadable) {
+            return FAST_PATH_EXTRA_FETCH_BUDGET_BYTES;
+        }
     }
 
     /**

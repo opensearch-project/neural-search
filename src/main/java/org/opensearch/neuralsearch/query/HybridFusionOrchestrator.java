@@ -232,30 +232,30 @@ final class HybridFusionOrchestrator {
      * request instead is bounded by the sum of the legs' own counts (below {@code legs * threshold} documents, since each
      * is below the threshold), is request-cacheable, and terminates early at the threshold.
      *
-     * <p><b>What it costs relative to the Tail it replaces.</b> In <em>per-document shard work</em> it is never more: the
-     * count re-executes each leg, but so does the Tail. In <em>round trips</em> that is only true on the armed path, and the
-     * difference is the whole reason the ANN rule below is per-path:
-     * <ul>
-     *   <li><b>armed</b> — settling the total makes round 2 a {@code match_none} and the page is assembled from round 1, so
-     *       the count replaces a round trip (round 2's query <i>and</i> its page fetch) rather than adding one.</li>
-     *   <li><b>un-armed</b> — round 2 runs regardless, Top-only instead of Top+Tail, so the count is a <b>third serial
-     *       round</b>: two rounds become three, and shard tasks go from {@code (legs + 1) * shards} to
-     *       {@code (legs + 2) * shards}. The Tail's work used to ride inside round 2, so this is added fixed overhead
-     *       (measured at about +2 ms p50 cold). It is still taken for most leg shapes, because it drops the Tail from round
-     *       2 — but it is <b>not</b> free, and shapes that reach here without arming are ordinary rather than exotic:
-     *       {@code profile}, any {@code sort} (including an explicit {@code _score desc}, which derived totals allow and
-     *       {@link #requestShapeAllowsFastPath} refuses), {@code rescore}, {@code script_fields}, a leg with
-     *       {@code inner_hits}, the first request of each {@code _source} shape per coordinator node
-     *       ({@code SOURCE_SIZE_UNOBSERVED}), and a request over the fetch budget.</li>
-     * </ul>
+     * <p><b>Only issued when the fast path is armed, and that is a measured choice.</b> Armed, settling the total makes
+     * round 2 a {@code match_none} and the page is assembled from round 1, so the count <em>replaces</em> a round trip —
+     * round 2's query and its page fetch — rather than adding one. Un-armed, round 2 runs regardless (Top-only instead of
+     * Top+Tail), so the count is a <b>third serial round</b> doing work the Tail would have done inside round 2, and shard
+     * tasks go from {@code (legs + 1) * shards} to {@code (legs + 2) * shards}. Measured on WANDS, two lexical legs,
+     * {@code sort: [{_score: desc}]} (count-eligible, fast-path-refused): issuing the count cost {@code +5 ms} cold and
+     * {@code +2 ms} warm, keeping the Tail {@code +3 ms} cold and {@code +2 ms} warm. The count is fully request-cacheable
+     * — 636 cold misses became 636 warm hits with no misses — but a cache hit still pays the round trip, so caching brings
+     * it level with the Tail rather than ahead.
      *
-     * <p>One leg shape makes that difference decisive. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/
-     * {@code neural_knn} leg the window did <em>not</em> truncate with an address of the hits it returned, so for that leg
-     * the Tail walks no graph while the count's disjunction would. Armed, one graph walk buys away a round trip and is
-     * worth it; un-armed, it is a third round whose only saving is a Tail clause that for this leg is a cheap ids lookup —
-     * so the un-armed case is refused. Note that a {@code k} large enough to fill the window cannot be assumed instead: a
-     * shard holding fewer documents than {@code k}, a {@code knn} {@code filter}, a small corpus, and radial knn (which has
-     * no {@code k} at all) all come back short.
+     * <p>Shapes that are count-eligible but un-armed are ordinary rather than exotic, which is why this matters:
+     * {@code profile}, any {@code sort} (including an explicit {@code _score desc}, which derived totals allow and
+     * {@link #requestShapeAllowsFastPath} refuses), {@code rescore}, {@code script_fields}, a leg with {@code inner_hits},
+     * the first request of each {@code _source} shape per coordinator node, and a request over the fetch budget. Each of
+     * those keeps the Tail and counts with it, exactly as before this optimization existed.
+     *
+     * <p>One leg shape is still refused even armed. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/
+     * {@code neural_knn} leg the window did <em>not</em> truncate with an address of the hits it returned, so the Tail
+     * neither walks its graph nor re-runs its inference. For {@code knn}/{@code neural_knn} the re-execution is one graph
+     * walk, which armed buys away a round trip and is worth it (measured: {@code +4 ms} allowing it against {@code +8 ms}
+     * refusing). For {@code neural} it is a second <b>model inference</b> — see {@link #carriesInference} — which against a
+     * remote connector is a network call, per-call spend and another throttle path, so that one is refused. A {@code k}
+     * large enough to fill the window cannot be assumed instead: a shard holding fewer documents than {@code k}, a
+     * {@code knn} {@code filter}, a small corpus, and radial knn (which has no {@code k} at all) all come back short.
      *
      * <p><b>What it buys beyond cost.</b> Core computes the value <em>and the relation</em>, so the threshold-boundary
      * arithmetic this class otherwise does by hand cannot be wrong here; and with no aggregation in the request there is
@@ -270,6 +270,16 @@ final class HybridFusionOrchestrator {
         boolean fastPathArmed
     ) {
         if (Objects.isNull(scope) || scope.legUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
+            return null;
+        }
+        // Only when the fast path is armed. Un-armed, round 2 runs whatever happens, so the count is a THIRD distributed
+        // round doing work the Tail would have done inside round 2 -- and measured on WANDS with two lexical legs and
+        // `sort: [{_score: desc}]` (count-eligible, fast-path-refused), keeping the Tail wins or ties:
+        // count issued +5 ms cold, +2 ms warm Tail kept +3 ms cold, +2 ms warm
+        // The count IS fully request-cacheable -- 636 misses cold became 636 hits warm, 0 misses -- but a cache hit still
+        // costs the round trip, so caching brings it level with the Tail rather than ahead. Armed it is a different trade,
+        // because settling the total removes round 2 entirely rather than adding a round.
+        if (fastPathArmed == false) {
             return null;
         }
         // Two or more legs, and no more than the fan-out this is worth doing for. Every leg shape is eligible; the
@@ -323,10 +333,10 @@ final class HybridFusionOrchestrator {
             // So: refuse a short materializable leg un-armed, and refuse it on either path when it carries inference. A leg
             // that FILLED the window is served on both paths and inference or not, because there the Tail keeps it verbatim
             // and re-executes — and re-infers — exactly as the count would.
-            if (isMaterializableLeg(legs.get(leg)) && item.getResponse().getHits().getHits().length < windowSize) {
-                if (fastPathArmed == false || carriesInference(legs.get(leg))) {
-                    return null;
-                }
+            if (isMaterializableLeg(legs.get(leg))
+                && carriesInference(legs.get(leg))
+                && item.getResponse().getHits().getHits().length < windowSize) {
+                return null;
             }
             disjunction.should(legs.get(leg));
         }
