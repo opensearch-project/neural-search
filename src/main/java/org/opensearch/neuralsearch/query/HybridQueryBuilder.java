@@ -83,6 +83,8 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSI
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForFusedModeInHybridQuery;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
 
 /**
  * Class abstract creation of a Query type "hybrid". Hybrid query will allow execution of multiple sub-queries and
@@ -664,9 +666,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 )
             );
         }
-        // Current scope: the whole score-normalization family (min_max, z_score, l2) combined by arithmetic_mean, plus
-        // rank-based rrf. Other techniques parse but are not wired into the coordinator fusion path yet — fail fast
-        // rather than mis-fuse.
+        // Scope: the whole score-normalization family (min_max, z_score, l2) combined by any of the three means, plus
+        // rank-based rrf. Which pairings are legal is NOT this set's business -- the classic compatibility matrix decides
+        // that, and z_score x {geometric, harmonic} is the pairing it refuses.
         requireSupportedTechniques(fusionSpec);
 
         int window = effectiveWindowSize();
@@ -1405,7 +1407,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * ({@code HybridFusionOrchestrator#recordExplanations}) with no cast, and a combiner that forgot to describe itself
      * is a compile error rather than a {@code ClassCastException} on explained requests only.
      */
-    private static final Set<String> FUSED_COMBINATION_TECHNIQUES = Set.of(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, FusionSpec.TECHNIQUE_RRF);
+    private static final Set<String> FUSED_COMBINATION_TECHNIQUES = Set.of(
+        FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+        FusionSpec.TECHNIQUE_RRF,
+        GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME
+    );
 
     /**
      * Fail fast on fusion configs the coordinator path cannot honor, rather than silently mis-fusing. Three checks,

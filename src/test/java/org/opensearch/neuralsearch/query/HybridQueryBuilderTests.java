@@ -685,15 +685,23 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
+    /**
+     * The fused combination-scope check still refuses a name it does not know, at rewrite, before any fan-out.
+     *
+     * <p>Uses an invented technique because every combination technique that actually exists
+     * ({@code ScoreCombinationFactory}: arithmetic_mean, geometric_mean, harmonic_mean, rrf) is now in fused scope. This
+     * test used to use {@code geometric_mean}; that it now gets past this check is the point of enabling it, and the
+     * pairing rules for the two means are covered by
+     * {@code testRequireSupportedTechniques_refusesZScoreWithGeometricOrHarmonic}.
+     */
     public void testDoRewriteFused_whenUnsupportedCombination_thenFailsFast() {
         setUpClusterService();
-        // geometric_mean is a valid classic pairing for min_max but is not wired into the coordinator path yet.
         HybridQueryBuilder builder = fusedBuilder(
-            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "geometric_mean")))
+            new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "median")))
         );
         QueryCoordinatorContext ctx = coordinatorContextFor(builder);
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
-        assertThat(e.getMessage(), containsString("does not support combination [geometric_mean] in fused mode"));
+        assertThat(e.getMessage(), containsString("does not support combination [median] in fused mode"));
     }
 
     @SneakyThrows
@@ -2771,6 +2779,52 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertTrue(neuralInnerMap.get(fieldName) instanceof Map);
         Map<String, Object> vectorFieldInnerMap = (Map<String, Object>) neuralInnerMap.get(fieldName);
         return vectorFieldInnerMap;
+    }
+
+    // ---- geometric_mean / harmonic_mean in fused mode ----
+
+    private static FusionSpec normProcessorSpec(String normalization, String combination) {
+        return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            combination,
+            normalization,
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            new float[0]
+        );
+    }
+
+    /**
+     * The three means are all in fused scope, paired with every normalization the classic compatibility matrix allows them
+     * with. Fused mode does not get its own opinion about pairings — widening the combination set only decides what may be
+     * asked for; {@code ScoreNormalizationFactory}'s matrix still decides what is legal, which is the next test.
+     */
+    public void testRequireSupportedTechniques_acceptsGeometricAndHarmonicWhereClassicDoes() {
+        for (String combination : List.of("geometric_mean", "harmonic_mean")) {
+            for (String normalization : List.of("min_max", "l2")) {
+                HybridQueryBuilder.requireSupportedTechniques(normProcessorSpec(normalization, combination));
+            }
+        }
+    }
+
+    /**
+     * {@code z_score} allows only arithmetic_mean, and that check was <b>dead code</b> until the two means were admitted:
+     * the combination-scope set used to reject them first, so nothing reached the matrix. This is the test that makes the
+     * matrix load-bearing, and it asserts the message comes from the matrix rather than from the scope check — otherwise a
+     * later narrowing of the scope set would silently take this case over again.
+     */
+    public void testRequireSupportedTechniques_refusesZScoreWithGeometricOrHarmonic() {
+        for (String combination : List.of("geometric_mean", "harmonic_mean")) {
+            IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
+                () -> HybridQueryBuilder.requireSupportedTechniques(normProcessorSpec("z_score", combination))
+            );
+            assertThat(
+                "the refusal must come from the pairing matrix, not the fused scope set",
+                e.getMessage(),
+                containsString("does not support combination [" + combination + "] with normalization [z_score]")
+            );
+            assertThat(e.getMessage(), containsString("supported combinations for that normalization are"));
+        }
     }
 
     private void initKNNSettings() {

@@ -64,6 +64,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     private static final int DOCS_PER_GROUP = 2;
     /** Own index, and deliberately single-shard: the classic-vs-fused score comparison is only exact on one shard. */
     private static final String INDEX_FOR_FAMILY_PARITY = "test-hybrid-fused-family-parity";
+    /** Combination-family parity runs multi-shard on purpose; see that test for why an exact comparison still holds. */
+    private static final String INDEX_FOR_COMBINATION_PARITY = "test-hybrid-fused-combination-parity";
+    private static final int COMBINATION_PARITY_SHARDS = 4;
+    private static final int COMBINATION_PARITY_DOCS = 16;
     private static final int FAMILY_PARITY_DOCS = 6;
     private static final String INDEX_WITH_DEFAULT_NORM = "test-hybrid-fused-default-norm";
     private static final String INDEX_NO_PIPELINE = "test-hybrid-fused-inline-config";
@@ -851,12 +855,160 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         }
     }
 
+    private String multiShardQuery(String normalizationTechnique, String combinationTechnique) {
+        return multiShardQuery(normalizationTechnique, combinationTechnique, 16);
+    }
+
+    private String multiShardQuery(String normalizationTechnique, String combinationTechnique, int window) {
+        String legAll = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"none\",\"missing\":1}}}";
+        String legTop = "{\"function_score\":{\"query\":{\"range\":{\""
+            + RANK_FIELD
+            + "\":{\"gte\":80}}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"sqrt\",\"missing\":1}}}";
+        String fusionBlock = Objects.isNull(normalizationTechnique)
+            ? ""
+            : "\"fusion\":{\"window_size\":"
+                + window
+                + ",\"normalization\":{\"technique\":\""
+                + normalizationTechnique
+                + "\"},\"combination\":{\"technique\":\""
+                + combinationTechnique
+                + "\"}},";
+        return "{\"hybrid\":{" + fusionBlock + "\"queries\":[" + legAll + "," + legTop + "]}}";
+    }
+
+    /**
+     * The same parity guarantee for the two combination techniques the resolver just gained, on <b>4 shards across 2
+     * nodes</b> with 16 documents — so the comparison is made where a coordinator-side fusion could plausibly disagree
+     * with a shard-side one, not on the single-shard case where it trivially cannot.
+     *
+     * <p><b>Why an exact comparison is legitimate here, which is not the reason one might assume.</b> It is not that the
+     * two paths normalize over the same shard — classic's {@code min_max} is computed at the coordinator across <i>all</i>
+     * shards' results ({@code MinMaxScoreNormalizationTechnique#getMinMaxScoresResult} takes the whole per-shard list), so
+     * shard count has no bearing on the scores at all. What matters is that both paths see the same <b>candidate set</b>:
+     * classic collects {@code size} per shard per leg, the resolver collects a global {@code window_size} per leg, and with
+     * {@code window_size} at or above the number of matching documents those two sets coincide. Measured on this fixture:
+     * at {@code window_size} 16 the two agree on all 10 returned documents and every score; at 8 they agree on 7 of 10; at
+     * 4, on 4 of 10, the remainder being Tail backfill at {@code 0.0}. So the window, not the sharding, is the variable —
+     * and it is pinned here rather than left to chance.
+     *
+     * <p>{@code z_score} is absent deliberately — the classic compatibility matrix does not allow it with either mean, and
+     * fused mode defers to that matrix rather than having its own opinion.
+     */
+    @SneakyThrows
+    public void testFusedMode_forGeometricAndHarmonicMean_thenMatchesClassicPipeline() {
+        if (indexExists(INDEX_FOR_COMBINATION_PARITY) == false) {
+            createIndex(INDEX_FOR_COMBINATION_PARITY, indexConfigWithRankField(COMBINATION_PARITY_SHARDS));
+            for (int id = 1; id <= COMBINATION_PARITY_DOCS; id++) {
+                indexRankedDoc(INDEX_FOR_COMBINATION_PARITY, id, id * 10);
+            }
+        }
+
+        for (String combination : List.of("geometric_mean", "harmonic_mean")) {
+            for (String normalization : List.of("min_max", "l2")) {
+                String pipeline = "fused-comb-parity-" + combination + "-" + normalization;
+                createSearchPipeline(pipeline, normalization, combination, Map.of());
+
+                List<Map<String, Object>> classicHits = getNestedHits(
+                    searchRawWithParams(
+                        "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                        "{\"query\":" + multiShardQuery(null, null) + "}",
+                        Map.of("search_pipeline", pipeline)
+                    )
+                );
+                List<Map<String, Object>> fusedHits = getNestedHits(
+                    searchRaw(
+                        "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                        "{\"query\":" + multiShardQuery(normalization, combination) + "}"
+                    )
+                );
+
+                String where = combination + " with " + normalization;
+                assertFalse("fixture must return documents for " + where, classicHits.isEmpty());
+                assertEquals("same document count for " + where, classicHits.size(), fusedHits.size());
+                for (int i = 0; i < classicHits.size(); i++) {
+                    String classicId = (String) classicHits.get(i).get("_id");
+                    double classicScore = ((Number) classicHits.get(i).get("_score")).doubleValue();
+                    assertEquals("rank " + i + " document for " + where, classicId, fusedHits.get(i).get("_id"));
+                    // Relative tolerance: the two paths run the same float arithmetic, but the scores travel through JSON
+                    // as doubles, so pin agreement to float precision rather than to the exact decimal rendering.
+                    assertEquals(
+                        "fused score for doc " + classicId + " with " + where,
+                        classicScore,
+                        ((Number) fusedHits.get(i).get("_score")).doubleValue(),
+                        Math.max(1e-6, Math.abs(classicScore) * 1e-5)
+                    );
+                }
+            }
+        }
+    }
+
+    /**
+     * The window is what decides whether the two paths see the same candidates, so this pins the boundary the parity test
+     * above depends on: at a window covering the corpus they agree exactly, and below it the resolver legitimately
+     * diverges — fewer documents carry a fused score and the rest arrive as Tail backfill at {@code 0.0}. Without this, a
+     * future change that quietly shrank the effective window would turn the parity test into a coincidence.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenWindowIsBelowTheCorpus_thenItDivergesFromClassicByDesign() {
+        if (indexExists(INDEX_FOR_COMBINATION_PARITY) == false) {
+            createIndex(INDEX_FOR_COMBINATION_PARITY, indexConfigWithRankField(COMBINATION_PARITY_SHARDS));
+            for (int id = 1; id <= COMBINATION_PARITY_DOCS; id++) {
+                indexRankedDoc(INDEX_FOR_COMBINATION_PARITY, id, id * 10);
+            }
+        }
+        String pipeline = "fused-comb-window-geo";
+        createSearchPipeline(pipeline, "min_max", "geometric_mean", Map.of());
+        List<Map<String, Object>> classicHits = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + multiShardQuery(null, null) + "}",
+                Map.of("search_pipeline", pipeline)
+            )
+        );
+
+        int agreeAtFullWindow = rankAgreement(classicHits, "geometric_mean", COMBINATION_PARITY_DOCS);
+        int agreeAtHalfWindow = rankAgreement(classicHits, "geometric_mean", COMBINATION_PARITY_DOCS / 2);
+
+        assertEquals("a window covering the corpus reproduces classic exactly", classicHits.size(), agreeAtFullWindow);
+        assertTrue(
+            "a window below the corpus must diverge, or the window is not being applied: agreed on " + agreeAtHalfWindow,
+            agreeAtHalfWindow < classicHits.size()
+        );
+    }
+
+    /** How many ranks the fused result shares with {@code classicHits}, for a given fused window. */
+    @SneakyThrows
+    private int rankAgreement(List<Map<String, Object>> classicHits, String combination, int window) {
+        List<Map<String, Object>> fusedHits = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + multiShardQuery("min_max", combination, window) + "}"
+            )
+        );
+        int same = 0;
+        for (int i = 0; i < Math.min(classicHits.size(), fusedHits.size()); i++) {
+            if (classicHits.get(i).get("_id").equals(fusedHits.get(i).get("_id"))) {
+                same++;
+            }
+        }
+        return same;
+    }
+
     /**
      * Two legs over the rank field: leg A matches everything, leg B only the top ranks. Passing a {@code technique}
      * produces the fused form (inline {@code fusion} block, coordinator path); passing null produces the classic form,
      * which takes its technique from the {@code search_pipeline} request parameter instead.
      */
     private String familyParityQuery(String normalizationTechnique) {
+        return familyParityQuery(normalizationTechnique, "arithmetic_mean");
+    }
+
+    /** As above with the combination technique named too, for the combination-family parity test. */
+    private String familyParityQuery(String normalizationTechnique, String combinationTechnique) {
         String legScoringByRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
             + RANK_FIELD
             + "\",\"modifier\":\"none\",\"missing\":1}}}";
@@ -873,7 +1025,9 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
                 + FAMILY_PARITY_DOCS
                 + ",\"normalization\":{\"technique\":\""
                 + normalizationTechnique
-                + "\"},\"combination\":{\"technique\":\"arithmetic_mean\"}},";
+                + "\"},\"combination\":{\"technique\":\""
+                + combinationTechnique
+                + "\"}},";
         return "{\"hybrid\":{" + fusionBlock + "\"queries\":[" + legScoringByRank + "," + legScoringTopRanksOnly + "]}}";
     }
 
