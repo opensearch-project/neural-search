@@ -372,6 +372,12 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
      * armed path has to be measured by latency or by the request-cache side channel instead — a profiled probe of a build
      * that allows the count looks identical to one that refuses it.
      *
+     * <p>So the verdict has to say which of those two it is, or it would describe a request whose count is in fact
+     * derivable as one whose count nothing can prove. That is what {@code count_round_not_run_under_profile} is for, and
+     * pinning it here is the only end-to-end assertion that the reason reported is the twin's and not this request's.
+     * {@code would_take} and {@code count_settled} stay {@code false}, because they describe the request that ran — see
+     * {@code FastPathDecision} for why {@code would_take} cannot honestly be flipped.
+     *
      * <p>What must still hold is that profiling changes the path and not the answer, which is what this asserts against the
      * unprofiled twin.
      */
@@ -386,9 +392,22 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         Map<String, Object> profiledResponse = search(INDEX, profiled(body, "\"size\":" + window));
         Map<String, Object> verdict = fastPathVerdict(profiledResponse);
 
+        // would_take describes the request that ran, and for this one reason it has to: whether the twin's count settles
+        // depends on what the count round answers, which is unknowable without issuing it. The REASON is what speaks for
+        // the twin — count_round_not_run_under_profile rather than count_not_settled says the count is derivable for the
+        // unprofiled request and was simply not established for this one. Pinned as a literal, because the whole point of
+        // the reason is which of the two it is.
         assertEquals("a profile needs round 2, so the request is un-armed", Boolean.FALSE, verdict.get("would_take"));
-        assertNotNull("and the verdict says which shape refused it", verdict.get("refused_by"));
-        assertEquals("no count round ran, so nothing settled the union", Boolean.FALSE, verdict.get("count_settled"));
+        assertEquals(
+            "these legs are lexical-and-knn with no leg proving the count, so the twin's count round would have been issued",
+            "count_round_not_run_under_profile",
+            verdict.get("refused_by")
+        );
+        assertEquals(
+            "no count round ran, so nothing settled the union for the request that ran",
+            Boolean.FALSE,
+            verdict.get("count_settled")
+        );
 
         // The answer is unchanged by profiling: the Tail counted instead, and reports the same total.
         Map<String, Object> plain = search(INDEX, "{\"query\":" + body + ",\"size\":" + window + "}");

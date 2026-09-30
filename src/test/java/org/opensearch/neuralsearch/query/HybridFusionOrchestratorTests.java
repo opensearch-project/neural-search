@@ -2544,6 +2544,46 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertNull(refusedEarly.fastPath().countSettled());
     }
 
+    /**
+     * The two reasons an unsettled count can carry, and why the distinction exists. A profiled request is never armed and
+     * so never issues the count round, which means a count its unprofiled twin settles is reported as unsettled here. Saying
+     * only "no leg proved it" would describe a request whose count is in fact derivable, so when the twin would have issued
+     * the round the reason becomes {@code count_round_not_run_under_profile}. {@code count_settled} stays {@code false}
+     * either way: nothing settled the count for the request that actually ran.
+     */
+    public void testDecideFastPathAfterLegs_namesTheProfileAsTheReasonOnlyWhenTheTwinWouldHaveCounted() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f)), eq(40)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f)), eq(20))
+        );
+        SearchSourceBuilder source = new SearchSourceBuilder().size(2).trackTotalHitsUpTo(10_000);
+
+        FastPathDecision twinWouldCount = new FastPathDecision().twinWouldHaveCounted(true);
+        fusedResult(source, ms, legs, 10, false, new TotalHits[1], new FusedCoordinatorTimings().fastPath(twinWouldCount));
+        assertEquals(FastPathDecision.COUNT_ROUND_NOT_RUN_UNDER_PROFILE, twinWouldCount.refusedBy());
+        assertEquals("the count is derivable, just not for a profiled request", Boolean.FALSE, twinWouldCount.countSettled());
+        assertEquals(Boolean.FALSE, twinWouldCount.toMap().get("would_take"));
+
+        FastPathDecision twinWouldNot = new FastPathDecision();
+        fusedResult(source, ms, legs, 10, false, new TotalHits[1], new FusedCoordinatorTimings().fastPath(twinWouldNot));
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, twinWouldNot.refusedBy());
+        assertEquals(Boolean.FALSE, twinWouldNot.countSettled());
+
+        // The page bound keeps its precedence over both: it is the more specific refusal, and it is checked first.
+        FastPathDecision pageBeyond = new FastPathDecision().twinWouldHaveCounted(true);
+        fusedResult(
+            new SearchSourceBuilder().size(10).trackTotalHitsUpTo(10_000),
+            ms,
+            legs,
+            10,
+            false,
+            new TotalHits[1],
+            new FusedCoordinatorTimings().fastPath(pageBeyond)
+        );
+        assertEquals(FastPathDecision.PAGE_BEYOND_WINDOW, pageBeyond.refusedBy());
+    }
+
     // ---- L9: exact hits.total from round 1 (leg counts + overlap aggregations) ----
 
     /** A leg item with an exact ({@code eq}) or capped ({@code gte}) total and, optionally, its overlap aggregation. */
@@ -2671,34 +2711,59 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     /**
-     * A short {@code neural} leg is refused on <b>both</b> paths, unlike a short {@code knn} leg which is refused only
-     * un-armed. The difference is what re-executing it costs: the count's disjunction is built from the ORIGINAL leg
-     * builders, whose {@code vectorSupplier()} round 1 never set ({@code rewriteQueryAgainstKnnField} returns a NEW builder
-     * holding the {@code SetOnce}), so rewriting the count re-enters the inference branch and calls the model a second time
-     * — and {@code MLCommonsClientAccessor} caches model metadata, not embeddings. Against a remote connector that is a
-     * network call and per-call spend, which the knn measurement (+4 ms allowed vs +8 ms refused) says nothing about.
+     * The arming gate, on the shape where it is the <b>only</b> thing refusing: two lexical legs, every other condition for
+     * a count satisfied. Un-armed round 2 runs whatever happens, so the count would be a third round doing work its Tail
+     * does inside round 2 — measured on WANDS as +5 ms cold to issue the count against +3 ms to keep the Tail — while armed
+     * it removes round 2 outright. Worth pinning on a leg shape that carries no other refusal, because the two un-armed
+     * assertions further down both involve an ANN leg and so cannot tell the gate apart from a per-leg rule.
      */
-    public void testUnionCountRequest_refusesAShortNeuralLegOnBothPathsButAShortKnnLegOnlyUnarmed() {
+    public void testUnionCountRequest_isRefusedUnarmedEvenWhenEveryLegAndTheShapeAllowIt() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        List<QueryBuilder> lexical = List.of(hello, place);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        assertNotNull(
+            "armed, this is exactly the shape the count is for",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(eq(10), eq(3)), 100, true)
+        );
+        assertNull(
+            "un-armed the same shape is refused by the gate alone, with no leg giving a reason of its own",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(eq(10), eq(3)), 100, false)
+        );
+    }
+
+    /**
+     * A short {@code neural} leg is refused even when armed, unlike a short {@code knn} leg. The difference is what
+     * re-executing it costs: the count's disjunction is built from the ORIGINAL leg builders, whose {@code vectorSupplier()}
+     * round 1 never set ({@code rewriteQueryAgainstKnnField} returns a NEW builder holding the {@code SetOnce}), so
+     * rewriting the count re-enters the inference branch and calls the model a second time — and
+     * {@code MLCommonsClientAccessor} caches model metadata, not embeddings. Against a remote connector that is a network
+     * call and per-call spend, which the knn measurement (+4 ms allowed vs +8 ms refused) says nothing about.
+     *
+     * <p>Asserted on the armed path only. Un-armed the arming gate refuses first, so an un-armed assertion here would hold
+     * with the inference test deleted and would be pinning the gate rather than the carve-out — the gate has its own test
+     * above.
+     */
+    public void testUnionCountRequest_refusesAShortNeuralLegEvenArmedButServesAShortKnnLeg() {
         initClusterMinVersionForNeuralLegs();
         QueryBuilder hello = new MatchQueryBuilder("text", "hello");
         QueryBuilder neural = NeuralQueryBuilder.builder().fieldName("vec").queryText("shoes").modelId("m1").k(10).build();
         QueryBuilder knn = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
         SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
 
-        for (boolean armed : new boolean[] { true, false }) {
-            assertNull(
-                "a short neural leg would cost a second inference, armed=" + armed,
-                HybridFusionOrchestrator.unionCountRequest(
-                    armedScope(source),
-                    source,
-                    List.of(neural, hello),
-                    lexicalItems(eq(10), eq(3)),
-                    100,
-                    armed
-                )
-            );
-        }
-        // The same shape with knn instead: served when armed, because knn carries its vector and only re-walks a graph.
+        assertNull(
+            "a short neural leg would cost a second inference, which no round trip saved pays for",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(neural, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        // The same shape with knn instead: served, because knn carries its vector and only re-walks a graph.
         assertNotNull(
             "a short knn leg is a graph walk, which armed buys away a round trip",
             HybridFusionOrchestrator.unionCountRequest(
@@ -2711,7 +2776,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             )
         );
         assertNull(
-            "and un-armed it is a third round, so refused",
+            "and un-armed the gate refuses it before any leg is weighed",
             HybridFusionOrchestrator.unionCountRequest(
                 armedScope(source),
                 source,
@@ -2940,8 +3005,9 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         HybridFusionOrchestrator.FusedResult skewed = fusedResult(source, ms, legs, 10, true, skewedTotal, refused, eq(2));
         assertFalse("a count below the ranked page is not usable", skewed.tookFastPath());
         assertEquals(FastPathDecision.COUNT_NOT_SETTLED, refused.fastPath().refusedBy());
-        // The refusal alone is the decideFastPathAfterLegs floor. These two are the buildSubstitute one: the fallback has
-        // to actually carry the Tail and publish nothing, or round 2 reports 3 hits under "total": 2.
+        // The refusal above is the decideFastPathAfterLegs floor: the count is nulled against the ranked count, so nothing
+        // settles the total. These two are what the fallback then owes — it has to carry the Tail and publish nothing, or
+        // round 2 returns its 3 ranked documents under "total": 2.
         assertTrue("the fallback has to count for itself", refused.tailBuilt());
         assertNull("and publish no derived total", skewedTotal[0]);
 
@@ -3069,11 +3135,12 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         List<QueryBuilder> lexical = List.of(hello, place);
         SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
 
-        // A short ANN leg (10 hits against a window of 100 — the default shape, knn k=10 on a few shards) is the one leg
-        // the Tail does not re-execute, so what the count's graph walk buys depends on the path. UN-ARMED it is a third
-        // round saving only a cheap ids clause, so it is refused...
+        // A short ANN leg (10 hits against a window of 100 — the default shape, knn k=10 on a few shards) is the one leg the
+        // Tail does not re-execute, so the count's graph walk is work the Tail would not have done. UN-ARMED that question
+        // never arises: the arming gate refuses first, whatever the legs look like (pinned on its own shape by
+        // testUnionCountRequest_isRefusedUnarmedEvenWhenEveryLegAndTheShapeAllowIt)...
         assertNull(
-            "un-armed, a short ANN leg makes the count a third round whose only saving is an ids lookup",
+            "un-armed, the gate refuses before the legs are weighed at all",
             HybridFusionOrchestrator.unionCountRequest(
                 armedScope(source),
                 source,
@@ -3385,9 +3452,18 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         );
     }
 
-    public void testBuildFusedQuery_roundTwoDropsItsTailWhenACountRoundSettledTheUnion() {
-        // The UN-ARMED path. With no eager aggregation on lexical-only legs, the counted union is the only thing that can
-        // drop the Tail here; without it round 2 carries the Tail, which is what this asserts both ways.
+    /**
+     * What a settled count actually buys, at the only call that can have one. A count is issued for an armed request
+     * alone, so the union it establishes is spent by removing round 2 outright — the page is assembled and carries the
+     * counted total — rather than by trimming round 2's Tail. Without a count the same request keeps round 2 and its Tail,
+     * which is what makes the first half a statement about the count and not about the shape.
+     *
+     * <p>Replaces a pair of tests that drove this through {@code buildFusedQuery}'s un-armed path with a non-null count.
+     * That state is unreachable: {@code unionCountRequest} returns null when the fast path is un-armed, so an un-armed
+     * request never has a counted union to pass. The floor on a skewed count is covered on its reachable route by
+     * {@link #testBuildFusedResult_discardsACountedUnionBelowTheRankedCount}.
+     */
+    public void testBuildFusedResult_aSettledCountRemovesRoundTwoRatherThanTrimmingIt() {
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
         MultiSearchResponse ms = multiSearch(
             legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f)), eq(40)),
@@ -3396,91 +3472,19 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         SearchSourceBuilder source = new SearchSourceBuilder().size(2).trackTotalHitsUpTo(10_000);
 
         TotalHits[] withCount = new TotalHits[1];
-        FusedCoordinatorTimings countedTimings = new FusedCoordinatorTimings();
-        QueryBuilder counted = HybridFusionOrchestrator.buildFusedQuery(
-            source,
-            ms,
-            legs,
-            minMaxArithmetic(),
-            10,
-            countedTimings,
-            new FusedDocExplanations(),
-            null,
-            derived -> withCount[0] = derived,
-            eq(55)
-        );
-        assertFalse("the count is known, so round 2 runs Top-only", countedTimings.tailBuilt());
-        assertEquals("the counted union is what the response reports", eq(55), withCount[0]);
-        assertTrue(counted instanceof HybridFusionQueryBuilder);
+        FusedCoordinatorTimings countedTimings = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult counted = fusedResult(source, ms, legs, 10, true, withCount, countedTimings, eq(55));
+        assertTrue("the count settled the union, so there is nothing left for round 2 to do", counted.tookFastPath());
+        assertFalse(countedTimings.tailBuilt());
+        assertEquals("the counted union is what the assembled page reports", eq(55), counted.assembledHits().getTotalHits());
+        assertNull("and the totals consumer is told round 2's own total stands, so it cannot overwrite the page's", withCount[0]);
 
         TotalHits[] withoutCount = new TotalHits[1];
-        FusedCoordinatorTimings tailTimings = new FusedCoordinatorTimings();
-        HybridFusionOrchestrator.buildFusedQuery(
-            source,
-            ms,
-            legs,
-            minMaxArithmetic(),
-            10,
-            tailTimings,
-            new FusedDocExplanations(),
-            null,
-            derived -> withoutCount[0] = derived,
-            null
-        );
-        assertTrue("nothing knows the count, so the Tail stays", tailTimings.tailBuilt());
+        FusedCoordinatorTimings tailTimings = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult uncounted = fusedResult(source, ms, legs, 10, true, withoutCount, tailTimings, null);
+        assertFalse("nothing knows the count, so round 2 has to run and count for itself", uncounted.tookFastPath());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, tailTimings.fastPath().refusedBy());
+        assertTrue("with its Tail", tailTimings.tailBuilt());
         assertNull("and the consumer is told nothing was derived", withoutCount[0]);
-    }
-
-    /**
-     * v-I1 at the call site a client actually sees on the two-round path. The floor is applied in three places, and the
-     * fast-path refusal only pins one of them: with the floor deleted from {@code buildSubstitute} the request still falls
-     * back here, but {@code tailNeeded} goes false and round 2 returns its 3 ranked documents under {@code "total": 2}.
-     * So this asserts the two things that break in that case — the Tail is built, and nothing is published to the
-     * consumer — rather than only that the fast path refused.
-     */
-    public void testBuildFusedQuery_unarmedDiscardsACountedUnionBelowTheRankedCount() {
-        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
-        // The legs fuse to 3 distinct documents (1, 2, 3); a count of 2 contradicts the page assembled from them.
-        MultiSearchResponse ms = multiSearch(
-            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(40)),
-            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.4f)), eq(20))
-        );
-        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
-
-        TotalHits[] published = new TotalHits[1];
-        FusedCoordinatorTimings timings = new FusedCoordinatorTimings();
-        HybridFusionOrchestrator.buildFusedQuery(
-            source,
-            ms,
-            legs,
-            minMaxArithmetic(),
-            10,
-            timings,
-            new FusedDocExplanations(),
-            null,
-            derived -> published[0] = derived,
-            eq(2)
-        );
-        assertTrue("a count below the ranked page cannot drop the Tail: round 2 must count for itself", timings.tailBuilt());
-        assertNull("and nothing is published, so the response cannot report fewer hits than it returns", published[0]);
-
-        // The same request with a consistent count does drop the Tail — so the assertion above is about the floor, not
-        // about this shape being unable to use a count at all.
-        TotalHits[] consistent = new TotalHits[1];
-        FusedCoordinatorTimings ok = new FusedCoordinatorTimings();
-        HybridFusionOrchestrator.buildFusedQuery(
-            source,
-            ms,
-            legs,
-            minMaxArithmetic(),
-            10,
-            ok,
-            new FusedDocExplanations(),
-            null,
-            derived -> consistent[0] = derived,
-            eq(3)
-        );
-        assertFalse("a count at the ranked count is consistent and settles the total", ok.tailBuilt());
-        assertEquals(eq(3), consistent[0]);
     }
 }

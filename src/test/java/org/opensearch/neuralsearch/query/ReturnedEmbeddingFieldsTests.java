@@ -12,6 +12,7 @@ import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.OriginalIndices;
@@ -29,7 +30,10 @@ import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
 import org.opensearch.cluster.metadata.Metadata;
 import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.core.index.Index;
 import org.opensearch.index.IndexNotFoundException;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -214,6 +218,55 @@ public class ReturnedEmbeddingFieldsTests extends OpenSearchTestCase {
         ReturnedEmbeddingFields.FetchVolume unresolved = ReturnedEmbeddingFields.fastPathFetchVolume(request(source().size(10)), 2, 100);
         assertEquals(ReturnedEmbeddingFields.Unknown.INDICES_UNRESOLVED, unresolved.perDocument().unknown());
         assertTrue(unresolved.exceedsBudget());
+    }
+
+    /**
+     * The budget is read off the cluster settings so an operator's update applies to the next request, and every way that
+     * read can fail falls back to the setting's own default rather than propagating — it decides whether arming the fast
+     * path is worth it, never what the response says, so it must not be able to fail a search.
+     *
+     * <p>The un-registered case is what the {@code catch} is for, and it is only reachable by stubbing
+     * {@code getClusterSettings()}: {@link #cluster} leaves it {@code null}, so every other test in this class takes the
+     * early return above the {@code try} and never enters it.
+     */
+    public void testFastPathFetchBudgetBytes_fallsBackToTheDefaultWhenTheSettingCannotBeRead() {
+        // NeuralSearchClusterUtil is a JVM-lifetime singleton with no reset, and these classes share a worker JVM, so
+        // without this the first assertion reads whatever ClusterService another class left installed — and one of them
+        // leaves this very setting registered as "0b". Cleared explicitly, the idiom this class already uses elsewhere.
+        NeuralSearchClusterUtil.instance().initialize(null, null);
+        assertEquals(
+            "no cluster service at all: the setting's own default",
+            ReturnedEmbeddingFields.FAST_PATH_EXTRA_FETCH_BUDGET_BYTES,
+            ReturnedEmbeddingFields.fastPathFetchBudgetBytes()
+        );
+
+        cluster();
+        assertEquals(
+            "a cluster service with no settings in force still falls back",
+            ReturnedEmbeddingFields.FAST_PATH_EXTRA_FETCH_BUDGET_BYTES,
+            ReturnedEmbeddingFields.fastPathFetchBudgetBytes()
+        );
+
+        // Registered and set: the operator's value is what the gate weighs against.
+        clusterSettings(
+            Settings.builder().put(NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET.getKey(), "4mb").build(),
+            Set.of(NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET)
+        );
+        assertEquals(4L << 20, ReturnedEmbeddingFields.fastPathFetchBudgetBytes());
+
+        // Registered nowhere: AbstractScopedSettings#get throws SettingsException, which is the case the catch exists for.
+        clusterSettings(Settings.EMPTY, Set.of());
+        assertEquals(
+            "an unregistered setting falls back instead of raising from a latency decision",
+            ReturnedEmbeddingFields.FAST_PATH_EXTRA_FETCH_BUDGET_BYTES,
+            ReturnedEmbeddingFields.fastPathFetchBudgetBytes()
+        );
+    }
+
+    /** Puts a {@link ClusterSettings} in force on the mocked {@link ClusterService}, which {@link #cluster} leaves null. */
+    private void clusterSettings(Settings settings, Set<Setting<?>> registered) {
+        ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
+        when(clusterService.getClusterSettings()).thenReturn(new ClusterSettings(settings, registered));
     }
 
     public void testFastPathFetchExceedsBudget_reproducesTheMeasuredCrossover() {

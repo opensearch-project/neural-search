@@ -569,10 +569,17 @@ final class CandidateScope {
      * which a count over the legs' disjunction counts the same documents the legs' own totals do: a {@code post_filter}
      * applies to hits but not to a count, and a {@code slice} changes what each leg sees, so either keeps the Tail.
      *
-     * <p>Profiling is deliberately NOT excluded. It was, while the union was derived from an aggregation the legs carried —
-     * core's concurrent-segment profile breakdown asserts on a profiled search that also aggregates, which takes an
-     * assertions-enabled node down. The count round carries no aggregation, so a profiled request derives its count exactly
-     * as its unprofiled twin does, and the profile's own fast-path verdict describes the request the user actually sent.
+     * <p>Profiling is not excluded <i>here</i>, and does not need to be: this only says the request's shape admits a count.
+     * Whether one is issued is decided by {@code unionCountRequest}, which issues it for an armed request alone — and a
+     * profiled request is never armed, because {@code profile: true} is one of the shapes that keep two rounds. So a
+     * profiled request reaches this predicate, passes it, and still runs no count round. What its profile then reports about
+     * a count nothing else settled is {@code FastPathDecision#COUNT_ROUND_NOT_RUN_UNDER_PROFILE} when the twin's round would
+     * have been issued, and the plainer {@code FastPathDecision#COUNT_NOT_SETTLED} when it would not — a short {@code neural}
+     * leg, or more legs than the count is worth issuing for, are refused whether or not the request is profiled. An earlier
+     * revision excluded
+     * profiling here for an unrelated reason — the union was then derived from an aggregation the legs carried, and core's
+     * concurrent-segment profile breakdown asserts on a profiled search that also aggregates, taking an assertions-enabled
+     * node down. The count round carries no aggregation, so that exclusion is gone.
      */
     boolean legUnionCountAllowed() {
         return Objects.nonNull(legTotalHitsThreshold) && Objects.isNull(postFilter) && Objects.isNull(slice);
@@ -600,7 +607,7 @@ final class CandidateScope {
      * A count-only request over the legs' disjunction: {@code size: 0}, no fetch, no aggregations, totals tracked to the
      * request's own threshold. Used by the lazy union count — see {@code HybridFusionOrchestrator#unionCountRequest} for
      * which shapes it is issued for, and for what it costs relative to the round 2 Tail it replaces (never more
-     * per-document shard work; on the un-armed path, one extra serial round).
+     * per-document shard work, and issued only where it removes round 2 outright rather than adding a round to it).
      *
      * <p>Deliberately not {@link #newLegRequest}: a leg request carries {@code size = window_size} and a fetch source,
      * neither of which a count wants. What it does share is every request-level property that decides WHICH shards and

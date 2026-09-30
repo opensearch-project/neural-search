@@ -314,28 +314,22 @@ final class HybridFusionOrchestrator {
             if (Objects.isNull(own) || own.relation() != TotalHits.Relation.EQUAL_TO || own.value() >= threshold) {
                 return null;
             }
-            // An ANN leg the window did NOT truncate is the one leg the Tail does not re-execute: legInTailForm replaces it
-            // with an address of the hits it returned, so the Tail neither walks its graph nor re-runs its inference, while
-            // the disjunction below would do both. What that re-execution is worth depends on what the count replaces AND on
-            // what re-executing this particular leg costs:
+            // A leg the window did NOT truncate is the one leg the Tail does not re-execute: legInTailForm replaces it with
+            // an address of the hits it returned, so the Tail neither walks its graph nor re-runs its inference, while the
+            // disjunction below would do both. Everything reaching here is armed (the gate above), so what remains is the
+            // one re-execution that is not a local walk: a `neural` leg re-runs MODEL INFERENCE, because the count's copy of
+            // the leg is the ORIGINAL builder, whose vectorSupplier is still null (rewriteQueryAgainstKnnField returns a NEW
+            // builder holding the SetOnce), so rewriting the count re-enters the inference branch and calls the model a
+            // second time; MLCommonsClientAccessor caches model metadata, not embeddings. Against a remote connector that is
+            // a network call, per-call spend and a second chance to throttle — categorically unlike the graph walk a short
+            // knn / neural_knn leg costs, which armed is worth paying (measured on WANDS: +4 ms allowing against +8 ms
+            // refusing, because settling the total makes round 2 a match_none and buys back its query AND its page fetch).
             //
-            // armed, no inference (knn / neural_knn) — settling the total makes round 2 a match_none and the page is
-            // assembled from round 1, so the count replaces a whole round trip (round 2's query AND its page fetch) for one
-            // graph walk, and is request-cacheable on a repeat. Measured on WANDS: +4 ms allowing it against +8 ms refusing.
-            // un-armed — round 2 runs either way, Top-only instead of Top+Tail, so the count is a THIRD round whose only
-            // saving is a Tail clause that for this leg is a cheap ids lookup.
-            // any path, with inference (neural) — the count's copy of the leg is the ORIGINAL builder, whose vectorSupplier
-            // is still null (rewriteQueryAgainstKnnField returns a NEW builder holding the SetOnce), so rewriting the count
-            // re-enters the inference branch and calls the model a second time; MLCommonsClientAccessor caches model
-            // metadata, not embeddings. For a remote connector that is a network call, per-call spend and a second chance to
-            // throttle — categorically unlike a local graph walk, and not something the knn measurement above speaks to.
-            //
-            // So: refuse a short materializable leg un-armed, and refuse it on either path when it carries inference. A leg
-            // that FILLED the window is served on both paths and inference or not, because there the Tail keeps it verbatim
-            // and re-executes — and re-infers — exactly as the count would.
-            if (isMaterializableLeg(legs.get(leg))
-                && carriesInference(legs.get(leg))
-                && item.getResponse().getHits().getHits().length < windowSize) {
+            // The window test is what makes this "short": a leg that FILLED the window is served whether or not it carries
+            // inference, because there the Tail keeps it verbatim and re-executes — and re-infers — exactly as the count
+            // would, so refusing would buy nothing. carriesInference implies isMaterializableLeg (only `neural` carries it,
+            // and it is one of the three materializable names), so naming the narrower test alone is the whole condition.
+            if (carriesInference(legs.get(leg)) && item.getResponse().getHits().getHits().length < windowSize) {
                 return null;
             }
             disjunction.should(legs.get(leg));
@@ -451,47 +445,18 @@ final class HybridFusionOrchestrator {
         HybridQueryBuilder originalQuery,
         FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer
     ) {
-        return buildFusedQuery(
-            source,
-            multiSearchResponse,
-            legs,
-            fusion,
-            windowSize,
-            timings,
-            explanations,
-            originalQuery,
-            totalHitsConsumer,
-            null
-        );
-    }
-
-    /**
-     * As above, with the union a lazy count-only round established ({@code null} when none ran). The un-armed path needs it
-     * for the same reason the armed one does: round 2 keeps its Tail purely to count unless something already knows the
-     * count, and once no leg's own count proves the union the count round is the only thing that can know it.
-     */
-    static QueryBuilder buildFusedQuery(
-        SearchSourceBuilder source,
-        MultiSearchResponse multiSearchResponse,
-        List<QueryBuilder> legs,
-        FusionSpec fusion,
-        int windowSize,
-        FusedCoordinatorTimings timings,
-        FusedDocExplanations explanations,
-        HybridQueryBuilder originalQuery,
-        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer,
-        TotalHits countedUnion
-    ) {
         MultiSearchResponse.Item[] items = multiSearchResponse.getResponses();
         long windowMergeStart = System.nanoTime();
         SearchHit[][] legHits = groupLegHits(items, legs.size());
         timings.windowMergeNanos(System.nanoTime() - windowMergeStart);
         RankedDocs ranked = computeRankedDocs(legHits, fusion, windowSize, timings, explanations);
         timings.rankedDocs(ranked.ids().length);
-        // Not armed, so nothing here depends on the verdict — but a profiled request's report of its unprofiled twin
-        // still needs what the legs decided, read off the same answers the unprofiled twin would have had.
-        decideFastPathAfterLegs(timings.fastPath(), source, items, ranked, windowSize, countedUnion);
-        return buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer, countedUnion);
+        // This is the un-armed path, which is also the only path a count-only round is never issued for — so there is no
+        // counted union to carry here and null is passed for it. Nothing on this path depends on the verdict either, but a
+        // profiled request's report of its unprofiled twin still needs what the legs decided, read off the same answers the
+        // twin would have had.
+        decideFastPathAfterLegs(timings.fastPath(), source, items, ranked, windowSize, null);
+        return buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer);
     }
 
     /**
@@ -501,6 +466,15 @@ final class HybridFusionOrchestrator {
      * a request that arms the fast path and then needs round 2, rather than recomputed and its timings double-written.
      * The recomputing {@code buildFusedQuery} overloads above stay the entry point for the un-armed path, which never
      * ran fusion before reaching them.
+     *
+     * <p>Takes no counted union, because neither route into it can carry one. Un-armed no count round is issued at all.
+     * Armed, the only post-leg refusal that reaches here with a count in hand is {@link FastPathDecision#COUNT_NOT_SETTLED}
+     * — {@code NO_CANDIDATES} returns {@code match_none} in {@link #buildFusedResult} first, and {@code PAGE_BEYOND_WINDOW}
+     * cannot, since {@link #unionCountRequest} refuses a page past the ranked count before issuing the round — and that
+     * refusal is by definition the case where {@link #totalHitsNotBelowThePage} nulled the count, which is the same floor
+     * applied below. A count is only issued when every leg came back {@code EQUAL_TO} and below the threshold, which is
+     * also what makes {@link #totalHitsFromLegs} return {@code null}, so the Tail is kept and the consumer told nothing
+     * was derived either way.
      */
     private static QueryBuilder buildSubstitute(
         SearchSourceBuilder source,
@@ -511,8 +485,7 @@ final class HybridFusionOrchestrator {
         int windowSize,
         FusedCoordinatorTimings timings,
         HybridQueryBuilder originalQuery,
-        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer,
-        TotalHits countedUnion
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer
     ) {
         if (ranked.ids().length == 0) {
             return new MatchNoneQueryBuilder();
@@ -529,9 +502,11 @@ final class HybridFusionOrchestrator {
             && Objects.nonNull(totalHitsConsumer)
             && onlyTotalsNeedTheTail(source, ranked.ids().length)
             && namedAnnLegFilledTheWindow(legs, legHits, windowSize) == false) {
-            // The counted union first: core computed both its value and its relation for the legs' own disjunction, so it
-            // is the count round 2 would have produced rather than an inference about it.
-            derivedTotalHits = Objects.nonNull(countedUnion) ? countedUnion : totalHitsFromLegs(source, legTotalHits(items), windowSize);
+            derivedTotalHits = totalHitsFromLegs(source, legTotalHits(items), windowSize);
+            // Floored against the page, so a total can never come back below what round 2 is about to return. Defensive at
+            // this call: a leg-derived total is always {threshold, gte} with the threshold above the window, hence above
+            // anything ranked, so the floor cannot fire — it is kept because it is the invariant, not the branch, that
+            // matters, and because this is the one place a future second source of a derived total would land.
             derivedTotalHits = totalHitsNotBelowThePage(derivedTotalHits, ranked.ids().length);
             tailNeeded = Objects.isNull(derivedTotalHits);
         }
@@ -1584,9 +1559,16 @@ final class HybridFusionOrchestrator {
             return;
         }
         if (countSettled == false) {
+            // Two reasons for one state, chosen here rather than at the call site so that the page bound above keeps its
+            // precedence either way. The count-only round is issued for an armed request alone, so a profiled request
+            // (never armed) cannot settle a count its unprofiled twin settles — and saying only "no leg proved it" would
+            // describe a request whose count is in fact derivable. twinWouldHaveCounted is set where that question can be
+            // answered; everywhere else it is false and the plain reason stands.
             decision.refuse(
-                FastPathDecision.COUNT_NOT_SETTLED,
-                "the request wants a count beyond the window and no leg reported enough matches to prove it"
+                decision.twinWouldHaveCounted() ? FastPathDecision.COUNT_ROUND_NOT_RUN_UNDER_PROFILE : FastPathDecision.COUNT_NOT_SETTLED,
+                decision.twinWouldHaveCounted()
+                    ? "the count-only round that would prove this count is issued only for an armed request, and profile keeps two rounds"
+                    : "the request wants a count beyond the window and no leg reported enough matches to prove it"
             );
         }
     }
@@ -1717,6 +1699,8 @@ final class HybridFusionOrchestrator {
         TotalHits countedUnion
     ) {
         if (fastPathArmed == false) {
+            // No counted union to pass on: unionCountRequest issues the round for an armed request only, so countedUnion is
+            // null on every un-armed call.
             return FusedResult.twoRound(
                 buildFusedQuery(
                     source,
@@ -1727,8 +1711,7 @@ final class HybridFusionOrchestrator {
                     timings,
                     explanations,
                     originalQuery,
-                    totalHitsConsumer,
-                    countedUnion
+                    totalHitsConsumer
                 )
             );
         }
@@ -1752,9 +1735,12 @@ final class HybridFusionOrchestrator {
         }
         if (decision.allowsSoFar() == false) {
             // Fall back with the fusion already done: reuse the legHits/ranked computed above rather than recomputing
-            // them (and re-recording their timings/explanations) inside a recomputing buildFusedQuery overload.
+            // them (and re-recording their timings/explanations) inside a recomputing buildFusedQuery overload. The counted
+            // union is deliberately not carried in: arming required the verdict to be unrefused before the legs, so the
+            // refusal read here is one of the post-leg three, and none of them can both hold a usable count and reach the
+            // Tail decision — see buildSubstitute.
             return FusedResult.twoRound(
-                buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer, countedUnion)
+                buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer)
             );
         }
         // Totals: disabled → none; otherwise what round 2 would have reported, which the verdict above established is known.

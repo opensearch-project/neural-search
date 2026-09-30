@@ -311,9 +311,11 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         sliced.enableLegTotalHits(10_000);
         assertFalse("each slice counts a different subset", sliced.legUnionCountAllowed());
 
-        // Profiling is NOT a refusal. It was, while the union came from an aggregation the legs carried -- core's
-        // concurrent-segment profile breakdown asserts on a profiled search that also aggregates. The count round carries
-        // no aggregation, so a profiled request derives its count exactly as its unprofiled twin does.
+        // Profiling is NOT a refusal here, and does not need to be: this predicate only says the request's SHAPE admits a
+        // count. Whether one is issued is unionCountRequest's call, and it issues for an armed request alone -- a profiled
+        // request is never armed, so it passes this and still runs no count round. (An earlier revision did refuse
+        // profiling here, for an unrelated reason: the union then came from an aggregation the legs carried, and core's
+        // concurrent-segment profile breakdown asserts on a profiled search that also aggregates.)
         CandidateScope profiled = CandidateScope.from(new SearchRequest(INDEX));
         profiled.enableLegTotalHits(10_000);
         profiled.enableLegProfiling();
