@@ -2800,7 +2800,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
      */
     public void testRequireSupportedTechniques_acceptsGeometricAndHarmonicWhereClassicDoes() {
         for (String combination : List.of("geometric_mean", "harmonic_mean")) {
-            for (String normalization : List.of("min_max", "l2")) {
+            // rrf belongs here as much as the score-based two: the classic matrix's rrf row lists all three means, and the
+            // score-ranker exemption above only covers rrf + rrf, so a normalization-processor rrf + mean falls through to
+            // the matrix and is admitted. It is the one newly reachable normalization, so it is the one worth naming.
+            for (String normalization : List.of("min_max", "l2", "rrf")) {
                 HybridQueryBuilder.requireSupportedTechniques(normProcessorSpec(normalization, combination));
             }
         }

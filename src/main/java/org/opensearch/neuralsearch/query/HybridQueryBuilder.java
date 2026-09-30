@@ -1399,8 +1399,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * Combination techniques wired into the coordinator fusion path. Narrower than the classic compatibility matrix
-     * while combination support is widened one technique at a time; widening this set is what admits a new combiner.
+     * Combination techniques wired into the coordinator fusion path. Now every combiner {@code ScoreCombinationFactory}
+     * knows, so it no longer narrows anything on its own — which pairings are legal is decided by the classic compatibility
+     * matrix in {@link #requireSupportedTechniques}, not here. It stays as the place a future combiner is admitted, and as
+     * the check that refuses a name no combiner implements.
      *
      * <p>A technique added here is describable for free: {@code ScoreCombinationTechnique} extends
      * {@code ExplainableTechnique}, so the fused explain path reads {@code describe()} straight off the technique
@@ -1467,9 +1469,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
 
         // Defer to the one compatibility matrix the classic path enforces, so a pairing classic rejects cannot slip in
-        // through fused mode — z_score with geometric or harmonic mean being the case that exists today. Not yet
-        // load-bearing for the mean combiners, because the scope check above admits only arithmetic_mean and every
-        // normalization accepts that; it starts biting as soon as that scope widens.
+        // through fused mode. This is now the only thing refusing z_score with geometric or harmonic mean: the scope check
+        // above used to reject those combiners outright, which made this branch unreachable, and admitting them is what made
+        // it load-bearing. A test asserts the refusal carries THIS message rather than the scope check's, so narrowing the
+        // scope set again cannot silently take the case back over.
         final Set<String> classicPairings = ScoreNormalizationFactory.supportedCombinationTechniques(normalization);
         if (classicPairings.contains(combination) == false) {
             throw new IllegalArgumentException(

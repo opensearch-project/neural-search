@@ -860,6 +860,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     private String multiShardQuery(String normalizationTechnique, String combinationTechnique, int window) {
+        return multiShardQuery(normalizationTechnique, combinationTechnique, window, null);
+    }
+
+    private String multiShardQuery(String normalizationTechnique, String combinationTechnique, int window, String weightsJson) {
         String legAll = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
             + RANK_FIELD
             + "\",\"modifier\":\"none\",\"missing\":1}}}";
@@ -876,7 +880,9 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
                 + normalizationTechnique
                 + "\"},\"combination\":{\"technique\":\""
                 + combinationTechnique
-                + "\"}},";
+                + "\""
+                + (Objects.isNull(weightsJson) ? "" : ",\"parameters\":{\"weights\":" + weightsJson + "}")
+                + "}},";
         return "{\"hybrid\":{" + fusionBlock + "\"queries\":[" + legAll + "," + legTop + "]}}";
     }
 
@@ -908,7 +914,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         }
 
         for (String combination : List.of("geometric_mean", "harmonic_mean")) {
-            for (String normalization : List.of("min_max", "l2")) {
+            // rrf is included because it is the one normalization these means newly reach: the classic matrix's rrf row
+            // lists all three, and the score-ranker exemption only covers rrf + rrf, so a normalization-processor
+            // rrf + mean goes through the matrix and is admitted.
+            for (String normalization : List.of("min_max", "l2", "rrf")) {
                 String pipeline = "fused-comb-parity-" + combination + "-" + normalization;
                 createSearchPipeline(pipeline, normalization, combination, Map.of());
 
@@ -942,6 +951,57 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
                         Math.max(1e-6, Math.abs(classicScore) * 1e-5)
                     );
                 }
+            }
+        }
+    }
+
+    /**
+     * Per-leg weights reach the new combiners unchanged. Both means take their weights through the same
+     * {@code ScoreCombinationUtil} as {@code arithmetic_mean}, so this is a low-risk path — but every other test here runs
+     * with default equal weights, which is exactly the condition under which a dropped or defaulted weights array would be
+     * invisible. Unequal weights make each document's score depend on which leg carried which weight, so a parity failure
+     * here would mean the parameters did not arrive.
+     */
+    @SneakyThrows
+    public void testFusedMode_forGeometricAndHarmonicMean_thenHonoursWeightsLikeClassic() {
+        if (indexExists(INDEX_FOR_COMBINATION_PARITY) == false) {
+            createIndex(INDEX_FOR_COMBINATION_PARITY, indexConfigWithRankField(COMBINATION_PARITY_SHARDS));
+            for (int id = 1; id <= COMBINATION_PARITY_DOCS; id++) {
+                indexRankedDoc(INDEX_FOR_COMBINATION_PARITY, id, id * 10);
+            }
+        }
+
+        for (String combination : List.of("geometric_mean", "harmonic_mean")) {
+            String pipeline = "fused-comb-weighted-" + combination;
+            createSearchPipeline(pipeline, "min_max", combination, Map.of("weights", "[0.7, 0.3]"));
+
+            List<Map<String, Object>> classicHits = getNestedHits(
+                searchRawWithParams(
+                    "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                    "{\"query\":" + multiShardQuery(null, null) + "}",
+                    Map.of("search_pipeline", pipeline)
+                )
+            );
+            List<Map<String, Object>> fusedHits = getNestedHits(
+                searchRaw(
+                    "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                    "{\"query\":" + multiShardQuery("min_max", combination, COMBINATION_PARITY_DOCS, "[0.7, 0.3]") + "}"
+                )
+            );
+
+            String where = "weighted " + combination;
+            assertFalse("fixture must return documents for " + where, classicHits.isEmpty());
+            assertEquals("same document count for " + where, classicHits.size(), fusedHits.size());
+            for (int i = 0; i < classicHits.size(); i++) {
+                String classicId = (String) classicHits.get(i).get("_id");
+                double classicScore = ((Number) classicHits.get(i).get("_score")).doubleValue();
+                assertEquals("rank " + i + " document for " + where, classicId, fusedHits.get(i).get("_id"));
+                assertEquals(
+                    "fused score for doc " + classicId + " with " + where,
+                    classicScore,
+                    ((Number) fusedHits.get(i).get("_score")).doubleValue(),
+                    Math.max(1e-6, Math.abs(classicScore) * 1e-5)
+                );
             }
         }
     }
