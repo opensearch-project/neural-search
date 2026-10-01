@@ -95,6 +95,7 @@ import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 import lombok.SneakyThrows;
 import org.opensearch.neuralsearch.util.TestUtils;
+import org.opensearch.neuralsearch.stats.events.EventStatName;
 
 public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     static final String VECTOR_FIELD_NAME = "vectorField";
@@ -2218,6 +2219,49 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         }
     }
 
+    /**
+     * A request refused after the technique check must not be counted as a technique execution. The counters sit after
+     * {@code validateFusionParams}, the last refusal before the leg fan-out, precisely so that the three refusals between
+     * the technique check and the fan-out — a bad {@code weights} array, a window past {@code index.max_result_window}, a
+     * window past the clause ceiling — do not inflate a {@code *_executions} series with requests that returned a 400.
+     *
+     * <p>A mismatched {@code weights} array is an ordinary user mistake rather than an exotic case, so counting it would
+     * not be a rare over-count. This asserts the 400 still happens AND that every technique counter stays at zero, since a
+     * later reordering that moved the counting back above the validations would keep the first half passing.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenRefusedAfterTheTechniqueCheck_thenNoTechniqueIsCounted() {
+        enableStatsForCounting();
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "min_max"),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.3, 0.3)))
+                )
+            )
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+
+        assertThat("the request must still be refused", e.getMessage(), containsString("sum of weights"));
+        for (EventStatName name : List.of(
+            EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS
+        )) {
+            assertEquals("a request refused with a 400 is not a technique execution: " + name, 0L, statValue(name));
+        }
+    }
+
     @SneakyThrows
     public void testDoRewriteFused_whenWeightsSumNotOne_thenFailsFastBeforeFanOut() {
         // A weights array that doesn't sum to 1.0 must be rejected at rewrite, BEFORE the leg MultiSearch fan-out is
@@ -3337,6 +3381,194 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 containsString("does not support combination [" + combination + "] with normalization [z_score]")
             );
             assertThat(e.getMessage(), containsString("supported combinations for that normalization are"));
+        }
+    }
+
+    // ---- resolver (in-query `fusion`) usage metrics ----
+
+    /** Stats on, counters zeroed, so an increment assertion below measures this test alone. */
+    private void enableStatsForCounting() {
+        org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor accessor = mock(
+            org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor.class
+        );
+        when(accessor.isStatsEnabled()).thenReturn(true);
+        org.opensearch.neuralsearch.stats.events.EventStatsManager.instance().initialize(accessor);
+        org.opensearch.neuralsearch.stats.events.EventStatsManager.instance().reset();
+    }
+
+    private long statValue(org.opensearch.neuralsearch.stats.events.EventStatName name) {
+        return name.getEventStat().getValue();
+    }
+
+    /**
+     * The combined counter must keep counting every hybrid, and the resolver must also land in its own. This is the property
+     * the whole plan rests on: a classic-to-resolver migration has to read as a shift in the mix, not as a fall in hybrid
+     * usage, and that only holds while both are incremented from the same parse.
+     */
+    @SneakyThrows
+    public void testUpdateQueryStats_countsAResolverHybridInBothTheCombinedAndTheResolverCounter() {
+        enableStatsForCounting();
+
+        HybridQueryBuilder.updateQueryStats(false, false, false, true);
+
+        assertEquals("a fused hybrid is still a hybrid", 1L, statValue(EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals("and is counted as a resolver request too", 1L, statValue(EventStatName.HYBRID_QUERY_FUSION_REQUESTS));
+    }
+
+    /** And a classic hybrid must not touch the resolver counter, or the share is meaningless. */
+    @SneakyThrows
+    public void testUpdateQueryStats_doesNotCountAClassicHybridAsResolver() {
+        enableStatsForCounting();
+
+        HybridQueryBuilder.updateQueryStats(false, false, false, false);
+
+        assertEquals(1L, statValue(EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals("a classic hybrid is not a resolver request", 0L, statValue(EventStatName.HYBRID_QUERY_FUSION_REQUESTS));
+    }
+
+    /**
+     * The parse path end to end, which is what actually decides the number in production: a body carrying a {@code fusion}
+     * block must increment both counters, and the same body without one only the combined counter. Pins the wiring at
+     * {@code fromXContent}, which no other test covers — a refactor that split the fused and classic parse paths would
+     * otherwise silently halve the combined total.
+     */
+    @SneakyThrows
+    public void testFromXContent_aFusionBlockIncrementsTheResolverCounter() {
+        enableStatsForCounting();
+        NamedXContentRegistry registry = new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent)
+            )
+        );
+        XContentParser parser = createParser(
+            registry,
+            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
+            new org.opensearch.core.common.bytes.BytesArray(
+                "{\"queries\":[{\"term\":{\"text\":\"hello\"}},{\"term\":{\"text\":\"world\"}}],"
+                    + "\"fusion\":{\"normalization\":{\"technique\":\"min_max\"},\"combination\":{\"technique\":\"arithmetic_mean\"}}}"
+            )
+        );
+        parser.nextToken();
+
+        HybridQueryBuilder.fromXContent(parser);
+
+        assertEquals(1L, statValue(EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals(1L, statValue(EventStatName.HYBRID_QUERY_FUSION_REQUESTS));
+
+        enableStatsForCounting();
+        XContentParser classic = createParser(
+            registry,
+            org.opensearch.common.xcontent.XContentType.JSON.xContent(),
+            new org.opensearch.core.common.bytes.BytesArray(
+                "{\"queries\":[{\"term\":{\"text\":\"hello\"}},{\"term\":{\"text\":\"world\"}}]}"
+            )
+        );
+        classic.nextToken();
+
+        HybridQueryBuilder.fromXContent(classic);
+
+        assertEquals(1L, statValue(EventStatName.HYBRID_QUERY_REQUESTS));
+        assertEquals("no fusion block, no resolver count", 0L, statValue(EventStatName.HYBRID_QUERY_FUSION_REQUESTS));
+    }
+
+    private static FusionSpec specOf(String normalization, String combination) {
+        FusionSpec.Shape shape = "rrf".equals(combination) && "rrf".equals(normalization)
+            ? FusionSpec.Shape.SCORE_RANKER_PROCESSOR
+            : FusionSpec.Shape.NORMALIZATION_PROCESSOR;
+        return new FusionSpec(shape, combination, normalization, 60, new float[0]);
+    }
+
+    /**
+     * Each technique the resolver can actually be configured with lands in its own counter, and only that one. Table-driven
+     * because the point is the mapping, and a switch that fell through to the wrong branch would otherwise be invisible —
+     * the totals would still add up.
+     *
+     * <p>Counted at rewrite rather than at parse, because with {@code fusion: "pipeline"} the techniques come from the
+     * resolved search pipeline and are unknown until then.
+     */
+    @SneakyThrows
+    public void testUpdateFusionTechniqueStats_countsEachTechniqueInItsOwnCounter() {
+        Object[][] cases = {
+            {
+                "min_max",
+                "arithmetic_mean",
+                EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS },
+            {
+                "z_score",
+                "arithmetic_mean",
+                EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS },
+            {
+                "l2",
+                "arithmetic_mean",
+                EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS },
+            { "rrf", "rrf", EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS, EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS },
+            // Admitted into fused mode by #2031. Paired with min_max because the pairing matrix refuses z_score with
+            // either mean, so min_max is what a request can actually carry.
+            {
+                "min_max",
+                "geometric_mean",
+                EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS },
+            {
+                "min_max",
+                "harmonic_mean",
+                EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS } };
+
+        for (Object[] c : cases) {
+            String normalization = (String) c[0];
+            String combination = (String) c[1];
+            EventStatName expectedNorm = (EventStatName) c[2];
+            EventStatName expectedComb = (EventStatName) c[3];
+            enableStatsForCounting();
+
+            HybridQueryBuilder.updateFusionTechniqueStats(specOf(normalization, combination));
+
+            for (EventStatName name : List.of(
+                EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS,
+                EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS
+            )) {
+                long expected = (name == expectedNorm || name == expectedComb) ? 1L : 0L;
+                assertEquals(normalization + "/" + combination + " -> " + name, expected, statValue(name));
+            }
+        }
+    }
+
+    /**
+     * A technique outside the resolver's scope counts nothing rather than counting as something else.
+     * {@code requireSupportedTechniques} rejects these before this is reached, so it is unreachable today — the assertion is
+     * about which way it fails if that scope ever widens and this mapping is not extended.
+     *
+     * <p>Named with values no technique will ever have. This case previously used geometric_mean/harmonic_mean, which #2031
+     * then admitted into fused mode — at which point the test was asserting that a legitimate configuration is counted
+     * nowhere, and it passed. That is the failure this mapping's coupling to the allowlists has to be read against.
+     */
+    @SneakyThrows
+    public void testUpdateFusionTechniqueStats_anUnknownTechniqueIsNotMiscounted() {
+        enableStatsForCounting();
+
+        HybridQueryBuilder.updateFusionTechniqueStats(specOf("no_such_normalization", "no_such_combination"));
+
+        for (EventStatName name : List.of(
+            EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS
+        )) {
+            assertEquals("a missing series beats an inflated one: " + name, 0L, statValue(name));
         }
     }
 

@@ -8,6 +8,11 @@ import org.junit.Before;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.Version;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.common.settings.Setting;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
@@ -103,5 +108,61 @@ public class InfoStatsManagerTests extends OpenSearchTestCase {
 
         assertEquals(1, (long) stats.get(InfoStatName.NORM_TECHNIQUE_L2_PROCESSORS).getValue());
         assertEquals(0, (long) stats.get(InfoStatName.NORM_TECHNIQUE_MINMAX_PROCESSORS).getValue());
+    }
+
+    /**
+     * The resolver-enabled info stat is read off the cluster settings on every call rather than cached, so that an
+     * operator turning fused mode on or off is reflected by the next stats read. These four cases are the whole decision:
+     * the setting in force, either way; and the two ways it cannot be read, which must fall back to the setting's own
+     * default instead of failing a stats call for the sake of an adoption metric.
+     */
+    public void test_hybridFusionEnabled_readsTheSettingInForce() {
+        withClusterSettings(Settings.builder().put(NeuralSearchSettings.HYBRID_FUSION_ENABLED.getKey(), true).build());
+
+        assertEquals(Boolean.TRUE, fusionEnabledStat());
+    }
+
+    public void test_hybridFusionEnabled_reportsFalseWhenTheSettingIsOff() {
+        withClusterSettings(Settings.builder().put(NeuralSearchSettings.HYBRID_FUSION_ENABLED.getKey(), false).build());
+
+        assertEquals("explicitly off is not the same fact as unreadable, but both read false here", Boolean.FALSE, fusionEnabledStat());
+    }
+
+    public void test_hybridFusionEnabled_fallsBackToTheDefaultWhenTheSettingIsNotRegistered() {
+        ClusterService clusterService = org.mockito.Mockito.mock(ClusterService.class);
+        // A ClusterSettings that does not know this setting: get(...) throws SettingsException, which must not escape.
+        when(clusterService.getClusterSettings()).thenReturn(new ClusterSettings(Settings.EMPTY, Set.<Setting<?>>of()));
+        when(mockClusterUtil.getClusterService()).thenReturn(clusterService);
+
+        assertEquals(
+            "an unreadable setting falls back rather than failing the stats read",
+            NeuralSearchSettings.HYBRID_FUSION_ENABLED.getDefault(Settings.EMPTY),
+            fusionEnabledStat()
+        );
+    }
+
+    public void test_hybridFusionEnabled_fallsBackWhenThereAreNoClusterSettingsToRead() {
+        ClusterService clusterService = org.mockito.Mockito.mock(ClusterService.class);
+        when(clusterService.getClusterSettings()).thenReturn(null);
+        when(mockClusterUtil.getClusterService()).thenReturn(clusterService);
+
+        assertEquals(
+            "a node still starting has a cluster service but nothing to read from it",
+            NeuralSearchSettings.HYBRID_FUSION_ENABLED.getDefault(Settings.EMPTY),
+            fusionEnabledStat()
+        );
+    }
+
+    /** Puts a real {@link ClusterSettings} with this setting registered behind the mocked cluster service. */
+    private void withClusterSettings(final Settings settings) {
+        ClusterService clusterService = org.mockito.Mockito.mock(ClusterService.class);
+        when(clusterService.getClusterSettings()).thenReturn(
+            new ClusterSettings(settings, Set.<Setting<?>>of(NeuralSearchSettings.HYBRID_FUSION_ENABLED))
+        );
+        when(mockClusterUtil.getClusterService()).thenReturn(clusterService);
+    }
+
+    private Object fusionEnabledStat() {
+        return infoStatsManager.getStats(EnumSet.of(InfoStatName.HYBRID_FUSION_ENABLED)).get(InfoStatName.HYBRID_FUSION_ENABLED).getValue();
     }
 }

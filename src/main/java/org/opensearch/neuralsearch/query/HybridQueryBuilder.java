@@ -68,6 +68,8 @@ import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
+import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.search.FusedLegTimeoutMerger;
 import org.opensearch.neuralsearch.search.FusedHitsMerger;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
@@ -519,7 +521,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
         boolean hasFilter = Objects.nonNull(filter);
         boolean hasPagination = Objects.nonNull(paginationDepth);
-        updateQueryStats(hasFilter, hasPagination, hasInnerHits);
+        // `fusion` is the parsed block, set on compoundQueryBuilder above: its presence is what makes this resolver mode.
+        updateQueryStats(hasFilter, hasPagination, hasInnerHits, Objects.nonNull(fusion));
         return compoundQueryBuilder;
     }
 
@@ -686,6 +689,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // Validate weights (range, sum, count) before the leg fan-out — a bad weights array otherwise burns a full
         // MultiSearch before the combiner is built in the async callback.
         HybridFusionOrchestrator.validateFusionParams(fusionSpec, legs.size());
+
+        // Counted here, and the position is the point. Not at parse time, because with `fusion: "pipeline"` the techniques
+        // come from the resolved search pipeline and are unknown until now (see resolveFusionSpec). And not one line
+        // earlier: validateFusionParams is the LAST refusal before the leg fan-out, so counting above it would attribute a
+        // technique execution to requests that go on to fail with a 400 -- a mismatched `weights` array, a window past
+        // index.max_result_window, a window past the clause ceiling. Those are ordinary user mistakes, so the inflation
+        // would not be rare.
+        //
+        // Reached exactly once per fused request: every earlier return in this method is taken before it -- a nested hybrid
+        // rewritten as an enclosing query's match set, the round-2 re-entry guard, a non-SearchRequest rewrite
+        // (_explain, _validate/query), and every refusal above. It therefore counts requests that reached the fan-out,
+        // which is why these series are a lower bound on HYBRID_QUERY_FUSION_REQUESTS and never equal to it: that one is
+        // counted at parse time and includes everything refused in between.
+        updateFusionTechniqueStats(fusionSpec);
+
         // The Tail keeps the original legs (it is rewritten against the user's request, which still carries the
         // pipeline), but the fanned-out legs run with the pipeline disabled — so hand the resolved config down.
         List<QueryBuilder> fanOutLegs = projectResolvedConfigOntoLegs(legs, fusionSpec);
@@ -1930,8 +1948,24 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
     }
 
-    public static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits) {
+    /**
+     * Parse-time usage counters for one hybrid query.
+     *
+     * <p>{@code HYBRID_QUERY_REQUESTS} is incremented for <b>every</b> hybrid, classic or resolver, so it stays the
+     * all-hybrid total; {@code hasFusion} adds the resolver to its own counter beside it rather than instead of it. That is
+     * what lets one read of {@code query.hybrid.*} answer both "how much hybrid" and "how much of it is the resolver", and
+     * it means a migration from classic to resolver shows up as a rising share and not as a fall in hybrid usage.
+     *
+     * <p>Counted at parse time, so it counts <i>requests as submitted</i>. A request refused later at rewrite (fused mode
+     * disabled, an unsupported technique, cross-cluster) still counts here, and so do {@code _validate/query} and
+     * {@code _explain}, which parse a query without searching. That is pre-existing for the three flags beside it; it is
+     * noted because it puts an upper bound on the per-technique counters, which are counted at rewrite instead.
+     */
+    public static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits, boolean hasFusion) {
         EventStatsManager.increment(EventStatName.HYBRID_QUERY_REQUESTS);
+        if (hasFusion) {
+            EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_REQUESTS);
+        }
         if (hasFilter) {
             EventStatsManager.increment(EventStatName.HYBRID_QUERY_FILTER_REQUESTS);
         }
@@ -1940,6 +1974,53 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         if (hasInnerHits) {
             EventStatsManager.increment(EventStatName.HYBRID_QUERY_INNER_HITS_REQUESTS);
+        }
+    }
+
+    /**
+     * Per-technique usage for resolver mode, from the resolved {@link FusionSpec}.
+     *
+     * <p>Fused-specific rather than reusing {@code NORM_TECHNIQUE_*}/{@code COMB_TECHNIQUE_*}, because those are
+     * incremented by the classic search-pipeline processors and merging the two could not answer "which techniques does the
+     * resolver get used with". The reachable set is also not classic's: fused mode admits normalization
+     * min_max/z_score/l2/<b>rrf</b> and combination arithmetic_mean/rrf/geometric_mean/harmonic_mean, so it <i>can</i>
+     * report rrf normalization, for which no classic counter exists.
+     *
+     * <p><b>One counter per name admitted by {@link #FUSED_COMBINATION_TECHNIQUES} and by the fused normalization
+     * allowlist, and that coupling is the thing to keep.</b> Widening either set without adding a counter here does not
+     * fail anything — the name falls to the {@code default} arm and the request is counted in
+     * {@link EventStatName#HYBRID_QUERY_FUSION_REQUESTS} but in no technique series, so the technique counters quietly stop
+     * summing to the request count. That is exactly what happened when geometric_mean and harmonic_mean were admitted.
+     *
+     * <p>The {@code default} arms are still deliberate: an unrecognized name is not counted rather than counted as
+     * something else, so the failure mode of the next widening is a missing series instead of an inflated one.
+     */
+    static void updateFusionTechniqueStats(final FusionSpec fusionSpec) {
+        switch (fusionSpec.normalizationTechnique()) {
+            case FusionSpec.NORMALIZATION_MIN_MAX -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS);
+            case ZScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS
+            );
+            case L2ScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS
+            );
+            case FusionSpec.NORMALIZATION_RRF -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS);
+            default -> {
+            }
+        }
+        switch (fusionSpec.combinationTechnique()) {
+            case FusionSpec.TECHNIQUE_ARITHMETIC_MEAN -> EventStatsManager.increment(
+                EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS
+            );
+            case FusionSpec.TECHNIQUE_RRF -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS);
+            case GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS
+            );
+            case HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+                EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS
+            );
+            default -> {
+            }
         }
     }
 

@@ -74,7 +74,17 @@ public class EventStatNameTests extends OpenSearchTestCase {
             "AGENTIC_QUERY_REQUESTS",
             "SEISMIC_QUERY_REQUESTS",
             "SPARSE_ENCODING_PROCESSOR_SEISMIC_EXECUTIONS",
-            "MMR_NEURAL_QUERY_TRANSFORMER"
+            "MMR_NEURAL_QUERY_TRANSFORMER",
+            // Resolver (in-query `fusion`) mode. Appended, never inserted: the ordinal is the wire format.
+            "HYBRID_QUERY_FUSION_REQUESTS",
+            "HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS"
         );
 
         assertEquals(frozenOrder, Arrays.stream(EventStatName.values()).map(Enum::name).toList());

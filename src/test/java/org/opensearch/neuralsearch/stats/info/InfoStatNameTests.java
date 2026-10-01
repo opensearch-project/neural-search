@@ -58,7 +58,9 @@ public class InfoStatNameTests extends OpenSearchTestCase {
             "RERANK_BY_FIELD_PROCESSORS",
             "RERANK_ML_PROCESSORS",
             "AGENTIC_QUERY_TRANSLATOR_PROCESSORS",
-            "AGENTIC_CONTEXT_PROCESSORS"
+            "AGENTIC_CONTEXT_PROCESSORS",
+            // Resolver (in-query `fusion`) mode: the enabled-vs-used funnel. Appended, never inserted.
+            "HYBRID_FUSION_ENABLED"
         );
 
         assertEquals(frozenOrder, Arrays.stream(InfoStatName.values()).map(Enum::name).toList());
