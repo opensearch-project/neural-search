@@ -2219,6 +2219,49 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         }
     }
 
+    /**
+     * A request refused after the technique check must not be counted as a technique execution. The counters sit after
+     * {@code validateFusionParams}, the last refusal before the leg fan-out, precisely so that the three refusals between
+     * the technique check and the fan-out — a bad {@code weights} array, a window past {@code index.max_result_window}, a
+     * window past the clause ceiling — do not inflate a {@code *_executions} series with requests that returned a 400.
+     *
+     * <p>A mismatched {@code weights} array is an ordinary user mistake rather than an exotic case, so counting it would
+     * not be a rare over-count. This asserts the 400 still happens AND that every technique counter stays at zero, since a
+     * later reordering that moved the counting back above the validations would keep the first half passing.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenRefusedAfterTheTechniqueCheck_thenNoTechniqueIsCounted() {
+        enableStatsForCounting();
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(
+            new HashMap<>(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "min_max"),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.3, 0.3)))
+                )
+            )
+        );
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+
+        assertThat("the request must still be refused", e.getMessage(), containsString("sum of weights"));
+        for (EventStatName name : List.of(
+            EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS,
+            EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS
+        )) {
+            assertEquals("a request refused with a 400 is not a technique execution: " + name, 0L, statValue(name));
+        }
+    }
+
     @SneakyThrows
     public void testDoRewriteFused_whenWeightsSumNotOne_thenFailsFastBeforeFanOut() {
         // A weights array that doesn't sum to 1.0 must be rejected at rewrite, BEFORE the leg MultiSearch fan-out is

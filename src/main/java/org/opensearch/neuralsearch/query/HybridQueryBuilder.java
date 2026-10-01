@@ -675,13 +675,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // rank-based rrf. Which pairings are legal is NOT this set's business -- the classic compatibility matrix decides
         // that, and z_score x {geometric, harmonic} is the pairing it refuses.
         requireSupportedTechniques(fusionSpec);
-        // Counted here, not at parse time, and this is the only site: with `fusion: "pipeline"` the techniques come from the
-        // resolved search pipeline and are simply unknown until now (see resolveFusionSpec). Reached exactly once per fused
-        // request -- every earlier return in this method is taken before it: a nested hybrid being rewritten as an enclosing
-        // query's match set, the round-2 re-entry guard, a non-SearchRequest rewrite (_explain, _validate/query), and each
-        // refusal above. So this counts fused requests that got as far as being fusable, which is why it is a lower bound on
-        // HYBRID_QUERY_FUSION_REQUESTS rather than equal to it.
-        updateFusionTechniqueStats(fusionSpec);
 
         int window = effectiveWindowSize();
         // Each leg fires size=window per shard, so an unbounded window is a per-shard memory/CPU amplifier. Cap it at
@@ -696,6 +689,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // Validate weights (range, sum, count) before the leg fan-out — a bad weights array otherwise burns a full
         // MultiSearch before the combiner is built in the async callback.
         HybridFusionOrchestrator.validateFusionParams(fusionSpec, legs.size());
+
+        // Counted here, and the position is the point. Not at parse time, because with `fusion: "pipeline"` the techniques
+        // come from the resolved search pipeline and are unknown until now (see resolveFusionSpec). And not one line
+        // earlier: validateFusionParams is the LAST refusal before the leg fan-out, so counting above it would attribute a
+        // technique execution to requests that go on to fail with a 400 -- a mismatched `weights` array, a window past
+        // index.max_result_window, a window past the clause ceiling. Those are ordinary user mistakes, so the inflation
+        // would not be rare.
+        //
+        // Reached exactly once per fused request: every earlier return in this method is taken before it -- a nested hybrid
+        // rewritten as an enclosing query's match set, the round-2 re-entry guard, a non-SearchRequest rewrite
+        // (_explain, _validate/query), and every refusal above. It therefore counts requests that reached the fan-out,
+        // which is why these series are a lower bound on HYBRID_QUERY_FUSION_REQUESTS and never equal to it: that one is
+        // counted at parse time and includes everything refused in between.
+        updateFusionTechniqueStats(fusionSpec);
+
         // The Tail keeps the original legs (it is rewritten against the user's request, which still carries the
         // pipeline), but the fanned-out legs run with the pipeline disabled — so hand the resolved config down.
         List<QueryBuilder> fanOutLegs = projectResolvedConfigOntoLegs(legs, fusionSpec);

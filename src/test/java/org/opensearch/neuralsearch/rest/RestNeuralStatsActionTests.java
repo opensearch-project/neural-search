@@ -41,6 +41,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -96,6 +97,54 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
     /** As above for info stats. */
     private static EnumSet<InfoStatName> infoStatsAtBuildVersion() {
         return EnumSet.complementOf(EnumSet.of(InfoStatName.HYBRID_FUSION_ENABLED));
+    }
+
+    /**
+     * Both sides of the resolver stats' version gate, which nothing else pins.
+     *
+     * <p>{@code statsSupportedByAllNodes} keeps the leading run of stats whose version is {@code onOrBefore} the oldest
+     * node's and stops at the first newer one, because a stat enum travels as ordinals and a filtered set is only readable
+     * by an older node if it is a prefix of that node's own enum. So the gate has two halves worth asserting separately:
+     * on a cluster at the release these stats ship in they must be <b>present</b>, and on one below it they must be
+     * <b>withheld</b>. Testing only the second half would pass for a stat gated at any unreachable future version,
+     * including a typo.
+     */
+    public void test_execute_resolverStatsAreGatedOnTheirOwnRelease() throws Exception {
+        when(settingsAccessor.isStatsEnabled()).thenReturn(true);
+        Version resolverStatsRelease = EventStatName.HYBRID_QUERY_FUSION_REQUESTS.version();
+
+        when(clusterUtil.getClusterMinVersion()).thenReturn(resolverStatsRelease);
+        NeuralStatsInput atRelease = captureStatsInput();
+        assertTrue(
+            "a cluster at the release these stats ship in must be able to report them",
+            atRelease.getEventStatNames().contains(EventStatName.HYBRID_QUERY_FUSION_REQUESTS)
+        );
+        assertTrue(
+            "including the info stat, which is gated through the same mechanism",
+            atRelease.getInfoStatNames().contains(InfoStatName.HYBRID_FUSION_ENABLED)
+        );
+
+        // One minor version below, which is the case the ordinal contract exists for: an older node has no ordinal for them.
+        Version justBefore = Version.fromString((resolverStatsRelease.major) + "." + (resolverStatsRelease.minor - 1) + ".0");
+        when(clusterUtil.getClusterMinVersion()).thenReturn(justBefore);
+        NeuralStatsInput beforeRelease = captureStatsInput();
+        assertFalse(
+            "a cluster below that release must not be sent ordinals it cannot read",
+            beforeRelease.getEventStatNames().contains(EventStatName.HYBRID_QUERY_FUSION_REQUESTS)
+        );
+        assertFalse(
+            "nor the info stat",
+            beforeRelease.getInfoStatNames().contains(InfoStatName.HYBRID_FUSION_ENABLED)
+        );
+    }
+
+    /** Drive the action once and return the stats input it asked for. */
+    private NeuralStatsInput captureStatsInput() throws Exception {
+        RestNeuralStatsAction action = new RestNeuralStatsAction(settingsAccessor, clusterUtil);
+        action.handleRequest(getRestRequest(), channel, client);
+        ArgumentCaptor<NeuralStatsRequest> captor = ArgumentCaptor.forClass(NeuralStatsRequest.class);
+        verify(client, atLeastOnce()).execute(eq(NeuralStatsAction.INSTANCE), captor.capture(), any());
+        return captor.getValue().getNeuralStatsInput();
     }
 
     public void test_execute_containsAllStats() throws Exception {
