@@ -33,6 +33,9 @@ import org.opensearch.neuralsearch.processor.optimization.TextImageEmbeddingInfe
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.transport.client.OpenSearchClient;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ROUTING_FIELD;
 import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 
 /**
@@ -52,8 +55,6 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
     public static final String IMAGE_FIELD_NAME = "image";
     public static final String INPUT_TEXT = "inputText";
     public static final String INPUT_IMAGE = "inputImage";
-    private static final String INDEX_FIELD = "_index";
-    private static final String ID_FIELD = "_id";
     private static final Set<String> VALID_FIELD_NAMES = Set.of(TEXT_FIELD_NAME, IMAGE_FIELD_NAME);
 
     private final String modelId;
@@ -142,13 +143,18 @@ public class TextImageEmbeddingProcessor extends AbstractProcessor {
             // copied
             Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
             Object id = ingestDocument.getSourceAndMetadata().get(ID_FIELD);
+            Object routing = ingestDocument.getSourceAndMetadata().get(ROUTING_FIELD);
             if (Objects.isNull(index) || Objects.isNull(id)) {
                 generateAndSetInference(ingestDocument, inferenceMap, handler);
                 return;
             }
+            GetRequest getRequest = new GetRequest(index.toString(), id.toString());
+            if (Objects.nonNull(routing)) {
+                getRequest.routing(routing.toString());
+            }
             openSearchClient.execute(
                 GetAction.INSTANCE,
-                new GetRequest(index.toString(), id.toString()),
+                getRequest,
                 ActionListener.wrap(
                     response -> reuseOrGenerateEmbedding(response, ingestDocument, knnMap, inferenceMap, handler),
                     e -> handler.accept(null, e)

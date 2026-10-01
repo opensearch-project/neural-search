@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Fix hybrid `collapse` sorted by ascending `_score` returning wrong documents and an undercounted `hits.total` on shards with more than 4,096 matching documents ([#1795](https://github.com/opensearch-project/neural-search/issues/1795))
 * [Sparse ANN] Widen the CSR indptr offset to 64-bit across the JNI/Java boundary (matching neural-sparse-cpp `offset_t=int64`) so a single segment can hold more than 2.15B cumulative non-zeros without int32 overflow ([#2001](https://github.com/opensearch-project/neural-search/pull/2001))
 * [Sparse ANN] Bump neural-sparse-cpp for the DiskSeismic mmap madvise fix (MADV_RANDOM for per_block), fixing a large memory-constrained latency regression ([#2005](https://github.com/opensearch-project/neural-search/issues/2005))
+* [Ingest Processors] Pass `_routing` to the `skip_existing` lookup so writes to indices with required or custom routing no longer fail or silently re-embed ([#2024](https://github.com/opensearch-project/neural-search/issues/2024))
 
 ### Infrastructure
 
