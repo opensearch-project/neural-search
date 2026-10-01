@@ -350,7 +350,12 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             try {
                 setInference(ingestDocument, semanticFieldInfoList, modelIdValueToEmbeddingMap);
             } catch (Exception e) {
+                // On failure, report the exception and stop. Without this return, control fell through to
+                // the success callback below, so the handler was invoked twice and the document was indexed
+                // as created WITHOUT its embedding (e.g. when inference returned an unparseable shape or
+                // failed transiently during model cold start), silently producing empty/partial documents.
                 handler.accept(null, e);
+                return;
             }
             handler.accept(ingestDocument, null);
         });
