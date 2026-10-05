@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * In-query fusion in hybrid search. Keep a rescore from returning documents the fusion did not rank ([#1999](https://github.com/opensearch-project/neural-search/pull/1999))
 * In-query fusion in hybrid search. Support `geometric_mean` and `harmonic_mean` combination techniques in fused mode ([#2031](https://github.com/opensearch-project/neural-search/pull/2031))
 * In-query fusion in hybrid search. Report resolver usage in the stats API: overall request count and per-technique counts, plus whether fused mode is enabled ([#2032](https://github.com/opensearch-project/neural-search/pull/2032))
+* In-query fusion in hybrid search. Fixed `explain` mode output when rescore is part of the search resolver hybrid query request ([#2034](https://github.com/opensearch-project/neural-search/pull/2034))
 
 ### Bug Fixes
 * [SemanticHighlighter] Fix SemanticHighlighterExtBuilder.toXContent ([#1906](https://github.com/opensearch-project/neural-search/issues/1906)) (query-insights [#651](https://github.com/opensearch-project/query-insights/issues/651))

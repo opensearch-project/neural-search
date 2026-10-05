@@ -42,6 +42,9 @@ import lombok.SneakyThrows;
 public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
 
     private static final String INDEX = "test-fused-explain";
+    /** The same documents over several shards, so the fetch phase runs in a separate search context from the query. */
+    private static final String SHARDED_INDEX = "test-fused-explain-sharded";
+    private static final int SHARDED_INDEX_SHARDS = 3;
     private static final String NORM_PIPELINE = "fused-explain-norm-pipeline";
     private static final String TEXT_FIELD = "text";
     private static final String VECTOR_FIELD = "vec";
@@ -199,26 +202,82 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
     /**
      * A {@code rescore} moves the score after fusion — the one way a fused hit's score can differ from its fused score, since
      * the {@code hybrid} query rejects {@code boost} at parse time. The fused combination can then no longer be the top node:
-     * relabelling it with the final score would claim the fusion produced a number it did not. It becomes a child of a node
-     * that names the final score instead.
+     * relabelling it with the final score would claim the fusion produced a number it did not. What goes on top is core's own
+     * rescore tree, exactly as it reads for any rescored query — {@code sum of:} the weighted first pass and the weighted
+     * rescore query — with the fused combination standing where the self-erased first pass was. So the reader sees both what
+     * fusion computed and what the rescore added, and the arithmetic between them.
      */
     @SneakyThrows
-    public void testExplainedRescoredFusedHybrid_thenTheFusedScoreIsNestedUnderTheFinalScore() {
+    public void testExplainedRescoredFusedHybrid_thenTheFusionReplacesTheFirstPassOfTheRescoreExplanation() {
         ensureDataset();
 
         Map<String, Object> response = search(rescored(fusedHybrid(knnLeg(WINDOW_SIZE), termLeg())));
         Map<String, Object> hit = hits(response).get(0);
         Map<String, Object> explanation = explanationOf(hit);
 
-        assertEquals("the top node describes the score the hit actually has", FINAL_SCORE_DESCRIPTION, description(explanation));
+        assertEquals("the top node is core's rescore combination", "sum of:", description(explanation));
         assertEquals(score(hit), value(explanation), DELTA);
         List<Map<String, Object>> children = details(explanation);
-        assertEquals("with the fusion underneath it: " + descriptions(children), 1, children.size());
-        assertEquals(COMBINATION_DESCRIPTION, description(children.get(0)));
+        assertEquals("weighted first pass and weighted rescore query: " + descriptions(children), 2, children.size());
+
+        Map<String, Object> firstPass = children.get(0);
+        assertEquals("product of:", description(firstPass));
+        List<Map<String, Object>> firstPassDetails = details(firstPass);
+        assertEquals("the fusion stands where the self-erased query was", COMBINATION_DESCRIPTION, description(firstPassDetails.get(0)));
+        assertEquals("primaryWeight", description(firstPassDetails.get(1)));
+        assertEquals(1.0, value(firstPassDetails.get(1)), DELTA);
+        assertEquals("query_weight 1.0 leaves the fused score as the first pass", value(firstPassDetails.get(0)), value(firstPass), DELTA);
+        assertFalse("the fusion's own legs are still under it", details(firstPassDetails.get(0)).isEmpty());
+
+        Map<String, Object> rescoreQuery = children.get(1);
+        assertEquals("product of:", description(rescoreQuery));
+        List<Map<String, Object>> rescoreDetails = details(rescoreQuery);
+        assertEquals("secondaryWeight", description(rescoreDetails.get(1)));
+        assertEquals(2.0, value(rescoreDetails.get(1)), DELTA);
+        assertEquals("the rescore query's own score times its weight", value(rescoreDetails.get(0)) * 2.0, value(rescoreQuery), DELTA);
+        assertEquals("and the top node is their sum", value(firstPass) + value(rescoreQuery), value(explanation), DELTA);
         assertTrue(
-            "the rescore is what stands between them: " + value(children.get(0)) + " -> " + value(explanation),
-            value(explanation) > value(children.get(0))
+            "the rescore is what stands between the fused score and the final one: " + value(firstPass) + " -> " + value(explanation),
+            value(explanation) > value(firstPass)
         );
+    }
+
+    /**
+     * The same rescore over several shards, where core fetches in a separate search context from the query and has to carry
+     * which documents each rescorer rescored across in between — through the request's top-level rescore contexts, of which
+     * the fused rescore guard is the only one. On one shard query and fetch share a context, so the test above cannot see
+     * that hand-over fail; here every rescored hit must still carry core's rescore explanation with the fusion as its first pass.
+     *
+     * <p>And the rescore query is explained as the user wrote it: exactly what {@code _explain} says for that query on that
+     * document. The query that ran is confined to the fused window by an {@code _id} filter listing every document of the
+     * window, and none of that belongs in the tree.
+     */
+    @SneakyThrows
+    public void testExplainedRescoredFusedHybrid_overSeveralShards_thenEveryHitExplainsTheRescoreQueryAsWritten() {
+        ensureDataset();
+        ensureIndex(SHARDED_INDEX, SHARDED_INDEX_SHARDS);
+
+        Map<String, Object> response = search(SHARDED_INDEX, rescored(fusedHybrid(knnLeg(WINDOW_SIZE), termLeg())), null);
+        List<Map<String, Object>> hits = hits(response);
+
+        assertEquals("both legs and the rescore query match every document", TOTAL_DOCS, hits.size());
+        for (Map<String, Object> hit : hits) {
+            Map<String, Object> explanation = explanationOf(hit);
+            assertEquals("hit " + hit.get("_id") + " carries core's rescore combination", "sum of:", description(explanation));
+            assertEquals(score(hit), value(explanation), DELTA);
+            List<Map<String, Object>> children = details(explanation);
+            assertEquals("weighted first pass and weighted rescore query: " + descriptions(children), 2, children.size());
+            assertEquals(
+                "the fusion stands where the first pass was",
+                COMBINATION_DESCRIPTION,
+                description(details(children.get(0)).get(0))
+            );
+            assertEquals(
+                "the rescore query is explained exactly as it is on its own",
+                explainedAlone(SHARDED_INDEX, String.valueOf(hit.get("_id")), termLeg()),
+                details(children.get(1)).get(0)
+            );
+        }
     }
 
     /**
@@ -536,8 +595,10 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
     /** The classic hybrid's pipeline: the same normalization and combination, plus the response processor that explains it. */
     private static final String EXPLAIN_PIPELINE = "fused-explain-classic-pipeline";
 
-    private String indexConfig() {
-        return "{\"settings\":{\"index\":{\"knn\":true,\"number_of_shards\":1,\"number_of_replicas\":0,"
+    private String indexConfig(final int shards) {
+        return "{\"settings\":{\"index\":{\"knn\":true,\"number_of_shards\":"
+            + shards
+            + ",\"number_of_replicas\":0,"
             + "\"search.default_pipeline\":\""
             + NORM_PIPELINE
             + "\"}},\"mappings\":{\"properties\":{\""
@@ -552,19 +613,24 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
     private void ensureDataset() {
         createSearchPipeline(NORM_PIPELINE, "min_max", "arithmetic_mean", Map.of());
         createSearchPipeline(EXPLAIN_PIPELINE, "min_max", Map.of(), "arithmetic_mean", Map.of(), true);
-        if (indexExists(INDEX)) {
+        ensureIndex(INDEX, 1);
+    }
+
+    @SneakyThrows
+    private void ensureIndex(final String index, final int shards) {
+        if (indexExists(index)) {
             return;
         }
-        createIndex(INDEX, indexConfig());
+        createIndex(index, indexConfig(shards));
         for (int id = 1; id <= TOTAL_DOCS; id++) {
-            Request request = new Request("PUT", "/" + INDEX + "/_doc/" + id + "?refresh=true");
+            Request request = new Request("PUT", "/" + index + "/_doc/" + id + "?refresh=true");
             request.setJsonEntity(
                 "{\"" + TEXT_FIELD + "\":\"hello world document " + id + "\",\"" + VECTOR_FIELD + "\":[1." + id + ",1.0]}"
             );
             Response response = client().performRequest(request);
             int code = response.getStatusLine().getStatusCode();
             assertTrue(
-                "indexing " + INDEX + "/" + id + " failed: " + code,
+                "indexing " + index + "/" + id + " failed: " + code,
                 code == RestStatus.OK.getStatus() || code == RestStatus.CREATED.getStatus()
             );
         }
@@ -574,14 +640,34 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
         return search(jsonBody, null);
     }
 
-    @SneakyThrows
     private Map<String, Object> search(final String jsonBody, final String pipeline) {
-        String endpoint = "/" + INDEX + "/_search" + (Objects.isNull(pipeline) ? "" : "?search_pipeline=" + pipeline);
+        return search(INDEX, jsonBody, pipeline);
+    }
+
+    @SneakyThrows
+    private Map<String, Object> search(final String index, final String jsonBody, final String pipeline) {
+        String endpoint = "/" + index + "/_search" + (Objects.isNull(pipeline) ? "" : "?search_pipeline=" + pipeline);
         Request request = new Request("POST", endpoint);
         request.setJsonEntity(jsonBody);
         Response response = client().performRequest(request);
         assertEquals(request.getEndpoint() + ": failed", RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
+    }
+
+    /** Core's own explanation of {@code query} for one document, through the {@code _explain} API. */
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> explainedAlone(final String index, final String id, final String query) {
+        Request request = new Request("POST", "/" + index + "/_explain/" + id);
+        request.setJsonEntity("{\"query\":" + query + "}");
+        Response response = client().performRequest(request);
+        Map<String, Object> body = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(response.getEntity()),
+            false
+        );
+        assertEquals("the query matches " + id + " on its own", Boolean.TRUE, body.get("matched"));
+        return (Map<String, Object>) body.get("explanation");
     }
 
     @SuppressWarnings("unchecked")

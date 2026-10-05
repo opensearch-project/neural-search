@@ -6,8 +6,10 @@ package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 import org.apache.lucene.search.Query;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -213,6 +215,47 @@ public class FusedWindowGuardRescorerBuilder extends RescorerBuilder<FusedWindow
                 parsedQueries.addAll(delegate.getParsedQueries());
             }
             return parsedQueries;
+        }
+
+        /**
+         * The documents the chain rescored, so core can carry them from the query phase to the fetch phase — the third
+         * thing core reads off the request's rescore contexts rather than off their rescorers.
+         *
+         * <p>{@code QueryRescorer#rescore} records which documents it rescored on its own context, and
+         * {@code QueryRescorer#explain} adds the rescore to a document's explanation only when that set contains it. A
+         * fetch that runs in a separate search context from its query — every search over more than one shard — gets
+         * freshly built contexts, so core ships the sets to the coordinator with the query result and hands them back with
+         * the fetch request ({@code SearchContext#rescoreDocIds} / {@code #assignRescoreDocIds}), walking the request's
+         * top-level contexts by position. After the wrap this context is the only one, and a bare {@code RescoreContext}
+         * reports none: the fetch phase's delegates then believe they rescored nothing, and {@code explain} silently omits
+         * the rescore from every hit. Single-shard searches fetch in the query's own context and never needed this.
+         *
+         * <p>One position carries one set, so the chain's sets travel as their union, and {@link #setRescoredDocs} hands
+         * the union to every delegate. That is exact for a single rescorer and for a chain whose elements rescored the same
+         * documents. For a chain whose elements reached different documents — different {@code window_size}s, or weights
+         * that reorder the pool between elements — an element is told it rescored a document only another element did,
+         * and explains a layer the score never went through. The coordinator keeps a fused hit's rescore tree only when its
+         * arithmetic reproduces the hit's score, so that hit falls back to naming the final score — unless the extra layer
+         * happens not to change the value, such as a {@code max} that keeps the first pass.
+         */
+        @Override
+        public Set<Integer> getRescoredDocs() {
+            Set<Integer> rescored = new HashSet<>();
+            for (RescoreContext delegate : delegates) {
+                Set<Integer> docs = delegate.getRescoredDocs();
+                if (Objects.nonNull(docs)) {
+                    rescored.addAll(docs);
+                }
+            }
+            return rescored;
+        }
+
+        /** Hands the set core carried over from the query phase to every delegate — see {@link #getRescoredDocs}. */
+        @Override
+        public void setRescoredDocs(final Set<Integer> docIds) {
+            for (RescoreContext delegate : delegates) {
+                delegate.setRescoredDocs(docIds);
+            }
         }
     }
 

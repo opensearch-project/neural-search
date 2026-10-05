@@ -7,12 +7,30 @@ package org.opensearch.neuralsearch.query;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.StringField;
+import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.TermInSetQuery;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.store.Directory;
+import org.apache.lucene.util.BytesRef;
+import org.opensearch.index.query.ParsedQuery;
+import org.opensearch.search.rescore.QueryRescorer;
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.rescore.Rescorer;
 import org.opensearch.test.OpenSearchTestCase;
@@ -177,7 +195,184 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
         assertEquals("a", explanation.getDetails()[0].getDescription());
     }
 
+    /**
+     * A ranked document the rescore moved is explained the way core explains any rescore, with the rescore query as the
+     * user wrote it: the fused window the query ran intersected with appears nowhere in the tree, and the arithmetic is
+     * the one core computes over the query that ran.
+     */
+    public void testExplain_whenTheConfinedQueryRescoredTheDocument_thenTheRescoreQueryIsExplainedAsDeclared() throws IOException {
+        try (Directory directory = newDirectory(); IndexReader reader = corpus(directory)) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            int ranked = docId(searcher, "a");
+            QueryRescorer.QueryRescoreContext confined = confined(Set.of(ranked));
+
+            Explanation explanation = guardOver(confined).explain(ranked, searcher, null, RANKED_FIRST_PASS);
+
+            Explanation asItRan = QueryRescorer.INSTANCE.explain(ranked, searcher, confined, RANKED_FIRST_PASS);
+            assertEquals("the score the rescore produced", asItRan.getValue().floatValue(), explanation.getValue().floatValue(), 0.0f);
+            assertEquals("core's combination of the weighted first pass and rescore query", 2, explanation.getDetails().length);
+            assertEquals(
+                "the rescore query, exactly as core explains it on its own",
+                searcher.explain(DECLARED, ranked),
+                explanation.getDetails()[1].getDetails()[0]
+            );
+            assertFalse("nothing of the window: " + explanation, explanation.toString().contains(WINDOW_FIELD));
+            assertTrue("which explaining the query as it ran would describe", asItRan.toString().contains(WINDOW_FIELD));
+        }
+    }
+
+    /**
+     * A document only the Tail matched can sit in the shard's rescore window, and the rescore query alone matches it — but
+     * the query that ran did not, so no rescore may be claimed for it: the tree is exactly what core says over the
+     * query that ran.
+     */
+    public void testExplain_whenTheRescoreWindowReachedADocumentOutsideTheFusedWindow_thenNoRescoreIsClaimed() throws IOException {
+        try (Directory directory = newDirectory(); IndexReader reader = corpus(directory)) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            int tailOnly = docId(searcher, "c");
+            assertTrue("the declared query alone matches it", searcher.explain(DECLARED, tailOnly).isMatch());
+            QueryRescorer.QueryRescoreContext confined = confined(Set.of(tailOnly));
+
+            Explanation explanation = guardOver(confined).explain(tailOnly, searcher, null, TAIL_FIRST_PASS);
+
+            assertEquals(QueryRescorer.INSTANCE.explain(tailOnly, searcher, confined, TAIL_FIRST_PASS), explanation);
+            assertEquals("the weighted first pass alone", "product of:", explanation.getDescription());
+        }
+    }
+
+    /**
+     * A segment can hold none of the fused window — the window is coordinator-global — and then the confined query has no
+     * scorer there at all: nothing in the segment was rescored by it, whatever the rescore query alone says.
+     */
+    public void testExplain_whenTheSegmentHoldsNoDocumentOfTheWindow_thenNoRescoreIsClaimed() throws IOException {
+        try (Directory directory = newDirectory(); IndexReader reader = corpus(directory)) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            int matching = docId(searcher, "a");
+            QueryRescorer.QueryRescoreContext confined = confined(Set.of(matching), "elsewhere");
+
+            Explanation explanation = guardOver(confined).explain(matching, searcher, null, RANKED_FIRST_PASS);
+
+            assertEquals(QueryRescorer.INSTANCE.explain(matching, searcher, confined, RANKED_FIRST_PASS), explanation);
+            assertEquals("the weighted first pass alone", "product of:", explanation.getDescription());
+        }
+    }
+
+    /** A document beyond the rescore window was never rescored, whatever the queries say about it. */
+    public void testExplain_whenTheDocumentWasNotRescored_thenNoRescoreIsClaimed() throws IOException {
+        try (Directory directory = newDirectory(); IndexReader reader = corpus(directory)) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            int ranked = docId(searcher, "a");
+            QueryRescorer.QueryRescoreContext confined = confined(Set.of());
+
+            Explanation explanation = guardOver(confined).explain(ranked, searcher, null, RANKED_FIRST_PASS);
+
+            assertEquals(QueryRescorer.INSTANCE.explain(ranked, searcher, confined, RANKED_FIRST_PASS), explanation);
+        }
+    }
+
+    /** A rescore query that is not the confinement's shape is explained exactly as it ran. */
+    public void testExplain_whenTheQueryIsNotTheConfinement_thenItIsExplainedAsItRan() throws IOException {
+        try (Directory directory = newDirectory(); IndexReader reader = corpus(directory)) {
+            IndexSearcher searcher = new IndexSearcher(reader);
+            int ranked = docId(searcher, "a");
+            QueryRescorer.QueryRescoreContext plain = new QueryRescorer.QueryRescoreContext(10);
+            plain.setParsedQuery(new ParsedQuery(DECLARED));
+            plain.setRescoredDocs(Set.of(ranked));
+
+            Explanation explanation = guardOver(plain).explain(ranked, searcher, null, RANKED_FIRST_PASS);
+
+            assertEquals(QueryRescorer.INSTANCE.explain(ranked, searcher, plain, RANKED_FIRST_PASS), explanation);
+        }
+    }
+
+    /** Only {@code bool{must: <query>, filter: <window>}}, in that order and with nothing else, is read as the confinement. */
+    public void testDeclaredQuery_recognisesOnlyTheConfinementShape() {
+        Query window = new TermInSetQuery(WINDOW_FIELD, List.of(new BytesRef("a")));
+        assertSame(DECLARED, FusedWindowGuardRescorer.declaredQuery(confinedQuery()));
+        assertNull("not a bool", FusedWindowGuardRescorer.declaredQuery(DECLARED));
+        assertNull(
+            "the clauses the other way round",
+            FusedWindowGuardRescorer.declaredQuery(
+                new BooleanQuery.Builder().add(window, BooleanClause.Occur.FILTER).add(DECLARED, BooleanClause.Occur.MUST).build()
+            )
+        );
+        assertNull(
+            "a scoring second clause",
+            FusedWindowGuardRescorer.declaredQuery(
+                new BooleanQuery.Builder().add(DECLARED, BooleanClause.Occur.MUST).add(window, BooleanClause.Occur.SHOULD).build()
+            )
+        );
+        assertNull(
+            "a minimum_should_match",
+            FusedWindowGuardRescorer.declaredQuery(
+                new BooleanQuery.Builder().setMinimumNumberShouldMatch(1)
+                    .add(DECLARED, BooleanClause.Occur.MUST)
+                    .add(window, BooleanClause.Occur.FILTER)
+                    .build()
+            )
+        );
+        assertNull(
+            "a third clause",
+            FusedWindowGuardRescorer.declaredQuery(
+                new BooleanQuery.Builder().add(DECLARED, BooleanClause.Occur.MUST)
+                    .add(window, BooleanClause.Occur.FILTER)
+                    .add(window, BooleanClause.Occur.FILTER)
+                    .build()
+            )
+        );
+    }
+
     // ---- helpers ----
+
+    /** The field the stand-in fused window filters on — named so that any description mentioning it is recognisable. */
+    private static final String WINDOW_FIELD = "fused_window_member";
+    private static final String TEXT_FIELD = "text";
+    /** The user's rescore query, as {@link FusedRescoreScope} finds it before confining it. */
+    private static final Query DECLARED = new TermQuery(new Term(TEXT_FIELD, "lamp"));
+    private static final Explanation RANKED_FIRST_PASS = Explanation.match(0.5f, "first pass");
+    private static final Explanation TAIL_FIRST_PASS = Explanation.match(0.0f, "first pass");
+
+    /** "a" and "b" are in the fused window; "a" and "c" match the rescore query, so "c" is the Tail-only match. */
+    private IndexReader corpus(final Directory directory) throws IOException {
+        try (IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig())) {
+            for (String[] doc : new String[][] { { "a", "lamp desk" }, { "b", "sofa table" }, { "c", "lamp chair" } }) {
+                Document document = new Document();
+                document.add(new StringField(WINDOW_FIELD, doc[0], Field.Store.NO));
+                document.add(new TextField(TEXT_FIELD, doc[1], Field.Store.NO));
+                writer.addDocument(document);
+            }
+        }
+        return DirectoryReader.open(directory);
+    }
+
+    private int docId(final IndexSearcher searcher, final String id) throws IOException {
+        return searcher.search(new TermQuery(new Term(WINDOW_FIELD, id)), 1).scoreDocs[0].doc;
+    }
+
+    /**
+     * The shape {@code BoolQueryBuilder#doToQuery} compiles the confinement to: the user's query, then the window — by
+     * default "a" and "b".
+     */
+    private Query confinedQuery(final String... window) {
+        List<BytesRef> ids = new ArrayList<>();
+        for (String id : window.length == 0 ? new String[] { "a", "b" } : window) {
+            ids.add(new BytesRef(id));
+        }
+        Query windowFilter = new TermInSetQuery(WINDOW_FIELD, ids);
+        return new BooleanQuery.Builder().add(DECLARED, BooleanClause.Occur.MUST).add(windowFilter, BooleanClause.Occur.FILTER).build();
+    }
+
+    private QueryRescorer.QueryRescoreContext confined(final Set<Integer> rescored, final String... window) {
+        QueryRescorer.QueryRescoreContext context = new QueryRescorer.QueryRescoreContext(10);
+        context.setParsedQuery(new ParsedQuery(confinedQuery(window)));
+        context.setRescoreQueryWeight(2.0f);
+        context.setRescoredDocs(rescored);
+        return context;
+    }
+
+    private FusedWindowGuardRescorer guardOver(final RescoreContext... delegates) {
+        return new FusedWindowGuardRescorer(List.of(delegates));
+    }
 
     private FusedWindowGuardRescorer guard(final Rescorer... delegates) {
         List<RescoreContext> contexts = new ArrayList<>();

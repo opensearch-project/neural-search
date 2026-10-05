@@ -87,6 +87,7 @@ public class FusedExplanationMergerTests extends OpenSearchTestCase {
         FusedExplanationMerger merger = new FusedExplanationMerger();
         merger.consumer().accept(collected("1", 0.6f, 0.4f, 0.8f));
 
+        // No explanation of its own on the hit: nothing says what moved the score, so the fusion is nested under it.
         SearchResponse merged = merger.getMergedResponse(responseWithHits(hit("1", 1.9f)));
         Explanation explanation = merged.getHits().getHits()[0].getExplanation();
 
@@ -95,6 +96,243 @@ public class FusedExplanationMergerTests extends OpenSearchTestCase {
         assertEquals(1, explanation.getDetails().length);
         assertEquals("and the fusion keeps the number it actually produced", COMBINATION, explanation.getDetails()[0].getDescription());
         assertEquals(0.6f, explanation.getDetails()[0].getValue().floatValue(), 0.0f);
+    }
+
+    public void testGetMergedResponse_whenARescoreMovedTheScore_thenTheFusionReplacesTheFirstPassOfCoresRescoreExplanation() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5334f, 0.4f, 0.8f));
+        // Round 2's own tree for a rescored window document, as core's QueryRescorer#explain writes it over the
+        // self-erased query (captured live: Top clause `_id:(…)^0.5334` plus the non-scoring Tail, then
+        // query_weight 1.0 and rescore_query_weight 2.0 under score_mode total).
+        SearchHit rescored = hit("1", 5.829916f);
+        rescored.explanation(rescoreTree(5.829916f, "sum of:", selfErasedQuery(0.5334f), 1.0f, 2.648258f, 2.0f));
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(rescored)).getHits().getHits()[0].getExplanation();
+
+        assertEquals("core's rescore node stays on top", "sum of:", explanation.getDescription());
+        assertEquals(5.829916f, explanation.getValue().floatValue(), 0.0f);
+        assertEquals(2, explanation.getDetails().length);
+        Explanation primary = explanation.getDetails()[0];
+        assertEquals("product of:", primary.getDescription());
+        assertEquals(0.5334f, primary.getValue().floatValue(), 0.0f);
+        assertEquals("the fusion replaces the self-erased first pass", COMBINATION, primary.getDetails()[0].getDescription());
+        assertEquals(0.5334f, primary.getDetails()[0].getValue().floatValue(), 0.0f);
+        assertEquals("one node per leg under it", 2, primary.getDetails()[0].getDetails().length);
+        assertEquals("primaryWeight", primary.getDetails()[1].getDescription());
+        Explanation secondary = explanation.getDetails()[1];
+        assertEquals("and the rescore query's own explanation is kept verbatim", "product of:", secondary.getDescription());
+        assertEquals("weight(text:sofa in 3080)", secondary.getDetails()[0].getDescription());
+        assertEquals("secondaryWeight", secondary.getDetails()[1].getDescription());
+        assertEquals(2.0f, secondary.getDetails()[1].getValue().floatValue(), 0.0f);
+    }
+
+    public void testGetMergedResponse_whenTheRescoreQueryDidNotMatch_thenTheFusionStillReplacesTheWeightedFirstPass() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        // query_weight 0.5 and a rescore query that did not match this document: core returns the weighted first pass alone.
+        SearchHit rescored = hit("1", 0.25f);
+        rescored.explanation(weightedFirstPass(selfErasedQuery(0.5f), 0.5f));
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(rescored)).getHits().getHits()[0].getExplanation();
+
+        assertEquals("product of:", explanation.getDescription());
+        assertEquals(0.25f, explanation.getValue().floatValue(), 0.0f);
+        assertEquals(COMBINATION, explanation.getDetails()[0].getDescription());
+        assertEquals(0.5f, explanation.getDetails()[0].getValue().floatValue(), 0.0f);
+        assertEquals("primaryWeight", explanation.getDetails()[1].getDescription());
+        assertEquals(0.5f, explanation.getDetails()[1].getValue().floatValue(), 0.0f);
+    }
+
+    public void testGetMergedResponse_whenRescorersAreChained_thenTheFusionReplacesTheInnermostFirstPass() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        // Two rescorers: the second one's first pass is the first one's whole tree.
+        Explanation first = rescoreTree(2.5f, "sum of:", selfErasedQuery(0.5f), 1.0f, 2.0f, 1.0f);
+        Explanation second = rescoreTree(7.5f, "product of:", first, 1.0f, 3.0f, 1.0f);
+        SearchHit rescored = hit("1", 7.5f);
+        rescored.explanation(second);
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(rescored)).getHits().getHits()[0].getExplanation();
+
+        assertEquals(7.5f, explanation.getValue().floatValue(), 0.0f);
+        Explanation innerLayer = explanation.getDetails()[0].getDetails()[0];
+        assertEquals("the outer layer still wraps the inner one", 2.5f, innerLayer.getValue().floatValue(), 0.0f);
+        Explanation innermostFirstPass = innerLayer.getDetails()[0].getDetails()[0];
+        assertEquals("and only the innermost first pass is the fusion", COMBINATION, innermostFirstPass.getDescription());
+        assertEquals(0.5f, innermostFirstPass.getValue().floatValue(), 0.0f);
+        assertEquals("the second rescore query is kept", 3.0f, explanation.getDetails()[1].getDetails()[0].getValue().floatValue(), 0.0f);
+    }
+
+    public void testGetMergedResponse_whenTheFirstOfTwoRescoreQueriesDidNotMatch_thenTheReplacementDescendsThroughItsWeightedFirstPass() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        // The first rescorer's query did not match this document, so its layer is core's weighted first pass alone; the
+        // second rescorer's matched, and its first pass is that whole layer.
+        Explanation first = weightedFirstPass(selfErasedQuery(0.5f), 0.5f);
+        Explanation second = rescoreTree(2.25f, "sum of:", first, 1.0f, 2.0f, 1.0f);
+        SearchHit rescored = hit("1", 2.25f);
+        rescored.explanation(second);
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(rescored)).getHits().getHits()[0].getExplanation();
+
+        assertEquals("core's rescore node stays on top", "sum of:", explanation.getDescription());
+        assertEquals(2.25f, explanation.getValue().floatValue(), 0.0f);
+        Explanation firstLayer = explanation.getDetails()[0].getDetails()[0];
+        assertEquals("the first rescorer's weighted first pass is kept", 0.25f, firstLayer.getValue().floatValue(), 0.0f);
+        assertEquals("primaryWeight", firstLayer.getDetails()[1].getDescription());
+        assertEquals("with the fusion as the first pass it weights", COMBINATION, firstLayer.getDetails()[0].getDescription());
+    }
+
+    public void testGetMergedResponse_whenRoundTwosTreeIsNotAMatch_thenTheFusionIsNestedUnderTheFinalScore() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.6f, 0.4f, 0.8f));
+        SearchHit moved = hit("1", 1.9f);
+        moved.explanation(Explanation.noMatch("First pass did not match", selfErasedQuery(0.6f)));
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(moved)).getHits().getHits()[0].getExplanation();
+
+        assertEquals(FINAL_SCORE, explanation.getDescription());
+        assertEquals(COMBINATION, explanation.getDetails()[0].getDescription());
+    }
+
+    public void testGetMergedResponse_whenAProductHasMoreThanTwoFactors_thenItIsNotTakenForARescoreLayer() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.6f, 0.4f, 0.8f));
+        // Core's weighted first pass has exactly two factors; a product with a third is some other query's explanation.
+        SearchHit moved = hit("1", 1.2f);
+        moved.explanation(
+            Explanation.match(
+                1.2f,
+                "product of:",
+                selfErasedQuery(0.6f),
+                Explanation.match(1.0f, "primaryWeight"),
+                Explanation.match(2.0f, "boost")
+            )
+        );
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(moved)).getHits().getHits()[0].getExplanation();
+
+        assertEquals(FINAL_SCORE, explanation.getDescription());
+        assertEquals(COMBINATION, explanation.getDetails()[0].getDescription());
+    }
+
+    public void testGetMergedResponse_whenTheSecondFactorIsNotAWeightedRescoreQuery_thenNothingIsReplaced() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        // A weighted first pass beside something that is not core's weighted rescore query: not a rescore layer.
+        SearchHit moved = hit("1", 1.9f);
+        moved.explanation(
+            Explanation.match(1.9f, "sum of:", weightedFirstPass(selfErasedQuery(0.5f), 1.0f), Explanation.match(1.4f, "weight(text:a)"))
+        );
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(moved)).getHits().getHits()[0].getExplanation();
+
+        assertEquals(FINAL_SCORE, explanation.getDescription());
+        assertEquals(1, explanation.getDetails().length);
+    }
+
+    public void testGetMergedResponse_whenRoundTwosTreeIsNotARescore_thenTheFusionIsNestedUnderTheFinalScore() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.6f, 0.4f, 0.8f));
+        // A moved score whose tree is a plain bool: a `sum of:` with two children that are not core's weighted products. The
+        // description alone must not be taken for a rescore layer.
+        SearchHit moved = hit("1", 1.9f);
+        moved.explanation(
+            Explanation.match(1.9f, "sum of:", Explanation.match(0.6f, "ConstantScore(_id:[1])"), Explanation.match(1.3f, "weight(text:a)"))
+        );
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(moved)).getHits().getHits()[0].getExplanation();
+
+        assertEquals(FINAL_SCORE, explanation.getDescription());
+        assertEquals(1.9f, explanation.getValue().floatValue(), 0.0f);
+        assertEquals(COMBINATION, explanation.getDetails()[0].getDescription());
+    }
+
+    public void testGetMergedResponse_whenTheFirstPassDoesNotCarryTheFusedScore_thenNothingIsReplaced() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.6f, 0.4f, 0.8f));
+        // A rescore tree whose first pass is some other number: replacing it with the fusion would misattribute the score.
+        SearchHit rescored = hit("1", 1.9f);
+        rescored.explanation(rescoreTree(1.9f, "sum of:", selfErasedQuery(0.3f), 1.0f, 1.6f, 1.0f));
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(rescored)).getHits().getHits()[0].getExplanation();
+
+        assertEquals(FINAL_SCORE, explanation.getDescription());
+        assertEquals(1, explanation.getDetails().length);
+        assertEquals(COMBINATION, explanation.getDetails()[0].getDescription());
+    }
+
+    public void testGetMergedResponse_whenTheRebuiltTreeDoesNotDescribeTheHitScore_thenTheFinalScoreNodeIsUsed() {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        // A well-formed rescore tree whose value is not what the hit carries (something after the rescore moved it again):
+        // the top node must still describe the score the hit has.
+        SearchHit rescored = hit("1", 9.0f);
+        rescored.explanation(rescoreTree(2.5f, "sum of:", selfErasedQuery(0.5f), 1.0f, 2.0f, 1.0f));
+
+        Explanation explanation = merger.getMergedResponse(responseWithHits(rescored)).getHits().getHits()[0].getExplanation();
+
+        assertEquals(FINAL_SCORE, explanation.getDescription());
+        assertEquals(9.0f, explanation.getValue().floatValue(), 0.0f);
+    }
+
+    public void testReplaceFirstPass_thenTheInputTreeIsNotMutated() {
+        Explanation roundTwo = rescoreTree(5.829916f, "sum of:", selfErasedQuery(0.5334f), 1.0f, 2.648258f, 2.0f);
+        Explanation combination = Explanation.match(0.5334f, COMBINATION);
+
+        Explanation rebuilt = FusedDocExplanations.replaceFirstPass(roundTwo, combination, 0.5334f);
+
+        assertNotSame(rebuilt, roundTwo);
+        assertEquals(
+            "the input still has the self-erased first pass",
+            "sum of:",
+            roundTwo.getDetails()[0].getDetails()[0].getDescription()
+        );
+        assertEquals(COMBINATION, rebuilt.getDetails()[0].getDetails()[0].getDescription());
+        assertNull("a leaf is not a rescore layer", FusedDocExplanations.replaceFirstPass(Explanation.match(1f, "leaf"), combination, 1f));
+    }
+
+    /** Round 2's own explanation of a window document: the Top clause at the fused score plus the non-scoring Tail. */
+    private static Explanation selfErasedQuery(final float fusedScore) {
+        return Explanation.match(
+            fusedScore,
+            "sum of:",
+            Explanation.match(fusedScore, "_id:([fe 17 78 4f])^" + fusedScore),
+            Explanation.match(
+                0f,
+                "match on required clause, product of:",
+                Explanation.match(0f, "# clause"),
+                Explanation.match(1f, "text:sofa")
+            )
+        );
+    }
+
+    /** Core's {@code prim}: the first pass times {@code query_weight}. */
+    private static Explanation weightedFirstPass(final Explanation firstPass, final float queryWeight) {
+        return Explanation.match(
+            firstPass.getValue().floatValue() * queryWeight,
+            "product of:",
+            firstPass,
+            Explanation.match(queryWeight, "primaryWeight")
+        );
+    }
+
+    /** Core's whole rescore layer for a document the rescore query matched. */
+    private static Explanation rescoreTree(
+        final float value,
+        final String scoreModeDescription,
+        final Explanation firstPass,
+        final float queryWeight,
+        final float rescoreQueryScore,
+        final float rescoreQueryWeight
+    ) {
+        Explanation secondary = Explanation.match(
+            rescoreQueryScore * rescoreQueryWeight,
+            "product of:",
+            Explanation.match(rescoreQueryScore, "weight(text:sofa in 3080)"),
+            Explanation.match(rescoreQueryWeight, "secondaryWeight")
+        );
+        return Explanation.match(value, scoreModeDescription, weightedFirstPass(firstPass, queryWeight), secondary);
     }
 
     public void testGetMergedResponse_whenALegReturnedNoExplanation_thenItsNodeIsALeaf() {

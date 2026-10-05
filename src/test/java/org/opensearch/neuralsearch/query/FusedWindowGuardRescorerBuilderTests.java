@@ -8,6 +8,7 @@ import java.io.IOException;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import java.util.List;
+import java.util.Set;
 
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.apache.lucene.search.MatchAllDocsQuery;
@@ -142,6 +143,42 @@ public class FusedWindowGuardRescorerBuilderTests extends OpenSearchTestCase {
 
         assertEquals("one parsed query per delegate, or matched_queries loses the name", 2, context.getParsedQueries().size());
         assertEquals("and the same for the DFS term-statistics walk", 2, context.getQueries().size());
+    }
+
+    /**
+     * The third thing core reads off the request's rescore contexts: which documents each one rescored, carried from the
+     * query phase to a fetch phase that runs in a separate search context — every search over more than one shard — so
+     * that {@code QueryRescorer#explain} can tell a rescored document from one it never reached. After the wrap this is
+     * the only context core walks, so it has to report what its delegates rescored and hand what it is given back to
+     * them; otherwise the fetch phase's freshly built delegates believe they rescored nothing and {@code explain} omits
+     * the rescore from every hit.
+     */
+    public void testBuildContext_carriesTheRescoredDocumentsFromTheQueryPhaseToTheFetchPhase() throws IOException {
+        QueryShardContext shardContext = mock(QueryShardContext.class);
+        when(shardContext.toQuery(org.mockito.ArgumentMatchers.any(QueryBuilder.class))).thenReturn(
+            new ParsedQuery(new MatchAllDocsQuery())
+        );
+        FusedWindowGuardRescorerBuilder guard = new FusedWindowGuardRescorerBuilder(
+            List.of(new QueryRescorerBuilder(new MatchAllQueryBuilder()), new QueryRescorerBuilder(new TermQueryBuilder("f", "v")))
+        );
+
+        RescoreContext queryPhase = guard.buildContext(shardContext);
+        List<RescoreContext> rescoredBy = ((FusedWindowGuardRescorer) queryPhase.rescorer()).delegates();
+        rescoredBy.get(0).setRescoredDocs(Set.of(1, 2));
+        rescoredBy.get(1).setRescoredDocs(Set.of(2, 3));
+        assertEquals(
+            "what core ships to the coordinator: every document the chain rescored",
+            Set.of(1, 2, 3),
+            queryPhase.getRescoredDocs()
+        );
+
+        RescoreContext fetchPhase = guard.buildContext(shardContext);
+        assertEquals("a freshly built context has rescored nothing yet", Set.of(), fetchPhase.getRescoredDocs());
+        fetchPhase.setRescoredDocs(queryPhase.getRescoredDocs());
+        for (RescoreContext delegate : ((FusedWindowGuardRescorer) fetchPhase.rescorer()).delegates()) {
+            assertTrue("every delegate is told what the chain rescored", delegate.isRescored(1) && delegate.isRescored(3));
+            assertFalse("and nothing else", delegate.isRescored(4));
+        }
     }
 
     /**

@@ -10,12 +10,23 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.ReaderUtil;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.Weight;
+import org.opensearch.index.query.ParsedQuery;
+import org.opensearch.search.rescore.QueryRescorer;
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.rescore.Rescorer;
 
@@ -163,12 +174,13 @@ class FusedWindowGuardRescorer implements Rescorer {
 
     /**
      * Chain the delegates' explanations in the order core would have applied them, so {@code explain: true} describes
-     * the rescore the user asked for rather than this wrapper.
+     * the rescore the user asked for rather than this wrapper — including the rescore query, which each delegate is
+     * explained with as the user declared it, not as {@link FusedRescoreScope} confined it (see {@link #asDeclared}).
      *
      * <p>The value it reports is the delegates' own combined value, which for a demoted document is its score BEFORE
      * the band was applied. That is deliberate: the explanation explains the user's rescore, and the band is an internal
-     * encoding the coordinator removes again. {@code FusedExplanationMerger} replaces the tree for every ranked hit
-     * anyway.
+     * encoding the coordinator removes again. For a ranked hit {@code FusedExplanationMerger} keeps this tree and replaces
+     * its first pass with the fused breakdown.
      */
     @Override
     public Explanation explain(
@@ -179,9 +191,72 @@ class FusedWindowGuardRescorer implements Rescorer {
     ) throws IOException {
         Explanation explanation = sourceExplanation;
         for (RescoreContext delegate : delegates) {
-            explanation = delegate.rescorer().explain(topLevelDocId, searcher, delegate, explanation);
+            explanation = delegate.rescorer().explain(topLevelDocId, searcher, asDeclared(delegate, topLevelDocId, searcher), explanation);
         }
         return explanation;
+    }
+
+    /**
+     * The delegate as the user declared it, for explaining one document: its rescore query without the fused window
+     * {@link FusedRescoreScope} intersected into it, and rescored exactly when the confined query really rescored it.
+     *
+     * <p>Core explains a rescore by explaining the rescore query, and the query this delegate ran is
+     * {@code bool{must: <the user's query>, filter: <the fused window>}}. Explained as it ran, the window lands in every
+     * rescored hit's tree as a {@code "match on required clause"} node whose description is the {@code _id} filter
+     * listing every document of the window — an internal rewrite the user never wrote, repeated per hit, and the bulk
+     * of the response once the window is large. So core's own {@code QueryRescorer#explain} is handed a view instead:
+     * the same weights, score mode and window, the user's query alone, and a rescored set that admits this document
+     * only when core rescored it AND the confined query matches it. Core shows the rescore under exactly that
+     * condition, the user's query matches wherever the confined one does, and the window filter scores {@code 0.0}, so
+     * the arithmetic is the one the score went through.
+     *
+     * <p>Whether the confined query matches is answered the way Lucene's {@code QueryRescorer} answers it while
+     * rescoring — by advancing the query's scorer to the document — not by explaining it, which would build the very
+     * description this exists to drop. Anything that is not the confinement's shape — a window that resolved to
+     * {@code match_none} on this shard, say — is explained as it ran.
+     */
+    private static RescoreContext asDeclared(final RescoreContext delegate, final int topLevelDocId, final IndexSearcher searcher)
+        throws IOException {
+        if (delegate instanceof QueryRescorer.QueryRescoreContext confined) {
+            Query confinedQuery = confined.parsedQuery().query();
+            Query declared = declaredQuery(confinedQuery);
+            if (Objects.nonNull(declared)) {
+                QueryRescorer.QueryRescoreContext view = new QueryRescorer.QueryRescoreContext(confined.getWindowSize());
+                view.setParsedQuery(new ParsedQuery(declared));
+                view.setQueryWeight(confined.queryWeight());
+                view.setRescoreQueryWeight(confined.rescoreQueryWeight());
+                view.setScoreMode(confined.scoreMode());
+                boolean rescored = confined.isRescored(topLevelDocId) && matches(searcher, confinedQuery, topLevelDocId);
+                view.setRescoredDocs(rescored ? Set.of(topLevelDocId) : Set.of());
+                return view;
+            }
+        }
+        return delegate;
+    }
+
+    /**
+     * The user's rescore query out of the confinement {@code bool{must: <it>, filter: <the fused window>}} — the shape
+     * {@code BoolQueryBuilder#doToQuery} compiles {@link FusedRescoreScope}'s wrapper to, must clauses first — or
+     * {@code null} for any other query.
+     */
+    static Query declaredQuery(final Query confinedQuery) {
+        if ((confinedQuery instanceof BooleanQuery bool) && bool.getMinimumNumberShouldMatch() == 0 && bool.clauses().size() == 2) {
+            BooleanClause declared = bool.clauses().get(0);
+            BooleanClause window = bool.clauses().get(1);
+            if (declared.occur() == BooleanClause.Occur.MUST && window.occur() == BooleanClause.Occur.FILTER) {
+                return declared.query();
+            }
+        }
+        return null;
+    }
+
+    private static boolean matches(final IndexSearcher searcher, final Query query, final int topLevelDocId) throws IOException {
+        Weight weight = searcher.createWeight(searcher.rewrite(query), ScoreMode.COMPLETE_NO_SCORES, 1.0f);
+        List<LeafReaderContext> leaves = searcher.getIndexReader().leaves();
+        LeafReaderContext leaf = leaves.get(ReaderUtil.subIndex(topLevelDocId, leaves));
+        int doc = topLevelDocId - leaf.docBase;
+        Scorer scorer = weight.scorer(leaf);
+        return Objects.nonNull(scorer) && scorer.iterator().advance(doc) == doc;
     }
 
     /** The delegate contexts, so the builder can expose the chain it wrapped for testing. */
