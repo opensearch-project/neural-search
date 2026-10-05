@@ -42,7 +42,9 @@ import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.common.settings.Settings;
 import org.opensearch.index.IndexSettings;
+import org.opensearch.index.mapper.KeywordFieldMapper;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
 import org.opensearch.index.query.BoostingQueryBuilder;
@@ -300,6 +302,145 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         Collector collector = hybridCollectorManager.newCollector();
         assertNotNull(collector);
         assertTrue(collector instanceof SimpleFieldCollector);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreAscendingWithFieldAndCollapse_thenFail() {
+        // [_score asc, <field>] + collapse must be rejected. The collapse relaxation allows _score to be mixed
+        // with a field only when _score is the DESCENDING primary key; ascending _score with a tiebreaker is out
+        // of scope. _score asc maps to SortField reverse=true.
+        SearchContext searchContext = mock(SearchContext.class);
+        SortField scoreAscending = new SortField(null, SortField.Type.SCORE, true); // _score asc == reverse=true
+        SortField fieldSort = new SortField("price", SortField.Type.INT);
+        Sort sort = new Sort(scoreAscending, fieldSort);
+        DocValueFormat[] docValueFormat = new DocValueFormat[] { DocValueFormat.RAW, DocValueFormat.RAW };
+        when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
+        when(searchContext.minimumScore()).thenReturn(null);
+
+        // Collapse present + score primary would otherwise pass the relaxation; the ascending order is what fails it.
+        CollapseContext collapseContext = mock(CollapseContext.class);
+        when(collapseContext.getFieldName()).thenReturn(TEXT_FIELD_NAME);
+        when(searchContext.collapse()).thenReturn(collapseContext);
+
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(TEXT_FIELD_NAME)).thenReturn(fieldType);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+
+        HybridQuery hybridQuery = new HybridQuery(List.of(termSubQuery.toQuery(mockQueryShardContext)), hybridQueryContext);
+
+        when(searchContext.query()).thenReturn(hybridQuery);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQuery)
+        );
+        assertEquals(
+            "_score must be sorted descending when combined with a field in a hybrid query with collapse",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldAndCollapse_thenCollapseCollectorCreated() {
+        SearchContext searchContext = mockSearchContextForSortValidation(
+            new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT)),
+            true
+        );
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        Collector collector = hybridCollectorManager.newCollector();
+        assertTrue(collector instanceof HybridCollapsingTopDocsCollector);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldWithoutCollapse_thenFail() {
+        SearchContext searchContext = mockSearchContextForSortValidation(
+            new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT)),
+            false
+        );
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(
+            "_score sort criteria cannot be applied with any other criteria unless the query uses collapse with _score as the "
+                + "primary, descending key. Please select one sort criteria out of them.",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenFieldThenScoreWithCollapse_thenFail() {
+        SearchContext searchContext = mockSearchContextForSortValidation(
+            new Sort(new SortField("price", SortField.Type.INT), SortField.FIELD_SCORE),
+            true
+        );
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(
+            "_score must be the primary sort key when combined with a field in a hybrid query with collapse",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    /**
+     * Mocks a non-concurrent SearchContext over a single-term hybrid query with the given two-key sort, and a
+     * keyword collapse on {@link #TEXT_FIELD_NAME} when {@code withCollapse} is true.
+     */
+    private SearchContext mockSearchContextForSortValidation(Sort sort, boolean withCollapse) throws IOException {
+        SearchContext searchContext = mock(SearchContext.class);
+        DocValueFormat[] docValueFormat = new DocValueFormat[] { DocValueFormat.RAW, DocValueFormat.RAW };
+        when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
+        when(searchContext.minimumScore()).thenReturn(null);
+
+        if (withCollapse) {
+            CollapseContext collapseContext = mock(CollapseContext.class);
+            when(collapseContext.getFieldName()).thenReturn(TEXT_FIELD_NAME);
+            when(collapseContext.getFieldType()).thenReturn(new KeywordFieldMapper.KeywordFieldType(TEXT_FIELD_NAME));
+            when(searchContext.collapse()).thenReturn(collapseContext);
+
+            IndexShard indexShard = mock(IndexShard.class);
+            IndexSettings indexSettings = mock(IndexSettings.class);
+            when(indexSettings.getSettings()).thenReturn(Settings.EMPTY);
+            when(indexShard.indexSettings()).thenReturn(indexSettings);
+            when(searchContext.indexShard()).thenReturn(indexShard);
+        }
+
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(TEXT_FIELD_NAME)).thenReturn(fieldType);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+        HybridQuery hybridQuery = new HybridQuery(
+            List.of(termSubQuery.toQuery(mockQueryShardContext)),
+            HybridQueryContext.builder().paginationDepth(10).build()
+        );
+        when(searchContext.query()).thenReturn(hybridQuery);
+
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
+
+        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
+        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.shouldUseConcurrentSearch()).thenReturn(false);
+        return searchContext;
     }
 
     @SneakyThrows

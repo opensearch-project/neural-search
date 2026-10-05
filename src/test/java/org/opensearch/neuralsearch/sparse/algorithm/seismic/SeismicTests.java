@@ -10,10 +10,17 @@ import java.util.Map;
 
 import org.opensearch.common.ValidationException;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseForwardIndex;
 import org.opensearch.neuralsearch.sparse.mapper.SparseMethodContext;
 
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTERING_BATCH_SIZE_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.FORWARD_INDEX_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.MAX_CLUSTERING_BATCH_SIZE;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.MIN_CLUSTERING_BATCH_SIZE;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.SUMMARY_PRUNE_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.N_POSTINGS_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_INGEST_FIELD;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.QUANTIZATION_CEILING_SEARCH_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.CLUSTER_RATIO_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.APPROXIMATE_THRESHOLD_FIELD;
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.NAME_FIELD;
@@ -368,5 +375,133 @@ public class SeismicTests extends AbstractSparseTestBase {
         assertTrue(result.validationErrors().contains(expectedError3));
         assertTrue(result.validationErrors().contains(expectedError4));
         assertTrue(result.validationErrors().contains("Unknown parameter 'unknown_param' found"));
+    }
+
+    // ---- quantization ceilings ----
+
+    public void testValidateMethod_validQuantizationCeilings() {
+        ValidationException result = validate(Map.of(QUANTIZATION_CEILING_INGEST_FIELD, 3.0f, QUANTIZATION_CEILING_SEARCH_FIELD, 16.0f));
+
+        assertNull(result);
+    }
+
+    public void testValidateMethod_quantizationCeilingIngestMustBePositive() {
+        ValidationException result = validate(Map.of(QUANTIZATION_CEILING_INGEST_FIELD, 0.0f));
+
+        assertNotNull(result);
+        assertTrue(
+            result.validationErrors()
+                .contains(String.format(Locale.ROOT, "Parameter [%s] must be a positive float number", QUANTIZATION_CEILING_INGEST_FIELD))
+        );
+    }
+
+    public void testValidateMethod_quantizationCeilingSearchMustBePositive() {
+        ValidationException result = validate(Map.of(QUANTIZATION_CEILING_SEARCH_FIELD, -1.5f));
+
+        assertNotNull(result);
+        assertTrue(
+            result.validationErrors()
+                .contains(String.format(Locale.ROOT, "Parameter [%s] must be a positive float number", QUANTIZATION_CEILING_SEARCH_FIELD))
+        );
+    }
+
+    public void testValidateMethod_quantizationCeilingIngestMustBeAFloat() {
+        ValidationException result = validate(Map.of(QUANTIZATION_CEILING_INGEST_FIELD, "not_a_float"));
+
+        assertNotNull(result);
+        assertTrue(
+            result.validationErrors()
+                .contains(
+                    String.format(
+                        Locale.ROOT,
+                        "Parameter [%s] must be of %s type",
+                        QUANTIZATION_CEILING_INGEST_FIELD,
+                        Float.class.getName()
+                    )
+                )
+        );
+    }
+
+    public void testValidateMethod_quantizationCeilingSearchMustBeAFloat() {
+        ValidationException result = validate(Map.of(QUANTIZATION_CEILING_SEARCH_FIELD, "not_a_float"));
+
+        assertNotNull(result);
+        assertTrue(
+            result.validationErrors()
+                .contains(
+                    String.format(
+                        Locale.ROOT,
+                        "Parameter [%s] must be of %s type",
+                        QUANTIZATION_CEILING_SEARCH_FIELD,
+                        Float.class.getName()
+                    )
+                )
+        );
+    }
+
+    // ---- forward index ----
+
+    public void testValidateMethod_validForwardIndex() {
+        assertNull(validate(Map.of(FORWARD_INDEX_FIELD, SparseForwardIndex.PER_BLOCK.getName())));
+    }
+
+    public void testValidateMethod_invalidForwardIndex() {
+        ValidationException result = validate(Map.of(FORWARD_INDEX_FIELD, "not_a_forward_index"));
+
+        assertNotNull(result);
+        assertTrue(
+            result.validationErrors()
+                .contains(
+                    String.format(Locale.ROOT, "Parameter [%s] must be one of [%s]", FORWARD_INDEX_FIELD, SparseForwardIndex.validNames())
+                )
+        );
+    }
+
+    // ---- clustering batch size ----
+
+    public void testValidateMethod_validClusteringBatchSize() {
+        assertNull(validate(Map.of(CLUSTERING_BATCH_SIZE_FIELD, MAX_CLUSTERING_BATCH_SIZE)));
+        assertNull(validate(Map.of(CLUSTERING_BATCH_SIZE_FIELD, MIN_CLUSTERING_BATCH_SIZE)));
+        assertNull(validate(Map.of(CLUSTERING_BATCH_SIZE_FIELD, "64")));
+    }
+
+    public void testValidateMethod_clusteringBatchSizeBelowRange() {
+        assertTrue(validate(Map.of(CLUSTERING_BATCH_SIZE_FIELD, 0)).validationErrors().contains(outOfRangeBatchSizeError()));
+    }
+
+    public void testValidateMethod_clusteringBatchSizeAboveRange() {
+        assertTrue(
+            validate(Map.of(CLUSTERING_BATCH_SIZE_FIELD, MAX_CLUSTERING_BATCH_SIZE + 1)).validationErrors()
+                .contains(outOfRangeBatchSizeError())
+        );
+    }
+
+    public void testValidateMethod_clusteringBatchSizeMustBeAnInteger() {
+        String expectedError = String.format(
+            Locale.ROOT,
+            "Parameter [%s] must be of %s type",
+            CLUSTERING_BATCH_SIZE_FIELD,
+            Integer.class.getName()
+        );
+
+        assertTrue(validate(Map.of(CLUSTERING_BATCH_SIZE_FIELD, "not_an_integer")).validationErrors().contains(expectedError));
+        assertTrue(validate(Map.of(CLUSTERING_BATCH_SIZE_FIELD, 1.5f)).validationErrors().contains(expectedError));
+    }
+
+    private String outOfRangeBatchSizeError() {
+        return String.format(
+            Locale.ROOT,
+            "Parameter [%s] must be in [%d, %d]",
+            CLUSTERING_BATCH_SIZE_FIELD,
+            MIN_CLUSTERING_BATCH_SIZE,
+            MAX_CLUSTERING_BATCH_SIZE
+        );
+    }
+
+    private ValidationException validate(Map<String, Object> parameters) {
+        Map<String, Object> methodMap = new HashMap<>();
+        methodMap.put(NAME_FIELD, "testMethod");
+        methodMap.put(PARAMETERS_FIELD, new HashMap<>(parameters));
+        return Seismic.INSTANCE.validateMethod(SparseMethodContext.parse(methodMap));
     }
 }

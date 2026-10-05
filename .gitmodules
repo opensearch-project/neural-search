@@ -1,0 +1,3 @@
+[submodule "jni/external/neural-sparse-cpp"]
+	path = jni/external/neural-sparse-cpp
+	url = https://github.com/opensearch-project/neural-sparse-cpp.git

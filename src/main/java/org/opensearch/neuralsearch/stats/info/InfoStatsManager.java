@@ -29,6 +29,8 @@ import org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
+import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
 import org.opensearch.neuralsearch.stats.common.StatSnapshot;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.neuralsearch.util.PipelineServiceUtil;
@@ -42,6 +44,8 @@ import java.util.function.Consumer;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ENGINE_FIELD;
+
 /**
  * Manager to generate stat snapshots for cluster level info stats
  */
@@ -50,6 +54,8 @@ public class InfoStatsManager {
     public static final String REQUEST_PROCESSORS_KEY = "request_processors";
     public static final String RESPONSE_PROCESSORS_KEY = "response_processors";
     public static final String PHASE_PROCESSORS_KEY = "phase_results_processors";
+    public static final String PROPERTIES_KEY = "properties";
+    public static final String TYPE_KEY = "type";
 
     private final NeuralSearchClusterUtil neuralSearchClusterUtil;
     private final NeuralSearchSettingsAccessor settingsAccessor;
@@ -140,6 +146,9 @@ public class InfoStatsManager {
 
         // Parses search pipeline processor configs for processor info
         addSearchProcessorStats(countableInfoStats);
+
+        // Parses index mappings for sparse vector field info
+        addSparseFieldStats(countableInfoStats);
 
         // Helpers to parse search pipeline processor configs for processor info would go here
         return countableInfoStats;
@@ -254,6 +263,90 @@ public class InfoStatsManager {
                 }
             }
         }
+    }
+
+    /**
+     * Adds sparse vector field info stats, mutating the input
+     *
+     * Derived from the mappings in cluster state rather than counted as fields are created, so the
+     * numbers stay correct across mapping updates, node restarts and replayed cluster state.
+     *
+     * @param stats mutable map of info stats that the result will be added to
+     */
+    private void addSparseFieldStats(Map<InfoStatName, CountableInfoStatSnapshot> stats) {
+        List<Map<String, Object>> indexMappings = neuralSearchClusterUtil.getAllIndexMappings();
+        if (indexMappings == null) {
+            return;
+        }
+
+        for (Map<String, Object> mapping : indexMappings) {
+            SparseFieldCounts counts = countSparseVectorFields(asMap(mapping.get(PROPERTIES_KEY)));
+
+            if (counts.total() == 0) {
+                continue;
+            }
+            increment(stats, InfoStatName.SPARSE_VECTOR_INDICES);
+            incrementBy(stats, InfoStatName.SPARSE_VECTOR_FIELDS, counts.total());
+
+            if (counts.nativeEngine() > 0) {
+                increment(stats, InfoStatName.SPARSE_NATIVE_ENGINE_INDICES);
+                incrementBy(stats, InfoStatName.SPARSE_NATIVE_ENGINE_FIELDS, counts.nativeEngine());
+            }
+        }
+    }
+
+    /**
+     * Counts the sparse vector fields under one level of a mapping's properties, recursing into
+     * object and nested fields. Multi-fields are not walked, since a sparse vector field cannot be one.
+     *
+     * Recursion depth is the nesting depth of the mapping, which the mapper has already capped at
+     * {@code index.mapping.depth.limit} (20 by default) before the mapping reached cluster state.
+     *
+     * @param properties the properties map of a mapping level, may be null
+     * @return the sparse vector fields found at this level and below
+     */
+    private SparseFieldCounts countSparseVectorFields(Map<String, Object> properties) {
+        if (properties == null) {
+            return SparseFieldCounts.NONE;
+        }
+        long total = 0;
+        long nativeEngine = 0;
+        for (Object field : properties.values()) {
+            Map<String, Object> fieldConfig = asMap(field);
+            if (fieldConfig == null) {
+                continue;
+            }
+            if (SparseVectorFieldMapper.CONTENT_TYPE.equals(asString(fieldConfig.get(TYPE_KEY)))) {
+                total++;
+                if (isNativeEngine(fieldConfig)) {
+                    nativeEngine++;
+                }
+            }
+            SparseFieldCounts nested = countSparseVectorFields(asMap(fieldConfig.get(PROPERTIES_KEY)));
+            total += nested.total();
+            nativeEngine += nested.nativeEngine();
+        }
+        return new SparseFieldCounts(total, nativeEngine);
+    }
+
+    /**
+     * Whether a sparse vector field's mapping puts it on the native engine. A field that leaves the
+     * engine out means the default, matching how {@code SparseMethodContext#parse} resolves it.
+     *
+     * @param fieldConfig the field's mapping config
+     * @return whether the field uses the native engine
+     */
+    private boolean isNativeEngine(Map<String, Object> fieldConfig) {
+        Map<String, Object> method = asMap(fieldConfig.get(SparseVectorFieldMapper.METHOD));
+        String engine = method == null ? null : asString(method.get(ENGINE_FIELD));
+        return SparseEngine.NATIVE == SparseEngine.fromName(engine);
+    }
+
+    /**
+     * The sparse vector fields found in one index's mapping, and how many of them are on the native engine
+     */
+    private record SparseFieldCounts(long total, long nativeEngine) {
+        private static final SparseFieldCounts NONE = new SparseFieldCounts(0, 0);
     }
 
     /**

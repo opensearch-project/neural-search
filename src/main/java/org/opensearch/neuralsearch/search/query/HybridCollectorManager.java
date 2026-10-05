@@ -20,12 +20,14 @@ import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
+import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopGroupsCollector;
 import org.opensearch.neuralsearch.search.collector.HybridCollectorFactory;
 import org.opensearch.neuralsearch.search.collector.HybridCollectorFactoryDTO;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.query.util.HybridSearchCollectorResultUtil;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
 import org.opensearch.search.query.ReduceableSearchResult;
@@ -56,7 +58,8 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
     private final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
         HybridTopScoreDocCollector.class,
         HybridTopFieldDocSortCollector.class,
-        HybridCollapsingTopDocsCollector.class
+        HybridCollapsingTopDocsCollector.class,
+        HybridCollapsingTopGroupsCollector.class
     );
 
     /**
@@ -201,9 +204,26 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             }
         }
         if (hasScoreSort && hasFieldSort) {
-            throw new IllegalArgumentException(
-                "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them."
-            );
+            // Collapse-gated relaxation: a hybrid query with collapse may mix _score with a field so the collapse
+            // group head is deterministic (field breaks exact fused-score ties). Allowed only when _score is the
+            // primary (first) sort key AND descending; field-primary + _score, and ascending _score, stay rejected
+            // (see HybridSearchCollapseUtil#isScorePrimaryDescendingSort).
+            if (searchContext.collapse() == null) {
+                throw new IllegalArgumentException(
+                    "_score sort criteria cannot be applied with any other criteria unless the query uses collapse with _score as the "
+                        + "primary, descending key. Please select one sort criteria out of them."
+                );
+            }
+            if (!HybridSearchCollapseUtil.isScorePrimarySort(sortFields)) {
+                throw new IllegalArgumentException(
+                    "_score must be the primary sort key when combined with a field in a hybrid query with collapse"
+                );
+            }
+            if (!HybridSearchCollapseUtil.isScorePrimaryDescendingSort(sortFields)) {
+                throw new IllegalArgumentException(
+                    "_score must be sorted descending when combined with a field in a hybrid query with collapse"
+                );
+            }
         }
         if (trackScores && hasFieldSort) {
             throw new IllegalArgumentException(

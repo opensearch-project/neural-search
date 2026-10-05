@@ -18,11 +18,7 @@ import org.opensearch.core.common.unit.ByteSizeValue;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class NeuralSearchSettings {
 
-    public static final String SPARSE_ALGO_PARAM_INDEX_THREAD_QTY = "plugins.neural_search.sparse.algo_param.index_thread_qty";
     public static final String NEURAL_CIRCUIT_BREAKER_NAME = "neural_search";
-    public static final int DEFAULT_INDEX_THREAD_QTY = 1; // Choosing 1 as default value to protect safety
-    public static final int MINIMUM_INDEX_THREAD_QTY = 1;
-    public static final int MAXIMUM_INDEX_THREAD_QTY = 1024;
 
     /**
      * Specifies the initial memory limit for the parent circuit breaker.
@@ -86,12 +82,23 @@ public final class NeuralSearchSettings {
         Setting.Property.Deprecated
     );
 
-    public static Setting<Integer> SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING = Setting.intSetting(
-        SPARSE_ALGO_PARAM_INDEX_THREAD_QTY,
-        DEFAULT_INDEX_THREAD_QTY,
-        MINIMUM_INDEX_THREAD_QTY,
-        MAXIMUM_INDEX_THREAD_QTY,
-        Setting.Property.NodeScope,
+    /**
+     * When enabled, a hybrid query with collapse collects the top {@code size} distinct groups per sub-query
+     * (each represented by its most competitive document), so the response contains {@code size} groups whenever
+     * that many exist. When disabled (default), the collector keeps the top {@code size} documents per sub-query,
+     * which preserves score parity with the same hybrid query without collapse but can return fewer groups than
+     * {@code size} when one group owns several top-scoring documents. The two behaviors are mutually exclusive;
+     * see https://github.com/opensearch-project/neural-search/issues/1947 for the design discussion.
+     *
+     * <p>The setting is dynamic and read per request, so flipping it between pages of a paginated search changes
+     * the page semantics mid-flight. It is also index-scoped: a single search spanning indices with different
+     * values runs a different collector per shard and merges the two result shapes into one response, so the two
+     * modes should not be mixed across indices in one request.
+     */
+    public static final Setting<Boolean> HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED = Setting.boolSetting(
+        "index.neural_search.hybrid_collapse_distinct_groups_enabled",
+        false,
+        Setting.Property.IndexScope,
         Setting.Property.Dynamic
     );
 

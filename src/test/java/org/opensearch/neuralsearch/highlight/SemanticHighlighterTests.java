@@ -610,4 +610,28 @@ public class SemanticHighlighterTests extends OpenSearchTestCase {
         assertNotNull(result);
         assertEquals("test ", result.fragments()[0].string()); // first 5 chars of "test field content"
     }
+
+    public void testSingleInferenceModeWithListFieldReturnsPerElementFragments() throws Exception {
+        Map<String, Object> options = new HashMap<>();
+        options.put("model_id", "test_model");
+        when(fieldOptions.options()).thenReturn(options);
+        when(sourceLookup.extractValue("test_field", null)).thenReturn(java.util.List.of("alpha", "beta"));
+
+        highlighter.initialize(semanticHighlighterEngine);
+        when(semanticHighlighterEngine.extractOriginalQuery(any(), anyString())).thenReturn("test query");
+        when(semanticHighlighterEngine.getHighlightedSentences(anyString(), anyString(), anyString(), anyString(), anyString()))
+            .thenCallRealMethod();
+        when(semanticHighlighterEngine.applyHighlighting(anyString(), any(), anyString(), anyString())).thenCallRealMethod();
+        when(semanticHighlighterEngine.fetchModelResults("test_model", "test query", "alpha")).thenReturn(
+            java.util.List.of(Map.of("highlights", java.util.List.of()))
+        );
+        when(semanticHighlighterEngine.fetchModelResults("test_model", "test query", "beta")).thenReturn(
+            java.util.List.of(Map.of("highlights", java.util.List.of(Map.of("start", 0, "end", 4))))
+        );
+
+        HighlightField result = highlighter.highlight(fieldContext);
+        assertNotNull(result);
+        assertEquals(1, result.fragments().length);
+        assertEquals("<em>beta</em>", result.fragments()[0].string());
+    }
 }

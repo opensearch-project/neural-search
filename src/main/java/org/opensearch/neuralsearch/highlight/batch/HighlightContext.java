@@ -28,6 +28,8 @@ public class HighlightContext {
 
     private final List<SearchHit> validHits;
 
+    private final List<Integer> elementIndices;
+
     private final List<String> fieldNames;
 
     private final List<String> preTags;

@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.sparse;
 
+import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
 import lombok.SneakyThrows;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
@@ -14,9 +15,11 @@ import org.opensearch.client.Request;
 import org.opensearch.client.Response;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
+import org.opensearch.neuralsearch.sparse.algorithm.SparseEngine;
 import org.opensearch.neuralsearch.sparse.cache.CacheKey;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,7 +28,10 @@ import java.util.concurrent.atomic.AtomicReferenceArray;
 import static org.opensearch.neuralsearch.stats.metrics.MemoryStat.BYTES_PER_KILOBYTES;
 
 /**
- * Integration tests for memory stats related features for Seismic algorithm
+ * Integration tests for memory stats related features for Seismic algorithm.
+ *
+ * <p>Lucene engine only: the native engine keeps its index in an mmap'd file rather than in the
+ * sparse cache, so none of it is accounted for by these stats.
  */
 public class SparseMemoryStatsIT extends SparseBaseIT {
 
@@ -33,6 +39,15 @@ public class SparseMemoryStatsIT extends SparseBaseIT {
     private static final String TEST_TEXT_FIELD_NAME = "text";
     private static final String TEST_SPARSE_FIELD_NAME = "sparse_field";
     private static final double DELTA_FOR_MEMORY_STATS_ASSERTION = 0.01d;
+
+    @ParametersFactory(argumentFormatting = "engine=%s")
+    public static Collection<Object[]> parameters() {
+        return luceneEngineOnly();
+    }
+
+    public SparseMemoryStatsIT(SparseEngine engine) {
+        super(engine);
+    }
 
     @Before
     @Override

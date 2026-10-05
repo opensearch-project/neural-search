@@ -1,0 +1,144 @@
+{
+  "settings": {
+    "index": {
+      "knn": true,
+      "knn.algo_param.ef_search": 100,
+      "refresh_interval": "30s",
+      "default_pipeline": "%s"
+    },
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "mappings": {
+    "_routing": {
+      "required": true
+    },
+    "properties": {
+      "title_knn": {
+        "type": "knn_vector",
+        "dimension": 768,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "lucene",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "favorites.game_knn": {
+        "type": "knn_vector",
+        "dimension": 768,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "lucene",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "favorites.movie_knn": {
+        "type": "knn_vector",
+        "dimension": 768,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "lucene",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "favor_list_knn": {
+        "type": "nested",
+        "properties": {
+          "knn": {
+            "type": "knn_vector",
+            "dimension": 768,
+            "method": {
+              "name": "hnsw",
+              "space_type": "l2",
+              "engine": "lucene",
+              "parameters": {
+                "ef_construction": 128,
+                "m": 24
+              }
+            }
+          }
+        }
+      },
+      "passage_embedding": {
+        "type": "knn_vector",
+        "dimension": 768,
+        "method": {
+          "name": "hnsw",
+          "space_type": "l2",
+          "engine": "lucene",
+          "parameters": {
+            "ef_construction": 128,
+            "m": 24
+          }
+        }
+      },
+      "passage_text": {
+        "type": "text"
+      },
+      "nested_passages": {
+        "type": "nested",
+        "properties": {
+          "text": {
+            "type": "text"
+          },
+          "text_not_for_embedding": {
+            "type": "text"
+          },
+          "embedding": {
+            "type": "knn_vector",
+            "dimension": 768,
+            "method": {
+              "name": "hnsw",
+              "space_type": "l2",
+              "engine": "lucene",
+              "parameters": {
+                "ef_construction": 128,
+                "m": 24
+              }
+            }
+          },
+          "level_2": {
+            "type": "nested",
+            "properties": {
+              "level_3_text": {
+                "type": "text"
+              },
+              "level_3_container": {
+                "properties": {
+                  "level_3_embedding": {
+                    "type": "knn_vector",
+                    "dimension": 768,
+                    "method": {
+                      "name": "hnsw",
+                      "space_type": "l2",
+                      "engine": "lucene",
+                      "parameters": {
+                        "ef_construction": 128,
+                        "m": 24
+                      }
+                    }
+                  },
+                  "random_field1": {
+                    "type": "text"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

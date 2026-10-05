@@ -6,13 +6,10 @@ package org.opensearch.neuralsearch.sparse.codec;
 
 import lombok.NonNull;
 import lombok.extern.log4j.Log4j2;
-import org.apache.lucene.codecs.DocValuesConsumer;
 import org.apache.lucene.codecs.DocValuesProducer;
 import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.index.FieldInfo;
-import org.apache.lucene.index.FieldInfos;
-import org.apache.lucene.index.MergeState;
 import org.apache.lucene.index.SegmentWriteState;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.BytesRef;
@@ -23,39 +20,28 @@ import org.opensearch.neuralsearch.sparse.common.MergeStateFacade;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorField;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.IOException;
+import java.util.List;
 
 /**
  * A DocValuesConsumer that writes sparse doc values to a segment.
  */
 @Log4j2
-public class SparseDocValuesConsumer extends DocValuesConsumer {
-    private final DocValuesConsumer delegate;
+public class SparseDocValuesConsumer extends SparseVectorBinaryConsumer {
     private final SegmentWriteState state;
     private final MergeHelper mergeHelper;
 
-    public SparseDocValuesConsumer(
-        @NonNull SegmentWriteState state,
-        @NonNull DocValuesConsumer delegate,
-        @NonNull MergeHelper mergeHelper
-    ) {
+    public SparseDocValuesConsumer(@NonNull SegmentWriteState state, @NonNull MergeHelper mergeHelper) {
         super();
-        this.delegate = delegate;
         this.state = state;
         this.mergeHelper = mergeHelper;
     }
 
     @Override
-    public void addNumericField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-        this.delegate.addNumericField(field, valuesProducer);
-    }
-
-    @Override
     public void addBinaryField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-        this.delegate.addBinaryField(field, valuesProducer);
         // check field is the sparse field, otherwise return
         if (!SparseVectorField.isSparseField(field)) {
             return;
@@ -97,43 +83,18 @@ public class SparseDocValuesConsumer extends DocValuesConsumer {
     }
 
     @Override
-    public void addSortedField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-        this.delegate.addSortedField(field, valuesProducer);
-    }
-
-    @Override
-    public void addSortedNumericField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-        this.delegate.addSortedNumericField(field, valuesProducer);
-    }
-
-    @Override
-    public void addSortedSetField(FieldInfo field, DocValuesProducer valuesProducer) throws IOException {
-        this.delegate.addSortedSetField(field, valuesProducer);
-    }
-
-    @Override
-    public void close() throws IOException {
-        this.delegate.close();
-    }
-
-    @Override
-    public void merge(MergeState mergeState) throws IOException {
-        this.delegate.merge(mergeState);
+    public void merge(List<FieldInfo> fieldInfos, MergeStateFacade mergeStateFacade) throws IOException {
         try {
-            assert mergeState != null;
-            MergeStateFacade mergeStateFacade = mergeHelper.convertToMergeStateFacade(mergeState);
-            FieldInfos mergeFieldInfos = mergeStateFacade.getMergeFieldInfos();
-            if (mergeFieldInfos == null) {
-                return;
-            }
-            for (FieldInfo fieldInfo : mergeFieldInfos) {
+            for (FieldInfo fieldInfo : fieldInfos) {
                 DocValuesType type = fieldInfo.getDocValuesType();
                 if (type == DocValuesType.BINARY && SparseVectorField.isSparseField(fieldInfo)) {
                     addSparseVectorBinary(fieldInfo, mergeHelper.newSparseDocValuesReader(mergeStateFacade), true);
                 }
             }
         } catch (Exception e) {
+            // Rethrow so Lucene aborts the merge: see BaseSparseDocValuesConsumer#merge.
             log.error("Merge sparse doc values error", e);
+            throw e;
         }
     }
 }

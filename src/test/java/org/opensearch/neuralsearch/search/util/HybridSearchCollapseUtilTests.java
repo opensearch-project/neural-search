@@ -248,4 +248,36 @@ public class HybridSearchCollapseUtilTests extends OpenSearchTestCase {
 
         assertEquals(BytesRef.class, result);
     }
+
+    // ---- isScorePrimarySort / isScorePrimaryDescendingSort ----
+
+    private static final SortField SCORE_DESC = SortField.FIELD_SCORE;                          // reverse=false
+    private static final SortField SCORE_ASC = new SortField(null, SortField.Type.SCORE, true); // reverse=true
+    private static final SortField FIELD_INT = new SortField("price", SortField.Type.INT);
+
+    public void testIsScorePrimarySort_whenScoreIsFirstKey_thenTrueRegardlessOfOrder() {
+        assertTrue(HybridSearchCollapseUtil.isScorePrimarySort(new SortField[] { SCORE_DESC }));
+        assertTrue(HybridSearchCollapseUtil.isScorePrimarySort(new SortField[] { SCORE_ASC }));
+        assertTrue(HybridSearchCollapseUtil.isScorePrimarySort(new SortField[] { SCORE_DESC, FIELD_INT }));
+    }
+
+    public void testIsScorePrimarySort_whenScoreNotFirstOrAbsent_thenFalse() {
+        assertFalse(HybridSearchCollapseUtil.isScorePrimarySort(new SortField[] { FIELD_INT, SCORE_DESC }));
+        assertFalse(HybridSearchCollapseUtil.isScorePrimarySort(new SortField[] { FIELD_INT }));
+        assertFalse(HybridSearchCollapseUtil.isScorePrimarySort(new SortField[0]));
+        assertFalse(HybridSearchCollapseUtil.isScorePrimarySort(null));
+    }
+
+    public void testIsScorePrimaryDescendingSort_whenScorePrimaryAndDescending_thenTrue() {
+        assertTrue(HybridSearchCollapseUtil.isScorePrimaryDescendingSort(new SortField[] { SCORE_DESC }));
+        assertTrue(HybridSearchCollapseUtil.isScorePrimaryDescendingSort(new SortField[] { SCORE_DESC, FIELD_INT }));
+    }
+
+    public void testIsScorePrimaryDescendingSort_whenAscendingOrNotScorePrimary_thenFalse() {
+        assertFalse(HybridSearchCollapseUtil.isScorePrimaryDescendingSort(new SortField[] { SCORE_ASC }));
+        assertFalse(HybridSearchCollapseUtil.isScorePrimaryDescendingSort(new SortField[] { SCORE_ASC, FIELD_INT }));
+        assertFalse(HybridSearchCollapseUtil.isScorePrimaryDescendingSort(new SortField[] { FIELD_INT, SCORE_DESC }));
+        assertFalse(HybridSearchCollapseUtil.isScorePrimaryDescendingSort(new SortField[0]));
+        assertFalse(HybridSearchCollapseUtil.isScorePrimaryDescendingSort(null));
+    }
 }

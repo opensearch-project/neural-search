@@ -25,3 +25,6 @@ bin/
 
 # git stuff
 .gitattributes
+
+# fetched by the neural-sparse-cpp build (abseil)
+jni/third_party/

@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.util;
 
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.util.BytesRef;
@@ -76,5 +77,33 @@ public class HybridSearchCollapseUtil {
         }
         // null will be returned when the field on which collapse is applied is absent from the document.
         return null;
+    }
+
+    /**
+     * Whether {@code _score} is the primary (first) sort key. Hybrid score handling assumes the score occupies
+     * sort slot 0 — the collapse score-slot swap ({@code fields[0] = normalizedScore}) and min-score gating both
+     * rely on it — so this is the shared "is this a score-primary sort" predicate.
+     *
+     * @param sortFields the sort keys (may be {@code null}/empty)
+     * @return {@code true} iff the first sort key is {@link SortField.Type#SCORE}
+     */
+    public static boolean isScorePrimarySort(final SortField[] sortFields) {
+        return sortFields != null && sortFields.length > 0 && SortField.Type.SCORE.equals(sortFields[0].getType());
+    }
+
+    /**
+     * Whether {@code _score} is the primary sort key AND descending. For a SCORE sort field {@code reverse == false}
+     * is the natural highest-first (descending) order; OpenSearch maps {@code _score} order:asc to {@code reverse == true}.
+     * The hybrid+collapse {@code [_score, field]} relaxation deliberately accepts only this form: a tiebreaker on a
+     * least-relevant-first ordering has no clear use case, so ascending {@code _score} with a field is left out of scope.
+     * The collapse collector also uses this as one of two conditions for sending min-competitive-score feedback: it
+     * feeds the evicted score back only when this holds AND the sort is single-key {@code [_score]}. With a
+     * {@code [_score, field]} tiebreak, a doc tying the evicted score can still win on the field, so feedback is off.
+     *
+     * @param sortFields the sort keys (may be {@code null}/empty)
+     * @return {@code true} iff the first sort key is a descending {@link SortField.Type#SCORE}
+     */
+    public static boolean isScorePrimaryDescendingSort(final SortField[] sortFields) {
+        return isScorePrimarySort(sortFields) && !sortFields[0].getReverse();
     }
 }

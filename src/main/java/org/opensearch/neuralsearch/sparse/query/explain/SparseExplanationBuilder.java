@@ -8,12 +8,15 @@ import lombok.Builder;
 import lombok.NonNull;
 import lombok.Value;
 import lombok.extern.log4j.Log4j2;
+import org.apache.lucene.index.BinaryDocValues;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.util.BitSet;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.search.Query;
 import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
+import org.opensearch.neuralsearch.sparse.common.BinaryVectorUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
@@ -34,6 +37,15 @@ import java.util.Map;
  * - Raw dot product score calculation with token-level contributions
  * - Quantization rescaling - Convert Byte format data back into float
  * - Filter application
+ *
+ * The score is recomputed from the document's stored vector rather than recorded during search, so
+ * it reproduces the scorer's arithmetic: the quantized path matches nsparse's decode_dot_product,
+ * which is the same `raw * ceiling_ingest * ceiling_search / 255 / 255` this class applies.
+ *
+ * Known limit on the quantized path: {@link SparseVector} folds token ids modulo
+ * {@code MODULUS_FOR_SHORT} (32768) and merges collisions by max weight, while the native engine
+ * indexes raw ids up to 65535. A field using ids at or above 32768 therefore aliases tokens here
+ * and can report a score the native scorer did not produce.
  */
 @Log4j2
 @Builder
@@ -56,6 +68,19 @@ public class SparseExplanationBuilder {
     private final SparseVectorReader reader;
 
     /**
+     * Whether the segment was scored by the native engine. Only changes how the search mode is
+     * described: native hands a filter to nsparse as a candidate set, where Lucene post-filters.
+     */
+    private final boolean nativeEngine;
+
+    /**
+     * Set instead of {@link #reader} for a segment scored over unquantized floats -- nsparse's
+     * inverted index, used below the approximate threshold. Reading the doc values directly rather
+     * than through a {@link SparseVectorReader} is what keeps the weights unquantized.
+     */
+    private final BinaryDocValues rawDocValues;
+
+    /**
      * Constructs a complete explanation for the document's score.
      * @return A Lucene Explanation object containing the complete scoring breakdown
      */
@@ -65,6 +90,9 @@ public class SparseExplanationBuilder {
         }
         if (query.getQueryVector().getSize() == 0) {
             return Explanation.noMatch(String.format(Locale.ROOT, "query vector is empty or null for field '%s'", query.getFieldName()));
+        }
+        if (rawDocValues != null) {
+            return explainExactFloatScore();
         }
 
         SparseVector docVector;
@@ -103,6 +131,86 @@ public class SparseExplanationBuilder {
         return Explanation.match(
             finalScore,
             String.format(Locale.ROOT, "sparse_ann score for doc %d in field '%s'", docId, query.getFieldName()),
+            details
+        );
+    }
+
+    /**
+     * Explains a score produced over unquantized floats, which is what nsparse's inverted index
+     * computes for a segment below the approximate threshold. There is no quantization step to
+     * describe and no rescaling to undo: the score is the float dot product times the boost.
+     *
+     * @return A Lucene Explanation for the exact float scoring path
+     */
+    private Explanation explainExactFloatScore() {
+        Map<Integer, Float> docWeights;
+        try {
+            if (rawDocValues.advanceExact(docId) == false) {
+                return Explanation.noMatch(
+                    String.format(Locale.ROOT, "document %d has no sparse vector in field '%s'", docId, query.getFieldName())
+                );
+            }
+            BytesRef bytesRef = rawDocValues.binaryValue();
+            if (bytesRef == null) {
+                return Explanation.noMatch(
+                    String.format(Locale.ROOT, "document %d has no sparse vector in field '%s'", docId, query.getFieldName())
+                );
+            }
+            docWeights = BinaryVectorUtils.readToMap(bytesRef);
+        } catch (IOException e) {
+            return Explanation.noMatch(
+                String.format(Locale.ROOT, "error reading document %d in field '%s': %s", docId, query.getFieldName(), e.getMessage())
+            );
+        }
+
+        // The native scorer is handed the raw query weights, so the dot product is over the query as
+        // the user sent it, not the pruned token list -- pruning only picks posting lists to visit.
+        Map<Integer, Float> queryWeights = query.getRawQueryTokens();
+        List<Explanation> tokenDetails = new ArrayList<>();
+        float rawScore = 0.0f;
+        List<Map.Entry<Integer, Float>> contributions = new ArrayList<>();
+        for (Map.Entry<Integer, Float> queryEntry : queryWeights.entrySet()) {
+            Float docWeight = docWeights.get(queryEntry.getKey());
+            if (docWeight == null) {
+                continue;
+            }
+            float contribution = queryEntry.getValue() * docWeight;
+            rawScore += contribution;
+            contributions.add(Map.entry(queryEntry.getKey(), contribution));
+        }
+        contributions.sort(Map.Entry.<Integer, Float>comparingByValue().reversed());
+        for (Map.Entry<Integer, Float> contribution : contributions) {
+            int token = contribution.getKey();
+            tokenDetails.add(
+                Explanation.match(
+                    contribution.getValue(),
+                    String.format(
+                        Locale.ROOT,
+                        "token '%d' contribution: query_weight=%f * doc_weight=%f",
+                        token,
+                        queryWeights.get(token),
+                        docWeights.get(token)
+                    )
+                )
+            );
+        }
+
+        List<Explanation> details = new ArrayList<>();
+        details.add(explainQueryPruning());
+        details.add(Explanation.match(rawScore, String.format(Locale.ROOT, "dot product score (exact): %f", rawScore), tokenDetails));
+        details.add(Explanation.match(boost, String.format(Locale.ROOT, "boost: %.4f", boost)));
+        if (query.getFilter() != null) {
+            details.add(explainFilter());
+        }
+
+        return Explanation.match(
+            rawScore * boost,
+            String.format(
+                Locale.ROOT,
+                "sparse_ann score for doc %d in field '%s' (exact scoring, segment below approximate_threshold)",
+                docId,
+                query.getFieldName()
+            ),
             details
         );
     }
@@ -301,6 +409,20 @@ public class SparseExplanationBuilder {
                         Locale.ROOT,
                         "document passed filter with exact search mode "
                             + "(filter matched %d documents <= k=%d, all filtered documents scored exactly)",
+                        passedCount,
+                        k
+                    ),
+                    details
+                );
+            } else if (nativeEngine) {
+                // The native engine hands the filter to nsparse as a candidate set, so the ANN
+                // search is restricted to it rather than filtered afterwards.
+                return Explanation.match(
+                    1.0f,
+                    String.format(
+                        Locale.ROOT,
+                        "document passed filter with approximate search mode "
+                            + "(filter matched %d documents > k=%d, ANN search restricted to the filtered documents)",
                         passedCount,
                         k
                     ),

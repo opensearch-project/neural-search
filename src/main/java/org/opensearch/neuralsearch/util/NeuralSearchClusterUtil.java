@@ -14,10 +14,12 @@ import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
+import org.opensearch.cluster.metadata.MappingMetadata;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.core.index.Index;
 import org.opensearch.search.pipeline.SearchPipelineService;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -74,6 +76,30 @@ public class NeuralSearchClusterUtil {
         return Arrays.stream(concreteIndices)
             .map(concreteIndex -> clusterService.state().metadata().index(concreteIndex))
             .collect(Collectors.toList());
+    }
+
+    /**
+     * Mapping source of every index in the cluster state, for stats derived from field mappings.
+     *
+     * An index whose mapping is absent or unparseable is skipped rather than failing the caller: a
+     * stats call should still report what the rest of the cluster looks like.
+     *
+     * @return one mapping map per index, with the type level already stripped
+     */
+    public List<Map<String, Object>> getAllIndexMappings() {
+        List<Map<String, Object>> mappings = new ArrayList<>();
+        for (Map.Entry<String, IndexMetadata> entry : clusterService.state().metadata().indices().entrySet()) {
+            MappingMetadata mappingMetadata = entry.getValue().mapping();
+            if (mappingMetadata == null) {
+                continue;
+            }
+            try {
+                mappings.add(mappingMetadata.sourceAsMap());
+            } catch (Exception e) {
+                log.warn("Failed to parse mapping of index [{}] for stats", entry.getKey(), e);
+            }
+        }
+        return mappings;
     }
 
     public Map<String, String> getIndexMapping(String[] indices) {

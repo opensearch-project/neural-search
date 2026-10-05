@@ -44,6 +44,7 @@ import java.util.stream.Collectors;
 
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ROUTING_FIELD;
 import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 
 /**
@@ -110,11 +111,16 @@ public final class SparseEncodingProcessor extends InferenceProcessor {
         // if skipExisting flag is turned on, eligible inference texts will be compared and filtered after embeddings are copied
         Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         Object id = ingestDocument.getSourceAndMetadata().get(ID_FIELD);
+        Object routing = ingestDocument.getSourceAndMetadata().get(ROUTING_FIELD);
         if (Objects.isNull(index) || Objects.isNull(id)) {
             generateAndSetMapInference(ingestDocument, processMap, inferenceList, pruneType, pruneRatio, handler);
             return;
         }
-        openSearchClient.execute(GetAction.INSTANCE, new GetRequest(index.toString(), id.toString()), ActionListener.wrap(response -> {
+        GetRequest getRequest = new GetRequest(index.toString(), id.toString());
+        if (Objects.nonNull(routing)) {
+            getRequest.routing(routing.toString());
+        }
+        openSearchClient.execute(GetAction.INSTANCE, getRequest, ActionListener.wrap(response -> {
             final Map<String, Object> existingDocument = response.getSourceAsMap();
             if (existingDocument == null || existingDocument.isEmpty()) {
                 generateAndSetMapInference(ingestDocument, processMap, inferenceList, pruneType, pruneRatio, handler);
