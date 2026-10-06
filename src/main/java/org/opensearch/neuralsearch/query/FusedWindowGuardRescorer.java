@@ -26,6 +26,7 @@ import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.Weight;
 import org.opensearch.index.query.ParsedQuery;
+import org.opensearch.neuralsearch.search.explain.FusedFirstPassMarker;
 import org.opensearch.search.rescore.QueryRescorer;
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.rescore.Rescorer;
@@ -179,8 +180,12 @@ class FusedWindowGuardRescorer implements Rescorer {
      *
      * <p>The value it reports is the delegates' own combined value, which for a demoted document is its score BEFORE
      * the band was applied. That is deliberate: the explanation explains the user's rescore, and the band is an internal
-     * encoding the coordinator removes again. For a ranked hit {@code FusedExplanationMerger} keeps this tree and replaces
-     * its first pass with the fused breakdown.
+     * encoding the coordinator removes again.
+     *
+     * <p>The first pass is wrapped in a {@link FusedFirstPassMarker} before any delegate sees it, so that the coordinator
+     * can find it again without reading the layers core builds around it: for a ranked hit {@code FusedExplanationMerger}
+     * replaces the marker with the fused breakdown, and everywhere else the marker is stripped. Its value is the first
+     * pass's own, which is all core reads from it.
      */
     @Override
     public Explanation explain(
@@ -189,7 +194,7 @@ class FusedWindowGuardRescorer implements Rescorer {
         final RescoreContext rescoreContext,
         final Explanation sourceExplanation
     ) throws IOException {
-        Explanation explanation = sourceExplanation;
+        Explanation explanation = FusedFirstPassMarker.mark(sourceExplanation);
         for (RescoreContext delegate : delegates) {
             explanation = delegate.rescorer().explain(topLevelDocId, searcher, asDeclared(delegate, topLevelDocId, searcher), explanation);
         }

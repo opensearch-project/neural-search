@@ -5,6 +5,7 @@
 package org.opensearch.neuralsearch.query;
 
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
+import org.opensearch.neuralsearch.search.explain.FusedFirstPassMarker;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -281,6 +282,123 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * A rescore that leaves a hit's score where fusion put it — here the rescore query matches one document only — is
+     * still a rescore the hit went through, and core explains it as one for any query: the weighted first pass. So the
+     * hit reads {@code product of: [<fused combination>, primaryWeight]}, not the bare combination.
+     */
+    @SneakyThrows
+    public void testExplainedRescoredFusedHybrid_whenTheRescoreLeavesAScoreUnchanged_thenCoresLayerIsShownAroundTheFusion() {
+        ensureDataset();
+
+        Map<String, Object> response = search(
+            rescoredWith(fusedHybrid(knnLeg(WINDOW_SIZE), termLeg()), "{\"term\":{\"" + TEXT_FIELD + "\":\"3\"}}", null)
+        );
+        List<Map<String, Object>> hits = hits(response);
+
+        assertEquals(TOTAL_DOCS, hits.size());
+        for (Map<String, Object> hit : hits) {
+            Map<String, Object> explanation = explanationOf(hit);
+            assertEquals("hit " + hit.get("_id") + ": the tree still describes the score it has", score(hit), value(explanation), DELTA);
+            if ("3".equals(String.valueOf(hit.get("_id")))) {
+                assertEquals("the one document the rescore query matched is combined with it", 2, details(explanation).size());
+                continue;
+            }
+            assertEquals("a hit the rescore query missed: core's weighted first pass", "product of:", description(explanation));
+            List<Map<String, Object>> children = details(explanation);
+            assertEquals(COMBINATION_DESCRIPTION, description(children.get(0)));
+            assertEquals("primaryWeight", description(children.get(1)));
+        }
+    }
+
+    /**
+     * The shard marks the first pass of every hit the rescore explains, so that the coordinator can find it again — and a
+     * rescored response must not carry that mark anywhere: not on a hit fusion did not rank (the Tail surfaces those
+     * beyond the window), and not in a {@code top_hits} bucket that asks for {@code explain} itself, both of which fold the
+     * same rescorers but have no fused breakdown to put in its place.
+     */
+    @SneakyThrows
+    public void testExplainedRescoredFusedHybrid_whenUnrankedHitsAndTopHitsAreExplained_thenNoFirstPassMarkerReachesTheResponse() {
+        ensureDataset();
+
+        String body = rescoredWith(
+            fusedHybridWithWindow(2, knnLeg(WINDOW_SIZE), termLeg()),
+            termLeg(),
+            ",\"aggs\":{\"top\":{\"top_hits\":{\"size\":" + TOTAL_DOCS + ",\"explain\":true}}}"
+        );
+        Map<String, Object> response = search(body);
+        List<Map<String, Object>> hits = hits(response);
+
+        assertEquals("the Tail surfaces the whole match set", TOTAL_DOCS, hits.size());
+        assertEquals("no first-pass marker anywhere in the response", 0, countDescription(response, FusedFirstPassMarker.DESCRIPTION));
+        int ranked = 0;
+        for (Map<String, Object> hit : hits) {
+            Map<String, Object> explanation = explanationOf(hit);
+            assertTrue("hit " + hit.get("_id") + " went through the guard's explain", countDescription(explanation, "primaryWeight") > 0);
+            if (countDescription(explanation, COMBINATION_DESCRIPTION) > 0) {
+                assertEquals("a ranked hit keeps core's rescore tree", "sum of:", description(explanation));
+                ranked++;
+            }
+        }
+        assertEquals("the window's two documents carry the fused breakdown, the Tail's do not", 2, ranked);
+        assertTrue(
+            "every top_hits bucket hit went through the rescorers, so each had a marker to strip",
+            countDescription(response.get("aggregations"), "primaryWeight") >= TOTAL_DOCS
+        );
+    }
+
+    /**
+     * A document whose fused score was floored — round 2 ranks it at the floor, not at the 0.0 fusion computed — keeps
+     * core's rescore tree too: the floor stands where the first pass was, at the score round 2 ran with, over the fusion.
+     */
+    @SneakyThrows
+    public void testExplainedRescoredFusedHybrid_whenAFusedScoreWasFloored_thenTheFloorStandsInForTheFirstPass() {
+        ensureDataset();
+
+        Map<String, Object> response = search(rescored(zeroWeightedFusedHybrid(knnLeg(2), termLeg())));
+
+        int floored = 0;
+        for (Map<String, Object> hit : hits(response)) {
+            Map<String, Object> explanation = explanationOf(hit);
+            assertEquals("hit " + hit.get("_id") + " keeps core's rescore tree", "sum of:", description(explanation));
+            Map<String, Object> firstPass = details(details(explanation).get(0)).get(0);
+            if (FINAL_SCORE_DESCRIPTION.equals(description(firstPass))) {
+                floored++;
+                assertTrue("the floor round 2 ran with is above zero", value(firstPass) > 0.0);
+                assertEquals("over the fusion, which computed exactly zero", 0.0, value(details(firstPass).get(0)), DELTA);
+            }
+        }
+        assertEquals("the four documents the zero-weighted leg alone surfaced", 4, floored);
+    }
+
+    /**
+     * A {@code function_score} rescore query, which explains in float what it scores in double: every hit keeps core's
+     * rescore tree, over several shards.
+     */
+    @SneakyThrows
+    public void testExplainedRescoredFusedHybrid_whenTheRescoreQueryIsAFunctionScore_thenEveryHitKeepsCoresTree() {
+        ensureDataset();
+        ensureIndex(SHARDED_INDEX, SHARDED_INDEX_SHARDS);
+        String functionScore = "{\"function_score\":{\"query\":"
+            + termLeg()
+            + ",\"functions\":[{\"weight\":1.3},{\"weight\":0.7},{\"weight\":2.1}],\"score_mode\":\"sum\",\"boost_mode\":\"multiply\"}}";
+
+        Map<String, Object> response = search(
+            SHARDED_INDEX,
+            rescoredWith(fusedHybrid(knnLeg(WINDOW_SIZE), termLeg()), functionScore, null),
+            null
+        );
+        List<Map<String, Object>> hits = hits(response);
+
+        assertEquals(TOTAL_DOCS, hits.size());
+        for (Map<String, Object> hit : hits) {
+            Map<String, Object> explanation = explanationOf(hit);
+            assertEquals("hit " + hit.get("_id") + " keeps core's rescore tree", "sum of:", description(explanation));
+            assertEquals(score(hit), value(explanation), DELTA);
+            assertEquals(COMBINATION_DESCRIPTION, description(details(details(explanation).get(0)).get(0)));
+        }
+    }
+
+    /**
      * A request that sorts without tracking scores: the hits come back with no score at all, so there is no final score for
      * the tree to describe and the fusion is reported on its own. The fused score is still the fused score — a node claiming
      * a final score of zero would describe a number nothing computed.
@@ -535,6 +653,11 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
 
     /** The fused hybrid, then a rescore that adds a term score on top of the fused one — so the hit's score is not the fused score. */
     private String rescored(final String query) {
+        return rescoredWith(query, termLeg(), null);
+    }
+
+    /** The fused hybrid rescored by {@code rescoreQuery}, with {@code extra} (a leading-comma JSON fragment) appended, if any. */
+    private String rescoredWith(final String query, final String rescoreQuery, final String extra) {
         return "{\"query\":"
             + query
             + ",\"explain\":true,\"track_total_hits\":true,\"size\":"
@@ -542,8 +665,10 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
             + ",\"rescore\":{\"window_size\":"
             + WINDOW_SIZE
             + ",\"query\":{\"rescore_query\":"
-            + termLeg()
-            + ",\"query_weight\":1.0,\"rescore_query_weight\":2.0}}}";
+            + rescoreQuery
+            + ",\"query_weight\":1.0,\"rescore_query_weight\":2.0}}"
+            + (Objects.isNull(extra) ? "" : extra)
+            + "}";
     }
 
     /** The same two legs with no {@code fusion} block: classic hybrid, normalized and explained by a search pipeline. */
@@ -580,6 +705,24 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
 
     private List<String> descriptions(final List<Map<String, Object>> nodes) {
         return nodes.stream().map(this::description).toList();
+    }
+
+    /** How many explanation nodes anywhere in a parsed response carry the description: hits, inner hits, aggregations. */
+    private int countDescription(final Object node, final String description) {
+        int count = 0;
+        if (node instanceof Map<?, ?> map) {
+            if (description.equals(map.get("description")) && map.containsKey("value")) {
+                count++;
+            }
+            for (Object child : map.values()) {
+                count += countDescription(child, description);
+            }
+        } else if (node instanceof List<?> list) {
+            for (Object child : list) {
+                count += countDescription(child, description);
+            }
+        }
+        return count;
     }
 
     /** Every description in a tree, depth first — for asserting that a wording appears (or does not) at any depth. */

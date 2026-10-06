@@ -35,11 +35,13 @@ import org.opensearch.core.action.ActionResponse;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.ObservedSourceSizes;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
+import org.opensearch.neuralsearch.search.explain.FusedFirstPassMarker;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
@@ -136,6 +138,159 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         SearchHit[] hits = ((SearchResponse) delivered.getValue()).getInternalResponse().hits().getHits();
         assertEquals("the sentinel must never reach a response", 0.0f, hits[0].getScore(), 0.0f);
         assertEquals("a ranked score is untouched", 3.0f, hits[1].getScore(), 0.0f);
+    }
+
+    /**
+     * The guard marks every first pass it explains, including those of inner hits and {@code top_hits} buckets that ask
+     * for {@code explain} on their own, so the marker has to be stripped whenever the guard was installed — not only when
+     * the request itself was explained and the merger ran.
+     */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenARescoredFusedHybridIsNotExplained_thenTheFirstPassMarkerIsStillStripped() {
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(
+            new SearchSourceBuilder().query(fusedHybrid()).addRescorer(new QueryRescorerBuilder(new MatchAllQueryBuilder()))
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        // An inner hit that asked for explain on its own: core folds the request's rescorers into its explanation too.
+        Explanation firstPass = Explanation.match(3.0f, "first pass");
+        SearchHit innerHit = new SearchHit(0, "inner", null, null);
+        innerHit.explanation(FusedFirstPassMarker.mark(firstPass));
+        SearchResponse response = responseWithScores(3.0f);
+        response.getHits().getHits()[0].setInnerHits(
+            Map.of("leg", new SearchHits(new SearchHit[] { innerHit }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 3.0f))
+        );
+
+        proceeded.onResponse(response);
+
+        ArgumentCaptor<ActionResponse> delivered = ArgumentCaptor.forClass(ActionResponse.class);
+        verify(listener).onResponse(delivered.capture());
+        SearchHit deliveredHit = ((SearchResponse) delivered.getValue()).getHits().getHits()[0];
+        assertSame(firstPass, deliveredHit.getInnerHits().get("leg").getHits()[0].getExplanation());
+    }
+
+    /**
+     * The merger runs before the strip: it is what replaces the marker on a ranked hit with the fused breakdown, so with
+     * the strip first the marker would be gone and the hit would fall back to the final-score node.
+     */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenARescoredRankedHitIsExplained_thenTheMergerReplacesTheMarkerBeforeTheStrip() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(
+            new SearchSourceBuilder().query(hybridQuery).explain(true).addRescorer(new QueryRescorerBuilder(new MatchAllQueryBuilder()))
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        FusedDocExplanations collected = new FusedDocExplanations();
+        collected.combinationDescription("arithmetic_mean combination of:").normalizationDescription("min_max normalization of:");
+        collected.addDocument(
+            FusedDocExplanations.documentKey("test_index", "1"),
+            0.75f,
+            0.75f,
+            List.of(new FusedDocExplanations.LegContribution(0, 0.5f, Explanation.match(2.0f, "leg")))
+        );
+        hybridQuery.fusedExplanationConsumer().accept(collected);
+        SearchResponse response = responseWithRankedHit();
+        SearchHit hit = response.getHits().getHits()[0];
+        hit.score(2.75f);
+        // Core's layers around the marked first pass: 0.75 x 1.0 plus 1.0 x 2.0.
+        hit.explanation(
+            Explanation.match(
+                2.75f,
+                "sum of:",
+                Explanation.match(
+                    0.75f,
+                    "product of:",
+                    FusedFirstPassMarker.mark(Explanation.match(0.75f, "first pass")),
+                    Explanation.match(1.0f, "primaryWeight")
+                ),
+                Explanation.match(
+                    2.0f,
+                    "product of:",
+                    Explanation.match(1.0f, "weight(text:lamp)"),
+                    Explanation.match(2.0f, "secondaryWeight")
+                )
+            )
+        );
+
+        proceeded.onResponse(response);
+
+        ArgumentCaptor<ActionResponse> delivered = ArgumentCaptor.forClass(ActionResponse.class);
+        verify(listener).onResponse(delivered.capture());
+        Explanation explanation = ((SearchResponse) delivered.getValue()).getHits().getHits()[0].getExplanation();
+        assertEquals("core's rescore tree is kept", "sum of:", explanation.getDescription());
+        assertEquals(
+            "with the fusion where the marker was",
+            "arithmetic_mean combination of:",
+            explanation.getDetails()[0].getDetails()[0].getDescription()
+        );
+    }
+
+    /**
+     * The band is decoded before explanations are merged, so a ranked hit whose rescored score saturated into the band
+     * is explained at the score the caller sees rather than at the band value.
+     */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenARescoredRankedHitSaturated_thenItsExplanationNamesTheDecodedScore() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(
+            new SearchSourceBuilder().query(hybridQuery).explain(true).addRescorer(new QueryRescorerBuilder(new MatchAllQueryBuilder()))
+        );
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        FusedDocExplanations collected = new FusedDocExplanations();
+        collected.combinationDescription("arithmetic_mean combination of:").normalizationDescription("min_max normalization of:");
+        collected.addDocument(
+            FusedDocExplanations.documentKey("test_index", "1"),
+            0.75f,
+            0.75f,
+            List.of(new FusedDocExplanations.LegContribution(0, 0.5f, Explanation.match(2.0f, "leg")))
+        );
+        hybridQuery.fusedExplanationConsumer().accept(collected);
+        SearchResponse response = responseWithRankedHit();
+        SearchHit hit = response.getHits().getHits()[0];
+        hit.score(FusedWindowGuardRescorerBuilder.RANKED_FLOOR);
+        // What the guard's explain reports for a saturated hit: the delegates' own value, before the band was applied.
+        hit.explanation(
+            Explanation.match(Float.NEGATIVE_INFINITY, "sum of:", FusedFirstPassMarker.mark(Explanation.match(0.75f, "first pass")))
+        );
+
+        proceeded.onResponse(response);
+
+        ArgumentCaptor<ActionResponse> delivered = ArgumentCaptor.forClass(ActionResponse.class);
+        verify(listener).onResponse(delivered.capture());
+        SearchHit decoded = ((SearchResponse) delivered.getValue()).getHits().getHits()[0];
+        assertEquals(FusedWindowGuardRescorerBuilder.RANKED_FLOOR_NORMALIZED, decoded.getScore(), 0.0f);
+        assertEquals(
+            "the explanation names the score the caller sees",
+            decoded.getScore(),
+            decoded.getExplanation().getValue().floatValue(),
+            0.0f
+        );
+        assertEquals("arithmetic_mean combination of:", decoded.getExplanation().getDetails()[0].getDescription());
+    }
+
+    /**
+     * The guard is installed only for a fused hybrid that is the request's own query, so a rescore beside a nested one
+     * (which the rewrite refuses) gives this filter nothing to decode or strip, and the listener is handed straight through.
+     */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenARescoredRequestNestsTheFusedHybrid_thenNoGuardIsAssumed() {
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(
+            new SearchSourceBuilder().query(QueryBuilders.boolQuery().must(fusedHybrid()))
+                .addRescorer(new QueryRescorerBuilder(new MatchAllQueryBuilder()))
+        );
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        verify(chain).proceed(eq(task), eq(SearchAction.NAME), eq(searchRequest), eq(listener));
     }
 
     /** A fused hybrid with no rescore has no sentinel to normalise, so the caller's listener is handed straight through. */
@@ -529,6 +684,7 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         collected.combinationDescription("arithmetic_mean combination of:").normalizationDescription("min_max normalization of:");
         collected.addDocument(
             FusedDocExplanations.documentKey("test_index", "1"),
+            0.75f,
             0.75f,
             List.of(new FusedDocExplanations.LegContribution(0, 0.5f, Explanation.match(2.0f, "leg")))
         );
@@ -1067,6 +1223,7 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         collected.combinationDescription("arithmetic_mean combination of:").normalizationDescription("min_max normalization of:");
         collected.addDocument(
             FusedDocExplanations.documentKey("test_index", "1"),
+            0.75f,
             0.75f,
             List.of(new FusedDocExplanations.LegContribution(0, 0.5f, Explanation.match(2.0f, "leg")))
         );

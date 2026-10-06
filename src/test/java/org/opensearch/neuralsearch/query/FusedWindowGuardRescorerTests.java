@@ -6,7 +6,9 @@ package org.opensearch.neuralsearch.query;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 
 import org.apache.lucene.document.Document;
@@ -21,6 +23,7 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.PhraseQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TermInSetQuery;
@@ -29,7 +32,13 @@ import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.BytesRef;
+import org.opensearch.common.lucene.search.function.CombineFunction;
+import org.opensearch.common.lucene.search.function.FunctionScoreQuery;
+import org.opensearch.common.lucene.search.function.ScoreFunction;
+import org.opensearch.common.lucene.search.function.WeightFactorFunction;
 import org.opensearch.index.query.ParsedQuery;
+import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
+import org.opensearch.neuralsearch.search.explain.FusedFirstPassMarker;
 import org.opensearch.search.rescore.QueryRescorer;
 import org.opensearch.search.rescore.RescoreContext;
 import org.opensearch.search.rescore.Rescorer;
@@ -196,6 +205,35 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
     }
 
     /**
+     * The first pass is wrapped once, at its own value, before any delegate sees it, so the coordinator can find it again
+     * wherever the delegates nested it without reading their layers.
+     */
+    public void testExplain_marksTheFirstPassOnceBeforeAnyDelegate() throws IOException {
+        Explanation firstPass = Explanation.match(0.5f, "first pass");
+
+        Explanation explanation = guard(recording(new ArrayList<>(), "a"), recording(new ArrayList<>(), "b")).explain(
+            1,
+            null,
+            context(),
+            firstPass
+        );
+
+        Explanation marker = explanation.getDetails()[0].getDetails()[0];
+        assertEquals(FusedFirstPassMarker.DESCRIPTION, marker.getDescription());
+        assertSame(firstPass.getValue(), marker.getValue());
+        assertSame(firstPass, marker.getDetails()[0]);
+    }
+
+    /** A first pass that did not match has no value for core to build on, and nothing for the coordinator to replace. */
+    public void testExplain_whenTheFirstPassDidNotMatch_thenNothingIsMarked() throws IOException {
+        Explanation firstPass = Explanation.noMatch("first pass did not match");
+
+        Explanation explanation = guard(recording(new ArrayList<>(), "a")).explain(1, null, context(), firstPass);
+
+        assertSame(firstPass, explanation.getDetails()[0]);
+    }
+
+    /**
      * A ranked document the rescore moved is explained the way core explains any rescore, with the rescore query as the
      * user wrote it: the fused window the query ran intersected with appears nowhere in the tree, and the arithmetic is
      * the one core computes over the query that ran.
@@ -208,7 +246,7 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
 
             Explanation explanation = guardOver(confined).explain(ranked, searcher, null, RANKED_FIRST_PASS);
 
-            Explanation asItRan = QueryRescorer.INSTANCE.explain(ranked, searcher, confined, RANKED_FIRST_PASS);
+            Explanation asItRan = QueryRescorer.INSTANCE.explain(ranked, searcher, confined, FusedFirstPassMarker.mark(RANKED_FIRST_PASS));
             assertEquals("the score the rescore produced", asItRan.getValue().floatValue(), explanation.getValue().floatValue(), 0.0f);
             assertEquals("core's combination of the weighted first pass and rescore query", 2, explanation.getDetails().length);
             assertEquals(
@@ -235,7 +273,10 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
 
             Explanation explanation = guardOver(confined).explain(tailOnly, searcher, null, TAIL_FIRST_PASS);
 
-            assertEquals(QueryRescorer.INSTANCE.explain(tailOnly, searcher, confined, TAIL_FIRST_PASS), explanation);
+            assertEquals(
+                QueryRescorer.INSTANCE.explain(tailOnly, searcher, confined, FusedFirstPassMarker.mark(TAIL_FIRST_PASS)),
+                explanation
+            );
             assertEquals("the weighted first pass alone", "product of:", explanation.getDescription());
         }
     }
@@ -252,7 +293,10 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
 
             Explanation explanation = guardOver(confined).explain(matching, searcher, null, RANKED_FIRST_PASS);
 
-            assertEquals(QueryRescorer.INSTANCE.explain(matching, searcher, confined, RANKED_FIRST_PASS), explanation);
+            assertEquals(
+                QueryRescorer.INSTANCE.explain(matching, searcher, confined, FusedFirstPassMarker.mark(RANKED_FIRST_PASS)),
+                explanation
+            );
             assertEquals("the weighted first pass alone", "product of:", explanation.getDescription());
         }
     }
@@ -266,7 +310,10 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
 
             Explanation explanation = guardOver(confined).explain(ranked, searcher, null, RANKED_FIRST_PASS);
 
-            assertEquals(QueryRescorer.INSTANCE.explain(ranked, searcher, confined, RANKED_FIRST_PASS), explanation);
+            assertEquals(
+                QueryRescorer.INSTANCE.explain(ranked, searcher, confined, FusedFirstPassMarker.mark(RANKED_FIRST_PASS)),
+                explanation
+            );
         }
     }
 
@@ -281,7 +328,135 @@ public class FusedWindowGuardRescorerTests extends OpenSearchTestCase {
 
             Explanation explanation = guardOver(plain).explain(ranked, searcher, null, RANKED_FIRST_PASS);
 
-            assertEquals(QueryRescorer.INSTANCE.explain(ranked, searcher, plain, RANKED_FIRST_PASS), explanation);
+            assertEquals(
+                QueryRescorer.INSTANCE.explain(ranked, searcher, plain, FusedFirstPassMarker.mark(RANKED_FIRST_PASS)),
+                explanation
+            );
+        }
+    }
+
+    /**
+     * A two-phase rescore query — a phrase, whose approximation is every document holding both terms — claims a rescore
+     * only for the documents it really matches: the guard asks the confined query's scorer to advance to the document,
+     * which for a two-phase scorer confirms the match, exactly as Lucene's own {@code QueryRescorer} decides one.
+     */
+    public void testExplain_whenTheRescoreQueryIsTwoPhase_thenOnlyItsConfirmedMatchesClaimARescore() throws IOException {
+        try (Directory directory = newDirectory()) {
+            try (IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig())) {
+                for (String[] doc : new String[][] { { "phrase", "lamp desk" }, { "terms", "desk lamp" } }) {
+                    Document document = new Document();
+                    document.add(new StringField(WINDOW_FIELD, doc[0], Field.Store.NO));
+                    document.add(new TextField(TEXT_FIELD, doc[1], Field.Store.NO));
+                    writer.addDocument(document);
+                }
+            }
+            try (IndexReader reader = DirectoryReader.open(directory)) {
+                IndexSearcher searcher = new IndexSearcher(reader);
+                int phrase = docId(searcher, "phrase");
+                int terms = docId(searcher, "terms");
+                Query window = new TermInSetQuery(WINDOW_FIELD, List.of(new BytesRef("phrase"), new BytesRef("terms")));
+                Query confinedQuery = new BooleanQuery.Builder().add(new PhraseQuery(TEXT_FIELD, "lamp", "desk"), BooleanClause.Occur.MUST)
+                    .add(window, BooleanClause.Occur.FILTER)
+                    .build();
+                QueryRescorer.QueryRescoreContext confined = new QueryRescorer.QueryRescoreContext(10);
+                confined.setParsedQuery(new ParsedQuery(confinedQuery));
+                confined.setRescoreQueryWeight(2.0f);
+                confined.setRescoredDocs(Set.of(phrase, terms));
+
+                Explanation matched = guardOver(confined).explain(phrase, searcher, null, RANKED_FIRST_PASS);
+                Explanation approximationOnly = guardOver(confined).explain(terms, searcher, null, RANKED_FIRST_PASS);
+
+                assertTrue("the phrase is in the first document: " + matched, matched.toString().contains("secondaryWeight"));
+                assertEquals(
+                    "the second holds both terms in the wrong order, so no rescore is claimed",
+                    QueryRescorer.INSTANCE.explain(terms, searcher, confined, FusedFirstPassMarker.mark(RANKED_FIRST_PASS)),
+                    approximationOnly
+                );
+                assertFalse(approximationOnly.toString().contains("secondaryWeight"));
+            }
+        }
+    }
+
+    /**
+     * A {@code function_score} rescore query explains in float what it scores in double, so the tree the guard explains can
+     * land an ulp or two off the hit's score. The coordinator must keep every one of those trees — run end to end here: the
+     * guard rescores and explains over core's own {@code QueryRescorer}, and the coordinator's {@link FusedDocExplanations}
+     * rebuilds each hit.
+     */
+    public void testExplain_whenAFunctionScoreRescoreExplainsOffItsScore_thenTheCoordinatorStillKeepsEveryTree() throws IOException {
+        Random random = new Random(42);
+        String[] vocabulary = { "lamp", "desk", "chair", "sofa", "table" };
+        int documents = 200;
+        try (Directory directory = newDirectory()) {
+            List<BytesRef> ids = new ArrayList<>();
+            try (IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig())) {
+                for (int i = 0; i < documents; i++) {
+                    StringBuilder text = new StringBuilder();
+                    for (int word = 0, words = 1 + random.nextInt(6); word < words; word++) {
+                        text.append(vocabulary[random.nextInt(vocabulary.length)]).append(' ');
+                    }
+                    Document document = new Document();
+                    document.add(new StringField(WINDOW_FIELD, "d" + i, Field.Store.NO));
+                    document.add(new TextField(TEXT_FIELD, text.toString(), Field.Store.NO));
+                    writer.addDocument(document);
+                    ids.add(new BytesRef("d" + i));
+                }
+            }
+            try (IndexReader reader = DirectoryReader.open(directory)) {
+                IndexSearcher searcher = new IndexSearcher(reader);
+                ScoreFunction[] functions = {
+                    new WeightFactorFunction(1.3f),
+                    new WeightFactorFunction(0.7f),
+                    new WeightFactorFunction(2.1f) };
+                Query declared = new FunctionScoreQuery(
+                    new TermQuery(new Term(TEXT_FIELD, "desk")),
+                    FunctionScoreQuery.ScoreMode.SUM,
+                    functions,
+                    CombineFunction.MULTIPLY,
+                    null,
+                    Float.MAX_VALUE
+                );
+                Query confinedQuery = new BooleanQuery.Builder().add(declared, BooleanClause.Occur.MUST)
+                    .add(new TermInSetQuery(WINDOW_FIELD, ids), BooleanClause.Occur.FILTER)
+                    .build();
+                QueryRescorer.QueryRescoreContext confined = new QueryRescorer.QueryRescoreContext(documents);
+                confined.setParsedQuery(new ParsedQuery(confinedQuery));
+                confined.setQueryWeight(0.7f);
+                confined.setRescoreQueryWeight(1.2f);
+                FusedWindowGuardRescorer guard = guardOver(confined);
+                float[] firstPass = new float[documents];
+                ScoreDoc[] pool = new ScoreDoc[documents];
+                FusedDocExplanations collected = new FusedDocExplanations().combinationDescription("arithmetic_mean combination of:")
+                    .normalizationDescription("min_max normalization of:");
+                for (int doc = 0; doc < documents; doc++) {
+                    firstPass[doc] = 1e-30f + random.nextFloat();
+                    pool[doc] = new ScoreDoc(doc, firstPass[doc]);
+                    collected.addDocument(
+                        FusedDocExplanations.documentKey("index", String.valueOf(doc)),
+                        firstPass[doc],
+                        firstPass[doc],
+                        List.of()
+                    );
+                }
+                Arrays.sort(pool, (left, right) -> Float.compare(right.score, left.score));
+
+                TopDocs rescored = guard.rescore(new TopDocs(TOTAL, pool), searcher, null);
+
+                int offTheScore = 0;
+                for (ScoreDoc hit : rescored.scoreDocs) {
+                    Explanation roundTwo = guard.explain(hit.doc, searcher, null, Explanation.match(firstPass[hit.doc], "first pass"));
+                    if (Float.compare(roundTwo.getValue().floatValue(), hit.score) != 0) {
+                        offTheScore++;
+                    }
+                    Explanation explained = collected.explain(
+                        FusedDocExplanations.documentKey("index", String.valueOf(hit.doc)),
+                        hit.score,
+                        roundTwo
+                    );
+                    assertEquals("doc " + hit.doc + " keeps core's rescore tree", roundTwo.getDescription(), explained.getDescription());
+                }
+                assertTrue("the case this pins: some trees are explained off their score", offTheScore > 0);
+            }
         }
     }
 
