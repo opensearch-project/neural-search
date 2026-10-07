@@ -23,9 +23,13 @@ import org.opensearch.search.SearchHit;
  *
  * <p>Round 2's own explanation is what gets replaced. It is not wrong — the {@code constant_score} clause carries the
  * fused score, so the number matches — but it describes the query the rewrite <b>substituted</b> rather than the hybrid
- * the user wrote, so on its own it reads as if an {@code _id} lookup had produced the ranking. A document round 2
- * returned that fusion never ranked (one the Tail surfaced, at {@code 0.0}) keeps its own explanation untouched: it
- * truthfully says the document matched a non-scoring clause, and there is no fused breakdown to put there.
+ * the user wrote, so on its own it reads as if an {@code _id} lookup had produced the ranking. The one part of it worth
+ * keeping is a {@code rescore}: core explains that the same way for every query, and the fused breakdown replaces the
+ * substituted first pass in that tree — found by the {@link FusedFirstPassMarker} the shard put around it, not by
+ * reading core's layers — so a rescored hit reads as any rescored query does; see
+ * {@link FusedDocExplanations#explain(String, float, Explanation)}. A document round 2 returned that fusion never
+ * ranked (one the Tail surfaced, at {@code 0.0}) keeps its own explanation: it truthfully says the document matched a
+ * non-scoring clause, and there is no fused breakdown to put there (its marker, if rescored, is stripped afterwards).
  *
  * <p>Unlike classic hybrid's response processor this correlates by document identity — {@code _index} plus {@code _id},
  * the same key fusion ranks by — rather than by position within a shard's hit list, so it needs no per-shard counter, no
@@ -82,8 +86,9 @@ public final class FusedExplanationMerger {
             }
             String key = FusedDocExplanations.documentKey(hit.getIndex(), hit.getId());
             // The hit's score is handed over as it is, NaN included: a request that sorts without tracking scores has no
-            // final score for the tree to describe, and {@link FusedDocExplanations#explain} is what decides that.
-            Explanation fused = collected.explain(key, hit.getScore());
+            // final score for the tree to describe, and {@link FusedDocExplanations#explain} is what decides that. Round 2's
+            // own tree goes with it so that a rescore's explanation can be kept around the fused breakdown.
+            Explanation fused = collected.explain(key, hit.getScore(), hit.getExplanation());
             if (Objects.nonNull(fused)) {
                 hit.explanation(fused);
             }

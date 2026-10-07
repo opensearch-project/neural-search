@@ -736,13 +736,14 @@ final class HybridFusionOrchestrator {
                 }
                 contributions.add(new FusedDocExplanations.LegContribution(leg, normalizedScore, legExplanations.get(leg).get(key)));
             }
-            // The score fusion computed, deliberately not ranked.scores()[doc]: that one is already through
-            // scoreAboveTail, and recording the floored value would label the combination node with a number its own
-            // children do not produce — a fused 0.0 renders as MIN_RANKED_SCORE over children that combine to 0.0.
-            // Recording the raw value keeps the node honest and lets FusedDocExplanations#explain surface the floor as
-            // the final-score node instead, since the hit's score is the floored one and the two then differ.
-            // Non-null for every ranked document: toRankedDocs built the window out of this very map.
-            explanations.addDocument(key, fused.fused().get(key), contributions);
+            // Both scores, because they label different nodes. The combination node carries the score fusion computed,
+            // not ranked.scores()[doc]: that one is already through scoreAboveTail, and labelling the combination with it
+            // would claim a number its own children do not produce — a fused 0.0 rendering as MIN_RANKED_SCORE over
+            // children that combine to 0.0. The floored score is what round 2 ran with, so it is the value of a rescored
+            // hit's marked first pass, and FusedDocExplanations#explain matches the marker against it and surfaces the
+            // floor as the final-score node. Non-null for every ranked document: toRankedDocs built the window out of
+            // this very map.
+            explanations.addDocument(key, fused.fused().get(key), ranked.scores()[doc], contributions);
         }
     }
 
