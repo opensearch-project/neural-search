@@ -5,11 +5,16 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 
 /**
  * Abstracts normalization of scores in query search results.
+ *
+ * <p>Extends {@link ExplainableTechnique} for the same reason the combination side does: a technique is describable by
+ * construction, at no cost to an implementer since both of that interface's methods are {@code default}, and the explain
+ * path reads {@code describe()} directly rather than casting.
  */
-public interface ScoreNormalizationTechnique {
+public interface ScoreNormalizationTechnique extends ExplainableTechnique {
 
     /**
      * Performs score normalization based on input normalization technique.

@@ -22,8 +22,6 @@ import org.apache.lucene.search.TopDocs;
 import org.opensearch.ml.repackage.com.google.common.annotations.VisibleForTesting;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
-import com.google.common.primitives.Floats;
-
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
 import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
@@ -47,9 +45,10 @@ import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF
 public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "min_max";
-    protected static final float MIN_SCORE = 0.001f;
-    protected static final float MAX_SCORE = 1.0f;
-    private static final float SINGLE_RESULT_SCORE = 1.0f;
+    // Kept for the classic explain path and referenced by tests; sourced from the shared normalizer so there is one
+    // definition of the clipping bounds.
+    protected static final float MIN_SCORE = MinMaxScoreNormalizer.MIN_SCORE;
+    protected static final float MAX_SCORE = MinMaxScoreNormalizer.MAX_SCORE;
     private static final String PARAM_NAME_LOWER_BOUNDS = "lower_bounds";
     private static final String PARAM_NAME_BOUND_MODE = "mode";
     private static final String PARAM_NAME_LOWER_BOUND_MIN_SCORE = "min_score";
@@ -264,36 +263,14 @@ public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTech
         final LowerBound lowerBound,
         final UpperBound upperBound
     ) {
-        // edge case when there is only one score and min and max scores are same
-        if (isSingleScore(score, minScore, maxScore)) {
-            return SINGLE_RESULT_SCORE;
-        }
-
-        float effectiveMinScore = lowerBound.determineEffectiveScore(score, minScore, maxScore);
-        float effectiveMaxScore = upperBound.determineEffectiveScore(score, minScore, maxScore);
-
-        if (lowerBound.shouldClipToBound(score, effectiveMinScore)) {
-            return MIN_SCORE;
-        }
-        if (upperBound.shouldClipToBound(score, effectiveMaxScore)) {
-            return MAX_SCORE;
-        }
-
-        return calculateNormalizedScore(score, effectiveMinScore, effectiveMaxScore);
-    }
-
-    private boolean isSingleScore(float score, float minScore, float maxScore) {
-        return Floats.compare(maxScore, minScore) == 0 && Floats.compare(maxScore, score) == 0;
+        // Delegate the arithmetic to the shared core so the classic shard path and the resolver coordinator path use
+        // one implementation of the min-max formula (see MinMaxScoreNormalizer).
+        return MinMaxScoreNormalizer.normalizeSingleScore(score, minScore, maxScore, lowerBound, upperBound);
     }
 
     @VisibleForTesting
     protected float calculateNormalizedScore(float score, float effectiveMinScore, float effectiveMaxScore) {
-        if (Floats.compare(effectiveMaxScore, effectiveMinScore) == 0) {
-            return SINGLE_RESULT_SCORE;
-        }
-
-        float normalizedScore = (score - effectiveMinScore) / (effectiveMaxScore - effectiveMinScore);
-        return normalizedScore == 0.0f ? MIN_SCORE : normalizedScore;
+        return MinMaxScoreNormalizer.calculateNormalizedScore(score, effectiveMinScore, effectiveMaxScore);
     }
 
     @VisibleForTesting

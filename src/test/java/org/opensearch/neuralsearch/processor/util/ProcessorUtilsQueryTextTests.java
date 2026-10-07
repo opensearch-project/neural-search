@@ -8,18 +8,21 @@ import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.BoostingQueryBuilder;
 import org.opensearch.index.query.ConstantScoreQueryBuilder;
 import org.opensearch.index.query.DisMaxQueryBuilder;
+import org.opensearch.index.query.IdsQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
 import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.neuralsearch.query.HybridFusionQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.script.Script;
 import org.opensearch.test.OpenSearchTestCase;
 import org.apache.lucene.search.join.ScoreMode;
 
+import java.util.List;
 import java.util.Locale;
 
 public class ProcessorUtilsQueryTextTests extends OpenSearchTestCase {
@@ -71,6 +74,53 @@ public class ProcessorUtilsQueryTextTests extends OpenSearchTestCase {
 
         String result = ProcessorUtils.extractQueryTextFromBuilder(hybridQuery);
         assertEquals("hybrid1 hybrid2", result);
+    }
+
+    /**
+     * Fused mode replaces the hybrid at the coordinator before any response processor runs, so a processor extracting the
+     * query text is handed the substitute. It must read the same text a classic hybrid gives — the substitute itself has
+     * none.
+     */
+    public void testExtractQueryTextFromBuilder_FusedHybridReadsTheCarriedOriginal() {
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(new MatchQueryBuilder("field1", "hybrid1"));
+        original.add(new MatchQueryBuilder("field2", "hybrid2"));
+
+        assertEquals(
+            "the substitute must yield exactly what the hybrid it replaced yields",
+            ProcessorUtils.extractQueryTextFromBuilder(original),
+            ProcessorUtils.extractQueryTextFromBuilder(fusedSubstitute(original))
+        );
+    }
+
+    /**
+     * The Tail carries each leg as a match-set form, and a materialized one is {@code bool{filter: ids, filter: term(_index)}}
+     * — which the bool case above would read as the index name. So extracting from the substitute's own clauses is worse
+     * than failing, and with no original carried this has to fail.
+     */
+    public void testExtractQueryTextFromBuilder_FusedHybridWithoutOriginalIsUnsupported() {
+        HybridFusionQueryBuilder substitute = fusedSubstitute(null);
+
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> ProcessorUtils.extractQueryTextFromBuilder(substitute)
+        );
+        assertTrue(exception.getMessage().contains("HybridFusionQueryBuilder"));
+        assertTrue(exception.getMessage().contains("not supported for semantic highlighting"));
+    }
+
+    private static HybridFusionQueryBuilder fusedSubstitute(HybridQueryBuilder original) {
+        // A one-document window whose Tail holds the shape a materialized kNN/neural leg takes, so the negative case is a
+        // query whose clauses really would produce text if they were read.
+        return new HybridFusionQueryBuilder(
+            new String[] { "d1" },
+            new String[] { "idx" },
+            new float[] { 1.0f },
+            List.of(new BoolQueryBuilder().filter(new IdsQueryBuilder().addIds("d1")).filter(new TermQueryBuilder("_index", "idx"))),
+            List.of(),
+            List.of(),
+            original
+        );
     }
 
     public void testExtractQueryTextFromBuilder_NestedQuery() {

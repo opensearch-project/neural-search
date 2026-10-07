@@ -1,0 +1,1768 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+package org.opensearch.neuralsearch.query;
+
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+import org.apache.lucene.search.Explanation;
+import org.apache.lucene.search.TotalHits;
+import org.opensearch.ExceptionsHelper;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.search.MultiSearchRequest;
+import org.opensearch.action.search.MultiSearchResponse;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.search.ShardSearchFailure;
+import org.opensearch.common.logging.HeaderWarning;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.core.xcontent.ToXContent;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.index.query.AbstractQueryBuilder;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.IdsQueryBuilder;
+import org.opensearch.index.query.InnerHitContextBuilder;
+import org.opensearch.index.query.MatchNoneQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.neuralsearch.fusion.CoordinatorScoreFusion;
+import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
+import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
+import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
+import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
+import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
+import org.opensearch.neuralsearch.search.profile.FastPathDecision;
+import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
+import org.opensearch.search.SearchService;
+import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.sort.ScoreSortBuilder;
+import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortOrder;
+
+import com.google.common.annotations.VisibleForTesting;
+
+import lombok.AccessLevel;
+import lombok.NoArgsConstructor;
+
+/**
+ * Coordinator-side machinery for the resolver (fused) mode: fan the sub-query legs out as a parallel {@code MultiSearch},
+ * then fuse the leg hits into the standard query the {@code hybrid} query self-erases into ({@link HybridFusionQueryBuilder},
+ * or {@code match_none} when nothing fused). All methods are static and take the {@link SearchRequest} /
+ * {@link MultiSearchResponse} explicitly so the class holds no state.
+ *
+ * <p>Fusion arithmetic is NOT reimplemented here — it delegates to {@link CoordinatorScoreFusion}, the shared core that
+ * classic hybrid also calls, so fused-mode relevance matches classic for the same hit set. Current scope: the whole
+ * score-normalization family ({@code min_max}, {@code z_score}, {@code l2}, resolved by name through
+ * {@link ScalarNormalizers}) combined by {@code arithmetic_mean}, plus rank-based {@code rrf}; the caller rejects every
+ * other combination technique at rewrite.
+ *
+ * <p>The request's {@code rescore} is deliberately <b>not</b> handled here — see {@link FusedRescoreScope}. Confining a
+ * rescore has to be set up before the legs are even fired, which is the one thing this class cannot do from a callback that
+ * runs after them.
+ */
+@NoArgsConstructor(access = AccessLevel.PRIVATE)
+final class HybridFusionOrchestrator {
+
+    private static final ScoreCombinationFactory SCORE_COMBINATION_FACTORY = new ScoreCombinationFactory();
+    /** The {@code _name} key as it appears in a rendered query — see {@link #anyLegNamed}. */
+    private static final String QUERY_NAME_KEY = String.format(Locale.ROOT, "\"%s\":", AbstractQueryBuilder.NAME_FIELD.getPreferredName());
+
+    /**
+     * The score floor every ranked document is lifted to, so that no fused score can tie the non-scoring Tail — see
+     * {@link #scoreAboveTail} for the tie and why it matters.
+     *
+     * <p>The value is pinned from both sides. <b>From below</b>, it has to stay positive after everything downstream
+     * multiplies it: an enclosing clause's {@code boost}, a rescore's {@code query_weight} (core's {@code QueryRescorer}
+     * multiplies every window document's first-pass score by it, including the ones its query does not match), a
+     * {@code score_mode: multiply} rescore. Float32 makes that a real constraint rather than a theoretical one —
+     * {@link Float#MIN_VALUE} is subnormal, so <i>any</i> factor at or below {@code 0.5} rounds it to exactly {@code 0.0}
+     * and restores the very tie the floor exists to break. {@code 1e-30f} is normal, and measured, it survives every
+     * single factor down to {@code 7.0065e-16} — below that the product rounds to zero rather than to the smallest
+     * subnormal. <b>From above</b>, it has to stay far below any fused score a real config produces, since
+     * scores at or below it are collapsed onto it: min_max and z_score floor a normalized score at {@code 0.001} and
+     * arithmetic_mean divides by a weight sum of {@code 1.0}, so even a leg weighted {@code 1e-9} contributes about
+     * {@code 1e-12} — twelve orders of magnitude above this. Reaching the collapse needs {@code l2} over a leg whose raw
+     * scores are themselves near the bottom of the float range.
+     *
+     * <p>What the collapse costs, when reached, is the relative order of documents fusion scored below {@code 1e-30} — all
+     * of which it ranked at effectively no score, and all of which still outrank the Tail. That is the deliberate trade
+     * against the alternative: leaving sub-floor scores alone would sort a document fusion scored {@code 1e-40} <i>below</i>
+     * one it scored {@code 0.0}, which is an inversion rather than a tie.
+     *
+     * <p><b>The lower bound is per multiplication and does not compose</b> — worth stating plainly, because the shape of
+     * the guarantee is easy to over-read. Attenuation is applied by Lucene and by core's {@code QueryRescorer}, one factor
+     * at a time and each rounding to float32, so the factors <i>multiply</i>: measured, three rescorers at
+     * {@code query_weight: 1e-6} each, or six at {@code 0.001}, annihilate this floor even though every one of those
+     * factors is individually far inside the bound above. An enclosing clause's {@code boost} composes with them the same
+     * way. No value fixes this — a float32 floor can always be driven to zero by enough multiplication, and raising the
+     * constant only trades tolerance below for headroom above (at {@code 1e-20} the per-factor bound would improve to
+     * about {@code 7e-26}, but the collapse described above would start catching legal weights ten orders of magnitude
+     * less extreme). So this is a bound, not a promise, and it is deliberately not enforced: the attenuating values are
+     * legal core parameters, and refusing them to protect an internal floor would cost more than it buys.
+     *
+     * <p>What the residual exposure actually is. Under <i>attenuation</i> — the compounding multiplication described
+     * above — it is narrow: only a document fusion scored at or below this floor is annihilated, because everything else
+     * is orders of magnitude larger and attenuates to a value that is still positive, and reaching the floor at all takes
+     * a {@code weights} entry of {@code 0.0} or {@code l2} over a zero-norm leg (see {@link #scoreAboveTail}).
+     *
+     * <p><b>It is not narrow for every route, and an earlier version of this note wrongly said it was.</b> A weighting
+     * that multiplies by exactly zero annihilates <i>any</i> score, floor or not: {@code query_weight: 0} collapses every
+     * document in the rescore window, and {@code score_mode} {@code multiply}/{@code min} with a zero weighted rescore
+     * term collapses every document the rescore query matched — MEASURED evicting a document fusion ranked at an ordinary
+     * score of {@code 0.5}. A negative {@code query_weight} goes further and inverts the page outright, since Tail-only
+     * documents sit at {@code -0.0f} and {@code Float.compare} orders that above every negative. So the floor's value is
+     * load-bearing only against attenuation; against a zero or negative multiplier no floor can help, which is why the
+     * ranked/unranked distinction is not left to the score alone for a rescore: {@link FusedWindowGuardRescorer} records
+     * membership from the pool <i>before</i> the request's rescorers run, and afterwards re-separates the two groups into
+     * disjoint score bands, so no arithmetic can promote an unranked document however it scored it. The floor still
+     * matters for every other consumer of round 2's scores. Pinned by
+     * {@code HybridFusionOrchestratorTests#testMinRankedScore_attenuationBoundIsPerFactorAndDoesNotCompose}.
+     */
+    static final float MIN_RANKED_SCORE = 1e-30f;
+
+    /**
+     * Build the leg MultiSearch: one standalone search per sub-query, each reduced to the global top-{@code windowSize}.
+     *
+     * <p>What each leg inherits from the user's request is decided in exactly one place — {@link CandidateScope}, which
+     * classifies every field of {@link SearchRequest} and {@link SearchSourceBuilder} as propagated, overridden,
+     * rejected, Tail-forcing, or deliberately dropped, with the reason recorded next to it. This method only assembles
+     * the per-leg requests it produces; it holds no propagation policy of its own, so no request field can reach a leg
+     * (or fail to) by omission here.
+     *
+     * <p>Note on ANN legs: {@code size} sets how many hits a leg returns, but an ANN leg's retrieval depth is bounded by
+     * its own {@code k} (collected per shard), not by {@code size} — a {@code knn}/{@code neural} leg with a small or
+     * default {@code k} (10) contributes at most that many candidates regardless of {@code windowSize}. This matches
+     * classic hybrid, which likewise never rewrites {@code k}; for a full window, set {@code k >= window_size} on the
+     * sub-query. We deliberately do NOT rewrite {@code k} here — it would diverge from classic and has no analog for
+     * radial knn ({@code min_score}/{@code max_distance} have no {@code k}).
+     */
+    static MultiSearchRequest buildLegMultiSearch(CandidateScope scope, List<QueryBuilder> legs, int windowSize) {
+        MultiSearchRequest multiSearchRequest = new MultiSearchRequest();
+        for (QueryBuilder leg : legs) {
+            multiSearchRequest.add(scope.newLegRequest(leg, windowSize));
+        }
+        return multiSearchRequest;
+    }
+
+    // ---- hits.total from round 1: one count-only round over the legs' disjunction ----
+
+    /**
+     * The widest fan-out the count round is issued for: a bound on the size of the {@code bool} disjunction it builds, one
+     * {@code should} clause per leg. Not a comparison against the Tail — the Tail carries the same {@code n} legs, so the
+     * clause count is the same either way; this caps the algorithm's own input. Read by {@link #unionCountRequest} alone.
+     * Defensive — {@code HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES} caps a hybrid at 5 legs, so it is not reachable
+     * through the REST or gRPC API; it bounds the algorithm where the algorithm lives.
+     */
+    static final int MAX_LEGS_FOR_UNION_COUNT = 8;
+
+    /**
+     * Whether a sub-search counted over every shard and ran to completion — the precondition for treating its
+     * {@code hits.total} as a fact rather than a floor.
+     *
+     * <p>Applies to the legs and to the count round alike, and the asymmetry it removes was a real one: the count round
+     * refused an incomplete answer from the start, while the legs' own counts were taken at face value even though
+     * {@link #groupLegHits} deliberately tolerates a leg that lost shards under {@code allow_partial_search_results}, and a
+     * soft-timed-out leg reports its truncated count with relation {@code EQUAL_TO}. Either undercounts, and an undercount
+     * published as the union's own count produces a {@code hits.total} that claims to be exact.
+     *
+     * <p>The {@code getHits()} check is <b>defensive only</b>. A coordinator always sets the hits section on a search
+     * response, and the leg path relies on that: {@link #groupLegHits} dereferences {@code getResponse().getHits()}
+     * without a guard, and a null there would be an invariant violation worth failing on rather than a case to tolerate.
+     * This method returns a verdict rather than throwing, so it costs nothing to be total over its input.
+     *
+     * <p>Shard accounting is <b>one</b> counter comparison, {@code successful == total}, and the reason is a core detail that
+     * is easy to get backwards: <b>a skipped shard is counted as successful too.</b>
+     * {@code AbstractSearchAsyncAction#skipShard} increments {@code successfulOps} <i>and</i> {@code skippedOps}, and
+     * {@code buildSearchResponse} passes {@code successfulOps} as {@code successfulShards} and {@code skippedOps} separately
+     * as {@code skippedShards}. So {@code skippedShards} is a subset of {@code successfulShards}, not a disjoint bucket, and
+     * adding the two would over-count: one skipped shard of three gives {@code 3 + 1 != 3} and would refuse a search that
+     * answered completely. That is the shape {@code can_match} produces routinely — pre-filtering runs for any multi-shard
+     * search touching a read-only index (UltraWarm, rolled-over ISM indices, searchable snapshots) and skips a shard wherever
+     * a leg cannot match, which is why getting this wrong disables the optimization on whole classes of deployment rather
+     * than in a corner.
+     *
+     * <p>{@code successful == total} is sufficient on its own. Only two places increment {@code successfulOps} — a skipped
+     * shard and a consumed result — so a shard that failed or was unavailable is absent from it, and completeness already
+     * implies no failures. That also avoids depending on {@code getFailedShards()}, which is only the length of an array a
+     * response is not obliged to populate. Skipped shards are fine on the merits as well: they were pre-filtered as unable
+     * to match, so they contribute nothing to any count.
+     */
+    static boolean answeredCompletely(SearchResponse response) {
+        if (Objects.isNull(response)) {
+            return false;
+        }
+        return Objects.nonNull(response.getHits())
+            && response.getSuccessfulShards() == response.getTotalShards()
+            && response.isTimedOut() == false
+            && response.isTerminatedEarly() != Boolean.TRUE;
+    }
+
+    /** As above for one leg of the fan-out: a failed item, or one whose response did not answer completely. */
+    private static boolean legAnsweredCompletely(MultiSearchResponse.Item item) {
+        return Objects.nonNull(item) && item.isFailure() == false && answeredCompletely(item.getResponse());
+    }
+
+    /**
+     * The count-only round 2 that settles {@code hits.total} so round 2 can drop its Tail, or {@code null} when it does
+     * not apply. Once round 1 has shown every leg exact and short of the threshold, a single {@code size: 0} count over
+     * the legs' disjunction answers the union directly.
+     *
+     * <p><b>Why a count round rather than counting during round 1.</b> Deriving the union from the legs alone needs the
+     * legs to report their overlap, which means attaching work to a leg sub-search. Riding a lexical leg means evaluating
+     * it over that leg's full match set — the one shape whose cost is unbounded in corpus size. One {@code size: 0}
+     * request instead is bounded by the sum of the legs' own counts (below {@code legs * threshold} documents, since each
+     * is below the threshold), is request-cacheable, and terminates early at the threshold.
+     *
+     * <p><b>Only issued when the fast path is armed, and that is a measured choice.</b> Armed, settling the total makes
+     * round 2 a {@code match_none} and the page is assembled from round 1, so the count <em>replaces</em> a round trip —
+     * round 2's query and its page fetch — rather than adding one. Un-armed, round 2 runs regardless (Top-only instead of
+     * Top+Tail), so the count is a <b>third serial round</b> doing work the Tail would have done inside round 2, and shard
+     * tasks go from {@code (legs + 1) * shards} to {@code (legs + 2) * shards}. Measured on WANDS, two lexical legs,
+     * {@code sort: [{_score: desc}]} (count-eligible, fast-path-refused): issuing the count cost {@code +5 ms} cold and
+     * {@code +2 ms} warm, keeping the Tail {@code +3 ms} cold and {@code +2 ms} warm. The count is fully request-cacheable
+     * — 636 cold misses became 636 warm hits with no misses — but a cache hit still pays the round trip, so caching brings
+     * it level with the Tail rather than ahead.
+     *
+     * <p>Shapes that are count-eligible but un-armed are ordinary rather than exotic, which is why this matters:
+     * {@code profile}, any {@code sort} (including an explicit {@code _score desc}, which derived totals allow and
+     * {@link #requestShapeAllowsFastPath} refuses), {@code rescore}, {@code script_fields}, a leg with {@code inner_hits},
+     * the first request of each {@code _source} shape per coordinator node, and a request over the fetch budget. Each of
+     * those keeps the Tail and counts with it, exactly as before this optimization existed.
+     *
+     * <p>One leg shape is still refused even armed. {@link #legInTailForm} replaces a {@code knn}/{@code neural}/
+     * {@code neural_knn} leg the window did <em>not</em> truncate with an address of the hits it returned, so the Tail
+     * neither walks its graph nor re-runs its inference. For {@code knn}/{@code neural_knn} the re-execution is one graph
+     * walk, which armed buys away a round trip and is worth it (measured: {@code +4 ms} allowing it against {@code +8 ms}
+     * refusing). For {@code neural} it is a second <b>model inference</b> — see {@link #carriesInference} — which against a
+     * remote connector is a network call, per-call spend and another throttle path, so that one is refused. A {@code k}
+     * large enough to fill the window cannot be assumed instead: a shard holding fewer documents than {@code k}, a
+     * {@code knn} {@code filter}, a small corpus, and radial knn (which has no {@code k} at all) all come back short.
+     *
+     * <p><b>What it buys beyond cost.</b> Core computes the value <em>and the relation</em>, so the threshold-boundary
+     * arithmetic this class otherwise does by hand cannot be wrong here; and with no aggregation in the request there is
+     * no profile-plus-aggregation combination to avoid, so a profiled request is not refused.
+     */
+    static SearchRequest unionCountRequest(
+        CandidateScope scope,
+        SearchSourceBuilder source,
+        List<QueryBuilder> legs,
+        MultiSearchResponse.Item[] items,
+        int windowSize,
+        boolean fastPathArmed
+    ) {
+        if (Objects.isNull(scope) || scope.legUnionCountAllowed() == false || Objects.isNull(items) || Objects.isNull(legs)) {
+            return null;
+        }
+        // Only when the fast path is armed. Un-armed, round 2 runs whatever happens, so the count is a THIRD distributed
+        // round doing work the Tail would have done inside round 2 -- and measured on WANDS with two lexical legs and
+        // `sort: [{_score: desc}]` (count-eligible, fast-path-refused), keeping the Tail wins or ties:
+        // count issued +5 ms cold, +2 ms warm Tail kept +3 ms cold, +2 ms warm
+        // The count IS fully request-cacheable -- 636 misses cold became 636 hits warm, 0 misses -- but a cache hit still
+        // costs the round trip, so caching brings it level with the Tail rather than ahead. Armed it is a different trade,
+        // because settling the total removes round 2 entirely rather than adding a round.
+        if (fastPathArmed == false) {
+            return null;
+        }
+        // Two or more legs, and no more than the fan-out this is worth doing for. Every leg shape is eligible; the
+        // per-leg loop below refuses the one case where the Tail is cheaper than the count.
+        if (items.length != legs.size() || legs.size() < 2 || legs.size() > MAX_LEGS_FOR_UNION_COUNT) {
+            return null;
+        }
+        Integer threshold = legTotalHitsThreshold(source, windowSize);
+        if (Objects.isNull(threshold)) {
+            return null;
+        }
+        // Nothing to buy unless a derived count could actually replace the Tail for this request's shape.
+        if (requestShapeAllowsDerivedTotalHits(source) == false) {
+            return null;
+        }
+        for (QueryBuilder leg : legs) {
+            // A named leg, or a leg that cannot be nested at all, is refused: the disjunction would register a name the
+            // count never reports, and a hybrid is illegal anywhere but the root query.
+            if (carriesQueryName(leg) || leg instanceof HybridQueryBuilder || leg instanceof HybridFusionQueryBuilder) {
+                return null;
+            }
+        }
+        BoolQueryBuilder disjunction = new BoolQueryBuilder().minimumShouldMatch(1);
+        for (int leg = 0; leg < legs.size(); leg++) {
+            MultiSearchResponse.Item item = items[leg];
+            if (legAnsweredCompletely(item) == false) {
+                return null;
+            }
+            TotalHits own = item.getResponse().getHits().getTotalHits();
+            // Inexact means the leg's own match set is already past the threshold, so the union is too and
+            // totalHitsFromLegs has already answered; a value at or past the threshold says the same.
+            if (Objects.isNull(own) || own.relation() != TotalHits.Relation.EQUAL_TO || own.value() >= threshold) {
+                return null;
+            }
+            // A leg the window did NOT truncate is the one leg the Tail does not re-execute: legInTailForm replaces it with
+            // an address of the hits it returned, so the Tail neither walks its graph nor re-runs its inference, while the
+            // disjunction below would do both. Everything reaching here is armed (the gate above), so what remains is the
+            // one re-execution that is not a local walk: a `neural` leg re-runs MODEL INFERENCE, because the count's copy of
+            // the leg is the ORIGINAL builder, whose vectorSupplier is still null (rewriteQueryAgainstKnnField returns a NEW
+            // builder holding the SetOnce), so rewriting the count re-enters the inference branch and calls the model a
+            // second time; MLCommonsClientAccessor caches model metadata, not embeddings. Against a remote connector that is
+            // a network call, per-call spend and a second chance to throttle — categorically unlike the graph walk a short
+            // knn / neural_knn leg costs, which armed is worth paying (measured on WANDS: +4 ms allowing against +8 ms
+            // refusing, because settling the total makes round 2 a match_none and buys back its query AND its page fetch).
+            //
+            // The window test is what makes this "short": a leg that FILLED the window is served whether or not it carries
+            // inference, because there the Tail keeps it verbatim and re-executes — and re-infers — exactly as the count
+            // would, so refusing would buy nothing. carriesInference implies isMaterializableLeg (only `neural` carries it,
+            // and it is one of the three materializable names), so naming the narrower test alone is the whole condition.
+            if (carriesInference(legs.get(leg)) && item.getResponse().getHits().getHits().length < windowSize) {
+                return null;
+            }
+            disjunction.should(legs.get(leg));
+        }
+        // The page has to fit inside what the legs actually ranked, or the derivation is refused later
+        // (onlyTotalsNeedTheTail / the page bound in decideFastPathAfterLegs) and the count is paid for and discarded. This
+        // test is EXACT rather than the window bound it replaces: the ranked count is the number of distinct documents
+        // across the legs' returned hits cut to the window, which toRankedDocs computes from the same key set without
+        // dropping anything else — so it is available here from the responses alone, with no fusion and none of its timing
+        // or explanation side effects. Checked last because it reads every leg's hits, which the loop above has just
+        // established are there.
+        int rankedCount = rankedCountFromLegs(items, windowSize);
+        // Nothing fused: round 2 is a match_none either way and buildSubstitute returns before it reads a count, so issuing
+        // one would be a distributed round for nothing. Reachable without the page test catching it, because a size: 0
+        // request asks for page end 0 and `0 > 0` is false.
+        if (rankedCount == 0) {
+            return null;
+        }
+        if (requestedPageEnd(source) > rankedCount) {
+            return null;
+        }
+        return scope.newUnionCountRequest(disjunction, threshold);
+    }
+
+    /**
+     * Fuse the leg results into the standard query the fused-mode hybrid self-erases into — a {@link HybridFusionQueryBuilder}
+     * (Top + conditional Tail), or a {@link MatchNoneQueryBuilder} when nothing fused. Pure: returns the query and
+     * mutates nothing.
+     *
+     * <p>The Tail (non-scoring {@code bool{should: legs}} surfacing the full match set) is included when the request needs
+     * it: aggregations, highlighting, a non-{@code _score} sort, collapse group expansion, or totals beyond the window —
+     * see {@link #needsTail} for the list and for what deliberately does not trigger it. Since a request that sets none of
+     * those still wants an accurate {@code total_hits}, the Tail is present by default and Top-only is the opt-out.
+     *
+     * <p>The Tail decision is <b>depth-independent</b>: it is derived from the request alone, not from whether this
+     * hybrid is the whole query or nested inside a container. A nested fused query still self-erases into
+     * {@code bool{Top + Tail}}, and an enclosing clause simply intersects that (fuse-then-filter), so aggregations and
+     * {@code total_hits} stay correct at any nesting depth. This deliberately avoids inferring nesting from the query
+     * instance (a reference-identity check against {@code source().query()} would silently drop the Tail — and with it
+     * agg/total_hits accuracy — for any request-rewrite layer that clones the query first).
+     */
+    static QueryBuilder buildFusedQuery(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize
+    ) {
+        return buildFusedQuery(
+            source,
+            multiSearchResponse,
+            legs,
+            fusion,
+            windowSize,
+            new FusedCoordinatorTimings(),
+            new FusedDocExplanations()
+        );
+    }
+
+    /**
+     * As above, recording each fusion phase's span into {@code timings} for the coordinator profile entry and each window
+     * document's per-leg breakdown into {@code explanations} for the request's {@code explain}. Both instances are always
+     * present — never null-checked here — so that instrumentation costs the same handful of {@code nanoTime} calls whether
+     * or not the request asked to be profiled, and a request that asked for neither simply discards what was collected.
+     * Phase boundaries are the method boundaries below, so a span is never attributed to two phases.
+     */
+    static QueryBuilder buildFusedQuery(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations
+    ) {
+        return buildFusedQuery(source, multiSearchResponse, legs, fusion, windowSize, timings, explanations, null);
+    }
+
+    /**
+     * As above, and carrying {@code originalQuery} — the {@code hybrid} being self-erased — onto the substitute so that a
+     * search-pipeline response processor can still see the query the user sent. Nothing in the query phase reads it; see
+     * {@link HybridFusionQueryBuilder#originalQuery()} for what does and why. {@code null} is allowed and means the
+     * substitute carries nothing, which is the behavior every consumer falls back to.
+     */
+    static QueryBuilder buildFusedQuery(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations,
+        HybridQueryBuilder originalQuery
+    ) {
+        return buildFusedQuery(source, multiSearchResponse, legs, fusion, windowSize, timings, explanations, originalQuery, null);
+    }
+
+    /**
+     * As above, and able to answer the request's {@code hits.total} from the legs instead of the Tail — see
+     * {@link #totalHitsFromLegs}. {@code totalHitsConsumer} is where the derived total goes; it is attached by
+     * {@code HybridQuerySearchRequestFilter} only when this hybrid is the request's own query, and its presence is what
+     * permits dropping the Tail for totals at all. {@code null} keeps today's behaviour exactly: a request wanting totals
+     * beyond the window gets the Tail.
+     */
+    static QueryBuilder buildFusedQuery(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations,
+        HybridQueryBuilder originalQuery,
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer
+    ) {
+        MultiSearchResponse.Item[] items = multiSearchResponse.getResponses();
+        long windowMergeStart = System.nanoTime();
+        SearchHit[][] legHits = groupLegHits(items, legs.size());
+        timings.windowMergeNanos(System.nanoTime() - windowMergeStart);
+        RankedDocs ranked = computeRankedDocs(legHits, fusion, windowSize, timings, explanations);
+        timings.rankedDocs(ranked.ids().length);
+        // This is the un-armed path, which is also the only path a count-only round is never issued for — so there is no
+        // counted union to carry here and null is passed for it. Nothing on this path depends on the verdict either, but a
+        // profiled request's report of its unprofiled twin still needs what the legs decided, read off the same answers the
+        // twin would have had.
+        decideFastPathAfterLegs(timings.fastPath(), source, items, ranked, windowSize, null);
+        return buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer);
+    }
+
+    /**
+     * The two-round substitute built from a {@link RankedDocs} the caller already has. {@link #buildFusedResult}'s
+     * fast-path fallback reaches here so the coordinator-side fusion — {@link #groupLegHits} +
+     * {@link #computeRankedDocs}, with their {@code timings}/{@code explanations} side effects — is done exactly once for
+     * a request that arms the fast path and then needs round 2, rather than recomputed and its timings double-written.
+     * The recomputing {@code buildFusedQuery} overloads above stay the entry point for the un-armed path, which never
+     * ran fusion before reaching them.
+     *
+     * <p>Takes no counted union, because neither route into it can carry one. Un-armed no count round is issued at all.
+     * Armed, the only post-leg refusal that reaches here with a count in hand is {@link FastPathDecision#COUNT_NOT_SETTLED}
+     * — {@code NO_CANDIDATES} returns {@code match_none} in {@link #buildFusedResult} first, and {@code PAGE_BEYOND_WINDOW}
+     * cannot, since {@link #unionCountRequest} refuses a page past the ranked count before issuing the round — and that
+     * refusal is by definition the case where {@link #totalHitsNotBelowThePage} nulled the count, which is the same floor
+     * applied below. A count is only issued when every leg came back {@code EQUAL_TO} and below the threshold, which is
+     * also what makes {@link #totalHitsFromLegs} return {@code null}, so the Tail is kept and the consumer told nothing
+     * was derived either way.
+     */
+    private static QueryBuilder buildSubstitute(
+        SearchSourceBuilder source,
+        MultiSearchResponse.Item[] items,
+        SearchHit[][] legHits,
+        RankedDocs ranked,
+        List<QueryBuilder> legs,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        HybridQueryBuilder originalQuery,
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer
+    ) {
+        if (ranked.ids().length == 0) {
+            return new MatchNoneQueryBuilder();
+        }
+        long substituteBuildStart = System.nanoTime();
+        boolean tailNeeded = needsTail(source, ranked.ids().length);
+        // The Tail may be there for the count alone. If the legs already prove what that count would be, hand the count
+        // over and let round 2 run Top-only; otherwise the Tail stays and the consumer is told nothing was derived. The
+        // derived count describes round 1's view of the index; round 2 reads it again a moment later, so the two agree
+        // whenever both rounds reach the same shards and see the same reader state — the same assumption the two-round
+        // design makes about the ranked window itself.
+        TotalHits derivedTotalHits = null;
+        if (tailNeeded
+            && Objects.nonNull(totalHitsConsumer)
+            && onlyTotalsNeedTheTail(source, ranked.ids().length)
+            && namedAnnLegFilledTheWindow(legs, legHits, windowSize) == false) {
+            derivedTotalHits = totalHitsFromLegs(source, legTotalHits(items), windowSize);
+            // Floored against the page, so a total can never come back below what round 2 is about to return. Defensive at
+            // this call: a leg-derived total is always {threshold, gte} with the threshold above the window, hence above
+            // anything ranked, so the floor cannot fire — it is kept because it is the invariant, not the branch, that
+            // matters, and because this is the one place a future second source of a derived total would land.
+            derivedTotalHits = totalHitsNotBelowThePage(derivedTotalHits, ranked.ids().length);
+            tailNeeded = Objects.isNull(derivedTotalHits);
+        }
+        if (Objects.nonNull(totalHitsConsumer)) {
+            totalHitsConsumer.accept(derivedTotalHits);
+        }
+        timings.tailBuilt(tailNeeded);
+        // The two leg lists are alternatives, never both populated: an executed Tail converts every leg on the shard and so
+        // registers the names itself, and only when it is absent does anything have to be carried for registration alone.
+        // inner_hits are registered from the legs themselves, independent of whether the Tail executes them.
+        QueryBuilder substitute = new HybridFusionQueryBuilder(
+            ranked.ids(),
+            ranked.indices(),
+            ranked.scores(),
+            tailNeeded ? legQueriesForTail(legs, legHits, windowSize) : List.of(),
+            innerHitsLegs(legs),
+            tailNeeded ? List.of() : namedLegsForRegistration(legs, legHits),
+            originalQuery
+        );
+        timings.substituteBuildNanos(System.nanoTime() - substituteBuildStart);
+        return substitute;
+    }
+
+    /**
+     * Reduce the raw MultiSearch items into a per-leg array of hits (one item per leg). A wholly-failed leg (all shards
+     * down or a non-partial error → {@code Item.isFailure()}) fails the whole request — fusing over a missing leg would
+     * silently change the ranking function, not merely return fewer docs. A leg that only lost some shards under
+     * {@code allow_partial_search_results=true} comes back as a successful item with fewer hits and is fused as-is —
+     * matching OpenSearch's default partial-results behavior. Because normalization is per-leg, that degraded leg shifts
+     * its own min/max, so the fused <i>ranking</i> can differ from a complete run rather than merely losing docs; a
+     * response {@code Warning} header names the affected legs so the degradation is not silent. Under an effective
+     * {@code allow_partial_search_results=false} the leg itself fails, which the check below turns into a whole-request
+     * failure — so honoring that flag needs no separate handling here.
+     *
+     * <p>Every leg's hits enter fusion through this method and nowhere else, which makes it the one place to assert the
+     * per-hit {@code _index} invariant both the Top and the Tail depend on — see {@link #requireHitsCarryTheirIndex}.
+     */
+    private static SearchHit[][] groupLegHits(MultiSearchResponse.Item[] items, int legCount) {
+        if (items.length != legCount) {
+            throw new IllegalStateException(
+                String.format(Locale.ROOT, "[hybrid] expected %d leg sub-search responses but got %d", legCount, items.length)
+            );
+        }
+        SearchHit[][] legHits = new SearchHit[legCount][];
+        List<Integer> degradedLegs = new ArrayList<>();
+        for (int leg = 0; leg < legCount; leg++) {
+            MultiSearchResponse.Item item = items[leg];
+            if (item.isFailure()) {
+                // Carry the leg's own status instead of inventing one. A malformed query bound is the user's 400, a
+                // queue rejection is a retryable 429, a cluster block is a 403 — and ExceptionsHelper.status has no
+                // IllegalStateException case, so wrapping in one turned every leg failure into a 500 with the real
+                // status buried under caused_by: a client's retry-on-429 never fired and a bad request read as a
+                // server bug. SearchPhaseExecutionException#status derives from its shard failures and
+                // OpenSearchException#status unwraps transport wrappers, so the leg's own failure carries the right
+                // code with no unwrapping here. The message is passed with no format args, so LoggerMessageFormat
+                // returns it verbatim and a stray {} inside the leg's message cannot mangle it.
+                throw new OpenSearchStatusException(
+                    String.format(Locale.ROOT, "[hybrid] fused-mode sub-query %d failed: %s", leg, item.getFailureMessage()),
+                    ExceptionsHelper.status(item.getFailure()),
+                    item.getFailure()
+                );
+            }
+            // Shard failures (not successful<total) — skipped/can-match shards are not failures. Read the array rather
+            // than getFailedShards(), which dereferences it unguarded.
+            ShardSearchFailure[] shardFailures = item.getResponse().getShardFailures();
+            if (Objects.nonNull(shardFailures) && shardFailures.length > 0) {
+                degradedLegs.add(leg);
+            }
+            legHits[leg] = requireHitsCarryTheirIndex(item.getResponse().getHits().getHits(), leg);
+        }
+        warnOnDegradedLegs(degradedLegs);
+        return legHits;
+    }
+
+    /**
+     * Assert the property everything downstream relies on: every leg hit carries its {@code _index}. Fusion keys documents
+     * by {@code _index} + {@code _id} and round 2 addresses them the same way, so a hit without an index can neither be
+     * kept apart from a same-{@code _id} document in a sibling index nor addressed without also matching it.
+     *
+     * <p>An {@link IllegalStateException} rather than a fallback, on both counts: a coordinator sets a hit's index from its
+     * shard target, so a hit missing one means the leg response was not produced the way a search response is; and the only
+     * fallback available — {@code _id}-only addressing — merges distinct documents for the whole window, since its clauses
+     * are qualified as a set, not per hit.
+     */
+    private static SearchHit[] requireHitsCarryTheirIndex(final SearchHit[] hits, final int leg) {
+        for (SearchHit hit : hits) {
+            if (Objects.isNull(hit.getIndex())) {
+                throw new IllegalStateException(
+                    String.format(
+                        Locale.ROOT,
+                        "[hybrid] fused-mode sub-query %d returned a hit [_id: %s] with no [_index]; fused documents are "
+                            + "identified and addressed by [_index] plus [_id], so this hit cannot be fused",
+                        leg,
+                        hit.getId()
+                    )
+                );
+            }
+        }
+        return hits;
+    }
+
+    /**
+     * Surface partially-degraded legs as a response {@code Warning} header. Uses the same mechanism as deprecation
+     * warnings, emitted from the coordinator rewrite's async callback so it rides the request's thread context onto the
+     * response.
+     */
+    private static void warnOnDegradedLegs(final List<Integer> degradedLegs) {
+        if (degradedLegs.isEmpty()) {
+            return;
+        }
+        HeaderWarning.addWarning(
+            String.format(
+                Locale.ROOT,
+                "[hybrid] fused-mode sub-quer%s %s returned partial results (shard failures); fused scores were computed "
+                    + "over an incomplete result set, so ranking may differ from a complete run",
+                degradedLegs.size() == 1 ? "y" : "ies",
+                degradedLegs
+            )
+        );
+    }
+
+    /**
+     * Fuse via the shared {@link CoordinatorScoreFusion} core, then rank by fused score and cut to the window. Converts
+     * the coordinator's {@code SearchHit[][]} view into the per-leg key→score maps the shared core consumes; a leg that
+     * matched nothing contributes an empty map (groupLegHits fails fast on failures, so every slot is non-null).
+     *
+     * <p>Documents are keyed by {@code _index} + {@code _id}, not {@code _id} alone: {@code _id} is unique only within an
+     * index, so across indices two different documents can share one and fusion would otherwise combine their scores as
+     * if they were one document. The composite key is built with a separator but is never parsed back — an {@code _id}
+     * may itself contain the separator, so the original identity is carried in a side map instead. To fusion and to every
+     * normalizer the key stays opaque.
+     *
+     * <p>One consequence the fast path makes observable: under custom routing the same {@code _id} can be indexed onto
+     * two shards of a single index as two distinct documents. Keying by {@code _index}+{@code _id} folds them into one
+     * fused entry, so the assembled page carries one hit — whereas round 2's {@code ids} clause matches both and returns
+     * two. The two paths therefore disagree on the count of such a document. This is a property of the composite keying,
+     * not new to the fast path, but the fast path is where it becomes visible in {@code hits}; a routing-partitioned
+     * index that guarantees {@code _id} uniqueness per shard does not hit it.
+     */
+    private static RankedDocs computeRankedDocs(
+        SearchHit[][] legHits,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations
+    ) {
+        long fuseScoresStart = System.nanoTime();
+        List<Map<String, Float>> legRawScores = new ArrayList<>(legHits.length);
+        // Parallel to legRawScores: the leg's own explanation of each hit's raw score, present only when the request asked
+        // to be explained (an unexplained leg carries none, so these stay empty and nothing is recorded below).
+        List<Map<String, Explanation>> legExplanations = new ArrayList<>(legHits.length);
+        Map<String, SearchHit> identityByKey = new HashMap<>();
+        for (SearchHit[] hits : legHits) {
+            Map<String, Float> byKey = new LinkedHashMap<>();
+            Map<String, Explanation> explanationByKey = new HashMap<>();
+            for (SearchHit hit : hits) {
+                String key = documentKey(hit);
+                byKey.put(key, hit.getScore());
+                if (Objects.nonNull(hit.getExplanation())) {
+                    explanationByKey.put(key, hit.getExplanation());
+                }
+                identityByKey.putIfAbsent(key, hit);
+            }
+            legRawScores.add(byKey);
+            legExplanations.add(explanationByKey);
+        }
+        ScoreCombinationTechnique combination = SCORE_COMBINATION_FACTORY.createCombination(
+            fusion.combinationTechnique(),
+            weightsParams(fusion.weights())
+        );
+        // Normalization is resolved by name, so widening technique support is a new ScalarNormalizer plus one entry in
+        // ScalarNormalizers — no change here, rank-based rrf included. The caller already rejected out-of-scope
+        // techniques at rewrite.
+        ScalarNormalizer normalizer = ScalarNormalizers.forTechnique(fusion.normalizationTechnique(), normalizerParams(fusion));
+        CoordinatorScoreFusion.FusionResult fused = CoordinatorScoreFusion.fuseDetailed(legRawScores, normalizer, combination);
+        timings.fuseScoresNanos(System.nanoTime() - fuseScoresStart);
+        long rankWindowStart = System.nanoTime();
+        RankedDocs ranked = toRankedDocs(fused.fused(), identityByKey, windowSize);
+        timings.rankWindowNanos(System.nanoTime() - rankWindowStart);
+        recordExplanations(explanations, ranked, fused, legExplanations, combination, normalizer);
+        return ranked;
+    }
+
+    /**
+     * Record how each document in the window earned its fused score, for the request's {@code explain}. Runs after the
+     * window cut so only documents round 2 will actually rank are described, and is skipped entirely when no leg returned
+     * an explanation — which is every unexplained request, since a leg only explains when {@link CandidateScope} asked it
+     * to.
+     *
+     * <p>The descriptions are taken from the same two sources classic hybrid renders from — the combination technique's own
+     * {@link ExplainableTechnique#describe()} and the normalizer's {@link ScalarNormalizer#describe()} — so an identical hit
+     * set produces identical wording on both paths, {@code rrf}'s trailing rank constant included. The normalization half
+     * read {@code techniqueName()} at first, which is right only for a technique that carries no parameter and was quietly
+     * dropping that rank constant; it is {@code describe()} for the same reason the combination half always was. Classic's
+     * trailing {@code min_score} suffix has no counterpart here: fused mode does not propagate {@code min_score} to the
+     * legs, so there is no value to name.
+     *
+     * <p>Parity holds for every technique fused mode can currently resolve, and for min_max it holds for a second reason
+     * worth knowing before changing either side: classic's min_max appends its {@code lower_bounds}/{@code upper_bounds}
+     * when they are configured, and fused mode's does not — but {@code FusionSpec} refuses those parameters outright, so no
+     * request that reaches here has them. Honoring bounds later means giving that normalizer a {@code describe()} at the
+     * same time, or the divergence this paragraph rules out becomes reachable.
+     */
+    private static void recordExplanations(
+        final FusedDocExplanations explanations,
+        final RankedDocs ranked,
+        final CoordinatorScoreFusion.FusionResult fused,
+        final List<Map<String, Explanation>> legExplanations,
+        final ScoreCombinationTechnique combination,
+        final ScalarNormalizer normalizer
+    ) {
+        if (legExplanations.stream().allMatch(Map::isEmpty)) {
+            return;
+        }
+        // Same format strings as classic: ScoreCombiner#explainByShard and ExplanationUtils#getDocIdAtQueryForNormalization.
+        explanations.combinationDescription(String.format(Locale.ROOT, "%s combination of:", combination.describe()))
+            .normalizationDescription(String.format(Locale.ROOT, "%s normalization of:", normalizer.describe()));
+        List<Map<String, Float>> legNormalizedScores = fused.legNormalizedScores();
+        for (int doc = 0; doc < ranked.ids().length; doc++) {
+            String key = FusedDocExplanations.documentKey(ranked.indices()[doc], ranked.ids()[doc]);
+            List<FusedDocExplanations.LegContribution> contributions = new ArrayList<>(legNormalizedScores.size());
+            for (int leg = 0; leg < legNormalizedScores.size(); leg++) {
+                Float normalizedScore = legNormalizedScores.get(leg).get(key);
+                if (Objects.isNull(normalizedScore)) {
+                    // The leg did not match this document. Classic renders no node for it either.
+                    continue;
+                }
+                contributions.add(new FusedDocExplanations.LegContribution(leg, normalizedScore, legExplanations.get(leg).get(key)));
+            }
+            // Both scores, because they label different nodes. The combination node carries the score fusion computed,
+            // not ranked.scores()[doc]: that one is already through scoreAboveTail, and labelling the combination with it
+            // would claim a number its own children do not produce — a fused 0.0 rendering as MIN_RANKED_SCORE over
+            // children that combine to 0.0. The floored score is what round 2 ran with, so it is the value of a rescored
+            // hit's marked first pass, and FusedDocExplanations#explain matches the marker against it and surfaces the
+            // floor as the final-score node. Non-null for every ranked document: toRankedDocs built the window out of
+            // this very map.
+            explanations.addDocument(key, fused.fused().get(key), ranked.scores()[doc], contributions);
+        }
+    }
+
+    /**
+     * Fusion key for a hit: its {@code _index}, the separator, and its {@code _id}. Every leg hit carries an index —
+     * {@link #requireHitsCarryTheirIndex} asserts it as the hits enter — so the key is always qualified.
+     *
+     * <p>Limitation in custom routing. {@code _index} + {@code _id} is not a total identity when custom routing is used:
+     * the same {@code _id} can be written to different shards of one index under different routing values, giving two
+     * genuinely distinct documents that share this key and are therefore fused as one.
+     *
+     * <p>Adding the routing value to the key would not fix it. Reading it is not the obstacle — round 2's matching surface
+     * is: the self-erased query addresses documents by {@code _id} and an {@code _index} term, with no way to express
+     * routing, so two docs split apart in the key resolve to the same clause, and Lucene folds identical SHOULD clauses by
+     * <i>summing</i> their boosts — both would come back scored as the sum, which is worse than fusing them as one. This
+     * is a limitation of how documents are addressed, not of how they are keyed.
+     */
+    private static String documentKey(SearchHit hit) {
+        // Delegated so the rewrite and the response-side explanation attach build the same key from one definition.
+        return FusedDocExplanations.documentKey(hit.getIndex(), hit.getId());
+    }
+
+    /**
+     * Fail fast on a malformed {@code weights} array BEFORE the leg fan-out fires — otherwise a bad weights array (out
+     * of range, not summing to 1.0, or the wrong count) wastes a full N-leg MultiSearch before {@link ScoreCombinationUtil}
+     * errors in the async callback. Constructing the combination technique here reuses core's existing
+     * {@code validateParams}/{@code validateWeights} range-and-sum checks with no duplication; the count-vs-legs check
+     * (only enforced later, in {@code combine()}) is added explicitly so a mismatch also fails before the fan-out.
+     *
+     * @param fusion resolved fusion config (inline or pipeline)
+     * @param legCount number of sub-query legs (weights, when supplied, must match this)
+     */
+    static void validateFusionParams(final FusionSpec fusion, final int legCount) {
+        // Triggers ScoreCombinationUtil.validateParams + getWeights -> validateWeights (range 0.0..1.0 and sum == 1.0).
+        SCORE_COMBINATION_FACTORY.createCombination(fusion.combinationTechnique(), weightsParams(fusion.weights()));
+        float[] weights = fusion.weights();
+        if (weights.length != 0 && weights.length != legCount) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "number of weights [%d] must match number of sub-queries [%d] in hybrid query",
+                    weights.length,
+                    legCount
+                )
+            );
+        }
+    }
+
+    /**
+     * Parameters handed to the resolved {@link ScalarNormalizer}. Passed for every technique, not just the one that reads
+     * them — same as the classic path, where {@code ScoreNormalizationFactory.createNormalization} hands the params map to
+     * whichever technique it builds and the stateless ones ignore it. {@code rank_constant} is already resolved and
+     * validated by {@link FusionSpec}, so a non-rrf spec simply carries the default.
+     */
+    private static Map<String, Object> normalizerParams(FusionSpec fusion) {
+        return Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, fusion.rankConstant());
+    }
+
+    private static Map<String, Object> weightsParams(float[] weights) {
+        if (Objects.isNull(weights) || weights.length == 0) {
+            return Map.of();
+        }
+        List<Double> weightsList = new ArrayList<>(weights.length);
+        for (float weight : weights) {
+            weightsList.add((double) weight);
+        }
+        return Map.of(ScoreCombinationUtil.PARAM_NAME_WEIGHTS, weightsList);
+    }
+
+    /**
+     * Rank the fused scores, cut to the window, and resolve each key back to its {@code (_index, _id)} identity via the
+     * side map — never by parsing the key.
+     *
+     * <p>Every ranked document is addressed by its {@code _index} as well as its {@code _id}, unconditionally. The window
+     * is not evidence about the request: a multi-index search whose window happens to be filled from one index still runs
+     * round 2 against every requested index, where a sibling index's same-{@code _id} document would match the bare
+     * {@code ids} clause and inherit that document's fused score. Deciding qualification from the window was exactly that
+     * bug — fusion keys documents by {@code _index + _id} (see {@link #documentKey}), and addressing them by {@code _id}
+     * alone merges back together what keying had correctly separated.
+     *
+     * <p>Qualifying always is free rather than a trade: {@code _index} is a constant field, so on the shard's own index
+     * the added filter is a MatchAll that {@code BooleanQuery.rewrite} removes — the clause collapses to exactly the
+     * {@code constant_score(ids)} it would have been — and on any other index's shard the all-FILTER bool has a
+     * MatchNoDocs required clause and collapses away entirely. Measured post-rewrite, the qualified Top presents the same
+     * number of clauses to Lucene's ceiling as the unqualified one.
+     *
+     * <p>The returned {@code indices} array is fully populated, with no null holes: every key came from a hit whose
+     * {@code _index} {@link #requireHitsCarryTheirIndex} already asserted, and the side map is built from those same hits.
+     * Nothing here tolerates a missing index on purpose — see that method for why a fallback would be worse.
+     */
+    private static RankedDocs toRankedDocs(Map<String, Float> scoresByKey, Map<String, SearchHit> identityByKey, int windowSize) {
+        List<Map.Entry<String, Float>> ranked = new ArrayList<>(scoresByKey.entrySet());
+        ranked.sort(Comparator.<Map.Entry<String, Float>>comparingDouble(e -> -e.getValue()).thenComparing(Map.Entry::getKey));
+        if (ranked.size() > windowSize) {
+            ranked = ranked.subList(0, windowSize);
+        }
+        String[] ids = new String[ranked.size()];
+        String[] indices = new String[ranked.size()];
+        float[] scores = new float[ranked.size()];
+        SearchHit[] hits = new SearchHit[ranked.size()];
+        for (int i = 0; i < ranked.size(); i++) {
+            String key = ranked.get(i).getKey();
+            // Resolved through the side map, never by parsing the composite key — an _id may contain the separator.
+            SearchHit hit = identityByKey.get(key);
+            ids[i] = hit.getId();
+            indices[i] = hit.getIndex();
+            scores[i] = scoreAboveTail(ranked.get(i).getValue());
+            hits[i] = hit;
+        }
+        return new RankedDocs(ids, indices, scores, hits);
+    }
+
+    /**
+     * Floor a fused score so a ranked document can never score {@code 0.0} in round 2.
+     *
+     * <p>What separates the window from everything else is that the Top's clauses score and the Tail's do not — a document
+     * outside the window matches only the non-scoring {@code filter}, so it scores {@code 0.0} and sorts below the window.
+     * A ranked document whose fused score is exactly {@code 0.0} collapses that distinction: it ties with the Tail-only
+     * documents it is supposed to outrank, and the tie is then broken by Lucene doc id, so a document fusion deliberately
+     * did not rank can come back ahead of one it did. {@code rescore} does not cause this but sharpens it — core rescores
+     * the shard's top {@code window_size} documents <i>by score</i>, so a tied ranked document can be left out of a rescore
+     * window that a Tail-only document is admitted to, and then lifted past it.
+     *
+     * <p>Exactly {@code 0.0} is reachable, not hypothetical, and two independent paths produce it:
+     * <ul>
+     *   <li>a {@code weights} entry of {@code 0.0} for a document that matched only that leg — the numerator is its
+     *       normalized score times zero and every other leg contributes zero, for any normalization technique;</li>
+     *   <li>{@code l2} over a leg whose raw scores are all {@code 0.0}, whose norm is then zero, so
+     *       {@link org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizer#normalizeSingleScore} returns
+     *       {@link org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizer#MIN_SCORE} — which, unlike
+     *       min_max's and z_score's {@code 0.001f}, is {@code 0.0f}.</li>
+     * </ul>
+     *
+     * <p>A <i>negative</i> fused score is not reachable: Lucene scores are non-negative, every normalizer's output is
+     * non-negative (min_max maps a zero-range leg to {@code 1.0} and a zero result to {@code 0.001}, z_score clamps a
+     * non-positive result to {@code 0.001}, l2 divides a non-negative score by a non-negative norm),
+     * {@link ScoreCombinationUtil} confines every weight to {@code [0.0, 1.0]} and their sum to {@code 1.0} — so the
+     * combined score is a non-negative sum over a denominator of {@code 1.0}, never negative and never a division by zero.
+     * A negative here would mean that invariant broke, so it is refused rather than floored: flooring it would quietly
+     * hide an internal-invariant break, which is the opposite of what this method is for.
+     *
+     * <p>A <i>non-finite</i> fused score, by contrast, <b>is</b> reachable, and only under z_score. A raw {@code +Infinity}
+     * leg score is laundered to {@code 0.0} by min_max (its {@code Inf/Inf} ratio is {@code NaN}, which arithmetic_mean's
+     * {@code score >= 0.0} rule drops) and by l2 (the leg's norm is {@code +Infinity} too, so the ratio is again
+     * {@code NaN}); but z_score's equal-to-mean edge case returns the leg {@code maxScore} unchanged
+     * ({@link org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizer#normalizeSingleScore}), so a
+     * {@code +Infinity} hit normalizes to {@code +Infinity}, which arithmetic_mean keeps. It is floored to
+     * {@link #MIN_RANKED_SCORE}, exactly as min_max already floors the same input — a degenerate score ranks a document
+     * last rather than failing an otherwise legal request with a server error.
+     *
+     * <p>{@code -0.0f} is deliberately not one of them, and the {@code <} rather than a {@code Float.compare} is what makes
+     * that so: {@code -0.0f < 0.0f} is {@code false}, so a negative zero is a zero here and is floored like any other. That
+     * differs from {@link HybridFusionQueryBuilder#requireUsableAsBoosts}, which does use {@code Float.compare} and so
+     * <i>rejects</i> {@code -0.0f} — correctly, because a {@code -0.0f} boost is what core's own {@code checkNegativeBoost}
+     * refuses, and by the time the builder sees a score this method has already floored it, so the two can never disagree
+     * about a value that actually flows. Reachability makes the point moot in any case: all four combination techniques
+     * accumulate from {@code +0.0f} and {@code (+0.0f) + (-0.0f)} is {@code +0.0f}.
+     *
+     * <p>This floor is applied here, at fusion time, rather than when the Top clauses are built, so the builder's own
+     * state, its {@code toXContent}/profile form and the {@code _score} the user is shown all agree on one number.
+     *
+     * <p>Package-private so both branches can be tested: the non-finite floor, which z_score reaches, and the negative
+     * refusal, which nothing in scope reaches. The refusal is the fail-closed guard — a negative fused score would mean
+     * the non-negativity invariant above broke, so failing the request beats answering it with a corrupt ranking.
+     */
+    @VisibleForTesting
+    static float scoreAboveTail(final float fusedScore) {
+        if (fusedScore < 0.0f) {
+            throw new IllegalStateException(
+                String.format(Locale.ROOT, "[hybrid] a fused score must be non-negative but was %s", fusedScore)
+            );
+        }
+        // A non-finite fused score is degenerate rather than illegal (z_score can return a +Infinity leg score unchanged);
+        // floor it to the window bottom, the same outcome min_max already produces for the same input.
+        if (Float.isFinite(fusedScore) == false) {
+            return MIN_RANKED_SCORE;
+        }
+        return Math.max(fusedScore, MIN_RANKED_SCORE);
+    }
+
+    /** The sub-query legs in their Tail form. groupLegHits fails fast on any leg failure, so every leg is present here
+     *  (legHits.length == legs.size(), no null slots). A kNN/neural leg retrieves a bounded candidate set rather than a
+     *  term-defined one, so — when the window did not truncate it — it is materialized as the documents it already
+     *  retrieved rather than re-walking the HNSW graph in the Tail purely to count; other legs are used as-is. See
+     *  {@link #isMaterializableLeg} for why the type alone is not enough. */
+    private static List<QueryBuilder> legQueriesForTail(List<QueryBuilder> legs, SearchHit[][] legHits, int windowSize) {
+        List<QueryBuilder> tail = new ArrayList<>(legs.size());
+        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
+            tail.add(legInTailForm(legs.get(legIndex), legHits[legIndex], windowSize));
+        }
+        return tail;
+    }
+
+    /**
+     * One leg in its Tail form: itself, or — for a kNN/neural leg the window did not truncate — a direct address of the
+     * hits it already returned.
+     *
+     * <p>The Tail is a {@code filter}, so it <i>is</i> the match set {@code total_hits} and every aggregation are computed
+     * from, and an address of the returned hits stands for the real match set only when the leg returned all of it. That is
+     * decidable from the response alone: {@code newLegRequest} caps every leg at {@code size = window_size}, so a leg that
+     * came back with fewer hits than the window was not truncated and the address is exact — while one that filled the
+     * window may have matched documents it never returned, and is therefore kept as the real query and counted properly.
+     */
+    private static QueryBuilder legInTailForm(QueryBuilder leg, SearchHit[] hits, int windowSize) {
+        if (hits.length >= windowSize) {
+            return leg;
+        }
+        return legMaterializedIfWorthIt(leg, hits);
+    }
+
+    /**
+     * A leg replaced by an address of its returned hits when that is worth doing at all ({@link #isMaterializableLeg}), with
+     * no truncation test of its own — the caller applies that where the form has to stand for a match set.
+     */
+    private static QueryBuilder legMaterializedIfWorthIt(QueryBuilder leg, SearchHit[] hits) {
+        if (isMaterializableLeg(leg) == false) {
+            return leg;
+        }
+        // A materialized leg answers to its own _name: matched_queries is reported from the names registered while
+        // this query is converted, and the substitute is a fresh builder that would otherwise carry none — so a named
+        // kNN/neural leg would silently lose the field even with the Tail present. What it then reports is the
+        // documents the leg returned, which is the same bound materialization already accepts for the match set.
+        // Under include_named_queries_score the reported value is the substitute's score rather than the ANN
+        // similarity: the shard never sees the vector query, and re-running it for a reporting field is exactly the
+        // graph walk materialization exists to avoid. For the same reason only the leg's own name is inherited — a
+        // _name nested inside the leg (on a knn filter, say) has no clause left here to be registered against.
+        return materializedLeg(hits).queryName(leg.queryName());
+    }
+
+    /**
+     * The legs a Top-only query carries so their {@code _name}s are registered on the shard. A leg's {@code _name} only
+     * reaches {@code matched_queries} if its builder is converted there, and the Tail is the only thing that converts legs
+     * — so when the Tail is absent the named legs are carried in their Tail form for registration alone. The fetch phase
+     * re-evaluates every named query from its own weight, so nothing has to execute for one to be reported.
+     *
+     * <p>Only legs that carry a name are carried. An unnamed leg has nothing to register, and carrying it would cost a
+     * shard-side {@code toQuery} conversion — compiling a query a Top-only request would otherwise never compile — for no
+     * reporting benefit.
+     *
+     * <p>An ANN leg is materialized here <b>whether or not the window truncated it</b>, which is where this path parts from
+     * {@link #legInTailForm}. Nothing counts on it: the Tail is absent by construction, so what a substitute addresses
+     * cannot reach {@code total_hits} or an aggregation bucket, and the reporting bound a materialized name already carries
+     * (the documents the leg returned) is the same either way. Applying the Tail's truncation test here would buy a
+     * shard-side ANN compile — and, for {@code neural}, a second inference — for a reporting field alone.
+     */
+    private static List<QueryBuilder> namedLegsForRegistration(List<QueryBuilder> legs, SearchHit[][] legHits) {
+        List<QueryBuilder> namedLegs = new ArrayList<>();
+        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
+            QueryBuilder leg = legs.get(legIndex);
+            if (carriesQueryName(leg)) {
+                namedLegs.add(legMaterializedIfWorthIt(leg, legHits[legIndex]));
+            }
+        }
+        return namedLegs;
+    }
+
+    /**
+     * Whether a leg carries a query name, at any depth.
+     *
+     * <p><b>Deliberately over-inclusive.</b> There is no exact generic descent available: of all the core query builders
+     * only {@code bool} overrides {@code visit(QueryBuilderVisitor)}, so a visitor walk (like a shallow
+     * {@code queryName() != null} check) is blind to a {@code _name} under {@code nested}, {@code function_score},
+     * {@code dis_max}, {@code constant_score} or a {@code knn} filter. The rendered form is checked instead, where
+     * {@link AbstractQueryBuilder#printBoostAndQueryName} puts {@code _name} whenever one is set. A false positive — a leg
+     * querying a field literally called {@code _name} — costs one carried leg whose registration nobody reads; a false
+     * negative would silently drop the field, which is the defect being fixed.
+     */
+    private static boolean carriesQueryName(QueryBuilder leg) {
+        return Objects.nonNull(leg.queryName()) || rendersQueryName(leg);
+    }
+
+    private static boolean rendersQueryName(QueryBuilder leg) {
+        // toXContent opens and closes the query's own object, so the builder is used at its root position: wrapping it in
+        // another object makes every render fail, and this method's fail-open would then carry every leg unconditionally.
+        try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
+            leg.toXContent(builder, ToXContent.EMPTY_PARAMS);
+            return builder.toString().contains(QUERY_NAME_KEY);
+        } catch (IOException e) {
+            // A leg that cannot be rendered is one whose names cannot be ruled out. Carry it: an extra registration is
+            // cheap, and the alternative is exactly the silent loss this method exists to prevent.
+            return true;
+        }
+    }
+
+    /**
+     * A materialized leg addresses the documents it returned the same way the Top addresses ranked documents — through
+     * the shared {@link HybridFusionQueryBuilder#addressDocuments}, by {@code _index} and {@code _id} together.
+     *
+     * <p>The Tail is a {@code filter}, so it decides the match set. Addressing it by {@code _id} alone made every
+     * same-{@code _id} sibling document in another index part of that set: it was counted into {@code total_hits}, fed
+     * every aggregation bucket, and came back to the user as a score-0 hit — inflating precisely the numbers the Tail
+     * exists to make correct. This is not the same defect as the Top's, and qualifying the Top did not fix it: the Tail was
+     * built from the raw leg hits without reference to the ranked window's resolved indices at all.
+     *
+     * <p>Hits are grouped by index — one qualified clause per index, OR-ed by
+     * {@link HybridFusionQueryBuilder#addressDocumentGroups} — rather than one clause per hit, so a single-index search
+     * still presents a single clause and, since {@code _index} is a constant field whose filter rewrites to MatchAll on its
+     * own shard and MatchNoDocs elsewhere, the post-rewrite leaf count per leg is unchanged.
+     *
+     * <p>An empty leg is returned as an explicit {@code match_none}. {@code bool{should: []}} compiles to
+     * {@code MatchAllDocsQuery}, so an ANN leg that matched nothing would otherwise flip to matching <i>every</i> document
+     * in the Tail. Today's bare ids query avoids that only by accident — core rewrites an empty {@link IdsQueryBuilder} to
+     * {@code match_none} — and that accident does not survive wrapping the leg in a bool, so state the guard here.
+     */
+    private static QueryBuilder materializedLeg(SearchHit[] hits) {
+        if (hits.length == 0) {
+            return new MatchNoneQueryBuilder();
+        }
+        // Insertion-ordered, so a leg's clauses come out in the order its hits arrived — deterministic for the same
+        // response. Every hit carries an _index by the invariant requireHitsCarryTheirIndex asserts, so there is no
+        // unqualified group to address by _id alone.
+        Map<String, List<String>> idsByIndex = new LinkedHashMap<>();
+        for (SearchHit hit : hits) {
+            idsByIndex.computeIfAbsent(hit.getIndex(), index -> new ArrayList<>()).add(hit.getId());
+        }
+        return HybridFusionQueryBuilder.addressDocumentGroups(idsByIndex);
+    }
+
+    /**
+     * Legs for which materializing is <i>worth</i> it: an ANN leg re-run in the Tail re-walks the HNSW graph (and a
+     * {@code neural} one re-runs inference) purely to recount what the fan-out already retrieved, while a term-defined leg
+     * costs almost nothing to re-run. This is a cost filter only — whether an address of the returned hits is <i>correct</i>
+     * is decided per response by the truncation test in {@link #legInTailForm}, not here.
+     *
+     * <p>Keeping the two separate is what makes the rule safe for a leg whose writeable name does not determine its match
+     * set. {@code neural} is exactly that: against a {@code rank_features} semantic embedding field it rewrites into a
+     * {@code neural_sparse} query, whose match set is every document containing a query token — far larger than the window
+     * — and fused mode substitutes the Tail before the legs are rewritten, so the coordinator sees the same {@code neural}
+     * name either way and cannot tell dense from sparse. Materialized on the strength of the name alone, such a leg dropped
+     * everything past the window from {@code total_hits} and from every aggregation bucket, at HTTP 200. The truncation
+     * test refuses it for the same reason it refuses a deep-{@code k} dense leg: it filled the window, so what it returned
+     * is not known to be all it matched.
+     */
+    private static boolean isMaterializableLeg(QueryBuilder leg) {
+        String name = leg.getWriteableName();
+        return KNNQueryBuilder.NAME.equals(name) || NeuralQueryBuilder.NAME.equals(name) || NeuralKNNQueryBuilder.NAME.equals(name);
+    }
+
+    /**
+     * Whether re-executing this leg costs a <b>model inference</b> on top of whatever it reads. Only {@code neural} does:
+     * {@code knn} carries its vector in the request, and {@code neural_knn} ({@link NeuralKNNQueryBuilder}) wraps a
+     * {@link KNNQueryBuilder} whose vector is already resolved.
+     *
+     * <p>It matters because the count round's disjunction is built from the <b>original</b> leg builders — round 1 rewrites
+     * a copy ({@code NeuralQueryBuilder#rewriteQueryAgainstKnnField} returns a new builder holding the {@code SetOnce}),
+     * leaving the original's {@code vectorSupplier()} null — so rewriting the count re-enters the inference branch and calls
+     * the model again. Nothing caches the result: {@code MLCommonsClientAccessor} caches {@code MLModel} metadata, not
+     * embeddings. Against a remote connector that is a network round trip, per-call spend, and another throttle path, which
+     * is why it is weighed differently from a local graph walk even where one round trip would be saved.
+     */
+    private static boolean carriesInference(QueryBuilder leg) {
+        return NeuralQueryBuilder.NAME.equals(leg.getWriteableName());
+    }
+
+    /**
+     * Single source of truth for whether a fused query needs the executed Tail (the non-scoring
+     * {@code bool{should: legs}}): aggregations or highlighting need the full match set in the query phase, an accurate
+     * index-wide {@code total_hits} beyond the fused window needs the legs counted, a sort that is not by
+     * {@code _score} ranks over the match set rather than the fused window, and {@code collapse.inner_hits} expands each
+     * group over the match set (see {@link CandidateScope.Disposition#FORCES_TAIL}) — with
+     * Top only, such a request would sort, or expand a group over, an arbitrary window-sized subset of its matches.
+     *
+     * <p>Deliberately NOT triggers:
+     * <ul>
+     *   <li>{@code explain} — the Tail cannot recover a fused explanation: the fused score is arithmetic the coordinator
+     *       already did, and the clause carrying it into round 2 is a childless {@code constant_score} with nothing to
+     *       descend into (the Tail explains as a non-scoring filter either way). Describing the fusion belongs on the
+     *       response side, where classic hybrid puts it too — the legs explain in round 1 and the fused tree is assembled
+     *       from those explanations on the response (see {@code FusedExplanationMerger}).</li>
+     *   <li>{@code profile} — the legs report their own trees from round 1, where they execute as the queries the user
+     *       wrote, each merged into the response under its own shard entry (see {@code FusedLegProfileMerger}); the
+     *       response's own entry covers round 2, and a synthesized {@code [coordinator]} entry covers the fan-out and the
+     *       fusion between them, from the spans this class records into {@link FusedCoordinatorTimings}. Forcing the Tail
+     *       would add nothing to that: it would time a fresh
+     *       re-execution of the legs as the non-scoring filters the Tail reduces them to — a materialized leg appearing
+     *       there as an id/index filter rather than the ANN query it came from — and change the execution being
+     *       measured.</li>
+     *   <li>leg {@code inner_hits} — inner_hits are built in the fetch phase from the <i>registered</i> inner-hit
+     *       contexts per returned parent doc, so the leg never has to be executed for them to be returned. They are
+     *       carried separately (see {@link #innerHitsLegs}), which keeps a Top-only query cheap without losing them.
+     *       This is unlike {@code collapse.inner_hits} above, which is not a fetch-phase expansion of the returned
+     *       document at all but a whole extra search per group, and so does depend on what round 2 matches.</li>
+     *   <li>a leg carrying {@code _name} — {@code matched_queries} is built in the fetch phase from weights the phase
+     *       creates itself for each <i>registered</i> named query, so a named leg has to be converted, never executed.
+     *       Forcing the Tail would buy a reporting field with a full match-set execution across every shard. The leg
+     *       forms are carried for registration alone instead (see {@link #buildFusedQuery} and
+     *       {@code HybridFusionQueryBuilder#registerNamedOnlyQueries}), which keeps a Top-only query Top-only.</li>
+     * </ul>
+     */
+    private static boolean needsTail(SearchSourceBuilder source, int numRankedDocs) {
+        if (Objects.nonNull(source) && (Objects.nonNull(source.aggregations()) || Objects.nonNull(source.highlighter()))) {
+            return true;
+        }
+        if (CandidateScope.sortDiscardsFusedRanking(source) || CandidateScope.collapseExpandsGroups(source)) {
+            return true;
+        }
+        return wantsTotalsBeyondWindow(source, numRankedDocs);
+    }
+
+    /**
+     * The legs that declare {@code inner_hits}, in their original (un-materialized) form, for fetch-phase registration.
+     * Only legs actually carrying an inner_hits definition are kept, so the common case registers nothing. Note these are
+     * the original leg builders rather than the Tail's possibly id-materialized form — a kNN/neural leg materialized to
+     * ids has no inner_hits definition left to extract.
+     */
+    private static List<QueryBuilder> innerHitsLegs(List<QueryBuilder> legs) {
+        List<QueryBuilder> withInnerHits = new ArrayList<>();
+        for (QueryBuilder leg : legs) {
+            Map<String, InnerHitContextBuilder> innerHits = new HashMap<>();
+            InnerHitContextBuilder.extractInnerHits(leg, innerHits);
+            if (innerHits.isEmpty() == false) {
+                withInnerHits.add(leg);
+            }
+        }
+        return withInnerHits;
+    }
+
+    private static boolean wantsTotalsBeyondWindow(SearchSourceBuilder source, int numRankedDocs) {
+        if (Objects.isNull(source)) {
+            return true;
+        }
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        return Objects.isNull(trackTotalHitsUpTo) || trackTotalHitsUpTo > numRankedDocs;
+    }
+
+    /**
+     * The {@code track_total_hits} threshold a leg has to count up to for {@link #totalHitsFromLegs} to be able to stand
+     * in for the Tail, or {@code null} when no leg count could ever do that: totals disabled (round 2 is Top-only already),
+     * exact totals requested ({@code true} — only the Tail can count the union exactly), or an integer threshold at or
+     * below the window (round 2's own Top count reaches it, or the Tail is kept because the window came back short —
+     * {@link #wantsTotalsBeyondWindow} decides that from the ranked count, which is not known before the legs run).
+     * An unset value is core's default, {@link SearchContext#DEFAULT_TRACK_TOTAL_HITS_UP_TO}.
+     */
+    static Integer legTotalHitsThreshold(SearchSourceBuilder source, int windowSize) {
+        Integer trackTotalHitsUpTo = Objects.isNull(source) ? null : source.trackTotalHitsUpTo();
+        if (Objects.isNull(trackTotalHitsUpTo)) {
+            return SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO;
+        }
+        if (trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED
+            || trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
+            return null;
+        }
+        return trackTotalHitsUpTo > windowSize ? trackTotalHitsUpTo : null;
+    }
+
+    /**
+     * Whether the request's <i>shape</i> leaves the Tail nothing to do but count — the source-only half of
+     * {@link #onlyTotalsNeedTheTail}, decidable before the legs run and therefore also the condition under which asking
+     * the legs to count is worth anything at all ({@code HybridQuerySearchRequestFilter} and the fused rewrite consult it
+     * before arming the count; see finding 1 of the review on this change). Everything that makes the Tail's
+     * <i>documents</i> matter fails it: the features {@link #needsTail} names, plus the shapes where Tail-only documents
+     * (score {@code 0}) are what fills the result — a {@code search_after} cursor, a {@code collapse} whose groups the
+     * window may not fill, a {@code min_score} (core's count is of the documents that pass it, not of the union), and any
+     * sort other than {@code _score} descending: {@code _score} <i>ascending</i> puts the score-0 Tail documents first, so
+     * with them absent the page changes. The page bound itself needs the ranked count and is checked separately.
+     */
+    static boolean requestShapeAllowsDerivedTotalHits(SearchSourceBuilder source) {
+        if (Objects.isNull(source)) {
+            return false;
+        }
+        if (Objects.nonNull(source.aggregations()) || Objects.nonNull(source.highlighter())) {
+            return false;
+        }
+        if (Objects.nonNull(source.collapse()) || Objects.nonNull(source.searchAfter()) || Objects.nonNull(source.minScore())) {
+            return false;
+        }
+        if (Objects.nonNull(source.sorts())) {
+            for (SortBuilder<?> sort : source.sorts()) {
+                if ((sort instanceof ScoreSortBuilder) == false || sort.order() != SortOrder.DESC) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /** The last result slot the request asks for: {@code from + size}, with core's defaults for either when unset. */
+    static int requestedPageEnd(SearchSourceBuilder source) {
+        int from = Math.max(source.from(), SearchService.DEFAULT_FROM);
+        int size = source.size() < 0 ? SearchService.DEFAULT_SIZE : source.size();
+        return from + size;
+    }
+
+    /**
+     * Whether the Tail, if {@link #needsTail} asked for it, is there for {@code hits.total} and nothing else — the one case
+     * where a count derived from the legs can replace it: the request's shape allows it
+     * ({@link #requestShapeAllowsDerivedTotalHits}) and the page fits inside the ranked window, so no Tail-only document
+     * would have filled a slot. Each excluded shape stays exactly as it is today.
+     */
+    private static boolean onlyTotalsNeedTheTail(SearchSourceBuilder source, int numRankedDocs) {
+        return requestShapeAllowsDerivedTotalHits(source) && requestedPageEnd(source) <= numRankedDocs;
+    }
+
+    /**
+     * Whether dropping the Tail would change {@code matched_queries}. With the Tail, a named leg is registered as the query
+     * the user wrote; without it, {@link #namedLegsForRegistration} carries a named ANN leg as an address of the documents
+     * it <i>returned</i> — deliberately, to spare a shard-side ANN compile (and for {@code neural}, a second inference) for
+     * a reporting field. That address is the leg's match set only when the leg returned all of it; a named ANN leg that
+     * filled its window may have matched a page document it never returned, and that document would lose the entry the
+     * Tail path reports. The count is not allowed to stand in for the Tail in that one shape, so the default path keeps
+     * reporting exactly what it did.
+     */
+    private static boolean namedAnnLegFilledTheWindow(List<QueryBuilder> legs, SearchHit[][] legHits, int windowSize) {
+        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
+            QueryBuilder leg = legs.get(legIndex);
+            if (isMaterializableLeg(leg) && legHits[legIndex].length >= windowSize && carriesQueryName(leg)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * How many documents the legs will fuse to: the distinct {@code (_index, _id)} count across their returned hits, cut to
+     * the window. Equal to {@code ranked.ids().length} by construction — {@link #toRankedDocs} sorts the same key set and
+     * cuts it to {@code windowSize} without dropping anything else — but derived from the responses alone, so it can be
+     * asked before fusion runs and without re-running it.
+     */
+    private static int rankedCountFromLegs(MultiSearchResponse.Item[] items, int windowSize) {
+        Set<String> keys = new HashSet<>();
+        for (MultiSearchResponse.Item item : items) {
+            for (SearchHit hit : item.getResponse().getHits().getHits()) {
+                keys.add(documentKey(hit));
+            }
+        }
+        return Math.min(keys.size(), windowSize);
+    }
+
+    /**
+     * The {@code hits.total} round 2 would have reported with the Tail, when the legs already prove it — else {@code null}.
+     *
+     * <p>Core caps a tracked count at the threshold: a union with more matches than the threshold is reported as
+     * {@code {threshold, gte}}, whatever its size ({@code SearchPhaseController.TopDocsStats#getTotalHits}). A leg's
+     * match set is a subset of the union and its own count is capped the same way, so a leg that reports
+     * {@code gte} — which core emits only when the leg alone exceeded the threshold — proves the union does too, and
+     * {@code {threshold, gte}} is exactly what the Tail would have produced. Anything else (every leg exact and below the
+     * threshold, a leg that was not asked to count, a leg landing exactly on the threshold with {@code eq}) leaves the
+     * union's count genuinely unknown, and the Tail is kept so the response is unchanged.
+     */
+    static TotalHits totalHitsFromLegs(SearchSourceBuilder source, TotalHits[] legTotalHits, int windowSize) {
+        Integer threshold = legTotalHitsThreshold(source, windowSize);
+        if (Objects.isNull(threshold)) {
+            return null;
+        }
+        for (TotalHits legTotal : legTotalHits) {
+            if (Objects.nonNull(legTotal)
+                && legTotal.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
+                && legTotal.value() >= threshold) {
+                return new TotalHits(threshold, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * The {@code hits.total} a Top-only round 2 would have reported for a request that wants a count, or {@code null} when
+     * that is not knowable from the legs. Two sources, in order. The ranked window itself: round 2's Top matches exactly
+     * {@code numRankedDocs} documents, so when that count reaches the request's threshold core would report
+     * {@code {threshold, gte}} (past it) or {@code {threshold, eq}} (exactly on it) — the same rule
+     * {@code SearchPhaseController.TopDocsStats#getTotalHits} applies. Below it, the union's count is what round 2 with a
+     * Tail would have produced, and only a leg capped at the threshold proves that ({@link #totalHitsFromLegs}). Exact
+     * totals ({@code true}) are never answered here: the shape check refuses them before the legs run.
+     */
+    static TotalHits totalHitsForFastPath(SearchSourceBuilder source, int numRankedDocs, TotalHits[] legTotalHits, int windowSize) {
+        Integer trackTotalHitsUpTo = Objects.isNull(source) ? null : source.trackTotalHitsUpTo();
+        int threshold = Objects.isNull(trackTotalHitsUpTo) ? SearchContext.DEFAULT_TRACK_TOTAL_HITS_UP_TO : trackTotalHitsUpTo;
+        if (threshold == SearchContext.TRACK_TOTAL_HITS_ACCURATE || threshold == SearchContext.TRACK_TOTAL_HITS_DISABLED) {
+            return null;
+        }
+        if (numRankedDocs > threshold) {
+            return new TotalHits(threshold, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+        }
+        if (numRankedDocs == threshold) {
+            return new TotalHits(threshold, TotalHits.Relation.EQUAL_TO);
+        }
+        return totalHitsFromLegs(source, legTotalHits, windowSize);
+    }
+
+    /** Each leg's own {@code hits.total}, {@code null} for a leg that did not count. Called after {@link #groupLegHits}
+     *  has failed the request on any failed leg, so every item here has a response. */
+    private static TotalHits[] legTotalHits(MultiSearchResponse.Item[] items) {
+        TotalHits[] totals = new TotalHits[items.length];
+        for (int leg = 0; leg < items.length; leg++) {
+            totals[leg] = items[leg].getResponse().getHits().getTotalHits();
+        }
+        return totals;
+    }
+
+    /** The fused window in score order. {@code indices} is parallel to {@code ids} and fully populated — every entry names
+     *  the index the document was found in, which is what lets round 2 address it unambiguously. {@code hits} is the leg
+     *  hit each document was taken from (the first leg that returned it), which is what the fast path assembles the page
+     *  from: every leg fetches the same fields for the same document, so any leg's instance carries what round 2 would
+     *  have fetched. */
+    private record RankedDocs(String[] ids, String[] indices, float[] scores, SearchHit[] hits) {
+    }
+
+    // ---- fast path: answer from the legs, no round 2 ----
+
+    /**
+     * What the fused rewrite self-erases into. {@code substitute} is the query core executes as round 2: the Top-and-Tail
+     * {@link HybridFusionQueryBuilder} on the two-round path, or {@code match_none} when the page was assembled here and
+     * round 2 has nothing left to do. {@code assembledHits} is that page — {@code null} on the two-round path.
+     */
+    record FusedResult(QueryBuilder substitute, SearchHits assembledHits) {
+        static FusedResult twoRound(QueryBuilder substitute) {
+            return new FusedResult(substitute, null);
+        }
+
+        boolean tookFastPath() {
+            return Objects.nonNull(assembledHits);
+        }
+    }
+
+    /**
+     * Whether the request's <i>shape</i> lets the fast path answer it: nothing in it needs a shard-side round over the
+     * fused ranking or the full match set, and nothing in its hits can depend on a query other than the one that
+     * returned the document.
+     *
+     * <p>The three classes that force the two-round path, and what falls in each:
+     * <ul>
+     *   <li><b>shard-side phases that need the fused docs or the match set on the shard</b> — {@code aggregations},
+     *       {@code highlight}, any {@code sort} (a {@code _score} sort's {@code sort} values are produced shard-side too),
+     *       {@code collapse}, {@code search_after}, {@code min_score}, {@code rescore} ({@code RescorePhase} rescores the
+     *       shard's own query-phase top docs, which the fast path never produces), a page reaching past the window
+     *       (Tail-only documents fill it), exact totals ({@code track_total_hits: true} needs the Tail's count);</li>
+     *   <li><b>fetch-phase features the legs can serve only for the leg that returned the document</b> —
+     *       {@code script_fields} (a script may read {@code _score}, on a leg the raw score); {@code inner_hits} and leg
+     *       {@code _name}s are checked against the legs by {@link #decideFastPathBeforeLegs};</li>
+     *   <li><b>coordinator-side processing after the search</b> — {@code profile} (round 2's tree is part of what it
+     *       reports) here; search-pipeline response processors at the rewrite, where the pipeline is resolvable.</li>
+     * </ul>
+     * Source-only and O(fields), so the filter can consult it on every search before deciding to attach anything.
+     */
+    static boolean requestShapeAllowsFastPath(SearchSourceBuilder source) {
+        return Objects.isNull(requestShapeFastPathRefusal(source, false));
+    }
+
+    /**
+     * The first request feature that keeps the fast path off, as a {@link FastPathDecision.Refusal}, or {@code null} when
+     * the shape allows it. The order is the order {@link #requestShapeAllowsFastPath} checks in, so the two agree on
+     * every source. {@code ignoreProfile} evaluates the shape the request would have without {@code profile: true} —
+     * what a profiled request reports about its unprofiled twin.
+     */
+    static FastPathDecision.Refusal requestShapeFastPathRefusal(SearchSourceBuilder source, boolean ignoreProfile) {
+        if (Objects.isNull(source)) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "no request source");
+        }
+        if (Objects.nonNull(source.aggregations())) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "aggregations need round 2 over the fused ranking");
+        }
+        if (Objects.nonNull(source.highlighter())) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "highlight needs round 2 over the fused ranking");
+        }
+        if (Objects.nonNull(source.sorts())) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "sort needs round 2 over the fused ranking");
+        }
+        if (Objects.nonNull(source.collapse())) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "collapse needs round 2 over the fused ranking");
+        }
+        if (Objects.nonNull(source.searchAfter())) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "search_after needs round 2 over the fused ranking");
+        }
+        if (Objects.nonNull(source.minScore())) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "min_score needs round 2 over the fused ranking");
+        }
+        if (Objects.nonNull(source.rescores()) && source.rescores().isEmpty() == false) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "rescore runs on the shard over round 2's query");
+        }
+        if (Objects.nonNull(source.scriptFields()) && source.scriptFields().isEmpty() == false) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "script_fields may read _score, which a leg reports raw");
+        }
+        if (ignoreProfile == false && source.profile()) {
+            return new FastPathDecision.Refusal(FastPathDecision.REQUEST_SHAPE, "profile reports round 2's query tree");
+        }
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        if (Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
+            return new FastPathDecision.Refusal(FastPathDecision.EXACT_TOTALS, "track_total_hits: true needs the Tail's exact count");
+        }
+        return null;
+    }
+
+    /**
+     * The fast-path verdict for this hybrid as far as it can be known before the legs run — the request's shape (read
+     * as if unprofiled), its legs, the resolved pipeline, then the fetch volume against the budget in force — in the
+     * order the fast path itself checks them, so the first refusal is the one that would have applied.
+     * {@code rootHybrid} says whether this hybrid is the request's own query, the one thing the rewrite cannot see and
+     * {@code HybridQuerySearchRequestFilter} tells it. What the legs decide afterwards ({@link #decideFastPathAfterLegs})
+     * completes the verdict.
+     */
+    static FastPathDecision decideFastPathBeforeLegs(SearchRequest request, List<QueryBuilder> legs, int windowSize, boolean rootHybrid) {
+        FastPathDecision decision = new FastPathDecision();
+        if (rootHybrid == false) {
+            return decision.refuse(FastPathDecision.NESTED_HYBRID, "only the request's own top-level hybrid can have its page assembled");
+        }
+        SearchSourceBuilder source = request.source();
+        FastPathDecision.Refusal shape = requestShapeFastPathRefusal(source, true);
+        if (Objects.nonNull(shape)) {
+            return decision.refuse(shape);
+        }
+        for (int leg = 0; leg < legs.size(); leg++) {
+            if (carriesQueryName(legs.get(leg))) {
+                return decision.refuse(
+                    FastPathDecision.LEG_NAME,
+                    String.format(Locale.ROOT, "leg %d carries _name; round 2 registers it against every returned document", leg)
+                );
+            }
+        }
+        if (innerHitsLegs(legs).isEmpty() == false) {
+            return decision.refuse(
+                FastPathDecision.LEG_INNER_HITS,
+                "a leg declares inner_hits; round 2 computes them for every returned document"
+            );
+        }
+        if (FusionConfigResolver.resolvedPipelineHasResponseProcessors(request)) {
+            return decision.refuse(
+                FastPathDecision.RESPONSE_PROCESSORS,
+                "the resolved search pipeline has response processors, which run before an assembled page could reach them"
+            );
+        }
+        ReturnedEmbeddingFields.FetchVolume volume = ReturnedEmbeddingFields.fastPathFetchVolume(request, legs.size(), windowSize);
+        decision.fetchBudgetBytes(volume.budgetBytes());
+        switch (volume.perDocument().unknown()) {
+            case SOURCE_SIZE_UNOBSERVED:
+                return decision.refuse(
+                    FastPathDecision.SOURCE_SIZE_UNOBSERVED,
+                    "no response with this _source filter has been observed for the index on this coordinator yet; "
+                        + "the two-round page is the first observation"
+                );
+            case INDICES_UNRESOLVED:
+                return decision.refuse(
+                    FastPathDecision.FETCH_VOLUME_UNKNOWN,
+                    "the request's indices or their mappings could not be read on the coordinator"
+                );
+            default:
+                break;
+        }
+        decision.fetchEstimateBytes(volume.extraBytes());
+        if (volume.exceedsBudget()) {
+            return decision.refuse(
+                FastPathDecision.FETCH_BUDGET,
+                String.format(
+                    Locale.ROOT,
+                    "the legs would fetch %d documents beyond the page, an estimated %d bytes, over the %d-byte budget",
+                    volume.extraDocuments(),
+                    volume.extraBytes(),
+                    volume.budgetBytes()
+                )
+            );
+        }
+        return decision;
+    }
+
+    /**
+     * A derived total the response may carry: one that cannot contradict the page it is reported with.
+     *
+     * <p>Every leg, and the count round, is an independently routed read. Without a {@code point_in_time} the count can land
+     * on a shard copy that has not applied a refresh the legs' copy had, or has applied a delete it had not, so a count
+     * labelled exact can come back SMALLER than the number of documents the legs ranked — and the page is assembled from the
+     * legs. A response with ten hits and {@code "total": 9} is a contradiction a client can see, and pagination computed from
+     * the total then disagrees with the page it was given.
+     *
+     * <p>Refusing such a count costs nothing real: in a consistent view every ranked document matches some leg, so the union
+     * is never below the ranked count; and where the union exceeds the threshold the value reported IS the threshold, which
+     * {@link #legTotalHitsThreshold} keeps above the window and therefore above the ranked count. So this rejects only
+     * genuinely skewed reads, and the Tail — one execution, counting what it returns — answers them instead. A rejection is
+     * visible where every other refusal is: the coordinator profile entry reports the Tail as built and the fast path as
+     * refused for an unsettled count.
+     */
+    private static TotalHits totalHitsNotBelowThePage(TotalHits derived, int rankedCount) {
+        if (Objects.isNull(derived)) {
+            return null;
+        }
+        if (derived.relation() == TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO || derived.value() >= rankedCount) {
+            return derived;
+        }
+        return null;
+    }
+
+    /**
+     * Completes a {@link #decideFastPathBeforeLegs verdict} with what only the legs' answers decide: whether anything was
+     * ranked, whether the requested page lies inside the ranked window, and whether the count the request wants is
+     * settled — disabled, inside the window, or proved by a leg (see {@link #totalHitsForFastPath}). Evaluated identically
+     * on the armed path, where it decides the fallback, and on the two-round path of a profiled request, where it
+     * completes the report; a decision already refused before the legs is left as it is. {@code countedUnion} is the union
+     * a lazy count-only round established, or {@code null} when none ran.
+     */
+    static void decideFastPathAfterLegs(
+        FastPathDecision decision,
+        SearchSourceBuilder source,
+        MultiSearchResponse.Item[] items,
+        RankedDocs ranked,
+        int windowSize,
+        TotalHits countedUnion
+    ) {
+        if (Objects.isNull(decision) || decision.allowsSoFar() == false) {
+            return;
+        }
+        if (ranked.ids().length == 0) {
+            decision.refuse(FastPathDecision.NO_CANDIDATES, "the legs returned nothing to fuse; round 2 is a match_none either way");
+            return;
+        }
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
+        boolean countSettled = totalsDisabled
+            || Objects.nonNull(totalHitsNotBelowThePage(countedUnion, ranked.ids().length))
+            || Objects.nonNull(totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize));
+        decision.countSettled(countSettled);
+        int pageEnd = requestedPageEnd(source);
+        if (pageEnd > ranked.ids().length) {
+            decision.refuse(
+                FastPathDecision.PAGE_BEYOND_WINDOW,
+                String.format(Locale.ROOT, "the page ends at %d but only %d documents were ranked", pageEnd, ranked.ids().length)
+            );
+            return;
+        }
+        if (countSettled == false) {
+            // Two reasons for one state, chosen here rather than at the call site so that the page bound above keeps its
+            // precedence either way. The count-only round is issued for an armed request alone, so a profiled request
+            // (never armed) cannot settle a count its unprofiled twin settles — and saying only "no leg proved it" would
+            // describe a request whose count is in fact derivable. twinWouldHaveCounted is set where that question can be
+            // answered; everywhere else it is false and the plain reason stands.
+            decision.refuse(
+                decision.twinWouldHaveCounted() ? FastPathDecision.COUNT_ROUND_NOT_RUN_UNDER_PROFILE : FastPathDecision.COUNT_NOT_SETTLED,
+                decision.twinWouldHaveCounted()
+                    ? "the count-only round that would prove this count is issued only for an armed request, and profile keeps two rounds"
+                    : "the request wants a count beyond the window and no leg reported enough matches to prove it"
+            );
+        }
+    }
+
+    /**
+     * The page, assembled from the legs' hits: the ranked documents from {@code from} to {@code from + size}, each hit
+     * being the leg instance that returned it with its score replaced by the fused score — the same floored value the
+     * Top clause would have carried, so {@code _score} is what round 2 would have reported. {@code max_score} is the top
+     * fused score, as core reports the best score across all shards whatever the page. {@code hits.total} is
+     * {@code totalHits} — the leg-derived total, or {@code null} when totals are disabled, exactly as round 2 would have
+     * reported for the same request.
+     */
+    static SearchHits assemblePage(RankedDocs ranked, SearchSourceBuilder source, TotalHits totalHits) {
+        int from = Math.max(source.from(), SearchService.DEFAULT_FROM);
+        int size = source.size() < 0 ? SearchService.DEFAULT_SIZE : source.size();
+        Integer[] order = roundTwoOrder(ranked);
+        int end = Math.min(from + size, order.length);
+        SearchHit[] page = new SearchHit[Math.max(0, end - from)];
+        for (int i = from; i < end; i++) {
+            int position = order[i];
+            SearchHit hit = ranked.hits()[position];
+            hit.score(ranked.scores()[position]);
+            page[i - from] = hit;
+        }
+        float maxScore = ranked.scores().length == 0 || size == 0 ? Float.NaN : ranked.scores()[0];
+        return new SearchHits(page, totalHits, maxScore);
+    }
+
+    /**
+     * The ranked window in the order the page reports it. Round 2's Top scores each document at its fused score and
+     * core merges the shards' results with {@code TopDocs.merge}: score descending, then the shard's position in the
+     * request's shard iteration (which is {@code ShardId} order), then Lucene doc id within the shard. The fused ranking
+     * already has the scores in order; this settles equal scores by shard the same way, and within one shard by the
+     * ranking's own key order — {@code _index}, then {@code _id} — because the coordinator never sees Lucene doc ids
+     * ({@code SearchHit#docId} is {@code -1} after deserialization) and asking the legs for them through a
+     * {@code [_score, _doc]} sort costs a {@code TopFieldCollector} pass on every leg. So documents with bit-identical
+     * fused scores come out exactly as round 2 orders them when they sit in different shards, and in {@code _id} order
+     * rather than doc-id order when they share one — a deterministic order that, unlike doc ids, survives merges and
+     * is the same on every replica. Scores are never reordered; a hit without a shard target keeps its fused position.
+     *
+     * <p>When such a same-shard run of equal scores straddles a page edge ({@code from} or {@code from + size}), the
+     * order decides membership: the page may show a different one of the tied documents than round 2 would, at the same
+     * score. Any of them is a correct occupant of that rank; round 2's own choice is not stable across replicas either.
+     */
+    private static Integer[] roundTwoOrder(RankedDocs ranked) {
+        Integer[] order = new Integer[ranked.hits().length];
+        for (int i = 0; i < order.length; i++) {
+            order[i] = i;
+        }
+        Arrays.sort(order, (a, b) -> {
+            int byScore = Float.compare(ranked.scores()[b], ranked.scores()[a]);
+            if (byScore != 0) {
+                return byScore;
+            }
+            SearchHit first = ranked.hits()[a];
+            SearchHit second = ranked.hits()[b];
+            if (Objects.nonNull(first.getShard()) && Objects.nonNull(second.getShard())) {
+                int byShard = first.getShard().getShardId().compareTo(second.getShard().getShardId());
+                if (byShard != 0) {
+                    return byShard;
+                }
+            }
+            // toRankedDocs sorted equal scores by the composite _index + _id key, so ranked position is that order.
+            return Integer.compare(a, b);
+        });
+        return order;
+    }
+
+    /**
+     * The fused rewrite's result: the page assembled from the legs when the request allows it and the legs delivered what
+     * that needs, else the two-round substitute {@link #buildFusedQuery} builds.
+     *
+     * <p>{@code fastPathArmed} says the rewrite judged the request eligible before the legs ran (shape, legs, pipeline) and
+     * made the legs fetch the user's fields. Two things are only knowable now, and either sends the request down the
+     * two-round path with the legs' results reused as they are: the page must fit inside the ranked window (past it,
+     * Tail-only documents fill the slots — the same rule the Tail keeps), and a request that wants a count beyond the
+     * window must have a leg that proves it (see {@link #totalHitsFromLegs}); totals disabled need no count at all.
+     * Both paths report through the same consumers, so a caller cannot tell them apart from the hits except by latency
+     * and by the order of documents with bit-identical fused scores inside one shard — which, at a page edge, is which
+     * of the tied documents the page shows (see {@link #roundTwoOrder}). What tells them apart on purpose: the
+     * coordinator profile entry's {@code fast_path} verdict ({@link FastPathDecision}).
+     */
+    static FusedResult buildFusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations,
+        HybridQueryBuilder originalQuery,
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer,
+        boolean fastPathArmed
+    ) {
+        return buildFusedResult(
+            source,
+            multiSearchResponse,
+            legs,
+            fusion,
+            windowSize,
+            timings,
+            explanations,
+            originalQuery,
+            totalHitsConsumer,
+            fastPathArmed,
+            null
+        );
+    }
+
+    /**
+     * As above, with {@code countedUnion} the union a lazy count-only round already established — the answer to
+     * {@link #unionCountRequest}, or {@code null} when no such round ran (any request that method refused, or one whose
+     * count failed or came back incomplete). When present it is preferred over every derived total: core computed both the value and
+     * the relation against the same threshold, for the legs' own disjunction, so it is what round 2's Tail would have
+     * reported rather than an inference about it.
+     */
+    static FusedResult buildFusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse multiSearchResponse,
+        List<QueryBuilder> legs,
+        FusionSpec fusion,
+        int windowSize,
+        FusedCoordinatorTimings timings,
+        FusedDocExplanations explanations,
+        HybridQueryBuilder originalQuery,
+        FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumer,
+        boolean fastPathArmed,
+        TotalHits countedUnion
+    ) {
+        if (fastPathArmed == false) {
+            // No counted union to pass on: unionCountRequest issues the round for an armed request only, so countedUnion is
+            // null on every un-armed call.
+            return FusedResult.twoRound(
+                buildFusedQuery(
+                    source,
+                    multiSearchResponse,
+                    legs,
+                    fusion,
+                    windowSize,
+                    timings,
+                    explanations,
+                    originalQuery,
+                    totalHitsConsumer
+                )
+            );
+        }
+        MultiSearchResponse.Item[] items = multiSearchResponse.getResponses();
+        long windowMergeStart = System.nanoTime();
+        SearchHit[][] legHits = groupLegHits(items, legs.size());
+        timings.windowMergeNanos(System.nanoTime() - windowMergeStart);
+        RankedDocs ranked = computeRankedDocs(legHits, fusion, windowSize, timings, explanations);
+        timings.rankedDocs(ranked.ids().length);
+        // What the legs decide: nothing ranked, a page past the ranked window, or a count no leg proved, each a fallback.
+        // The verdict is recorded on the timings' decision (the profile's account of it) and read back here, so the
+        // report and the behaviour cannot disagree.
+        FastPathDecision decision = Objects.nonNull(timings.fastPath()) ? timings.fastPath() : new FastPathDecision();
+        decideFastPathAfterLegs(decision, source, items, ranked, windowSize, countedUnion);
+        if (ranked.ids().length == 0) {
+            // Nothing fused: match_none either way, and the consumers learn nothing was derived or assembled.
+            if (Objects.nonNull(totalHitsConsumer)) {
+                totalHitsConsumer.accept(null);
+            }
+            return FusedResult.twoRound(new MatchNoneQueryBuilder());
+        }
+        if (decision.allowsSoFar() == false) {
+            // Fall back with the fusion already done: reuse the legHits/ranked computed above rather than recomputing
+            // them (and re-recording their timings/explanations) inside a recomputing buildFusedQuery overload. The counted
+            // union is deliberately not carried in: arming required the verdict to be unrefused before the legs, so the
+            // refusal read here is one of the post-leg three, and none of them can both hold a usable count and reach the
+            // Tail decision — see buildSubstitute.
+            return FusedResult.twoRound(
+                buildSubstitute(source, items, legHits, ranked, legs, windowSize, timings, originalQuery, totalHitsConsumer)
+            );
+        }
+        // Totals: disabled → none; otherwise what round 2 would have reported, which the verdict above established is known.
+        Integer trackTotalHitsUpTo = source.trackTotalHitsUpTo();
+        boolean totalsDisabled = Objects.nonNull(trackTotalHitsUpTo) && trackTotalHitsUpTo == SearchContext.TRACK_TOTAL_HITS_DISABLED;
+        TotalHits totalHits = null;
+        if (totalsDisabled == false) {
+            TotalHits counted = totalHitsNotBelowThePage(countedUnion, ranked.ids().length);
+            totalHits = Objects.nonNull(counted)
+                ? counted
+                : totalHitsForFastPath(source, ranked.ids().length, legTotalHits(items), windowSize);
+        }
+        long assembleStart = System.nanoTime();
+        SearchHits page = assemblePage(ranked, source, totalHits);
+        timings.substituteBuildNanos(System.nanoTime() - assembleStart);
+        timings.tailBuilt(false);
+        // The page carries its own total; the totals consumer is told round 2's own (empty) total stands so it does not
+        // overwrite the assembled one on the way out.
+        if (Objects.nonNull(totalHitsConsumer)) {
+            totalHitsConsumer.accept(null);
+        }
+        return new FusedResult(new MatchNoneQueryBuilder(), page);
+    }
+}

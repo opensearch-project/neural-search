@@ -50,6 +50,9 @@ import org.opensearch.neuralsearch.processor.factory.NormalizationProcessorFacto
 import org.opensearch.neuralsearch.processor.factory.RRFProcessorFactory;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.RerankProcessor;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
+import org.opensearch.neuralsearch.query.FusedWindowGuardRescorerBuilder;
+import org.opensearch.search.rescore.RescorerBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
@@ -126,7 +129,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
                 NeuralSearchSettings.NEURAL_STATS_ENABLED,
                 NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT,
                 NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD,
-                SparseSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING
+                SparseSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
+                NeuralSearchSettings.HYBRID_FUSION_ENABLED
             )
         );
         when(clusterService.getClusterSettings()).thenReturn(clusterSettings);
@@ -148,6 +152,39 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         );
 
         assertEquals(4, components.size());
+    }
+
+    /**
+     * The fused rescore guard is registered as a named WRITEABLE and deliberately NOT as a rescorer spec: a
+     * {@code getRescorers()} registration would also add an XContent entry, which is what makes a rescorer name
+     * parseable from a request body — turning an internal wrapper into public request syntax. The shard needs the
+     * writeable to deserialize the builder the coordinator installs; nothing needs the parser.
+     */
+    public void testNamedWriteables_registerTheFusedRescoreGuardWithoutMakingItRequestSyntax() {
+        List<NamedWriteableRegistry.Entry> entries = plugin.getNamedWriteables();
+
+        assertNotNull(entries);
+        assertTrue(
+            "the guard's wire form must be registered under the RescorerBuilder category",
+            entries.stream()
+                .anyMatch(
+                    entry -> RescorerBuilder.class.equals(entry.categoryClass) && FusedWindowGuardRescorerBuilder.NAME.equals(entry.name)
+                )
+        );
+        assertTrue(
+            "the guard must not be registered as a rescorer spec, which would make its name user-typeable",
+            plugin.getRescorers().stream().noneMatch(spec -> FusedWindowGuardRescorerBuilder.NAME.equals(spec.getName().getPreferredName()))
+        );
+        // Route-agnostic, because the assertion above can only ever pass: the plugin does not override getRescorers(), so
+        // it walks an empty list. What actually has to hold is that NO registration route contributes an XContent entry for
+        // the name — getRescorers() is one route, Plugin#getNamedXContent() is another into the very same registry that
+        // parses search bodies.
+        assertTrue(
+            "no registration route may make the guard's name parseable from a request body",
+            plugin.getNamedXContent()
+                .stream()
+                .noneMatch(entry -> FusedWindowGuardRescorerBuilder.NAME.equals(entry.name.getPreferredName()))
+        );
     }
 
     public void testQuerySpecs() {
@@ -203,13 +240,19 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
 
     public void testGetSettings() {
         List<Setting<?>> settings = plugin.getSettings();
-        assertEquals(12, settings.size());
+        // 8 static settings, 4 contributed by SparseSettings.state(), 3 fused-mode settings.
+        assertEquals(15, settings.size());
         // getSettings() folds in SparseSettings.state().getSettings() rather than
         // listing the sparse settings inline, so assert they actually arrive --
         // a bare count passes even if that call is dropped, as long as something
         // else was added in the same change.
         assertTrue(settings.containsAll(SparseSettings.state().getSettings()));
         assertTrue(settings.contains(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED));
+        // A setting the plugin defines but never registers here cannot be set on a cluster at all, dynamically or in
+        // opensearch.yml — the fused fan-out budget would silently stay at its default, and fused mode's opt-in switch
+        // could never be turned on.
+        assertTrue(settings.contains(NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES));
+        assertTrue(settings.contains(NeuralSearchSettings.HYBRID_FUSION_ENABLED));
     }
 
     public void testRequestProcessors() {

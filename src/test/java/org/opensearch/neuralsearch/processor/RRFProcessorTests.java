@@ -44,6 +44,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -182,6 +183,60 @@ public class RRFProcessorTests extends OpenSearchTestCase {
 
         atomicArray.set(0, createQuerySearchResult(true));
         assertFalse(rrfProcessor.shouldSkipProcessor(mockQueryPhaseResultConsumer));
+    }
+
+    /**
+     * A shard whose request was built after the first shard answered replies with {@link QuerySearchResult#nullInstance()}
+     * when its query cannot match — the fused fast path's {@code match_none} round 2, or any query rewritten to match_none.
+     * Such a result has no topDocs to read; the processor must skip it, not throw "topDocs already consumed".
+     */
+    @SneakyThrows
+    public void testShouldSkipProcessor_whenAShardAnsweredWithANullInstance_thenItIsSkippedNotRead() {
+        AtomicArray<SearchPhaseResult> atomicArray = new AtomicArray<>(2);
+        atomicArray.set(0, createQuerySearchResult(false));
+        atomicArray.set(1, QuerySearchResult.nullInstance());
+        when(mockQueryPhaseResultConsumer.getAtomicArray()).thenReturn(atomicArray);
+
+        assertTrue("no shard answered with hybrid results", rrfProcessor.shouldSkipProcessor(mockQueryPhaseResultConsumer));
+
+        atomicArray.set(0, createQuerySearchResult(true));
+        assertFalse(
+            "a null instance beside a hybrid result does not hide the hybrid",
+            rrfProcessor.shouldSkipProcessor(mockQueryPhaseResultConsumer)
+        );
+    }
+
+    /**
+     * The other results {@code isHybridQuery} must not read: a phase result that carries no query result at all (a fetch-only
+     * result), a real result whose topDocs a partial reduce has already consumed, and a result whose topDocs are null.
+     * Each is simply not hybrid; a hybrid result beside them is still seen.
+     */
+    @SneakyThrows
+    public void testShouldSkipProcessor_whenResultsCarryNothingReadable_thenTheyAreSkippedNotRead() {
+        SearchPhaseResult fetchOnly = mock(SearchPhaseResult.class);
+        when(fetchOnly.queryResult()).thenReturn(null);
+
+        QuerySearchResult consumed = createQuerySearchResult(true);
+        consumed.consumeTopDocs();
+        assertTrue("the fixture really has consumed its topDocs", consumed.hasConsumedTopDocs());
+
+        QuerySearchResult nullTopDocs = mock(QuerySearchResult.class);
+        when(nullTopDocs.isNull()).thenReturn(false);
+        when(nullTopDocs.hasConsumedTopDocs()).thenReturn(false);
+        when(nullTopDocs.topDocs()).thenReturn(null);
+        when(nullTopDocs.queryResult()).thenReturn(nullTopDocs);
+
+        AtomicArray<SearchPhaseResult> atomicArray = new AtomicArray<>(4);
+        atomicArray.set(0, fetchOnly);
+        atomicArray.set(1, consumed);
+        atomicArray.set(2, nullTopDocs);
+        atomicArray.set(3, createQuerySearchResult(false));
+        when(mockQueryPhaseResultConsumer.getAtomicArray()).thenReturn(atomicArray);
+
+        assertTrue("nothing readable is hybrid", rrfProcessor.shouldSkipProcessor(mockQueryPhaseResultConsumer));
+
+        atomicArray.set(3, createQuerySearchResult(true));
+        assertFalse("a hybrid result beside them is still seen", rrfProcessor.shouldSkipProcessor(mockQueryPhaseResultConsumer));
     }
 
     @SneakyThrows

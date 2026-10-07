@@ -17,7 +17,11 @@ import java.util.stream.Collectors;
 /**
  * Enum that contains all info stat names, paths, and types
  * WE SHOULD AVOID CHANGING THE ORDER OF THESE STAT ENUMS! The ordinal is used in StreamInput/Output.
- * Changing the order will break the mixed cluster version upgrade version case.
+ * Changing the order will break the mixed cluster version upgrade version case. Append a new stat at the end, never
+ * insert one: the coordinating node only sends the leading run of stats the oldest node in the cluster also has
+ * ({@code RestNeuralStatsAction#statsSupportedByAllNodes}), so an insertion silently cuts every stat after it out of the
+ * response on a mixed cluster. The version declares the release a stat's ordinal dates from, which is the release it was
+ * added in only as long as nothing was ever inserted before it.
  */
 @Getter
 public enum InfoStatName implements StatName {
@@ -99,7 +103,7 @@ public enum InfoStatName implements StatName {
         "agentic_query_translator_processors",
         "processors.search.agentic",
         InfoStatType.INFO_COUNTER,
-        Version.V_3_2_0
+        Version.V_3_3_0
     ),
     /** Counts agentic context processors */
     AGENTIC_CONTEXT_PROCESSORS("agentic_context_processors", "processors.search.agentic", InfoStatType.INFO_COUNTER, Version.V_3_3_0),
@@ -110,7 +114,20 @@ public enum InfoStatName implements StatName {
     /** Counts indices with at least one sparse_vector field on the native engine */
     SPARSE_NATIVE_ENGINE_INDICES("sparse_native_engine_indices", "index.sparse", InfoStatType.INFO_COUNTER, Version.V_3_9_0),
     /** Counts sparse_vector fields on the native engine across all indices */
-    SPARSE_NATIVE_ENGINE_FIELDS("sparse_native_engine_fields", "index.sparse", InfoStatType.INFO_COUNTER, Version.V_3_9_0);
+    SPARSE_NATIVE_ENGINE_FIELDS("sparse_native_engine_fields", "index.sparse", InfoStatType.INFO_COUNTER, Version.V_3_9_0),
+
+    /**
+     * Whether resolver (in-query {@code fusion}) mode is turned on for this cluster. The top of the adoption funnel: paired
+     * with {@code query.hybrid.hybrid_query_with_fusion_requests} it separates clusters that enabled the feature from
+     * clusters that then used it, and the gap between those two is the difference between awareness and value. The setting
+     * defaults to off, so without this an unused cluster and an unaware one are indistinguishable.
+     */
+    HYBRID_FUSION_ENABLED("hybrid_fusion_enabled", "query.hybrid", InfoStatType.INFO_BOOLEAN, FusedStatsVersion.VALUE);
+
+    /** See {@code EventStatName.FusedStatsVersion} — the same release, for the same ordinal reason. */
+    private static final class FusedStatsVersion {
+        private static final Version VALUE = Version.V_3_10_0;
+    }
 
     private final String nameString;
     private final String path;

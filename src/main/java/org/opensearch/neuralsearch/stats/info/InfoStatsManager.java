@@ -43,6 +43,9 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.opensearch.cluster.service.ClusterService;
+import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.ENGINE_FIELD;
 
@@ -168,7 +171,29 @@ public class InfoStatsManager {
         }
 
         addClusterVersionStat(settableInfoStats);
+        addHybridFusionEnabledStat(settableInfoStats);
         return settableInfoStats;
+    }
+
+    /**
+     * Adds whether resolver (in-query {@code fusion}) mode is enabled, mutating the input.
+     *
+     * <p>Read from the cluster settings rather than cached, so an operator's update is reflected on the next stats call.
+     * Falls back to the setting's own default when there is no cluster service to read — a node still starting, or a unit
+     * test — because a stats read must not fail on account of an adoption metric.
+     */
+    private void addHybridFusionEnabledStat(Map<InfoStatName, SettableInfoStatSnapshot<?>> stats) {
+        InfoStatName infoStatName = InfoStatName.HYBRID_FUSION_ENABLED;
+        boolean enabled = NeuralSearchSettings.HYBRID_FUSION_ENABLED.getDefault(Settings.EMPTY);
+        ClusterService clusterService = neuralSearchClusterUtil.getClusterService();
+        if (Objects.nonNull(clusterService) && Objects.nonNull(clusterService.getClusterSettings())) {
+            try {
+                enabled = clusterService.getClusterSettings().get(NeuralSearchSettings.HYBRID_FUSION_ENABLED);
+            } catch (RuntimeException unreadable) {
+                // Not registered on the ClusterSettings in force: keep the default rather than failing the stats read.
+            }
+        }
+        stats.put(infoStatName, new SettableInfoStatSnapshot<>(infoStatName, enabled));
     }
 
     /**

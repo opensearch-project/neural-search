@@ -20,10 +20,14 @@ import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
+import com.google.common.primitives.Floats;
+
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.ToDoubleFunction;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -353,6 +357,162 @@ public class ZScoreNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         assertTrue(doc1Scores.get(0).getValue().contains("z_score normalization"));
         assertTrue(doc1Scores.get(1).getValue().contains("z_score normalization"));
         assertTrue(doc1Scores.get(2).getValue().contains("z_score normalization"));
+    }
+
+    /**
+     * The four statistics z_score needs (mean, standard deviation, max, min) are now read off one DescriptiveStatistics
+     * pass per sub query; each used to be computed by its own independent walk of every hit. This asserts the collapse is
+     * exact rather than merely close — normalized scores must be bit-identical to the four-pass computation.
+     *
+     * <p>Mean, standard deviation and max are pinned by the assertions below. Min is not, and cannot be: it is only read on
+     * the {@code standardDeviation == 0} branch, and a zero standard deviation means every score equals the mean, so the
+     * preceding {@code mean == score} check returns max first. That branch is unreachable for any realistic score.
+     */
+    public void testNormalization_whenStatsComputedInOnePass_thenBitIdenticalToFourPassReference() {
+        int numOfSubqueries = randomIntBetween(2, 4);
+        int numOfShards = randomIntBetween(1, 3);
+
+        // Raw scores are held aside because normalize() overwrites the ScoreDoc scores in place.
+        List<List<float[]>> rawScores = new ArrayList<>();
+        for (int shard = 0; shard < numOfShards; shard++) {
+            List<float[]> perSubQuery = new ArrayList<>();
+            for (int subQuery = 0; subQuery < numOfSubqueries; subQuery++) {
+                float[] scores;
+                if (subQuery == 1) {
+                    // A fixed triple whose mean (2.0) is exactly one of its scores, on one shard only. That score takes the
+                    // `mean == score` branch, which returns the sub query max — and because max (3.0), mean (2.0) and min
+                    // (1.0) all differ here, the assertion below can tell those three statistics apart.
+                    scores = shard == 0 ? new float[] { 3.0f, 2.0f, 1.0f } : new float[0];
+                } else {
+                    // Sub query 0 is populated on every shard so mean and standard deviation drive the main branch; the
+                    // rest are free to be empty, exercising the NaN-statistics case.
+                    int numOfHits = subQuery == 0 ? randomIntBetween(2, 8) : randomIntBetween(0, 8);
+                    scores = new float[numOfHits];
+                    for (int hit = 0; hit < numOfHits; hit++) {
+                        scores[hit] = randomFloat() * 100.0f;
+                    }
+                    // hits reach normalization in descending score order, as they do from a real shard
+                    Arrays.sort(scores);
+                    reverse(scores);
+                }
+                perSubQuery.add(scores);
+            }
+            rawScores.add(perSubQuery);
+        }
+
+        List<CompoundTopDocs> queryTopDocs = new ArrayList<>();
+        for (int shard = 0; shard < numOfShards; shard++) {
+            List<TopDocs> topDocsPerSubQuery = new ArrayList<>();
+            long hitsOnShard = 0;
+            for (float[] scores : rawScores.get(shard)) {
+                ScoreDoc[] scoreDocs = new ScoreDoc[scores.length];
+                for (int hit = 0; hit < scores.length; hit++) {
+                    scoreDocs[hit] = new ScoreDoc(hit, scores[hit]);
+                }
+                topDocsPerSubQuery.add(new TopDocs(new TotalHits(scores.length, TotalHits.Relation.EQUAL_TO), scoreDocs));
+                hitsOnShard += scores.length;
+            }
+            queryTopDocs.add(
+                new CompoundTopDocs(
+                    new TotalHits(hitsOnShard, TotalHits.Relation.EQUAL_TO),
+                    topDocsPerSubQuery,
+                    false,
+                    new SearchShard("my_index", shard, "shard-" + shard)
+                )
+            );
+        }
+
+        // Four fully independent walks, one per statistic — the computation the single pass replaced.
+        float[] referenceMax = referenceStatisticPerSubquery(rawScores, numOfSubqueries, DescriptiveStatistics::getMax);
+        float[] referenceMin = referenceStatisticPerSubquery(rawScores, numOfSubqueries, DescriptiveStatistics::getMin);
+        float[] referenceMean = referenceStatisticPerSubquery(rawScores, numOfSubqueries, DescriptiveStatistics::getMean);
+        float[] referenceStd = referenceStatisticPerSubquery(rawScores, numOfSubqueries, DescriptiveStatistics::getStandardDeviation);
+
+        ZScoreNormalizationTechnique normalizationTechnique = new ZScoreNormalizationTechnique();
+        normalizationTechnique.normalize(
+            NormalizeScoresDTO.builder().queryTopDocs(queryTopDocs).normalizationTechnique(normalizationTechnique).build()
+        );
+
+        int comparisons = 0;
+        for (int shard = 0; shard < numOfShards; shard++) {
+            List<TopDocs> topDocsPerSubQuery = queryTopDocs.get(shard).getTopDocs();
+            for (int subQuery = 0; subQuery < numOfSubqueries; subQuery++) {
+                float[] scores = rawScores.get(shard).get(subQuery);
+                ScoreDoc[] scoreDocs = topDocsPerSubQuery.get(subQuery).scoreDocs;
+                for (int hit = 0; hit < scores.length; hit++) {
+                    float expected = referenceNormalizeSingleScore(
+                        scores[hit],
+                        referenceStd[subQuery],
+                        referenceMean[subQuery],
+                        referenceMax[subQuery],
+                        referenceMin[subQuery]
+                    );
+                    assertEquals(
+                        "bit-level mismatch on shard " + shard + ", sub query " + subQuery + ", hit " + hit,
+                        Float.floatToIntBits(expected),
+                        Float.floatToIntBits(scoreDocs[hit].score)
+                    );
+                    comparisons++;
+                }
+            }
+        }
+        assertTrue("fixture produced no scores to compare", comparisons > 0);
+    }
+
+    /**
+     * Rebuilds one statistic the way the pre-collapse code did: its own DescriptiveStatistics array, its own full walk of
+     * every hit, in the same shard-then-sub-query order.
+     */
+    private static float[] referenceStatisticPerSubquery(
+        final List<List<float[]>> rawScores,
+        final int numOfSubqueries,
+        final ToDoubleFunction<DescriptiveStatistics> statistic
+    ) {
+        DescriptiveStatistics[] statsPerSubquery = new DescriptiveStatistics[numOfSubqueries];
+        for (int subQuery = 0; subQuery < numOfSubqueries; subQuery++) {
+            statsPerSubquery[subQuery] = new DescriptiveStatistics();
+        }
+        for (List<float[]> perSubQuery : rawScores) {
+            for (int subQuery = 0; subQuery < numOfSubqueries; subQuery++) {
+                for (float score : perSubQuery.get(subQuery)) {
+                    statsPerSubquery[subQuery].addValue(score);
+                }
+            }
+        }
+        float[] statisticPerSubquery = new float[numOfSubqueries];
+        for (int subQuery = 0; subQuery < numOfSubqueries; subQuery++) {
+            statisticPerSubquery[subQuery] = (float) statistic.applyAsDouble(statsPerSubquery[subQuery]);
+        }
+        return statisticPerSubquery;
+    }
+
+    /**
+     * The z_score formula as ZScoreNormalizationTechnique applies it, restated here so the reference is independent of the
+     * production code path under test.
+     */
+    private static float referenceNormalizeSingleScore(
+        final float score,
+        final float standardDeviation,
+        final float mean,
+        final float maxScore,
+        final float minScore
+    ) {
+        if (Floats.compare(mean, score) == 0) {
+            return maxScore;
+        }
+        if (Floats.compare(standardDeviation, 0.0f) == 0) {
+            return minScore;
+        }
+        float normalizedScore = (score - mean) / standardDeviation;
+        return normalizedScore <= 0.0f ? 0.001f : normalizedScore;
+    }
+
+    private static void reverse(final float[] values) {
+        for (int i = 0, j = values.length - 1; i < j; i++, j--) {
+            float swapped = values[i];
+            values[i] = values[j];
+            values[j] = swapped;
+        }
     }
 
     private float zscoreNorm(float score, List<Float> scores) {

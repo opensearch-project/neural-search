@@ -224,8 +224,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
      * with success, indexing the document WITHOUT its embedding ("created but empty"). After the fix the
      * handler must be invoked exactly once, with the error, and never with success.
      */
-    public void testExecute_whenInferenceFails_thenHandlerCalledOnceWithErrorAndNoSuccess() throws URISyntaxException,
-        IOException {
+    public void testExecute_whenInferenceFails_thenHandlerCalledOnceWithErrorAndNoSuccess() throws URISyntaxException, IOException {
         final Map<String, Object> ingestDocSource = readDocSourceFromFile("processor/semantic/ingest_doc1.json");
         final IngestDocument ingestDocument = new IngestDocument("index", "1", "routing", 1L, VersionType.INTERNAL, ingestDocSource);
 

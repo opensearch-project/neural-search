@@ -16,6 +16,8 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.util.concurrent.AtomicArray;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.SearchShardTarget;
@@ -61,6 +63,26 @@ public class AbstractScoreHybridizationProcessorTests extends OpenSearchTestCase
                 .pipelineProcessingContext(requestContextOptional.orElse(null))
                 .build();
             normalizationWorkflow1.execute(normalizationExecuteDTO);
+        }
+
+        @Override
+        protected ScoreNormalizationTechnique getNormalizationTechnique() {
+            return null;
+        }
+
+        @Override
+        protected ScoreCombinationTechnique getCombinationTechnique() {
+            return null;
+        }
+
+        @Override
+        protected NormalizationProcessorWorkflow getNormalizationWorkflow() {
+            return normalizationWorkflow1;
+        }
+
+        @Override
+        protected void recordStats() {
+            // no stats for this test processor
         }
 
         @Override

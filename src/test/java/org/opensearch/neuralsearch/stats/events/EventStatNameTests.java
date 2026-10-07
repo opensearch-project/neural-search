@@ -8,6 +8,7 @@ import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -25,6 +26,69 @@ public class EventStatNameTests extends OpenSearchTestCase {
 
     public void test_fromInvalid() {
         assertThrows(IllegalArgumentException.class, () -> { EventStatName.from("non_existent_stat"); });
+    }
+
+    /**
+     * The ordinal of an event stat is its wire format, so this list is frozen: a new stat goes at the end of the enum and
+     * at the end here. Inserting or reordering one is what breaks a mixed cluster - the coordinating node then sends the
+     * older node an ordinal that node reads as a different stat, or cannot read at all.
+     */
+    public void test_ordinalsAreFrozen() {
+        List<String> frozenOrder = List.of(
+            "TEXT_EMBEDDING_PROCESSOR_EXECUTIONS",
+            "SKIP_EXISTING_EXECUTIONS",
+            "TEXT_CHUNKING_PROCESSOR_EXECUTIONS",
+            "TEXT_CHUNKING_FIXED_TOKEN_LENGTH_EXECUTIONS",
+            "TEXT_CHUNKING_DELIMITER_EXECUTIONS",
+            "TEXT_CHUNKING_FIXED_CHAR_LENGTH_EXECUTIONS",
+            "SEMANTIC_FIELD_PROCESSOR_EXECUTIONS",
+            "SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS",
+            "SEMANTIC_HIGHLIGHTING_REQUEST_COUNT",
+            "SEMANTIC_HIGHLIGHTING_BATCH_REQUEST_COUNT",
+            "NORMALIZATION_PROCESSOR_EXECUTIONS",
+            "AGENTIC_QUERY_TRANSLATOR_PROCESSOR_EXECUTIONS",
+            "AGENTIC_CONTEXT_PROCESSOR_EXECUTIONS",
+            "NORM_TECHNIQUE_L2_EXECUTIONS",
+            "NORM_TECHNIQUE_MINMAX_EXECUTIONS",
+            "NORM_TECHNIQUE_NORM_ZSCORE_EXECUTIONS",
+            "COMB_TECHNIQUE_ARITHMETIC_EXECUTIONS",
+            "COMB_TECHNIQUE_GEOMETRIC_EXECUTIONS",
+            "COMB_TECHNIQUE_HARMONIC_EXECUTIONS",
+            "RRF_PROCESSOR_EXECUTIONS",
+            "COMB_TECHNIQUE_RRF_EXECUTIONS",
+            "HYBRID_QUERY_REQUESTS",
+            "HYBRID_QUERY_INNER_HITS_REQUESTS",
+            "HYBRID_QUERY_FILTER_REQUESTS",
+            "HYBRID_QUERY_PAGINATION_REQUESTS",
+            "NEURAL_QUERY_REQUESTS",
+            "NEURAL_QUERY_AGAINST_KNN_REQUESTS",
+            "NEURAL_QUERY_AGAINST_SEMANTIC_DENSE_REQUESTS",
+            "NEURAL_QUERY_AGAINST_SEMANTIC_SPARSE_REQUESTS",
+            "NEURAL_SPARSE_QUERY_REQUESTS",
+            "TEXT_IMAGE_EMBEDDING_PROCESSOR_EXECUTIONS",
+            "SPARSE_ENCODING_PROCESSOR_EXECUTIONS",
+            "NEURAL_QUERY_ENRICHER_PROCESSOR_EXECUTIONS",
+            "NEURAL_SPARSE_TWO_PHASE_PROCESSOR_EXECUTIONS",
+            "RERANK_BY_FIELD_PROCESSOR_EXECUTIONS",
+            "RERANK_ML_PROCESSOR_EXECUTIONS",
+            "AGENTIC_QUERY_REQUESTS",
+            "SEISMIC_QUERY_REQUESTS",
+            "SPARSE_ENCODING_PROCESSOR_SEISMIC_EXECUTIONS",
+            "MMR_NEURAL_QUERY_TRANSFORMER",
+            "SKIP_EXISTING_LOOKUP_FAILURES",
+            // Resolver (in-query `fusion`) mode. Appended, never inserted: the ordinal is the wire format.
+            "HYBRID_QUERY_FUSION_REQUESTS",
+            "HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS",
+            "HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS"
+        );
+
+        assertEquals(frozenOrder, Arrays.stream(EventStatName.values()).map(Enum::name).toList());
     }
 
     public void test_allEnumsHaveNonNullStats() {
