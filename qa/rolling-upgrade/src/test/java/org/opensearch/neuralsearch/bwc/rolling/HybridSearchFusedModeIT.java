@@ -51,7 +51,7 @@ public class HybridSearchFusedModeIT extends AbstractRollingUpgradeTestCase {
      * {@code MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY}, spelled out rather than imported because that class
      * initializes against k-NN classes which this module has as {@code compileOnly} — they are absent at test runtime.
      */
-    private static final Version FUSED_MODE_MIN_VERSION = Version.V_3_8_0;
+    private static final Version FUSED_MODE_MIN_VERSION = Version.V_3_10_0;
     /** Documents 0..2 match at least one leg; document 3 matches neither. */
     private static final String[] DOCS = { "hello world hello", "hello there place", "welcome to the place", "nothing relevant at all" };
     private static final int MATCHING_DOCS = 3;

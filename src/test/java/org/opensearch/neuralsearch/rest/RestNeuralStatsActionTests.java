@@ -89,14 +89,12 @@ public class RestNeuralStatsActionTests extends InferenceProcessorTestCase {
      * intentional.
      */
     private static EnumSet<EventStatName> eventStatsAtBuildVersion() {
-        return EnumSet.complementOf(
-            EnumSet.range(EventStatName.HYBRID_QUERY_FUSION_REQUESTS, EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS)
-        );
+        return EnumSet.allOf(EventStatName.class);
     }
 
     /** As above for info stats. */
     private static EnumSet<InfoStatName> infoStatsAtBuildVersion() {
-        return EnumSet.complementOf(EnumSet.of(InfoStatName.HYBRID_FUSION_ENABLED));
+        return EnumSet.allOf(InfoStatName.class);
     }
 
     /**

@@ -54,18 +54,15 @@ import org.opensearch.search.rescore.RescorerBuilder;
  * request that has passed that gate, and it ships in the same release as fused mode itself — which has never shipped, so
  * there is no released build that has fused mode and lacks this. The gate therefore covers both names with one check.
  *
- * <p><b>The dependency that makes that true, and it is not yet satisfied:</b>
- * {@code MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY} must name the release that actually
- * contains fused mode. It currently reads {@code V_3_8_0}, which is released and contains none of it — so the constant
- * has to be corrected before either name reaches a mixed-version cluster. The exposure is not confined to fused mode:
- * {@code HybridQueryBuilder#doWriteTo} writes the {@code fusion} presence flag to every peer at stream version
- * {@code V_3_8_0} or later whether the query uses fused mode or not, and no cluster setting gates the serializer, so a
- * plain classic {@code hybrid} desynchronises the stream against a released 3.8.0 node as well. Tracked by
- * <a href="https://github.com/opensearch-project/neural-search/issues/2002">issue 2002</a>, where the value is decided at
- * the point the feature branch merges, and held to meanwhile by
- * {@code HybridQueryFusedFanOutTests#testFusedModeMinimumVersion_isNotBehindTheVersionUnderDevelopment}, which fails as
- * soon as the branch's core version moves past the constant. Do not add a second gate here to work around it, because a
- * per-name gate would answer a fused rescore UNGUARDED on a cluster that failed it, which is worse than refusing.
+ * <p><b>The dependency that makes that true:</b>
+ * {@code MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY} names the release that contains fused
+ * mode ({@code V_3_10_0}). The exposure of getting it wrong is not confined to fused mode: {@code HybridQueryBuilder#doWriteTo}
+ * writes the {@code fusion} presence flag to every peer at that stream version or later whether the query uses fused mode
+ * or not, and no cluster setting gates the serializer, so a constant naming a release without the code would desynchronise
+ * a plain classic {@code hybrid} against that release's nodes as well. Held to by
+ * {@code HybridQueryFusedFanOutTests#testFusedModeMinimumVersion_isNotBehindTheVersionUnderDevelopment}, which fails as soon
+ * as the version under development moves past the constant (issue 2002). Do not add a second gate here, because a per-name
+ * gate would answer a fused rescore UNGUARDED on a cluster that failed it, which is worse than refusing.
  *
  * <p><b>Installed at coordinator rewrite round 1</b> by {@code FusedRescoreScope#install}, which replaces the request's
  * rescore list with a single element holding the already-window-confined delegates. A replacement made at round 1

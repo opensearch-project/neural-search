@@ -768,7 +768,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
      */
     @SneakyThrows
     public void testFusedMode_whenTurnedOffOnALaggingCluster_thenTheSettingRefusalWins() {
-        initClusterUtil(Settings.builder().put(HYBRID_FUSION_ENABLED.getKey(), false).build(), Version.V_3_7_0);
+        initClusterUtil(Settings.builder().put(HYBRID_FUSION_ENABLED.getKey(), false).build(), Version.V_3_9_0);
         QueryBuilder query = nestedChain(1);
         QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), new ArrayList<>());
 
@@ -872,7 +872,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
      */
     @SneakyThrows
     public void testFusedMode_whenAnyNodeIsBelowTheMinimumVersion_isRejectedBeforeAnyFanOut() {
-        initClusterUtil(null, Version.V_3_7_0);
+        initClusterUtil(null, Version.V_3_9_0);
         QueryBuilder query = nestedChain(1);
         List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
         QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
@@ -883,7 +883,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
             error.getMessage(),
             containsString("on version [" + MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY + "] or later")
         );
-        assertThat("the message quotes what the cluster actually is", error.getMessage(), containsString("is [" + Version.V_3_7_0 + "]"));
+        assertThat("the message quotes what the cluster actually is", error.getMessage(), containsString("is [" + Version.V_3_9_0 + "]"));
         assertTrue("refused before the fan-out whose results no node could be asked to fuse", registered.isEmpty());
     }
 
@@ -894,7 +894,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
      */
     @SneakyThrows
     public void testFusedMode_whenEveryNodeIsExactlyAtTheMinimumVersion_thenItFansOut() {
-        initClusterUtil(null, Version.V_3_8_0);
+        initClusterUtil(null, Version.V_3_10_0);
 
         FanOut fanOut = drive(request(nestedChain(1)));
 
@@ -937,7 +937,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
      */
     @SneakyThrows
     public void testFusedMode_whenTheRequestIsNotASearch_thenItIsStillRefusedOnALaggingCluster() {
-        initClusterUtil(null, Version.V_3_7_0);
+        initClusterUtil(null, Version.V_3_9_0);
         QueryBuilder query = nestedChain(1);
         QueryCoordinatorContext coordinatorContext = mock(QueryCoordinatorContext.class);
         when(coordinatorContext.convertToCoordinatorContext()).thenReturn(coordinatorContext);
@@ -1026,7 +1026,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
     /** Scoped to fused mode: classic hybrid is answered by every version that can parse it, and stays version-free. */
     @SneakyThrows
     public void testClassicHybrid_onTheSameLaggingCluster_isUnaffected() {
-        initClusterUtil(null, Version.V_3_7_0);
+        initClusterUtil(null, Version.V_3_9_0);
         HybridQueryBuilder classic = new HybridQueryBuilder();
         classic.add(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"));
         classic.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, "kw"));

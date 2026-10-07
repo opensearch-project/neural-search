@@ -124,9 +124,9 @@ public enum InfoStatName implements StatName {
      */
     HYBRID_FUSION_ENABLED("hybrid_fusion_enabled", "query.hybrid", InfoStatType.INFO_BOOLEAN, FusedStatsVersion.VALUE);
 
-    /** See {@code EventStatName.FusedStatsVersion} — same release, same reason it is spelled with {@code fromString}. */
+    /** See {@code EventStatName.FusedStatsVersion} — the same release, for the same ordinal reason. */
     private static final class FusedStatsVersion {
-        private static final Version VALUE = Version.fromString("3.10.0");
+        private static final Version VALUE = Version.V_3_10_0;
     }
 
     private final String nameString;

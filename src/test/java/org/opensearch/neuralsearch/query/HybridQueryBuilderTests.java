@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.query;
 
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.any;
@@ -535,9 +536,9 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     @SneakyThrows
     public void testSerialization_whenFusionPresent_thenSurvivesNonNull() {
-        // Wire round-trip on a fused cluster (V_3_8_0): fusion:{} must survive as a non-null empty map, else the
+        // Wire round-trip on a fused cluster (at the fused-mode minimum version): fusion:{} must survive as a non-null empty map, else the
         // resolver silently flips off on the receiving node.
-        setUpClusterService(Version.V_3_8_0);
+        setUpClusterService(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
         HybridQueryBuilder original = new HybridQueryBuilder();
         original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
         original.fusion(new HashMap<>());
@@ -559,7 +560,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testSerialization_whenNoFusion_thenClassicWireForm() {
         // Absence of fusion writes only a false boolean → equal classic builder round-trips unchanged.
-        setUpClusterService(Version.V_3_8_0);
+        setUpClusterService(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
         HybridQueryBuilder original = new HybridQueryBuilder();
         original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
 
@@ -582,13 +583,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         // pinned to a pre-fusion peer version must NOT read/write the fusion field — the gate keys off
         // StreamInput/StreamOutput#getVersion(), not the cluster-min-version singleton. An old peer that mistakenly
         // wrote the field would corrupt the classic wire form on the receiving node.
-        setUpClusterService(Version.V_3_8_0);
+        setUpClusterService(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
         HybridQueryBuilder original = new HybridQueryBuilder();
         original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
         original.fusion(new HashMap<>());
 
-        // A peer negotiated below the fused-mode minimum (V_3_8_0).
-        Version oldPeer = Version.V_3_7_0;
+        // A peer negotiated below the fused-mode minimum: 3.9.0 is the last release with no fused-mode code.
+        Version oldPeer = Version.V_3_9_0;
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         streamOutput.setVersion(oldPeer);
         original.writeTo(streamOutput);
@@ -615,7 +616,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         original.fusion(new HashMap<>());
 
         BytesStreamOutput streamOutput = new BytesStreamOutput();
-        streamOutput.setVersion(Version.V_3_8_0);
+        streamOutput.setVersion(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
         original.writeTo(streamOutput);
 
         FilterStreamInput in = new NamedWriteableAwareStreamInput(
@@ -624,7 +625,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
             )
         );
-        in.setVersion(Version.V_3_8_0);
+        in.setVersion(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
         HybridQueryBuilder copy = new HybridQueryBuilder(in);
 
         assertNotNull("fusion must survive a fused-version stream", copy.fusion());

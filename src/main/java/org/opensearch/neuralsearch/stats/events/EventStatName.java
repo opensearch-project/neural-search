@@ -363,21 +363,15 @@ public enum EventStatName implements StatName {
      * <p>Held in a nested class rather than a field of the enum because an enum constant's arguments cannot reference a
      * static field of its own enum — the constants are initialized first.
      *
-     * <p>Named with {@link Version#fromString} rather than a {@code Version.V_*} constant <b>deliberately</b>: this branch
-     * compiles against a 3.8 core, whose {@code Version} has no 3.10 constant, and the alternative — gating at
-     * {@code V_3_8_0} because that is what can be spelled — would be a live defect rather than a placeholder.
-     * {@code RestNeuralStatsAction#statsSupportedByAllNodes} sends the leading run of stats whose version is
-     * {@code onOrBefore} the oldest node's, and stops at the first newer one, because a stat enum travels as ordinals and a
-     * filtered set is only readable by an older node if it is a prefix of that node's own enum. Gated at 3.8, these stats
-     * would be sent to a genuine 3.8 node during a rolling upgrade, which has no ordinal for them; gated at 3.10 the run
-     * stops short and they are withheld, which is lossy and safe. {@code fromString} yields an ordinary comparable
-     * {@code Version} (id 137317827) and compares correctly against constants the core does know.
-     *
-     * <p>Swap this for {@code Version.V_3_10_0} once the branch builds against a core that declares it — pure cleanup, the
-     * value is identical.
+     * <p>Why the gate must name the shipping release exactly: {@code RestNeuralStatsAction#statsSupportedByAllNodes} sends
+     * the leading run of stats whose version is {@code onOrBefore} the oldest node's, and stops at the first newer one,
+     * because a stat enum travels as ordinals and a filtered set is only readable by an older node if it is a prefix of
+     * that node's own enum. Gated too low, these stats would be sent to a node that has no ordinal for them during a
+     * rolling upgrade; gated at the release that carries them, the run stops short on a mixed cluster and they are
+     * withheld, which is lossy and safe.
      */
     private static final class FusedStatsVersion {
-        private static final Version VALUE = Version.fromString("3.10.0");
+        private static final Version VALUE = Version.V_3_10_0;
     }
 
     private final String nameString;
