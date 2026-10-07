@@ -278,11 +278,13 @@ public enum EventStatName implements StatName {
         Version.V_3_3_0
     ),
     /** Tracks failed existing-document lookups, which silently degrade skip_existing to full inference */
+    // Added by #2028 after the 3.9 branch was cut: 3.9.0 shipped without it, so a 3.10 coordinator must not send this
+    // ordinal to a 3.9 node (it has no entry for it and fails the stats request with "Unknown EventStatName ordinal").
     SKIP_EXISTING_LOOKUP_FAILURES(
         "skip_existing_lookup_failures",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
-        Version.V_3_9_0
+        Version.V_3_10_0
     ),
 
     // ---- resolver (in-query `fusion`) mode. Appended at the TAIL, which the ordinal contract above requires. ----
