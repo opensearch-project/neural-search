@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.TextField;
@@ -34,7 +36,9 @@ import org.opensearch.search.aggregations.InternalAggregations;
 import org.opensearch.search.internal.InternalSearchResponse;
 import org.opensearch.search.rescore.QueryRescoreMode;
 import org.opensearch.search.rescore.QueryRescorer;
+import org.opensearch.test.MockLogAppender;
 import org.opensearch.test.OpenSearchTestCase;
+import org.opensearch.test.junit.annotations.TestLogging;
 
 /**
  * Unit coverage for the shapes the fused {@code explain} path has to survive without a cluster: nothing collected, a hit
@@ -47,6 +51,8 @@ public class FusedExplanationMergerTests extends OpenSearchTestCase {
     private static final String COMBINATION = "arithmetic_mean combination of:";
     private static final String NORMALIZATION = "min_max normalization of:";
     private static final String FINAL_SCORE = "score of the fused hybrid query as round 2 returned it, computed from:";
+    /** Where a rescore tree that was not kept is reported. */
+    private static final String LOGGER_NAME = FusedDocExplanations.class.getCanonicalName();
     /** Matches the one document {@link #roundTwo} explains over. */
     private static final Query MATCHES = new TermQuery(new Term("text", "lamp"));
     /** Matches nothing there. */
@@ -247,6 +253,82 @@ public class FusedExplanationMergerTests extends OpenSearchTestCase {
 
         assertEquals(FINAL_SCORE, explanation.getDescription());
         assertEquals(9.0f, explanation.getValue().floatValue(), 0.0f);
+    }
+
+    @TestLogging(value = "org.opensearch.neuralsearch.search.explain.FusedDocExplanations:DEBUG", reason = "a tree that is not kept is reported at debug")
+    public void testGetMergedResponse_whenTheRebuiltTreeIsNotKept_thenTheDisagreeingNumbersAreLoggedAtDebug() throws Exception {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        Explanation roundTwo = roundTwo(selfErasedQuery(0.5f), layer(MATCHES, 1.0f, 2.0f, QueryRescoreMode.Total));
+        SearchHit rescored = hit("1", 9.0f);
+        rescored.explanation(roundTwo);
+
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(LOGGER_NAME))) {
+            appender.addExpectation(
+                new MockLogAppender.SeenEventExpectation(
+                    "the rebuilt value, the hit's score and their distance",
+                    LOGGER_NAME,
+                    Level.DEBUG,
+                    "*rescore explanation of ["
+                        + INDEX
+                        + "#1] rebuilds to "
+                        + roundTwo.getValue().floatValue()
+                        + " but the hit scored 9.0 (*ulps apart, tolerance 4)*"
+                )
+            );
+            merger.getMergedResponse(responseWithHits(rescored));
+            appender.assertAllExpectationsMatched();
+        }
+    }
+
+    @TestLogging(value = "org.opensearch.neuralsearch.search.explain.FusedDocExplanations:DEBUG", reason = "a marker that is not the first pass is reported at debug")
+    public void testGetMergedResponse_whenTheMarkedFirstPassIsNotTheScoreRoundTwoRan_thenItIsLoggedAtDebug() throws Exception {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        Explanation roundTwo = roundTwo(selfErasedQuery(1.5f), layer(MATCHES, 1.0f, 2.0f, QueryRescoreMode.Total));
+        SearchHit rescored = hit("1", roundTwo.getValue().floatValue());
+        rescored.explanation(roundTwo);
+
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(LOGGER_NAME))) {
+            appender.addExpectation(
+                new MockLogAppender.SeenEventExpectation(
+                    "the score round 2 ran with and the hit's score",
+                    LOGGER_NAME,
+                    Level.DEBUG,
+                    "*marked first pass of ["
+                        + INDEX
+                        + "#1] does not carry the score round 2 ran with (0.5); naming the hit's score "
+                        + roundTwo.getValue().floatValue()
+                        + "*"
+                )
+            );
+            merger.getMergedResponse(responseWithHits(rescored));
+            appender.assertAllExpectationsMatched();
+        }
+    }
+
+    /** The negative control the two above need: a tree that is kept, and a hit with no rescore at all, say nothing. */
+    @TestLogging(value = "org.opensearch.neuralsearch.search.explain.FusedDocExplanations:DEBUG", reason = "nothing to report when the tree is kept")
+    public void testGetMergedResponse_whenTheRebuiltTreeIsKept_thenNothingIsLogged() throws Exception {
+        FusedExplanationMerger merger = new FusedExplanationMerger();
+        merger.consumer().accept(collected("1", 0.5f, 0.4f, 0.8f));
+        Explanation roundTwo = roundTwo(selfErasedQuery(0.5f), layer(MATCHES, 1.0f, 2.0f, QueryRescoreMode.Total));
+        SearchHit kept = hit("1", roundTwo.getValue().floatValue());
+        kept.explanation(roundTwo);
+
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(LOGGER_NAME))) {
+            appender.addExpectation(
+                new MockLogAppender.UnseenEventExpectation(
+                    "a kept tree is not reported",
+                    LOGGER_NAME,
+                    Level.DEBUG,
+                    "fused hybrid explain:*"
+                )
+            );
+            merger.getMergedResponse(responseWithHits(kept));
+            merger.getMergedResponse(responseWithHits(hit("1", 0.5f)));
+            appender.assertAllExpectationsMatched();
+        }
     }
 
     public void testGetMergedResponse_whenTheRootIsAFewUlpsOffTheHitScore_thenCoresTreeIsStillKept() throws IOException {

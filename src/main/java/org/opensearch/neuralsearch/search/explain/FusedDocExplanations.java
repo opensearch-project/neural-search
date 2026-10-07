@@ -15,6 +15,7 @@ import org.apache.lucene.search.Explanation;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import lombok.extern.log4j.Log4j2;
 
 /**
  * How each document in a fused ({@code fusion}) hybrid's window earned its fused score: per leg, that leg's own raw
@@ -32,6 +33,7 @@ import lombok.experimental.Accessors;
  * nothing (its legs ran without {@code explain}, so there are no explanations to record) and the instance is thrown
  * away.
  */
+@Log4j2
 public final class FusedDocExplanations {
 
     /**
@@ -167,7 +169,7 @@ public final class FusedDocExplanations {
      * primaryWeight], product of: [<rescore query>, secondaryWeight]]}, chained rescorers nesting the same way. The result
      * is kept only when the marker carries exactly the score round 2 ran with and the rebuilt tree still describes the
      * hit's score, to within {@link #ROOT_TOLERANCE_ULPS} ulps; anything else — something that added score to round 2's
-     * query, say — is answered as if there were no marker.
+     * query, say — is answered as if there were no marker, and logged at debug with the numbers that disagreed.
      *
      * <p>The tree shows the layers core built from which documents each rescorer rescored. For a chain of rescorers
      * that reached different documents on an index with more than one shard, the shards report those sets as one union
@@ -204,8 +206,11 @@ public final class FusedDocExplanations {
                 roundTwo,
                 marker -> Float.compare(marker.getValue().floatValue(), roundTwoScore) == 0 ? firstPass : null
             );
-            if (rescored != roundTwo && Objects.nonNull(rescored) && describes(rescored, hitScore)) {
-                return rescored;
+            if (rescored != roundTwo) {
+                if (Objects.nonNull(rescored) && describes(rescored, hitScore)) {
+                    return rescored;
+                }
+                logRescoreTreeNotKept(documentKey, hitScore, roundTwoScore, rescored);
             }
         }
         if (Float.compare(fusedScore, hitScore) == 0) {
@@ -221,5 +226,42 @@ public final class FusedDocExplanations {
             return Float.compare(value, hitScore) == 0;
         }
         return Math.abs(value - hitScore) <= ROOT_TOLERANCE_ULPS * Math.ulp(Math.max(Math.abs(value), Math.abs(hitScore)));
+    }
+
+    /**
+     * Round 2's rescore explanation was not kept for this document, so the hit reads as it would with no rescore
+     * explanation at all: still the right number on top, just silent about what moved it. Debug and not a warning: it
+     * fires per hit of an {@code explain} request, the response stays correct, and the one known cause — a chain of
+     * rescorers that rescored different documents on an index with more than one shard, see
+     * {@code FusedWindowGuardRescorerBuilder} — is the request's own shape. The numbers are what a report needs.
+     *
+     * @param rescored the rebuilt tree, or {@code null} when the marker did not carry the score round 2 ran with
+     */
+    private static void logRescoreTreeNotKept(
+        final String documentKey,
+        final float hitScore,
+        final float roundTwoScore,
+        final Explanation rescored
+    ) {
+        if (Objects.isNull(rescored)) {
+            log.debug(
+                "fused hybrid explain: the marked first pass of [{}] does not carry the score round 2 ran with ({}); "
+                    + "naming the hit's score {} over the fused breakdown instead of keeping the rescore explanation",
+                documentKey,
+                roundTwoScore,
+                hitScore
+            );
+            return;
+        }
+        float value = rescored.getValue().floatValue();
+        log.debug(
+            "fused hybrid explain: the rescore explanation of [{}] rebuilds to {} but the hit scored {} ({} ulps apart, "
+                + "tolerance {}); naming the hit's score over the fused breakdown instead",
+            documentKey,
+            value,
+            hitScore,
+            Math.abs(value - hitScore) / Math.ulp(Math.max(Math.abs(value), Math.abs(hitScore))),
+            ROOT_TOLERANCE_ULPS
+        );
     }
 }
