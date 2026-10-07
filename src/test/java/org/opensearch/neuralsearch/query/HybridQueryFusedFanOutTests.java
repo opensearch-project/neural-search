@@ -76,6 +76,7 @@ import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 
 import lombok.SneakyThrows;
@@ -131,6 +132,9 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         legTotalHits = new TotalHits(2, TotalHits.Relation.EQUAL_TO);
         initClusterUtil(null);
         ObservedSourceSizes.clear();
+        // The rewrite counts the fusion technique in the EventStatsManager singleton, which another test class may or may
+        // not have initialized in this JVM. Initialize it here so the class passes in any order and on its own.
+        TestUtils.initializeEventStatsManager();
     }
 
     // ------------------------------------------------ fan-out shape ------------------------------------------------
