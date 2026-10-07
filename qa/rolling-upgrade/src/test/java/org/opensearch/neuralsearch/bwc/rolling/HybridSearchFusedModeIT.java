@@ -35,8 +35,8 @@ import static org.opensearch.neuralsearch.util.TestUtils.NODES_BWC_CLUSTER;
  * known to predate fused mode — see {@link #skipUnlessBaseClusterPredatesFusedMode()}.
  *
  * <p>On a mixed cluster either coordinator is acceptable and they say different things — a pre-3.8 node fails while parsing
- * the unknown {@code fusion} field, an upgraded one fails on the version guardrail, or on the opt-in if the
- * cluster-manager was too old to accept it — so the assertions are deliberately coordinator-agnostic: a 400, and no trace of
+ * the unknown {@code fusion} field, an upgraded one fails on the version guardrail — so the assertions are deliberately
+ * coordinator-agnostic: a 400, and no trace of
  * the internal round-2 query name, which would mean the fused query was dispatched and a shard rejected it.
  *
  * <p>Deliberately not excluded for any {@code bwc_version} row in {@code qa/rolling-upgrade/build.gradle}: the convention
@@ -61,7 +61,7 @@ public class HybridSearchFusedModeIT extends AbstractRollingUpgradeTestCase {
      * {@code bwc_version} row CI runs is a real release below {@link #FUSED_MODE_MIN_VERSION}, but the local default is
      * {@code systemProp.bwc.version=3.8.0-SNAPSHOT} ({@code gradle.properties}), and the base cluster is then a nightly
      * distribution of that same version number carrying the plugin built from {@code main} — nodes reporting 3.8 whose
-     * plugin has neither the opt-in nor fused mode. No node version can tell those apart from the build under test, and
+     * plugin has no fused mode. No node version can tell those apart from the build under test, and
      * neither branch of the invariant then holds: the coordinator's own guardrail is version-based too, so a mixed stage
      * would hand a fused query to a shard that cannot read it. Pass a real released base to exercise this class locally,
      * e.g. {@code -Dtests.bwc.version=3.7.0}.
@@ -114,19 +114,11 @@ public class HybridSearchFusedModeIT extends AbstractRollingUpgradeTestCase {
      * @param expectedMatchedDocs documents matching at least one leg, used only when the cluster is expected to serve
      */
     private void assertFusedModeIsServedOrRefused(final int expectedMatchedDocs) throws Exception {
-        // Fused mode is an opt-in, off unless the cluster is switched on. Attempted even when this cluster is
-        // expected to refuse: on a mixed cluster whose elected cluster-manager is already upgraded the key is accepted, and
-        // that is what keeps the refusal below on the version guardrail this test exists for rather than on the setting.
-        // Swallowed there because a cluster-manager still running the old plugin rejects a key it has never heard of, and
-        // demanded once every node can run fused mode, so the positive branch fails on the switch rather than on a query.
-        if (minimumNodeVersion().onOrAfter(FUSED_MODE_MIN_VERSION)) {
-            enableFusedMode();
-        } else {
-            tryEnableFusedMode();
-        }
+        // Fused mode is on by default, so nothing has to be switched on: a refusal below comes from the version guardrail
+        // this test exists for, never from the setting, and the positive branch runs on the shipped default.
         // Once per node: the REST client rotates over the cluster's hosts, so this covers a coordinator of each version a
         // mixed cluster has. Which one answers decides *why* the query is refused, never whether — a pre-3.8 coordinator
-        // fails parsing `fusion`, an upgraded one on the version guardrail or the opt-in — and only the upgraded coordinator
+        // fails parsing `fusion`, an upgraded one on the version guardrail — and only the upgraded coordinator
         // exercises those at all, so a single request could miss them entirely.
         for (int node = 0; node < getClusterHosts().size(); node++) {
             assertFusedModeIsServedOrRefusedOnce(expectedMatchedDocs);

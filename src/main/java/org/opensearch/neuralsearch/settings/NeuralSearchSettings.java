@@ -166,30 +166,31 @@ public final class NeuralSearchSettings {
     );
 
     /**
-     * Opt-in for the {@code hybrid} query's fused mode (in-query fusion), which is off until an operator turns it on.
+     * Switch for the {@code hybrid} query's fused mode (in-query fusion). On by default; an operator turns it off.
      *
      * <p>Off refuses a query carrying a {@code fusion} block with a validation error rather than downgrading it to
      * classic hybrid: classic hybrid normalizes in a search pipeline, so a request whose whole fusion config is written
      * in the query body has none, and a silent downgrade would answer 200 with un-normalized scores and a different
-     * ranking. Dynamic, so the same setting turns fused mode on and — if it has to be — off again without a restart.
+     * ranking. Dynamic, so the same setting turns fused mode off and back on again without a restart — it is the kill
+     * switch, and OpenSearch cannot be downgraded in place, so it is the only rollback lever a cluster has.
      *
      * <p>Both properties are load-bearing. {@code NodeScope} is the {@code opensearch.yml} route: declarative, at home in
      * whatever configures the nodes, carried by a replacement node without an API call, and the only way to bring a
-     * cluster up with fused mode already on. {@code Dynamic} is the {@code PUT /_cluster/settings} route: it needs no
+     * cluster up with fused mode already off. {@code Dynamic} is the {@code PUT /_cluster/settings} route: it needs no
      * restart, and it is the only route on a cluster whose node configuration cannot be edited in place. Neither property
-     * is redundant — dropping either one takes the feature away from a way of running OpenSearch.
+     * is redundant — dropping either one takes the switch away from a way of running OpenSearch.
      *
      * <p>The two routes are not equal when both are used. A cluster-state value wins over the node's own
      * {@code opensearch.yml} — {@code AbstractScopedSettings} resolves the applied cluster settings first and falls back
      * to the node's settings — so once the key has been set through the API the yml line no longer decides anything.
      *
      * <p>Set it under {@code persistent}, not {@code transient}: a transient value silently overrides the persistent one
-     * while it exists and is then lost on a full-cluster restart, which would turn fused mode off under a workload already
-     * relying on it.
+     * while it exists and is then lost on a full-cluster restart, which would turn fused mode back on under a cluster
+     * whose operator had switched it off.
      */
     public static final Setting<Boolean> HYBRID_FUSION_ENABLED = Setting.boolSetting(
         "plugins.neural_search.hybrid.fusion.enabled",
-        false,
+        true,
         Setting.Property.NodeScope,
         Setting.Property.Dynamic
     );

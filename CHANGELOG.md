@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Features
 * [Hybrid Query] Add fusion mode to the hybrid query ([#2036](https://github.com/opensearch-project/neural-search/pull/2036))
+* [Hybrid Query] Turn fusion mode on by default; `plugins.neural_search.hybrid.fusion.enabled` becomes the switch that turns it off ([#2037](https://github.com/opensearch-project/neural-search/pull/2037))
 
 ### Enhancements
 - [SemanticHighlighter] Support lists and scalars for semantic highlighting with per-element fragments, matching built-in highlighters ([#1813](https://github.com/opensearch-project/neural-search/issues/1813))

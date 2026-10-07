@@ -720,12 +720,12 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         assertEquals("and it fans out its own legs from there", 1, legRegistered.size());
     }
 
-    // ------------------------------------------------- opt-in -------------------------------------------------
+    // ------------------------------------------------ kill switch ------------------------------------------------
 
     /**
-     * Fused mode is off until an operator turns it on, and a query carrying a {@code fusion}
-     * block on a cluster that has not is refused before anything is fanned out. The message has to name the setting: it
-     * is the only thing the user can act on, and nothing about their query is wrong.
+     * An operator can turn fused mode off, and a query carrying a {@code fusion} block on a cluster that has is refused
+     * before anything is fanned out. The message has to name the setting: it is the only thing the user can act on, and
+     * nothing about their query is wrong.
      */
     @SneakyThrows
     public void testFusedMode_whenTurnedOffByClusterSetting_isRejectedBeforeAnyFanOut() {
@@ -743,26 +743,22 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         );
         assertThat(error.getMessage(), containsString("is turned off on this cluster"));
         assertThat("and the alternative that works today", error.getMessage(), containsString("use classic hybrid"));
-        assertTrue("refused before a fan-out the cluster never opted in to", registered.isEmpty());
+        assertTrue("refused before a fan-out the cluster switched off", registered.isEmpty());
     }
 
     /**
-     * Cluster settings that cannot be read resolve to the setting's own default, which for this one is off. That is the
-     * same value a cluster with nothing configured resolves, so an unreadable settings object refuses exactly where a
-     * cluster that never opted in does rather than opening the path on the way through — the opposite trade
-     * from the leg budget, whose default is permissive.
+     * Cluster settings that cannot be read resolve to the setting's own default, which is on. That is the same value a
+     * cluster with nothing configured resolves, so an unreadable settings object fans out exactly where a cluster that
+     * never touched the switch does — there is no second, hidden default on this path.
      */
     @SneakyThrows
-    public void testFusedMode_whenClusterSettingsCannotBeRead_thenItIsRefused() {
+    public void testFusedMode_whenClusterSettingsCannotBeRead_thenItFansOut() {
         initClusterUtilWithoutClusterSettings();
-        QueryBuilder query = nestedChain(1);
-        List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
-        QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
 
-        IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+        FanOut fanOut = drive(request(nestedChain(1)));
 
-        assertThat(error.getMessage(), containsString(HYBRID_FUSION_ENABLED.getKey()));
-        assertTrue(registered.isEmpty());
+        assertEquals(1, fanOut.multiSearches());
+        assertEquals(List.of(2), fanOut.legCountPerMultiSearch());
     }
 
     /**
@@ -845,7 +841,18 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         assertFalse("round 2 hands over the query the legs already paid for", roundTwo instanceof HybridQueryBuilder);
     }
 
-    /** The other branch: opted in, and it fans out. */
+    /** Nothing configured: the default is on, and it fans out. */
+    @SneakyThrows
+    public void testFusedMode_whenNothingIsConfigured_thenItFansOut() {
+        initClusterUtil(null);
+
+        FanOut fanOut = drive(request(nestedChain(1)));
+
+        assertEquals(1, fanOut.multiSearches());
+        assertEquals(List.of(2), fanOut.legCountPerMultiSearch());
+    }
+
+    /** Switched on explicitly, which is the same as the default: it fans out. */
     @SneakyThrows
     public void testFusedMode_whenTurnedOnExplicitly_thenItFansOut() {
         initClusterUtil(Settings.builder().put(HYBRID_FUSION_ENABLED.getKey(), true).build());
@@ -857,12 +864,12 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
     }
 
     /**
-     * The shape of the switch itself. Off by default is what makes the feature opt-in rather than announced, and dynamic
-     * is what makes it a kill switch — an operator who has to restart nodes to turn it back off does not have one.
+     * The shape of the switch itself. On by default is what ships the feature to every cluster, and dynamic is what makes
+     * it a kill switch — an operator who has to restart nodes to turn it off does not have one.
      */
-    public void testFusedModeSetting_isOffByDefaultAndDynamic() {
+    public void testFusedModeSetting_isOnByDefaultAndDynamic() {
         assertEquals("plugins.neural_search.hybrid.fusion.enabled", HYBRID_FUSION_ENABLED.getKey());
-        assertFalse("fused mode ships off", HYBRID_FUSION_ENABLED.getDefault(Settings.EMPTY));
+        assertTrue("fused mode ships on", HYBRID_FUSION_ENABLED.getDefault(Settings.EMPTY));
         assertTrue("and has to be flippable without a restart, in both directions", HYBRID_FUSION_ENABLED.isDynamic());
     }
 
@@ -1360,12 +1367,9 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         when(nodes.getMinNodeVersion()).thenReturn(minNodeVersion);
         when(metadata.custom(SearchPipelineMetadata.TYPE)).thenReturn(new SearchPipelineMetadata(Map.of()));
         if (stubClusterSettings) {
-            // Fused mode is an opt-in, so it has to be turned on for this suite to fan out at all. The
-            // caller's own settings are layered on top, which lets a test turn it back off.
-            Settings settings = Settings.builder()
-                .put(HYBRID_FUSION_ENABLED.getKey(), true)
-                .put(Objects.isNull(clusterSettings) ? Settings.EMPTY : clusterSettings)
-                .build();
+            // Fused mode is on by default, so the suite fans out on the real default; a test that wants the switch off
+            // (or on explicitly) passes its own settings.
+            Settings settings = Objects.isNull(clusterSettings) ? Settings.EMPTY : clusterSettings;
             when(clusterService.getClusterSettings()).thenReturn(
                 new ClusterSettings(settings, Set.of(HYBRID_FUSION_ENABLED, MAX_FUSION_LEG_SEARCHES, HYBRID_FUSION_FAST_PATH_FETCH_BUDGET))
             );

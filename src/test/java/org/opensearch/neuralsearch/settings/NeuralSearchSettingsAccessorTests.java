@@ -45,23 +45,7 @@ public class NeuralSearchSettingsAccessorTests extends OpenSearchTestCase {
         new NeuralSearchSettingsAccessor(clusterService, Settings.EMPTY);
     }
 
-    public void testFusedModeSwitch_whenTurnedOn_thenTransitionIsLogged() throws IllegalAccessException {
-        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(LOGGER_NAME))) {
-            appender.addExpectation(
-                new MockLogAppender.SeenEventExpectation(
-                    "fused mode turned on",
-                    LOGGER_NAME,
-                    Level.WARN,
-                    "[" + HYBRID_FUSION_ENABLED.getKey() + "] is now [true]*accepted*"
-                )
-            );
-            clusterSettings.applySettings(Settings.builder().put(HYBRID_FUSION_ENABLED.getKey(), true).build());
-            appender.assertAllExpectationsMatched();
-        }
-    }
-
-    public void testFusedModeSwitch_whenTurnedBackOff_thenTransitionIsLogged() throws IllegalAccessException {
-        clusterSettings.applySettings(Settings.builder().put(HYBRID_FUSION_ENABLED.getKey(), true).build());
+    public void testFusedModeSwitch_whenTurnedOff_thenTransitionIsLogged() throws IllegalAccessException {
         try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(LOGGER_NAME))) {
             appender.addExpectation(
                 new MockLogAppender.SeenEventExpectation(
@@ -71,6 +55,23 @@ public class NeuralSearchSettingsAccessorTests extends OpenSearchTestCase {
                     "[" + HYBRID_FUSION_ENABLED.getKey() + "] is now [false]*refused*"
                 )
             );
+            clusterSettings.applySettings(Settings.builder().put(HYBRID_FUSION_ENABLED.getKey(), false).build());
+            appender.assertAllExpectationsMatched();
+        }
+    }
+
+    public void testFusedModeSwitch_whenTurnedBackOn_thenTransitionIsLogged() throws IllegalAccessException {
+        clusterSettings.applySettings(Settings.builder().put(HYBRID_FUSION_ENABLED.getKey(), false).build());
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(LOGGER_NAME))) {
+            appender.addExpectation(
+                new MockLogAppender.SeenEventExpectation(
+                    "fused mode back on its default",
+                    LOGGER_NAME,
+                    Level.WARN,
+                    "[" + HYBRID_FUSION_ENABLED.getKey() + "] is now [true]*accepted*"
+                )
+            );
+            // Clearing the key returns the switch to its default, which is on — the same transition as an explicit true.
             clusterSettings.applySettings(Settings.EMPTY);
             appender.assertAllExpectationsMatched();
         }
@@ -78,7 +79,7 @@ public class NeuralSearchSettingsAccessorTests extends OpenSearchTestCase {
 
     /**
      * The negative control the two positives need: an update that leaves fused mode alone must not log about it, otherwise
-     * every unrelated cluster settings change would look like an opt-in.
+     * every unrelated cluster settings change would look like a flip of the switch.
      */
     public void testFusedModeSwitch_whenAnotherSettingChanges_thenNothingIsLogged() throws IllegalAccessException {
         try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(LOGGER_NAME))) {
