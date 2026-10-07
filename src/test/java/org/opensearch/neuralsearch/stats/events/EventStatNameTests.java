@@ -75,6 +75,7 @@ public class EventStatNameTests extends OpenSearchTestCase {
             "SEISMIC_QUERY_REQUESTS",
             "SPARSE_ENCODING_PROCESSOR_SEISMIC_EXECUTIONS",
             "MMR_NEURAL_QUERY_TRANSFORMER",
+            "SKIP_EXISTING_LOOKUP_FAILURES",
             // Resolver (in-query `fusion`) mode. Appended, never inserted: the ordinal is the wire format.
             "HYBRID_QUERY_FUSION_REQUESTS",
             "HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS",

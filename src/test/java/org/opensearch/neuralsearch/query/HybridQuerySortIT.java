@@ -239,7 +239,8 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
         fieldSortOrderMap.put("stock", SortOrder.DESC);
         fieldSortOrderMap.put("_score", SortOrder.DESC);
         assertThrows(
-            "_score sort criteria cannot be applied with any other criteria. Please select one sort criteria out of them.",
+            "_score sort criteria cannot be applied with any other criteria unless the query uses collapse with _score as the "
+                + "primary, descending key. Please select one sort criteria out of them.",
             ResponseException.class,
             () -> search(
                 TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS,

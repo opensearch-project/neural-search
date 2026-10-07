@@ -22,6 +22,7 @@ import org.opensearch.index.mapper.TokenCountFieldMapper;
 import org.opensearch.index.mapper.WildcardFieldMapper;
 import org.opensearch.neuralsearch.constants.MappingConstants;
 import org.opensearch.neuralsearch.mapper.dto.ChunkingConfig;
+import org.opensearch.neuralsearch.mapper.dto.ModelSelection;
 import org.opensearch.neuralsearch.mapper.dto.SemanticParameters;
 import org.opensearch.neuralsearch.processor.chunker.ChunkerValidatorFactory;
 import org.opensearch.neuralsearch.mapper.dto.SparseEncodingConfig;
@@ -39,6 +40,7 @@ import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.CHUNK
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DEFAULT_SEMANTIC_INFO_FIELD_NAME_SUFFIX;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.DENSE_EMBEDDING_CONFIG;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_ID;
+import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.MODEL_SELECTION;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.RAW_FIELD_TYPE;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SKIP_EXISTING_EMBEDDING;
 import static org.opensearch.neuralsearch.constants.SemanticFieldConstants.SEARCH_MODEL_ID;
@@ -211,6 +213,21 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
             false
         );
 
+        @Getter
+        protected final Parameter<ModelSelection> modelSelection = new Parameter<>(
+            MODEL_SELECTION,
+            true,
+            () -> null,
+            (name, ctx, value) -> value == null ? null : new ModelSelection(name, value),
+            m -> ((SemanticFieldMapper) m).semanticParameters.getModelSelection()
+        ).setSerializer((builder, name, value) -> {
+            if (value == null) {
+                builder.nullField(name);
+            } else {
+                value.toXContent(builder, name);
+            }
+        }, (value) -> value == null ? null : value.toString());
+
         @Setter
         protected ParametrizedFieldMapper.Builder delegateBuilder;
 
@@ -229,7 +246,8 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 semanticFieldSearchAnalyzer,
                 denseEmbeddingConfig,
                 sparseEncodingConfig,
-                skipExistingEmbedding
+                skipExistingEmbedding,
+                modelSelection
             );
         }
 
@@ -261,6 +279,7 @@ public class SemanticFieldMapper extends ParametrizedFieldMapper {
                 .denseEmbeddingConfig(denseEmbeddingConfig.getValue())
                 .sparseEncodingConfig(sparseEncodingConfig.getValue())
                 .skipExistingEmbedding(skipExistingEmbedding.getValue())
+                .modelSelection(modelSelection.getValue())
                 .build();
         }
     }

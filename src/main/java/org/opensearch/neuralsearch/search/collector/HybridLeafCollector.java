@@ -7,7 +7,6 @@ package org.opensearch.neuralsearch.search.collector;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
-import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.search.LeafCollector;
 import org.apache.lucene.search.Scorable;
 import org.apache.lucene.search.Scorer;
@@ -16,7 +15,6 @@ import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.search.profile.ProfilingWrapper;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -70,15 +68,7 @@ public abstract class HybridLeafCollector implements LeafCollector {
             return;
         }
         compoundQueryScorer.resetScores();
-        float[] subQueryScores = compoundQueryScorer.getSubQueryScores();
-        int currentDoc = hybridQueryScorer.docID();
-        List<Scorer> subScorers = hybridQueryScorer.getSubScorers();
-        for (int i = 0; i < subScorers.size(); i++) {
-            Scorer subScorer = subScorers.get(i);
-            if (Objects.nonNull(subScorer) && subScorer.docID() == currentDoc && currentDoc != DocIdSetIterator.NO_MORE_DOCS) {
-                subQueryScores[i] = subScorer.score();
-            }
-        }
+        hybridQueryScorer.populateSubQueryScores(compoundQueryScorer.getSubQueryScores());
     }
 
     /**

@@ -23,6 +23,7 @@ public class SemanticParameters {
     private final String semanticFieldSearchAnalyzer;
     private final Map<String, Object> denseEmbeddingConfig;
     private final SparseEncodingConfig sparseEncodingConfig;
+    private final ModelSelection modelSelection;
 
     public boolean isChunkingEnabled() {
         if (chunkingConfig == null) {

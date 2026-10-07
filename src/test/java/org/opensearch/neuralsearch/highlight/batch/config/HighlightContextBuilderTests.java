@@ -368,8 +368,8 @@ public class HighlightContextBuilderTests extends OpenSearchTestCase {
         assertEquals(0, ctx.size());
     }
 
-    public void testListSourceValueIsJoinedIntoSingleString() {
-        // Source value is a List — exercises the List handling branch in extractSourceText
+    public void testListSourceValueProducesOneRequestPerElement() {
+        // List values produce one inference request per highlightable element.
         HighlightContextBuilder builder = new HighlightContextBuilder();
         SemanticHighlightTarget target = SemanticHighlightTarget.builder()
             .fieldName("body")
@@ -381,8 +381,11 @@ public class HighlightContextBuilderTests extends OpenSearchTestCase {
         SearchResponse response = mockResponse(new SearchHit[] { hit });
 
         HighlightContext ctx = builder.build(config, response, 0L);
-        assertEquals(1, ctx.size());
-        assertEquals("alpha beta gamma", ctx.getRequests().get(0).getContext());
+        assertEquals(3, ctx.size());
+        assertEquals("alpha", ctx.getRequests().get(0).getContext());
+        assertEquals("beta", ctx.getRequests().get(1).getContext());
+        assertEquals("gamma", ctx.getRequests().get(2).getContext());
+        assertEquals(List.of(0, 1, 2), ctx.getElementIndices());
     }
 
     public void testListSourceValueWithNullsAreSkipped() {
@@ -401,8 +404,10 @@ public class HighlightContextBuilderTests extends OpenSearchTestCase {
         SearchResponse response = mockResponse(new SearchHit[] { hit });
 
         HighlightContext ctx = builder.build(config, response, 0L);
-        assertEquals(1, ctx.size());
-        assertEquals("alpha gamma", ctx.getRequests().get(0).getContext());
+        assertEquals(2, ctx.size());
+        assertEquals("alpha", ctx.getRequests().get(0).getContext());
+        assertEquals("gamma", ctx.getRequests().get(1).getContext());
+        assertEquals(List.of(0, 1), ctx.getElementIndices());
     }
 
     public void testNonStringNonListSourceFallsBackToToString() {

@@ -15,8 +15,10 @@ import org.opensearch.index.mapper.MockFieldMapper;
 import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
+import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopGroupsCollector;
 import org.opensearch.neuralsearch.search.collector.HybridCollectorFactory;
 import org.opensearch.neuralsearch.search.collector.HybridCollectorFactoryDTO;
+import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.test.OpenSearchTestCase;
@@ -84,6 +86,68 @@ public class HybridCollectorFactoryTests extends OpenSearchTestCase {
 
         Collector collector = HybridCollectorFactory.createCollector(mockDTO);
         assertTrue(collector instanceof HybridCollapsingTopDocsCollector);
+    }
+
+    public void testCreateCollector_whenKeywordCollapseAndDistinctGroupsEnabled_thenTopGroupsCollector() {
+        KeywordFieldMapper.KeywordFieldType fieldType = mock(KeywordFieldMapper.KeywordFieldType.class);
+        CollapseContext collapseContext = mock(CollapseContext.class);
+        when(collapseContext.getFieldType()).thenReturn(fieldType);
+
+        Settings.Builder settingsBuilder = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
+            .put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true);
+        IndexMetadata indexMetadata = IndexMetadata.builder("test-index").settings(settingsBuilder).build();
+
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
+
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.indexSettings()).thenReturn(indexSettings);
+
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.size()).thenReturn(1);
+        when(searchContext.collapse()).thenReturn(collapseContext);
+        when(searchContext.indexShard()).thenReturn(indexShard);
+
+        HybridCollectorFactoryDTO mockDTO = mock(HybridCollectorFactoryDTO.class);
+        when(mockDTO.getSearchContext()).thenReturn(searchContext);
+        when(mockDTO.getNumHits()).thenReturn(5);
+
+        Collector collector = HybridCollectorFactory.createCollector(mockDTO);
+        assertTrue(collector instanceof HybridCollapsingTopGroupsCollector);
+    }
+
+    public void testCreateCollector_whenNumericCollapseAndDistinctGroupsEnabled_thenTopGroupsCollector() {
+        NumberFieldMapper.NumberFieldType fieldType = mock(NumberFieldMapper.NumberFieldType.class);
+        CollapseContext collapseContext = mock(CollapseContext.class);
+        when(collapseContext.getFieldType()).thenReturn(fieldType);
+
+        Settings.Builder settingsBuilder = Settings.builder()
+            .put(IndexMetadata.SETTING_VERSION_CREATED, Version.CURRENT)
+            .put(IndexMetadata.SETTING_NUMBER_OF_SHARDS, 1)
+            .put(IndexMetadata.SETTING_NUMBER_OF_REPLICAS, 0)
+            .put(IndexMetadata.SETTING_INDEX_UUID, UUIDs.randomBase64UUID())
+            .put(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED.getKey(), true);
+        IndexMetadata indexMetadata = IndexMetadata.builder("test-index").settings(settingsBuilder).build();
+
+        IndexSettings indexSettings = new IndexSettings(indexMetadata, Settings.EMPTY);
+
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.indexSettings()).thenReturn(indexSettings);
+
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.size()).thenReturn(1);
+        when(searchContext.collapse()).thenReturn(collapseContext);
+        when(searchContext.indexShard()).thenReturn(indexShard);
+
+        HybridCollectorFactoryDTO mockDTO = mock(HybridCollectorFactoryDTO.class);
+        when(mockDTO.getSearchContext()).thenReturn(searchContext);
+        when(mockDTO.getNumHits()).thenReturn(5);
+
+        Collector collector = HybridCollectorFactory.createCollector(mockDTO);
+        assertTrue(collector instanceof HybridCollapsingTopGroupsCollector);
     }
 
     public void testCreateCollector_whenDocsPerGroupPerSubQueryZero_thenSuccessful() {

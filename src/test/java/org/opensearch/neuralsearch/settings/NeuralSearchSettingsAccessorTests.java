@@ -15,6 +15,7 @@ import org.apache.logging.log4j.LogManager;
 import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.ClusterSettings;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.test.MockLogAppender;
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -33,7 +34,7 @@ public class NeuralSearchSettingsAccessorTests extends OpenSearchTestCase {
                 NeuralSearchSettings.NEURAL_STATS_ENABLED,
                 NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT,
                 NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD,
-                NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
+                SparseSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
                 HYBRID_FUSION_ENABLED
             )
         );

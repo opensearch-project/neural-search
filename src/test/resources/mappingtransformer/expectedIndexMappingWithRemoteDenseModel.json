@@ -11,15 +11,20 @@
             "product_description": {
               "type": "semantic",
               "model_id": "%s",
-              "raw_field_type": "text"
+              "raw_field_type": "text",
+              "dense_embedding_config": {
+                "method": {
+                  "engine": "lucene"
+                }
+              }
             },
             "product_description_semantic_info": {
               "properties": {
                 "embedding": {
                   "type": "knn_vector",
-                  "dimension": 384,
+                  "dimension": 128,
                   "method": {
-                    "engine": "faiss",
+                    "engine": "lucene",
                     "space_type": "l2",
                     "name": "hnsw",
                     "parameters": {}

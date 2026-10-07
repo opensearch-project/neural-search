@@ -38,7 +38,7 @@ public class HybridQueryScorer extends Scorer {
 
     private final DisiPriorityQueue subScorersPQ;
 
-    private final DocIdSetIterator approximation;
+    private final HybridSubqueriesDISIApproximation approximation;
     private final HybridScoreBlockBoundaryPropagator disjunctionBlockPropagator;
     private final TwoPhase twoPhase;
     private final int numSubqueries;
@@ -119,9 +119,28 @@ public class HybridQueryScorer extends Scorer {
         return totalScore;
     }
 
+    /**
+     * Fill an array of per sub-query scores for the document this scorer is positioned on. Scores are taken
+     * from the sub-matches of the current document, the same list {@link #score()} sums up, so a sub-query
+     * that has a two-phase iterator is confirmed to match before its score is read. Reading the sub-scorers
+     * directly instead would score a sub-query on a document it has only approximately matched.
+     * @param subQueryScores array with one element per sub-query of this hybrid query
+     */
+    public void populateSubQueryScores(final float[] subQueryScores) throws IOException {
+        for (DisiWrapper disiWrapper = getSubMatches(); disiWrapper != null; disiWrapper = disiWrapper.next) {
+            // check if this doc has match in the subQuery. If not, leave the score as 0.0 and continue
+            if (disiWrapper.scorer.docID() == DocIdSetIterator.NO_MORE_DOCS) {
+                continue;
+            }
+            if (disiWrapper instanceof HybridDisiWrapper hybridDisiWrapper) {
+                subQueryScores[hybridDisiWrapper.getSubQueryIndex()] = hybridDisiWrapper.scorer.score();
+            }
+        }
+    }
+
     DisiWrapper getSubMatches() throws IOException {
         if (twoPhase == null) {
-            return subScorersPQ.topList();
+            return approximation.topList();
         } else {
             return twoPhase.getSubMatches();
         }
@@ -181,10 +200,7 @@ public class HybridQueryScorer extends Scorer {
      */
     @Override
     public int docID() {
-        if (subScorersPQ.size() == 0) {
-            return DocIdSetIterator.NO_MORE_DOCS;
-        }
-        return subScorersPQ.top().doc;
+        return approximation.docID();
     }
 
     private List<HybridDisiWrapper> initializeSubScorersList() {
@@ -225,13 +241,18 @@ public class HybridQueryScorer extends Scorer {
         DisiWrapper verifiedMatches;
         // priority queue of approximations on the current doc that have not been verified yet
         final PriorityQueue<DisiWrapper> unverifiedMatches;
-        DisiPriorityQueue subScorers;
+        final HybridSubqueriesDISIApproximation hybridApproximation;
         boolean needsScores;
 
-        private TwoPhase(DocIdSetIterator approximation, float matchCost, DisiPriorityQueue subScorers, boolean needsScores) {
+        private TwoPhase(
+            HybridSubqueriesDISIApproximation approximation,
+            float matchCost,
+            DisiPriorityQueue subScorers,
+            boolean needsScores
+        ) {
             super(approximation);
             this.matchCost = matchCost;
-            this.subScorers = subScorers;
+            this.hybridApproximation = approximation;
             unverifiedMatches = new PriorityQueue<>(subScorers.size()) {
                 @Override
                 protected boolean lessThan(DisiWrapper a, DisiWrapper b) {
@@ -257,7 +278,7 @@ public class HybridQueryScorer extends Scorer {
             verifiedMatches = null;
             unverifiedMatches.clear();
 
-            for (DisiWrapper wrapper = subScorers.topList(); wrapper != null;) {
+            for (DisiWrapper wrapper = hybridApproximation.topList(); wrapper != null;) {
                 DisiWrapper next = wrapper.next;
 
                 if (Objects.isNull(wrapper.twoPhaseView)) {
@@ -303,7 +324,7 @@ public class HybridQueryScorer extends Scorer {
      * sub iterators that return empty results
      */
     static class HybridSubqueriesDISIApproximation extends DocIdSetIterator {
-        final DocIdSetIterator docIdSetIterator;
+        final DisjunctionDISIApproximation docIdSetIterator;
         final DisiPriorityQueue subIterators;
 
         public HybridSubqueriesDISIApproximation(
@@ -312,6 +333,10 @@ public class HybridQueryScorer extends Scorer {
         ) {
             docIdSetIterator = new DisjunctionDISIApproximation(subIterators, 0);
             this.subIterators = subIteratorsPQ;
+        }
+
+        DisiWrapper topList() {
+            return docIdSetIterator.topList();
         }
 
         @Override

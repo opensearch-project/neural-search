@@ -26,13 +26,13 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.Sort;
-import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.SearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 
 /**
  * Abstracts combination of scores in query search results.
@@ -165,14 +165,9 @@ public class ScoreCombiner {
         if (sort == null) {
             return false;
         }
-
-        for (SortField sortField : sort.getSort()) {
-            if (SortField.Type.SCORE.equals(sortField.getType())) {
-                return true;
-            }
-        }
-
-        return false;
+        // Hybrid rejects field-primary + _score upstream, so this is equivalent to the old "any key is score"
+        // check for every reachable hybrid sort, while staying consistent with that slot-0 assumption.
+        return HybridSearchCollapseUtil.isScorePrimarySort(sort.getSort());
     }
 
     /**
@@ -233,6 +228,12 @@ public class ScoreCombiner {
         // we're merging docs with normalized and combined scores. we need to have only maxHits results
         Map<Integer, Object[]> docIdSortFieldMap = new HashMap<>();
         final List<TopDocs> topFieldDocs = compoundTopDocs.getTopDocs();
+        // A shard that returned no results (e.g. one exhausted past a search_after cursor while other shards
+        // still have hits) arrives here with an empty top docs list but a non-zero total hits count. There are
+        // no sort fields to collect, so return the empty map and avoid getFirst() on an empty list. See issue #1934.
+        if (topFieldDocs.isEmpty()) {
+            return docIdSortFieldMap;
+        }
         final boolean isSortByScore = isSortOrderByScore(sort);
         final boolean isCollapseEnabled = topFieldDocs.getFirst() instanceof CollapseTopFieldDocs;
         for (TopDocs topDocs : topFieldDocs) {
@@ -240,13 +241,24 @@ public class ScoreCombiner {
                 FieldDoc fieldDoc = (FieldDoc) topDocs.scoreDocs[scoreDocIndex];
 
                 if (docIdSortFieldMap.get(fieldDoc.doc) == null) {
-                    // If sort by score then replace sort field value with normalized score.
+                    // If sort by score then replace the score sort field value with the normalized score,
+                    // keeping any trailing tiebreaker field values intact.
                     // If collapse is enabled, then we append the collapse value to the end of the sort fields
                     // in order to more easily access it later.
                     Object[] sortFields;
 
                     if (isSortByScore) {
-                        sortFields = new Object[] { combinedNormalizedScoresByDocId.get(fieldDoc.doc) };
+                        Float normalizedScore = combinedNormalizedScoresByDocId.get(fieldDoc.doc);
+                        // fields is never null here
+                        if (fieldDoc.fields.length <= 1) {
+                            // Single-key [_score] sort — original behavior
+                            sortFields = new Object[] { normalizedScore };
+                        } else {
+                            // Multi-key [_score, field] sort — _score is always the primary key (index 0),
+                            // so preserve the trailing tiebreaker(s) and swap only the score slot
+                            sortFields = fieldDoc.fields.clone();
+                            sortFields[0] = normalizedScore;
+                        }
                     } else {
                         sortFields = fieldDoc.fields;
                     }

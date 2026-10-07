@@ -37,6 +37,7 @@ public final class MinClusterVersionUtil {
     // reach a mixed-version cluster. Tracked by https://github.com/opensearch-project/neural-search/issues/2002 and held
     // to by HybridQueryFusedFanOutTests#testFusedModeMinimumVersion_isNotBehindTheVersionUnderDevelopment.
     public static final Version MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY = Version.V_3_8_0;
+    public static final Version MINIMAL_SUPPORTED_VERSION_SPARSE_NATIVE_ENGINE = Version.V_3_9_0;
 
     // Constant for neural_knn_query version check
     public static final String NEURAL_KNN_QUERY = "neural_knn_query";
@@ -131,5 +132,20 @@ public final class MinClusterVersionUtil {
      */
     public static boolean isClusterOnOrAfterMinReqVersionForAgenticEmbeddingModelId() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_AGENTIC_EMBEDDING_MODEL_ID);
+    }
+
+    /**
+     * Checks whether a version understands the sparse native engine and the mapping parameters that
+     * came with it.
+     *
+     * Mapping parsing cannot read the applied cluster state -- it runs inside a cluster state applier
+     * on the node that receives the mapping -- so the caller passes the index created version, which
+     * OpenSearch sets to the smallest node version in the cluster at creation time.
+     *
+     * @param version the version to check
+     * @return true if the version supports the sparse native engine
+     */
+    public static boolean isVersionOnOrAfterMinReqVersionForSparseNativeEngine(Version version) {
+        return version.onOrAfter(MINIMAL_SUPPORTED_VERSION_SPARSE_NATIVE_ENGINE);
     }
 }

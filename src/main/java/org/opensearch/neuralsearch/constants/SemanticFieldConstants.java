@@ -66,4 +66,23 @@ public class SemanticFieldConstants {
      * model is not changed.
      */
     public static final String SKIP_EXISTING_EMBEDDING = "skip_existing_embedding";
+
+    /**
+     * Name of the model selection parameter. It is a nested object holding {@link #LANGUAGE_OPTION} and
+     * {@link #MODEL_TYPE}. When specified, the system resolves the {@code model_id} from the
+     * {@code plugins.neural_search.model_selection.model_id.*} cluster settings instead of requiring the customer to
+     * provide a {@code model_id} directly.
+     */
+    public static final String MODEL_SELECTION = "model_selection";
+
+    /**
+     * Name of the language option sub-parameter of {@link #MODEL_SELECTION}. Supported values: ENGLISH, MULTILINGUAL.
+     */
+    public static final String LANGUAGE_OPTION = "language_option";
+
+    /**
+     * Name of the model type sub-parameter of {@link #MODEL_SELECTION}. Used together with {@link #LANGUAGE_OPTION} to
+     * resolve the appropriate model. Supported values: SPARSE, DENSE.
+     */
+    public static final String MODEL_TYPE = "model_type";
 }

@@ -4,4 +4,14 @@ grant {
     permission java.lang.RuntimePermission "accessDeclaredMembers";
     permission java.lang.reflect.ReflectPermission "suppressAccessChecks";
     permission java.lang.RuntimePermission "setContextClassLoader";
+
+    // Native sparse engine. One name per SIMD variant scripts/build.sh can ship:
+    // System.loadLibrary checks the permission against the name it is asked for,
+    // and NativeLibraryCandidates tries each in turn.
+    permission java.lang.RuntimePermission "loadLibrary.opensearch_neuralsearch_nsparse";
+    permission java.lang.RuntimePermission "loadLibrary.opensearch_neuralsearch_nsparse_avx2";
+    permission java.lang.RuntimePermission "loadLibrary.opensearch_neuralsearch_nsparse_avx512";
+    permission java.lang.RuntimePermission "loadLibrary.opensearch_neuralsearch_nsparse_sve";
+    // NativeCpuFeatures reads this to pick the variant the CPU can execute.
+    permission java.io.FilePermission "/proc/cpuinfo", "read";
 };

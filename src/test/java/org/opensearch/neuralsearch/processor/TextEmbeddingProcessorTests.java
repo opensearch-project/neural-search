@@ -44,6 +44,7 @@ import org.opensearch.action.get.GetAction;
 import org.opensearch.action.get.GetRequest;
 import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.get.MultiGetAction;
+import org.opensearch.action.get.MultiGetItemResponse;
 import org.opensearch.action.get.MultiGetRequest;
 import org.opensearch.action.get.MultiGetResponse;
 import org.opensearch.cluster.service.ClusterService;
@@ -2689,4 +2690,126 @@ public class TextEmbeddingProcessorTests extends InferenceProcessorTestCase {
         verify(resultHandler).accept(resultCaptor.capture());
         assertEquals(docCount, resultCaptor.getValue().size());
     }
+
+    @SneakyThrows
+    public void testExecute_whenSkipExistingAndRoutingPresent_thenGetRequestCarriesRouting() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("_id", "1");
+        sourceAndMetadata.put("_routing", "user-a");
+        sourceAndMetadata.put("key1", "value1");
+        sourceAndMetadata.put("key2", "value2");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+
+        GetResponse response = mockEmptyGetResponse();
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(response);
+            return null;
+        }).when(openSearchClient).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(isA(TextInferenceRequest.class), isA(ActionListener.class));
+
+        processor.execute(ingestDocument, mock(BiConsumer.class));
+
+        // Without routing the lookup targets the _id shard, which misses on a routed index
+        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(openSearchClient).execute(isA(GetAction.class), getRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals("user-a", getRequestCaptor.getValue().routing());
+    }
+
+    @SneakyThrows
+    public void testExecute_whenSkipExistingAndNoRouting_thenGetRequestHasNoRouting() {
+        Map<String, Object> sourceAndMetadata = new HashMap<>();
+        sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");
+        sourceAndMetadata.put("_id", "1");
+        sourceAndMetadata.put("key1", "value1");
+        sourceAndMetadata.put("key2", "value2");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+
+        GetResponse response = mockEmptyGetResponse();
+        doAnswer(invocation -> {
+            ActionListener<GetResponse> listener = invocation.getArgument(2);
+            listener.onResponse(response);
+            return null;
+        }).when(openSearchClient).execute(isA(GetAction.class), isA(GetRequest.class), isA(ActionListener.class));
+
+        List<List<Float>> modelTensorList = createMockVectorResult();
+        doAnswer(invocation -> {
+            ActionListener<List<List<Float>>> listener = invocation.getArgument(1);
+            listener.onResponse(modelTensorList);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(isA(TextInferenceRequest.class), isA(ActionListener.class));
+
+        processor.execute(ingestDocument, mock(BiConsumer.class));
+
+        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(openSearchClient).execute(isA(GetAction.class), getRequestCaptor.capture(), isA(ActionListener.class));
+        assertNull(getRequestCaptor.getValue().routing());
+    }
+
+    public void testBuildMultiGetRequest_whenRoutingPresent_thenItemsCarryRouting() {
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+
+        Map<String, Object> routed = new HashMap<>();
+        routed.put(IndexFieldMapper.NAME, "my_index");
+        routed.put("_id", "1");
+        routed.put("_routing", "user-a");
+
+        Map<String, Object> unrouted = new HashMap<>();
+        unrouted.put(IndexFieldMapper.NAME, "my_index");
+        unrouted.put("_id", "2");
+
+        List<InferenceProcessor.DataForInference> dataForInferences = List.of(
+            new InferenceProcessor.DataForInference(
+                new IngestDocumentWrapper(0, 0, new IngestDocument(routed, new HashMap<>()), null),
+                new HashMap<>(),
+                List.of()
+            ),
+            new InferenceProcessor.DataForInference(
+                new IngestDocumentWrapper(1, 0, new IngestDocument(unrouted, new HashMap<>()), null),
+                new HashMap<>(),
+                List.of()
+            )
+        );
+
+        MultiGetRequest multiGetRequest = processor.buildMultiGetRequest(dataForInferences);
+
+        assertEquals(2, multiGetRequest.getItems().size());
+        assertEquals("user-a", multiGetRequest.getItems().get(0).routing());
+        assertNull(multiGetRequest.getItems().get(1).routing());
+    }
+
+    public void testCreateDocumentMap_whenItemFailedOrMissing_thenSkippedInsteadOfNPE() {
+        TextEmbeddingProcessor processor = createInstanceWithLevel1MapConfig(true);
+
+        // A routed lookup without routing comes back as a failure whose getResponse() is null
+        MultiGetItemResponse failed = new MultiGetItemResponse(
+            null,
+            new MultiGetResponse.Failure("my_index", "1", new RuntimeException("routing is required"))
+        );
+
+        GetResponse missingResponse = mock(GetResponse.class);
+        when(missingResponse.isExists()).thenReturn(false);
+        MultiGetItemResponse missing = new MultiGetItemResponse(missingResponse, null);
+
+        GetResponse foundResponse = mock(GetResponse.class);
+        when(foundResponse.isExists()).thenReturn(true);
+        when(foundResponse.getSourceAsMap()).thenReturn(Map.of("key1", "value1"));
+        MultiGetItemResponse found = new MultiGetItemResponse(foundResponse, null);
+        when(foundResponse.getId()).thenReturn("3");
+
+        Map<String, Map<String, Object>> documentMap = processor.createDocumentMap(new MultiGetItemResponse[] { failed, missing, found });
+
+        assertEquals(1, documentMap.size());
+        assertEquals(Map.of("key1", "value1"), documentMap.get("3"));
+    }
+
 }

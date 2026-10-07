@@ -575,6 +575,35 @@ public class TextImageEmbeddingProcessorTests extends OpenSearchTestCase {
         return innerMap;
     }
 
+    public void testExecute_whenSkipExistingAndRoutingPresent_thenGetRequestCarriesRouting() {
+        Map<String, Object> sourceAndMetadata = getIngestDocument();
+        sourceAndMetadata.put("_routing", "user-a");
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextImageEmbeddingProcessor processor = createInstance(true);
+
+        mockUpdateVectorCreation();
+        mockUpdateDocument(ingestDocument);
+        processor.execute(ingestDocument, mock(BiConsumer.class));
+
+        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(openSearchClient).execute(isA(GetAction.class), getRequestCaptor.capture(), isA(ActionListener.class));
+        assertEquals("user-a", getRequestCaptor.getValue().routing());
+    }
+
+    public void testExecute_whenSkipExistingAndNoRouting_thenGetRequestHasNoRouting() {
+        Map<String, Object> sourceAndMetadata = getIngestDocument();
+        IngestDocument ingestDocument = new IngestDocument(sourceAndMetadata, new HashMap<>());
+        TextImageEmbeddingProcessor processor = createInstance(true);
+
+        mockUpdateVectorCreation();
+        mockUpdateDocument(ingestDocument);
+        processor.execute(ingestDocument, mock(BiConsumer.class));
+
+        ArgumentCaptor<GetRequest> getRequestCaptor = ArgumentCaptor.forClass(GetRequest.class);
+        verify(openSearchClient).execute(isA(GetAction.class), getRequestCaptor.capture(), isA(ActionListener.class));
+        assertNull(getRequestCaptor.getValue().routing());
+    }
+
     private Map<String, Object> getIngestDocument() {
         Map<String, Object> sourceAndMetadata = new HashMap<>();
         sourceAndMetadata.put(IndexFieldMapper.NAME, "my_index");

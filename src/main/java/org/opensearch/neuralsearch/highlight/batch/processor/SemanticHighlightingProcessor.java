@@ -4,7 +4,9 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.processor;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.action.search.SearchRequest;
@@ -166,6 +168,7 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
         private final HighlightResultApplier applier;
         private final ActionListener<SearchResponse> responseListener;
         private final List<SentenceHighlightingRequest> allRequests;
+        private final List<List<Map<String, Object>>> allResults;
         private int currentIndex = 0;
 
         BatchExecutor(HighlightContext context, HighlightResultApplier applier, ActionListener<SearchResponse> responseListener) {
@@ -173,6 +176,7 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
             this.applier = applier;
             this.responseListener = responseListener;
             this.allRequests = context.getRequests();
+            this.allResults = new ArrayList<>(allRequests.size());
         }
 
         void execute() {
@@ -181,7 +185,21 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
 
         private void processNextBatch() {
             if (currentIndex >= allRequests.size()) {
-                completeProcessing(context, responseListener);
+                try {
+                    applier.applyBatchResults(
+                        context.getValidHits(),
+                        allResults,
+                        context.getElementIndices(),
+                        context.getFieldNames(),
+                        context.getPreTags(),
+                        context.getPostTags(),
+                        context.getNoMatchSizes(),
+                        context.getEncoders()
+                    );
+                    completeProcessing(context, responseListener);
+                } catch (Exception e) {
+                    handleError(e, context.getOriginalResponse(), responseListener);
+                }
                 return;
             }
             int startIdx = currentIndex;
@@ -197,17 +215,10 @@ public class SemanticHighlightingProcessor implements SearchResponseProcessor, S
                 ActionListener.wrap(batchResults -> {
                     try {
                         log.debug("Batch [{}, {}) completed in {}ms", startIdx, endIdx, System.currentTimeMillis() - batchStart);
-                        applier.applyBatchResultsWithIndices(
-                            context.getValidHits(),
-                            batchResults,
-                            startIdx,
-                            endIdx,
-                            context.getFieldNames(),
-                            context.getPreTags(),
-                            context.getPostTags(),
-                            context.getNoMatchSizes(),
-                            context.getEncoders()
-                        );
+                        if (batchResults.size() != endIdx - startIdx) {
+                            throw new IllegalStateException("Batch results size mismatch");
+                        }
+                        allResults.addAll(batchResults);
                         currentIndex = endIdx;
                         processNextBatch();
                     } catch (Exception e) {

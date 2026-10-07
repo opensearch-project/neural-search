@@ -277,6 +277,13 @@ public enum EventStatName implements StatName {
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
         Version.V_3_3_0
     ),
+    /** Tracks failed existing-document lookups, which silently degrade skip_existing to full inference */
+    SKIP_EXISTING_LOOKUP_FAILURES(
+        "skip_existing_lookup_failures",
+        "processors.ingest",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        Version.V_3_9_0
+    ),
 
     // ---- resolver (in-query `fusion`) mode. Appended at the TAIL, which the ordinal contract above requires. ----
     // These count the resolver ALONGSIDE hybrid_query_requests rather than instead of it: a fused hybrid is parsed by the

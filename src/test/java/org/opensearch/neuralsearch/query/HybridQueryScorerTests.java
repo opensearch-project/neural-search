@@ -22,14 +22,28 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.lucene.document.Document;
+import org.apache.lucene.document.Field;
+import org.apache.lucene.document.TextField;
+import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.Term;
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.DisiWrapper;
 import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.Explanation;
+import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.TermQuery;
 import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
+import org.apache.lucene.store.Directory;
 import org.apache.lucene.tests.util.TestUtil;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
@@ -40,6 +54,8 @@ import org.opensearch.neuralsearch.search.HybridDisiWrapper;
 public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
     private static final int NUM_SUB_QUERIES = 2;
     private static final int DOC_ID_1 = 1;
+    private static final String TITLE_FIELD = "title";
+    private static final String BODY_FIELD = "body";
 
     @SneakyThrows
     public void testWithRandomDocuments_whenOneSubScorer_thenReturnSuccessfully() {
@@ -150,6 +166,111 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
             }
             idx++;
         }
+    }
+
+    @SneakyThrows
+    public void testDocIdAndScore_whenSubScorersMatchDifferentDocs_thenReflectCurrentDoc() {
+        // sub-scorers must match partially overlapping doc sets, not identical ones. Only then do their iterators
+        // sit on different docs, which is what makes reading position and match state from an unmaintained
+        // priority queue observable
+        final int[] docsOfFirstSubQuery = new int[] { 1, 3, 6 };
+        final float[] scoresOfFirstSubQuery = new float[] { 1.0f, 3.0f, 6.0f };
+        final int[] docsOfSecondSubQuery = new int[] { 2, 3, 5 };
+        final float[] scoresOfSecondSubQuery = new float[] { 20.0f, 30.0f, 50.0f };
+
+        HybridQueryScorer hybridQueryScorer = new HybridQueryScorer(
+            Arrays.asList(
+                scorerWithTwoPhaseIterator(docsOfFirstSubQuery, scoresOfFirstSubQuery),
+                scorerWithTwoPhaseIterator(docsOfSecondSubQuery, scoresOfSecondSubQuery)
+            )
+        );
+
+        final int[] expectedDocs = new int[] { 1, 2, 3, 5, 6 };
+        final float[] expectedScores = new float[] { 1.0f, 20.0f, 33.0f, 50.0f, 6.0f };
+
+        DocIdSetIterator iterator = hybridQueryScorer.iterator();
+        for (int idx = 0; idx < expectedDocs.length; idx++) {
+            assertEquals(expectedDocs[idx], iterator.nextDoc());
+            assertEquals("docID must be the doc the iterator is positioned on", expectedDocs[idx], hybridQueryScorer.docID());
+            assertEquals(
+                "score must only sum sub-queries that match the current doc",
+                expectedScores[idx],
+                hybridQueryScorer.score(),
+                DELTA_FOR_SCORE_ASSERTION
+            );
+        }
+        assertEquals(NO_MORE_DOCS, iterator.nextDoc());
+        assertEquals(NO_MORE_DOCS, hybridQueryScorer.docID());
+    }
+
+    @SneakyThrows
+    public void testScorer_whenSubQueryUsesPartialMinimumShouldMatch_thenIterateAllMatchingDocs() {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        final String[][] titleTermsPerDoc = { { "apple", "banana" }, { "cherry", "apple" }, { "durian" }, { "banana", "cherry" } };
+        final String[] bodyTermPerDoc = { "rare", "common", "common", "rare" };
+        for (int docId = 0; docId < titleTermsPerDoc.length; docId++) {
+            Document document = new Document();
+            for (String titleTerm : titleTermsPerDoc[docId]) {
+                document.add(new TextField(TITLE_FIELD, titleTerm, Field.Store.NO));
+            }
+            document.add(new TextField(BODY_FIELD, bodyTermPerDoc[docId], Field.Store.NO));
+            writer.addDocument(document);
+        }
+        writer.commit();
+        // keep everything in one segment so that leaf doc ids are the same as top level doc ids
+        writer.forceMerge(1);
+
+        DirectoryReader reader = DirectoryReader.open(writer);
+        IndexSearcher searcher = new IndexSearcher(reader);
+
+        // a bool sub-query with a partial minimum_should_match compiles to a Lucene WANDScorer, which is only
+        // reachable through a two-phase iterator. minimum_should_match equal to the number of clauses becomes a
+        // conjunction instead and would not exercise that path. This sub-query matches docs 0, 1 and 3
+        Query subQueryWithPartialMinimumShouldMatch = new BooleanQuery.Builder().add(
+            new TermQuery(new Term(TITLE_FIELD, "apple")),
+            BooleanClause.Occur.SHOULD
+        )
+            .add(new TermQuery(new Term(TITLE_FIELD, "banana")), BooleanClause.Occur.SHOULD)
+            .add(new TermQuery(new Term(TITLE_FIELD, "cherry")), BooleanClause.Occur.SHOULD)
+            .setMinimumNumberShouldMatch(2)
+            .build();
+        // this sub-query matches docs 1 and 2, so the two sub-queries overlap only partially
+        Query termSubQuery = new TermQuery(new Term(BODY_FIELD, "common"));
+        List<Query> subQueries = List.of(subQueryWithPartialMinimumShouldMatch, termSubQuery);
+
+        HybridQuery hybridQuery = new HybridQuery(subQueries, new HybridQueryContext(10));
+        Weight weight = searcher.createWeight(hybridQuery, ScoreMode.TOP_SCORES, 1.0f);
+        LeafReaderContext leafReaderContext = reader.leaves().get(0);
+        // the default search path uses the bulk scorer, asking the weight for a scorer is what exercises
+        // HybridQueryScorer, same as an aggregation filter, a nested query or a profiled query does
+        Scorer scorer = weight.scorer(leafReaderContext);
+        assertTrue("query must be scored by HybridQueryScorer", scorer instanceof HybridQueryScorer);
+
+        List<Integer> actualDocs = new ArrayList<>();
+        DocIdSetIterator iterator = scorer.iterator();
+        for (int doc = iterator.nextDoc(); doc != NO_MORE_DOCS; doc = iterator.nextDoc()) {
+            assertEquals("docID must be the doc the iterator is positioned on", doc, scorer.docID());
+            float expectedScore = 0.0f;
+            for (Query subQuery : subQueries) {
+                Explanation explanation = searcher.explain(subQuery, doc);
+                if (explanation.isMatch()) {
+                    expectedScore += explanation.getValue().floatValue();
+                }
+            }
+            assertEquals(
+                "score must only sum sub-queries that match the current doc",
+                expectedScore,
+                scorer.score(),
+                DELTA_FOR_SCORE_ASSERTION
+            );
+            actualDocs.add(doc);
+        }
+        assertEquals(List.of(0, 1, 2, 3), actualDocs);
+
+        reader.close();
+        writer.close();
+        directory.close();
     }
 
     @SneakyThrows
@@ -479,6 +600,53 @@ public class HybridQueryScorerTests extends OpenSearchQueryTestCase {
         float score = scorer.score();
 
         assertEquals(0.0f, score, 0.0f);
+    }
+
+    /**
+     * Scorer that only iterates over its own docs, unlike {@link #scorerWithTwoPhaseIterator(int[], float[], Weight, int)}
+     * which approximates every doc in the index. Two of these on different doc sets end up on different docs, which
+     * is what a hybrid query does in practice.
+     */
+    private static Scorer scorerWithTwoPhaseIterator(final int[] docs, final float[] scores) {
+        final DocIdSetIterator approximation = iterator(docs);
+        return new Scorer() {
+
+            @Override
+            public DocIdSetIterator iterator() {
+                return TwoPhaseIterator.asDocIdSetIterator(twoPhaseIterator());
+            }
+
+            @Override
+            public int docID() {
+                return approximation.docID();
+            }
+
+            @Override
+            public float score() {
+                return scores[Arrays.binarySearch(docs, approximation.docID())];
+            }
+
+            @Override
+            public float getMaxScore(int upTo) {
+                return Float.MAX_VALUE;
+            }
+
+            @Override
+            public TwoPhaseIterator twoPhaseIterator() {
+                return new TwoPhaseIterator(approximation) {
+
+                    @Override
+                    public boolean matches() {
+                        return Arrays.binarySearch(docs, approximation.docID()) >= 0;
+                    }
+
+                    @Override
+                    public float matchCost() {
+                        return 10;
+                    }
+                };
+            }
+        };
     }
 
     protected static Scorer scorerWithTwoPhaseIterator(final int[] docs, final float[] scores, Weight weight, int maxDoc) {

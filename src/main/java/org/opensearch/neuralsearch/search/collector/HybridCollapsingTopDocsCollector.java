@@ -26,6 +26,7 @@ import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -60,6 +61,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private int docBase;
     private final int numHits;
     private final boolean isSortByScore;
+    // minScoreThresholds is a max of evicted scores, so it is only a valid lower bound when the
+    // highest score wins. Under ascending score sort the evicted entry is the highest, so the
+    // threshold would discard exactly the documents that should be kept.
+    private final boolean isSortByScoreDescending;
     @Setter
     TotalHits.Relation totalHitsRelation = TotalHits.Relation.EQUAL_TO;
     private final HitsThresholdChecker hitsThresholdChecker;
@@ -80,6 +85,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
     private int[] collectedHitsPerSubQuery;
     // Per-sub-query min score thresholds (only used when sorting by score)
     private float[] minScoreThresholds;
+    // Per-sub-query handle to the HybridLeafFieldComparator wrapping the SCORE sub-comparator.
+    // For a single-key score sort this is the top-level comparator itself; for a multi-key
+    // [_score, field] sort it is the wrapped SCORE child nested inside the MultiLeafFieldComparator.
+    // Null entries when the sort is not by score.
+    private HybridLeafFieldComparator[] scoreComparators;
 
     HybridCollapsingTopDocsCollector(
         GroupSelector<T> groupSelector,
@@ -92,14 +102,11 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
         this.collapseField = collapseField;
         this.sort = groupSort;
 
-        boolean sortByScore = false;
-        for (SortField sf : groupSort.getSort()) {
-            if (SortField.Type.SCORE.equals(sf.getType())) {
-                sortByScore = true;
-                break;
-            }
-        }
-        this.isSortByScore = sortByScore;
+        // Score is supported only as the primary (first) sort key; the collapse guard rejects any other
+        // position, so the score sub-comparator (when present) is always at index 0.
+        SortField[] sortFields = groupSort.getSort();
+        this.isSortByScore = HybridSearchCollapseUtil.isScorePrimarySort(sortFields);
+        this.isSortByScoreDescending = HybridSearchCollapseUtil.isScorePrimaryDescendingSort(sortFields);
         this.numHits = topNGroups;
         this.hitsThresholdChecker = hitsThresholdChecker;
     }
@@ -159,10 +166,14 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
             int totalHitsForSubQuery = collectedHitsPerSubQuery[subQuery];
 
             if (totalHitsForSubQuery == 0 || queue.size() == 0) {
+                // The queue can be empty while the sub-query still matched documents, when every
+                // match was non-competitive. Report the hits that were counted rather than zero.
+                // Note this per-sub-query total is not response-visible: CompoundTopDocs recomputes
+                // it from scoreDocs.length, and the shard total comes from getTotalHits().
                 topDocsList.add(
                     new CollapseTopFieldDocs(
                         collapseField,
-                        new TotalHits(0, totalHitsRelation),
+                        new TotalHits(totalHitsForSubQuery, totalHitsRelation),
                         new FieldDoc[0],
                         sort.getSort(),
                         new Object[0]
@@ -262,18 +273,17 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
 
                 for (int subQuery = 0; subQuery < subScoresByQuery.length; subQuery++) {
                     float score = subScoresByQuery[subQuery];
-                    // Skip sub-queries with no match
-                    if (score == 0) {
-                        continue;
-                    }
-
-                    // Skip non-competitive docs when sorting by score
-                    if (isSortByScore && score <= 0 && score < minScoreThresholds[subQuery]) {
+                    if (score <= 0) {
                         continue;
                     }
 
                     collectedHitsPerSubQuery[subQuery]++;
                     maxScore = Math.max(score, maxScore);
+
+                    // Skip non-competitive docs when sorting by score
+                    if (isSortByScoreDescending && score < minScoreThresholds[subQuery]) {
+                        continue;
+                    }
 
                     if (queueFull[subQuery]) {
                         // Queue is full — compare with bottom and replace if competitive
@@ -297,6 +307,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 leafComparators = new LeafFieldComparator[numSubQueries];
                 reverseMuls = new int[numSubQueries];
                 collectedHitsPerSubQuery = new int[numSubQueries];
+                scoreComparators = new HybridLeafFieldComparator[numSubQueries];
 
                 for (int i = 0; i < numSubQueries; i++) {
                     subQueryQueues[i] = FieldValueHitQueue.create(sort.getSort(), numHits);
@@ -318,19 +329,32 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     int[] queueReverseMuls = subQueryQueues[subQuery].getReverseMul();
 
                     LeafFieldComparator comparator;
+                    HybridLeafFieldComparator scoreWrapper = null;
                     int reverseMul;
 
                     if (leafFieldComparators.length == 1) {
                         reverseMul = queueReverseMuls[0];
-                        LeafFieldComparator actual = leafFieldComparators[0];
-                        comparator = isSortByScore ? new HybridLeafFieldComparator(actual) : actual;
+                        if (isSortByScore) {
+                            // Single-key score sort: the top-level comparator IS the score wrapper
+                            scoreWrapper = new HybridLeafFieldComparator(leafFieldComparators[0]);
+                            comparator = scoreWrapper;
+                        } else {
+                            comparator = leafFieldComparators[0];
+                        }
                     } else {
                         reverseMul = 1;
+                        if (isSortByScore) {
+                            // Multi-key [_score, field] sort: _score is the primary key (index 0), so wrap
+                            // ONLY that child to feed the per-sub-query score; field children stay plain.
+                            scoreWrapper = new HybridLeafFieldComparator(leafFieldComparators[0]);
+                            leafFieldComparators[0] = scoreWrapper;
+                        }
                         comparator = new MultiLeafFieldComparator(leafFieldComparators, queueReverseMuls);
                     }
 
                     comparator.setScorer(compoundQueryScorer);
                     leafComparators[subQuery] = comparator;
+                    scoreComparators[subQuery] = scoreWrapper;
                     reverseMuls[subQuery] = reverseMul;
                 }
             }
@@ -340,11 +364,10 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 LeafFieldComparator comparator = leafComparators[subQuery];
                 float scoreOfLastTopEntry = 0;
 
-                // For score-based sorting, set the individual sub-query score on the wrapper
+                // For score-based sorting, set the individual sub-query score on the wrapped SCORE comparator
                 if (isSortByScore) {
-                    assert comparator instanceof HybridLeafFieldComparator;
-                    scoreOfLastTopEntry = ((HybridLeafFieldComparator) comparator).getCurrentSubQueryScore();
-                    ((HybridLeafFieldComparator) comparator).setCurrentSubQueryScore(score);
+                    scoreOfLastTopEntry = scoreComparators[subQuery].getCurrentSubQueryScore();
+                    scoreComparators[subQuery].setCurrentSubQueryScore(score);
                 }
 
                 boolean accepted = false;
@@ -352,7 +375,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     accepted = reverseMuls[subQuery] * comparator.compareBottom(doc) > 0;
                 } finally {
                     if (!accepted && isSortByScore) {
-                        ((HybridLeafFieldComparator) comparator).setCurrentSubQueryScore(scoreOfLastTopEntry);
+                        scoreComparators[subQuery].setCurrentSubQueryScore(scoreOfLastTopEntry);
                     }
                 }
 
@@ -371,8 +394,13 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                     bottomEntries[subQuery] = subQueryQueues[subQuery].updateTop();
                     comparator.setBottom(bottomEntries[subQuery].slot);
 
-                    // Update minScore from the evicted entry's score
-                    if (isSortByScore) {
+                    // Update minScore from the evicted entry's score. Only propagated for descending
+                    // score sort: under ascending the evicted entry is the highest kept score, and
+                    // HybridBulkScorer prunes on this shared array, so propagating it would drop the
+                    // low-scoring docs that ascending should keep. Also only for single-key [_score]: with a
+                    // [_score, field] tiebreak, a doc tying the evicted score can still win on the field, but
+                    // HybridBulkScorer keeps only score > minScore and would drop it in a later window.
+                    if (isSortByScoreDescending && sort.getSort().length == 1) {
                         minScoreThresholds[subQuery] = Math.max(minScoreThresholds[subQuery], evictedScore);
                         compoundQueryScorer.getMinScores()[subQuery] = Math.max(compoundQueryScorer.getMinScores()[subQuery], evictedScore);
                     }
@@ -384,8 +412,7 @@ public class HybridCollapsingTopDocsCollector<T> implements HybridSearchCollecto
                 int slot = subQueryQueues[subQuery].size();
 
                 if (isSortByScore) {
-                    assert comparator instanceof HybridLeafFieldComparator;
-                    ((HybridLeafFieldComparator) comparator).setCurrentSubQueryScore(score);
+                    scoreComparators[subQuery].setCurrentSubQueryScore(score);
                 }
 
                 comparator.copy(slot, doc);

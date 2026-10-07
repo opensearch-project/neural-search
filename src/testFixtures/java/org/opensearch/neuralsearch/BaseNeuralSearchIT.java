@@ -86,6 +86,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -153,6 +154,7 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected ThreadPool threadPool;
     protected ClusterService clusterService;
     private static final Set<String> DEPLOYED_MODEL_IDS = ConcurrentHashMap.newKeySet();
+    private static final AtomicLong MODEL_GROUP_SEQUENCE = new AtomicLong();
     private static final int MAX_ATTEMPTS = 30;
     private static final int WAIT_TIME_IN_SECONDS = 2;
     private static final int MAX_DEPLOY_RETRIES = 3;
@@ -1695,7 +1697,26 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void prepareSparseEncodingIndex(final String indexName, final List<String> sparseEncodingFieldNames) {
-        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject().startObject("mappings").startObject("properties");
+        prepareSparseEncodingIndex(indexName, sparseEncodingFieldNames, null);
+    }
+
+    /**
+     * @param numberOfShards explicit primary shard count, or null to inherit the cluster default. Pin this when a test
+     *                       asserts on exact scores produced by a per-shard operation, such as two-phase rescoring.
+     */
+    @SneakyThrows
+    protected void prepareSparseEncodingIndex(
+        final String indexName,
+        final List<String> sparseEncodingFieldNames,
+        final Integer numberOfShards
+    ) {
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder().startObject();
+
+        if (numberOfShards != null) {
+            xContentBuilder.startObject("settings").field("number_of_shards", numberOfShards).endObject();
+        }
+
+        xContentBuilder.startObject("mappings").startObject("properties");
 
         for (String fieldName : sparseEncodingFieldNames) {
             xContentBuilder.startObject(fieldName).field("type", "rank_features").endObject();
@@ -2165,8 +2186,15 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
         String modelGroupRegisterRequestBody = Files.readString(
             Path.of(classLoader.getResource("processor/CreateModelGroupRequestBody.json").toURI())
         );
+        // The per-test seed is derived from the method name alone, so every parameterized run of a
+        // test draws the same random name. The sequence number is what keeps the group names
+        // distinct; without it the second run is rejected as a duplicate.
         return registerModelGroup(
-            String.format(LOCALE, modelGroupRegisterRequestBody, "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8))
+            String.format(
+                LOCALE,
+                modelGroupRegisterRequestBody,
+                "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8) + "_" + MODEL_GROUP_SEQUENCE.incrementAndGet()
+            )
         );
     }
 

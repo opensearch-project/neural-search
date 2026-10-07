@@ -59,6 +59,10 @@ public class InfoStatNameTests extends OpenSearchTestCase {
             "RERANK_ML_PROCESSORS",
             "AGENTIC_QUERY_TRANSLATOR_PROCESSORS",
             "AGENTIC_CONTEXT_PROCESSORS",
+            "SPARSE_VECTOR_INDICES",
+            "SPARSE_VECTOR_FIELDS",
+            "SPARSE_NATIVE_ENGINE_INDICES",
+            "SPARSE_NATIVE_ENGINE_FIELDS",
             // Resolver (in-query `fusion`) mode: the enabled-vs-used funnel. Appended, never inserted.
             "HYBRID_FUSION_ENABLED"
         );

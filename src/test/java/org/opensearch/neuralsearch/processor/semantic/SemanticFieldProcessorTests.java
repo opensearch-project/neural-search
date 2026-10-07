@@ -45,6 +45,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -215,6 +216,56 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             verify(mlCommonsClientAccessor, times(2)).inferenceSentences(any(), any());
             verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), any());
         });
+    }
+
+    /**
+     * Regression test for the double-callback fall-through bug in {@link SemanticFieldProcessor} where,
+     * when embedding generation failed, the handler was invoked twice: once with the error and then again
+     * with success, indexing the document WITHOUT its embedding ("created but empty"). After the fix the
+     * handler must be invoked exactly once, with the error, and never with success.
+     */
+    public void testExecute_whenInferenceFails_thenHandlerCalledOnceWithErrorAndNoSuccess() throws URISyntaxException, IOException {
+        final Map<String, Object> ingestDocSource = readDocSourceFromFile("processor/semantic/ingest_doc1.json");
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", "routing", 1L, VersionType.INTERNAL, ingestDocSource);
+
+        // getModels succeeds so we reach embedding generation.
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(DUMMY_MODEL_ID_1, textEmbeddingModel, DUMMY_MODEL_ID_2, sparseEmbeddingModel));
+            return null;
+        }).when(mlCommonsClientAccessor).getModels(any(), any(), any());
+
+        // Dense inference fails -> setInference rethrows this exception for the dense chunk.
+        final RuntimeException inferenceError = new RuntimeException("inference failed (e.g. model cold start)");
+        doAnswer(invocationOnMock -> {
+            final ActionListener<List<List<Number>>> listener = invocationOnMock.getArgument(1);
+            listener.onFailure(inferenceError);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), any());
+
+        // Sparse inference succeeds (keeps the embedding-generation counter complete).
+        doAnswer(invocationOnMock -> {
+            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
+            listener.onResponse(List.of(Map.of("response", List.of(Map.of("tok", 1.0)))));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+
+        final AtomicInteger handlerInvocationCount = new AtomicInteger(0);
+        final AtomicInteger errorInvocationCount = new AtomicInteger(0);
+        final AtomicInteger successInvocationCount = new AtomicInteger(0);
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> {
+            handlerInvocationCount.incrementAndGet();
+            if (e != null) {
+                errorInvocationCount.incrementAndGet();
+            } else {
+                successInvocationCount.incrementAndGet();
+            }
+        });
+
+        assertEquals("handler must be invoked exactly once", 1, handlerInvocationCount.get());
+        assertEquals("handler must be invoked once with the error", 1, errorInvocationCount.get());
+        assertEquals("handler must NOT be invoked with success when inference failed", 0, successInvocationCount.get());
     }
 
     public void testExecute_whenValidDocReuseEmbedding_thenIngestDocSuccessfully() throws URISyntaxException, IOException {

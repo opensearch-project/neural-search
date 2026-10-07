@@ -22,6 +22,7 @@ import org.opensearch.neuralsearch.constants.MappingConstants;
 import org.opensearch.neuralsearch.constants.SemanticFieldConstants;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.ml.resolver.SemanticModelResolver;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.io.IOException;
@@ -39,6 +40,8 @@ import java.util.function.Consumer;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.KNN_VECTOR_METHOD_SPACE_TYPE_FIELD_NAME;
 
 public class SemanticMappingTransformerTests extends OpenSearchTestCase {
@@ -492,6 +495,146 @@ public class SemanticMappingTransformerTests extends OpenSearchTestCase {
         final String expectedErrorMessage = "Failed to transform the mapping for the semantic field at semantic_field "
             + "due to dense_embedding_config should be a Map<String, Object> for the semantic field at semantic_field";
         assertEquals(expectedErrorMessage, capturedException.getMessage());
+    }
+
+    public void testTransform_whenModelSelectionPresentWithoutResolver_thenFail() {
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_SELECTION, Map.of("language_option", "ENGLISH", "model_type", "SPARSE"));
+
+        transformer.transform(mappings, null, listener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalStateException);
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("SemanticModelResolver is not configured"));
+    }
+
+    public void testTransform_whenModelSelectionAndModelIdMismatch_thenFail() {
+        final SemanticModelResolver resolver = mock(SemanticModelResolver.class);
+        when(resolver.resolve(any())).thenReturn("resolved_model_id");
+        transformer.setModelResolver(resolver);
+
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_ID, "some_other_model_id");
+        semanticField.put(SemanticFieldConstants.MODEL_SELECTION, Map.of("language_option", "ENGLISH", "model_type", "SPARSE"));
+
+        transformer.transform(mappings, null, listener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("does not match the model_id"));
+    }
+
+    public void testTransform_whenModelSelectionAndModelIdMatch_thenSucceed() {
+        final SemanticModelResolver resolver = mock(SemanticModelResolver.class);
+        when(resolver.resolve(any())).thenReturn("resolved_model_id");
+        transformer.setModelResolver(resolver);
+
+        final MLModel sparseModel = MLModel.builder().algorithm(FunctionName.SPARSE_ENCODING).build();
+        doAnswer(invocation -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocation.getArgument(1);
+            onSuccess.accept(Map.of("resolved_model_id", sparseModel));
+            return null;
+        }).when(mlClientAccessor).getModels(any(), any(), any());
+
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_ID, "resolved_model_id");
+        semanticField.put(SemanticFieldConstants.MODEL_SELECTION, Map.of("language_option", "ENGLISH", "model_type", "SPARSE"));
+
+        transformer.transform(mappings, null, listener);
+
+        verify(listener).onResponse(null);
+        assertEquals("resolved_model_id", semanticField.get(SemanticFieldConstants.MODEL_ID));
+    }
+
+    public void testTransform_whenModelSelectionModelTypeMismatch_thenFail() {
+        final SemanticModelResolver resolver = mock(SemanticModelResolver.class);
+        when(resolver.resolve(any())).thenReturn("resolved_model_id");
+        transformer.setModelResolver(resolver);
+
+        // Configured model is dense (TEXT_EMBEDDING) but the request asks for SPARSE.
+        final MLModel denseModel = MLModel.builder().algorithm(FunctionName.TEXT_EMBEDDING).build();
+        doAnswer(invocation -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocation.getArgument(1);
+            onSuccess.accept(Map.of("resolved_model_id", denseModel));
+            return null;
+        }).when(mlClientAccessor).getModels(any(), any(), any());
+
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_SELECTION, Map.of("language_option", "ENGLISH", "model_type", "SPARSE"));
+
+        transformer.transform(mappings, null, listener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("does not match the requested model_type"));
+    }
+
+    public void testTransform_whenModelSelectionAndNonStringModelId_thenFail() {
+        final SemanticModelResolver resolver = mock(SemanticModelResolver.class);
+        when(resolver.resolve(any())).thenReturn("resolved_model_id");
+        transformer.setModelResolver(resolver);
+
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_ID, Map.of("unexpected", "object"));
+        semanticField.put(SemanticFieldConstants.MODEL_SELECTION, Map.of("language_option", "ENGLISH", "model_type", "SPARSE"));
+
+        transformer.transform(mappings, null, listener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("must be a string"));
+    }
+
+    public void testTransform_whenModelSelectionWithInvalidSemanticInfoFieldName_thenFail() {
+        final SemanticModelResolver resolver = mock(SemanticModelResolver.class);
+        when(resolver.resolve(any())).thenReturn("resolved_model_id");
+        transformer.setModelResolver(resolver);
+
+        final Map<String, Object> mappings = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
+        mappings.put("properties", properties);
+        final Map<String, Object> semanticField = new HashMap<>();
+        properties.put("semantic_field", semanticField);
+        semanticField.put(MappingConstants.TYPE, SemanticFieldMapper.CONTENT_TYPE);
+        semanticField.put(SemanticFieldConstants.MODEL_SELECTION, Map.of("language_option", "ENGLISH", "model_type", "SPARSE"));
+        // invalid: semantic_info_field_name must not contain '.'
+        semanticField.put(SemanticFieldConstants.SEMANTIC_INFO_FIELD_NAME, "bad.name");
+
+        transformer.transform(mappings, null, listener);
+
+        ArgumentCaptor<Exception> exceptionCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener).onFailure(exceptionCaptor.capture());
+        assertTrue(exceptionCaptor.getValue() instanceof IllegalArgumentException);
+        assertTrue(exceptionCaptor.getValue().getMessage().contains("should not contain '.'"));
     }
 
     private Map<String, Object> getBaseMappingsWithOneSemanticField(@NonNull final String modelId) {

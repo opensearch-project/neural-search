@@ -113,6 +113,52 @@ public class CollapseDataCollectorTests extends OpenSearchTestCase {
         assertEquals(1.0f, electronicsDoc.score, 0.001f);
     }
 
+    public void testCollectCollapseData_whenScoreTieWithinGroup_thenFieldElectsDeterministicHead() {
+        // Three docs collapse into the SAME group ("TV") and are all tied on _score. With sort
+        // [_score desc, price asc] the tie must be broken by price ascending, so the elected group head is the
+        // cheapest doc (price 10, docId 2) rather than an arbitrary doc-id winner. This exercises intra-group
+        // head election on a tie — the whole point of the [_score, field] + collapse feature.
+        // FieldDoc.fields layout for [_score, price] + collapse is [score, price, collapseValue].
+        BytesRef tv = new BytesRef("TV");
+        CollapseTopFieldDocs collapseTopFieldDocs = new CollapseTopFieldDocs(
+            "category",
+            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] {
+                new FieldDoc(1, 0.5f, new Object[] { 0.5f, 30, tv }),
+                new FieldDoc(2, 0.5f, new Object[] { 0.5f, 10, tv }),   // cheapest -> deterministic head
+                new FieldDoc(3, 0.5f, new Object[] { 0.5f, 20, tv }) },
+            new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) },
+            new Object[] { tv, tv, tv }
+        );
+
+        CompoundTopDocs compoundTopDocs = new CompoundTopDocs(
+            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+            List.of(collapseTopFieldDocs),
+            true,
+            new SearchShard("test_index", 0, "test_node")
+        );
+
+        CollapseDTO collapseDTO = new CollapseDTO(
+            List.of(compoundTopDocs),
+            List.of(mock(QuerySearchResult.class)),
+            new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT)),
+            true,
+            mock(CombineScoresDto.class),
+            BytesRef.class
+        );
+
+        CollapseDataCollector<BytesRef> collector = new CollapseDataCollector<>(collapseDTO);
+        collector.collectCollapseData(collapseDTO);
+
+        List<Map.Entry<BytesRef, FieldDoc>> sortedEntries = collector.getSortedCollapseEntries();
+        assertEquals("all three docs collapse into a single group", 1, sortedEntries.size());
+
+        FieldDoc head = sortedEntries.getFirst().getValue();
+        assertEquals("tie on _score must be broken by price asc -> cheapest doc wins the head", 2, head.doc);
+        assertEquals(10, ((Number) head.fields[1]).intValue());
+        assertEquals(0.5f, head.score, 0.001f);
+    }
+
     public void testCollectCollapseData_whenLongValues_thenCollectsCorrectly() {
         // Create test data with Long collapse values
         CollapseTopFieldDocs collapseTopFieldDocs = new CollapseTopFieldDocs(

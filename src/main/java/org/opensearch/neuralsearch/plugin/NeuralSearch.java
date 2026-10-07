@@ -5,11 +5,16 @@
 package org.opensearch.neuralsearch.plugin;
 
 import static org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants.HIGHLIGHTER_TYPE;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.RERANKER_MAX_DOC_FIELDS;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_STATS_ENABLED;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_INGEST_BATCH_SIZE;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -48,33 +53,21 @@ import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
 import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
-import org.opensearch.index.mapper.Mapper;
 import org.opensearch.index.mapper.MappingTransformer;
 import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
 import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
+import org.opensearch.neuralsearch.ml.resolver.DefaultSemanticModelResolver;
+import org.opensearch.neuralsearch.ml.resolver.SemanticModelResolver;
+import org.opensearch.neuralsearch.settings.SemanticModelSelectionSettingsAccessor;
 import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
 import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.search.query.QueryCollectorContextSpecFactory;
 import org.opensearch.search.query.QueryPhaseSearcher;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralSparseQueryBuilder;
-import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
-import org.opensearch.neuralsearch.query.AgenticSearchQueryBuilder;
-import org.opensearch.neuralsearch.rest.RestNeuralSparseClearCacheHandler;
-import org.opensearch.neuralsearch.rest.RestNeuralSparseWarmupHandler;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
 import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.cache.CircuitBreakerManager;
 import org.opensearch.neuralsearch.sparse.cache.MemoryUsageManager;
 import org.opensearch.neuralsearch.sparse.codec.SparseCodecService;
-import org.opensearch.neuralsearch.stats.events.EventStatsManager;
-import org.opensearch.neuralsearch.stats.info.InfoStatsManager;
-import org.opensearch.index.mapper.MappingTransformer;
-import org.opensearch.neuralsearch.mapper.SemanticFieldMapper;
-import org.opensearch.neuralsearch.mappingtransformer.SemanticMappingTransformer;
-import org.opensearch.neuralsearch.processor.factory.SemanticFieldProcessorFactory;
-import org.opensearch.plugins.MapperPlugin;
 import org.opensearch.plugins.CircuitBreakerPlugin;
 import org.opensearch.transport.client.Client;
 import org.opensearch.cluster.metadata.IndexNameExpressionResolver;
@@ -91,13 +84,8 @@ import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.env.Environment;
 import org.opensearch.env.NodeEnvironment;
 
-import org.opensearch.index.IndexModule;
-import org.opensearch.index.IndexSettings;
-import org.opensearch.index.codec.CodecServiceFactory;
-import org.opensearch.indices.breaker.BreakerSettings;
 import org.opensearch.ingest.Processor;
 import org.opensearch.neuralsearch.executors.HybridQueryExecutor;
-import org.opensearch.neuralsearch.highlight.SemanticHighlighter;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.AgenticQueryTranslatorProcessor;
 import org.opensearch.neuralsearch.processor.AgenticContextResponseProcessor;
@@ -130,9 +118,6 @@ import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.query.ext.AgentStepsSearchExtBuilder;
 import org.opensearch.neuralsearch.query.ext.SemanticHighlighterExtBuilder;
 import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
-import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
-import org.opensearch.neuralsearch.sparse.SparseIndexEventListener;
-import org.opensearch.neuralsearch.sparse.SparseSettings;
 import org.opensearch.neuralsearch.sparse.algorithm.ClusterTrainingExecutor;
 import org.opensearch.neuralsearch.sparse.common.SparseConstants;
 import org.opensearch.neuralsearch.sparse.mapper.SparseVectorFieldMapper;
@@ -164,16 +149,15 @@ import org.opensearch.search.rescore.RescorerBuilder;
 import org.opensearch.search.pipeline.SearchRequestProcessor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
 import org.opensearch.search.pipeline.SystemGeneratedProcessor;
-import org.opensearch.search.query.QueryPhaseSearcher;
 import org.opensearch.threadpool.ExecutorBuilder;
 import org.opensearch.threadpool.FixedExecutorBuilder;
 import org.opensearch.threadpool.ThreadPool;
 import org.opensearch.watcher.ResourceWatcherService;
 
-import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.DEFAULT_INDEX_THREAD_QTY;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_LIMIT;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_NAME;
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.NEURAL_CIRCUIT_BREAKER_OVERHEAD;
+import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.SEMANTIC_MODEL_SELECTION_MODEL_ID;
 
 /**
  * Neural Search plugin class
@@ -196,6 +180,8 @@ public class NeuralSearch extends Plugin
     private PipelineServiceUtil pipelineServiceUtil;
     private InfoStatsManager infoStatsManager;
     private ClusterService clusterService;
+    private SemanticMappingTransformer semanticMappingTransformer;
+    private SemanticModelResolver modelResolver;
     private final SemanticHighlighter semanticHighlighter;
     private final ScoreNormalizationFactory scoreNormalizationFactory = new ScoreNormalizationFactory();
     private final ScoreCombinationFactory scoreCombinationFactory = new ScoreCombinationFactory();
@@ -246,8 +232,19 @@ public class NeuralSearch extends Plugin
         // Initialize the semantic highlighter
         this.semanticHighlighter.initialize(semanticHighlighterEngine);
 
+        // Create model resolver for semantic field model_selection support. It resolves the model_id from the
+        // plugins.neural_search.model_selection.model_id.* cluster settings.
+        SemanticModelSelectionSettingsAccessor modelSelectionSettingsAccessor = new SemanticModelSelectionSettingsAccessor(clusterService);
+        modelResolver = new DefaultSemanticModelResolver(modelSelectionSettingsAccessor);
+        if (semanticMappingTransformer != null) {
+            semanticMappingTransformer.setModelResolver(modelResolver);
+        }
+
         // Create and provide the Hybrid query converter for gRPC transport
         HybridQueryBuilderProtoConverter hybridQueryConverter = new HybridQueryBuilderProtoConverter();
+
+        // initialize SparseSettings
+        SparseSettings.state().initialize(clusterService, environment.settings());
 
         return List.of(clientAccessor, EventStatsManager.instance(), infoStatsManager, hybridQueryConverter);
     }
@@ -325,7 +322,7 @@ public class NeuralSearch extends Plugin
             new FixedExecutorBuilder(
                 settings,
                 SparseConstants.THREAD_POOL_NAME,
-                DEFAULT_INDEX_THREAD_QTY,
+                SparseSettings.DEFAULT_INDEX_THREAD_QTY,
                 -1,
                 SparseConstants.THREAD_POOL_NAME,
                 false
@@ -386,19 +383,27 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<Setting<?>> getSettings() {
-        return List.of(
-            RERANKER_MAX_DOC_FIELDS,
-            NEURAL_STATS_ENABLED,
-            SEMANTIC_INGEST_BATCH_SIZE,
-            HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
-            SparseSettings.IS_SPARSE_INDEX_SETTING,
-            NeuralSearchSettings.SPARSE_ALGO_PARAM_INDEX_THREAD_QTY_SETTING,
-            NEURAL_CIRCUIT_BREAKER_LIMIT,
-            NEURAL_CIRCUIT_BREAKER_OVERHEAD,
-            NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES,
-            NeuralSearchSettings.HYBRID_FUSION_ENABLED,
-            NeuralSearchSettings.HYBRID_FUSION_FAST_PATH_FETCH_BUDGET
+        // The sparse settings are contributed by SparseSettings.state() below rather
+        // than listed here, so the set can depend on whether the native engine is
+        // available. SEMANTIC_MODEL_SELECTION_MODEL_ID is unrelated and stays static.
+        List<Setting<?>> settings = new ArrayList<>();
+        settings.addAll(
+            Arrays.asList(
+                RERANKER_MAX_DOC_FIELDS,
+                NEURAL_STATS_ENABLED,
+                SEMANTIC_INGEST_BATCH_SIZE,
+                HYBRID_COLLAPSE_DOCS_PER_GROUP_PER_SUBQUERY,
+                HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED,
+                NEURAL_CIRCUIT_BREAKER_LIMIT,
+                NEURAL_CIRCUIT_BREAKER_OVERHEAD,
+                SEMANTIC_MODEL_SELECTION_MODEL_ID,
+                MAX_FUSION_LEG_SEARCHES,
+                HYBRID_FUSION_ENABLED,
+                HYBRID_FUSION_FAST_PATH_FETCH_BUDGET
+            )
         );
+        settings.addAll(SparseSettings.state().getSettings());
+        return Collections.unmodifiableList(settings);
     }
 
     @Override
@@ -497,7 +502,11 @@ public class NeuralSearch extends Plugin
 
     @Override
     public List<MappingTransformer> getMappingTransformers() {
-        return List.of(new SemanticMappingTransformer(clientAccessor, xContentRegistry));
+        semanticMappingTransformer = new SemanticMappingTransformer(clientAccessor, xContentRegistry);
+        if (modelResolver != null) {
+            semanticMappingTransformer.setModelResolver(modelResolver);
+        }
+        return List.of(semanticMappingTransformer);
     }
 
     @Override
