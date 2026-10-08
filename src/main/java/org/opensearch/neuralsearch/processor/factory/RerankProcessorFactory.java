@@ -167,16 +167,27 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
             final ClusterService clusterService
         ) {
             Map<String, Object> contextConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, CONTEXT_CONFIG_FIELD);
+            // An option of the document fetcher rather than a fetcher of its own, so it is consumed before the fetcher loop
+            boolean innerHits = ConfigurationUtils.readBooleanProperty(
+                RERANK_PROCESSOR_TYPE,
+                tag,
+                contextConfig,
+                DocumentContextSourceFetcher.INNER_HITS_FIELD,
+                false
+            );
             List<ContextSourceFetcher> fetchers = new ArrayList<>();
             for (String key : contextConfig.keySet()) {
                 Object cfg = contextConfig.get(key);
                 switch (key) {
                     case DocumentContextSourceFetcher.NAME:
-                        fetchers.add(DocumentContextSourceFetcher.create(cfg, clusterService));
+                        fetchers.add(DocumentContextSourceFetcher.create(cfg, clusterService, innerHits));
                         break;
                     default:
                         throw new IllegalArgumentException(String.format(Locale.ROOT, "unrecognized context field: %s", key));
                 }
+            }
+            if (innerHits && fetchers.isEmpty()) {
+                throw new IllegalArgumentException(DocumentContextSourceFetcher.INNER_HITS_REQUIREMENT_MESSAGE);
             }
             if (includeQueryContextFetcher) {
                 fetchers.add(new QueryContextSourceFetcher(clusterService));

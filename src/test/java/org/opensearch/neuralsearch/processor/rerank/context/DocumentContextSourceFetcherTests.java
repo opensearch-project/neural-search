@@ -4,8 +4,11 @@
  */
 package org.opensearch.neuralsearch.processor.rerank.context;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.search.SearchRequest;
@@ -24,7 +27,7 @@ public class DocumentContextSourceFetcherTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testContextFromSearchHit_whenFlatField_thenExtractsValue() {
-        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("title"));
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("title"), false);
         SearchResponse response = createSearchResponse(createHit("{\"title\": \"good morning\"}", "1"));
 
         fetchAndAssert(fetcher, response, contexts -> {
@@ -35,7 +38,7 @@ public class DocumentContextSourceFetcherTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testContextFromSearchHit_whenDotNotationField_thenExtractsValue() {
-        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("metadata.author"));
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("metadata.author"), false);
         SearchResponse response = createSearchResponse(createHit("{\"metadata\": {\"author\": \"John\"}}", "1"));
 
         fetchAndAssert(fetcher, response, contexts -> {
@@ -46,7 +49,7 @@ public class DocumentContextSourceFetcherTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testContextFromSearchHit_whenNestedArrayField_thenExtractsConcatenatedValues() {
-        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("content.text"));
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("content.text"), false);
         SearchResponse response = createSearchResponse(
             createHit("{\"content\": [{\"text\": \"good morning\", \"page\": 1}, {\"text\": \"good evening\", \"page\": 2}]}", "1")
         );
@@ -60,13 +63,112 @@ public class DocumentContextSourceFetcherTests extends OpenSearchTestCase {
 
     @SneakyThrows
     public void testContextFromSearchHit_whenMissingField_thenReturnsEmpty() {
-        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("nonexistent"));
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("nonexistent"), false);
         SearchResponse response = createSearchResponse(createHit("{\"title\": \"hello\"}", "1"));
 
         fetchAndAssert(fetcher, response, contexts -> {
             assertEquals(1, contexts.size());
             assertEquals("", contexts.get(0));
         });
+    }
+
+    @SneakyThrows
+    public void testFetchContext_whenInnerHits_thenDeduplicatesChunksAcrossLists() {
+        SearchHit parent = createHit("{\"title\": \"doc\"}", "1");
+        Map<String, SearchHits> lists = new LinkedHashMap<>();
+        lists.put("keyword_chunks", innerHitsList(createInnerHit("embeddings", 0, "{\"text\": \"alpha\"}")));
+        lists.put(
+            "semantic_chunks",
+            innerHitsList(createInnerHit("embeddings", 0, "{\"text\": \"alpha\"}"), createInnerHit("embeddings", 1, "{\"text\": \"beta\"}"))
+        );
+        parent.setInnerHits(lists);
+
+        Map<String, Object> context = fetchInnerHits(createSearchResponse(parent));
+
+        assertEquals(List.of("alpha", "beta"), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+        assertEquals(List.of(List.of(0, 1)), context.get(DocumentContextSourceFetcher.INNER_HITS_CHUNK_OFFSETS_FIELD));
+        assertEquals(
+            List.of(List.of("keyword_chunks", "semantic_chunks")),
+            context.get(DocumentContextSourceFetcher.INNER_HITS_LIST_NAMES_FIELD)
+        );
+    }
+
+    @SneakyThrows
+    public void testFetchContext_whenInnerHitsSourceUsesFullFieldName_thenExtractsValue() {
+        SearchHit parent = createHit("{\"title\": \"doc\"}", "1");
+        parent.setInnerHits(Map.of("chunks", innerHitsList(createInnerHit("embeddings", 0, "{\"embeddings.text\": \"alpha\"}"))));
+
+        Map<String, Object> context = fetchInnerHits(createSearchResponse(parent));
+
+        assertEquals(List.of("alpha"), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+    }
+
+    @SneakyThrows
+    public void testFetchContext_whenInnerHitsOnOtherPath_thenHitHasNoChunks() {
+        SearchHit matching = createHit("{\"title\": \"doc\"}", "1");
+        matching.setInnerHits(Map.of("chunks", innerHitsList(createInnerHit("embeddings", 0, "{\"text\": \"alpha\"}"))));
+        SearchHit other = createHit("{\"title\": \"doc\"}", "2");
+        other.setInnerHits(Map.of("comments", innerHitsList(createInnerHit("comments", 0, "{\"text\": \"beta\"}"))));
+        SearchHit bare = createHit("{\"title\": \"doc\"}", "3");
+
+        Map<String, Object> context = fetchInnerHits(createSearchResponse(matching, other, bare));
+
+        assertEquals(List.of("alpha"), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+        assertEquals(List.of(List.of(0), List.of(), List.of()), context.get(DocumentContextSourceFetcher.INNER_HITS_CHUNK_OFFSETS_FIELD));
+        assertEquals(
+            List.of(List.of("chunks"), List.of(), List.of()),
+            context.get(DocumentContextSourceFetcher.INNER_HITS_LIST_NAMES_FIELD)
+        );
+    }
+
+    @SneakyThrows
+    public void testFetchContext_whenInnerHitsAndNoHitHasMatchingList_thenFail() {
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("embeddings.text"), true);
+        SearchResponse response = createSearchResponse(createHit("{\"title\": \"doc\"}", "1"));
+
+        List<Exception> failures = new ArrayList<>();
+        fetcher.fetchContext(new SearchRequest(), response, ActionListener.wrap(result -> fail("Should not succeed"), failures::add));
+
+        assertEquals(1, failures.size());
+        assertTrue(failures.get(0) instanceof IllegalArgumentException);
+        assertEquals(
+            "No inner hits on the nested path [embeddings] found in the search results, so [document_fields.inner_hits] "
+                + "cannot rerank chunks. Add \"inner_hits\": {} to the nested query on [embeddings].",
+            failures.get(0).getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testFetchContext_whenInnerHitsAndNoHits_thenSucceedsEmpty() {
+        Map<String, Object> context = fetchInnerHits(createSearchResponse());
+
+        assertEquals(List.of(), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+        assertEquals(List.of(), context.get(DocumentContextSourceFetcher.INNER_HITS_LIST_NAMES_FIELD));
+    }
+
+    @SneakyThrows
+    private Map<String, Object> fetchInnerHits(SearchResponse response) {
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("embeddings.text"), true);
+        List<Map<String, Object>> captured = new ArrayList<>();
+        fetcher.fetchContext(new SearchRequest(), response, ActionListener.wrap(captured::add, e -> fail("Should not fail: " + e)));
+        assertEquals(1, captured.size());
+        return captured.get(0);
+    }
+
+    private SearchHit createInnerHit(String nestedPath, int offset, String jsonSource) {
+        SearchHit hit = new SearchHit(
+            offset,
+            nestedPath + "-" + offset,
+            new SearchHit.NestedIdentity(nestedPath, offset, null),
+            Collections.emptyMap(),
+            Collections.emptyMap()
+        );
+        hit.sourceRef(new BytesArray(jsonSource));
+        return hit;
+    }
+
+    private SearchHits innerHitsList(SearchHit... hits) {
+        return new SearchHits(hits, new TotalHits(hits.length, TotalHits.Relation.EQUAL_TO), 1.0f);
     }
 
     @SneakyThrows

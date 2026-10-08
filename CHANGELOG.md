@@ -6,6 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+* [Rerank] Add `context.inner_hits` to the `ml_opensearch` rerank processor, scoring each nested chunk returned as an inner hit, re-sorting the inner hits and scoring the parent with its best chunk ([#XXXX](https://github.com/opensearch-project/neural-search/pull/XXXX))
 
 ### Enhancements
 - [SemanticHighlighter] Support lists and scalars for semantic highlighting with per-element fragments, matching built-in highlighters ([#1813](https://github.com/opensearch-project/neural-search/issues/1813))

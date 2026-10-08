@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -34,10 +35,12 @@ import org.opensearch.common.document.DocumentField;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.json.JsonXContent;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
+import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
@@ -384,6 +387,95 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
         verify(listener, times(1)).onFailure(argCaptor.capture());
         assertEquals(argCaptor.getValue().getMessage(), "scores and hits are not the same length");
+    }
+
+    @SneakyThrows
+    public void testRerank_whenInnerHits_thenScoresChunksOnceAndSortsThem() {
+        SearchHit parent0 = createParentHit(0, "0");
+        Map<String, SearchHits> parent0Lists = new LinkedHashMap<>();
+        parent0Lists.put("keyword_chunks", innerHitsList(createChunk(0, "alpha"), createChunk(1, "beta")));
+        parent0Lists.put("semantic_chunks", innerHitsList(createChunk(1, "beta"), createChunk(2, "gamma")));
+        parent0.setInnerHits(parent0Lists);
+
+        SearchHit parent1 = createParentHit(1, "1");
+        parent1.setInnerHits(new LinkedHashMap<>(Map.of("semantic_chunks", innerHitsList(createChunk(0, "delta")))));
+
+        SearchHit parent2 = createParentHit(2, "2");
+
+        TotalHits totalHits = new TotalHits(3, TotalHits.Relation.EQUAL_TO);
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent0, parent1, parent2 }, totalHits, 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+
+        doAnswer(invocation -> {
+            ActionListener<List<Float>> inferenceListener = invocation.getArgument(1);
+            inferenceListener.onResponse(List.of(0.1f, 0.9f, 0.5f, 0.7f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(isA(SimilarityInferenceRequest.class), isA(ActionListener.class));
+
+        Map<String, Object> scoringContext = new HashMap<>(innerHitsContext(response));
+        scoringContext.put(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        ArgumentCaptor<SimilarityInferenceRequest> requestCaptor = ArgumentCaptor.forClass(SimilarityInferenceRequest.class);
+        verify(mlCommonsClientAccessor, times(1)).inferenceSimilarity(requestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(List.of("alpha", "beta", "gamma", "delta"), requestCaptor.getValue().getInputTexts());
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchHits rerankedHits = argCaptor.getValue().getHits();
+        assertEquals("0", rerankedHits.getAt(0).getId());
+        assertEquals(0.9f, rerankedHits.getAt(0).getScore(), 0.0001f);
+        assertEquals("1", rerankedHits.getAt(1).getId());
+        assertEquals(0.7f, rerankedHits.getAt(1).getScore(), 0.0001f);
+        assertEquals("2", rerankedHits.getAt(2).getId());
+        assertTrue(Float.isNaN(rerankedHits.getAt(2).getScore()));
+
+        SearchHits keywordChunks = rerankedHits.getAt(0).getInnerHits().get("keyword_chunks");
+        assertEquals(1, keywordChunks.getAt(0).getNestedIdentity().getOffset());
+        assertEquals(0.9f, keywordChunks.getAt(0).getScore(), 0.0001f);
+        assertEquals(0, keywordChunks.getAt(1).getNestedIdentity().getOffset());
+        assertEquals(0.1f, keywordChunks.getAt(1).getScore(), 0.0001f);
+        assertEquals(0.9f, keywordChunks.getMaxScore(), 0.0001f);
+
+        SearchHits semanticChunks = rerankedHits.getAt(0).getInnerHits().get("semantic_chunks");
+        assertEquals(1, semanticChunks.getAt(0).getNestedIdentity().getOffset());
+        assertEquals(0.9f, semanticChunks.getAt(0).getScore(), 0.0001f);
+        assertEquals(2, semanticChunks.getAt(1).getNestedIdentity().getOffset());
+        assertEquals(0.5f, semanticChunks.getAt(1).getScore(), 0.0001f);
+    }
+
+    @SneakyThrows
+    private Map<String, Object> innerHitsContext(SearchResponse searchResponse) {
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("embeddings.text"), true);
+        List<Map<String, Object>> captured = new ArrayList<>();
+        fetcher.fetchContext(request, searchResponse, ActionListener.wrap(captured::add, e -> fail("Should not fail: " + e)));
+        return captured.get(0);
+    }
+
+    private SearchHit createParentHit(int docId, String id) {
+        SearchHit hit = new SearchHit(docId, id, Map.of(), Map.of());
+        hit.score(1.0f);
+        return hit;
+    }
+
+    private SearchHit createChunk(int offset, String text) {
+        SearchHit chunk = new SearchHit(
+            offset,
+            "chunk-" + offset,
+            new SearchHit.NestedIdentity("embeddings", offset, null),
+            Map.of(),
+            Map.of()
+        );
+        chunk.sourceRef(new BytesArray(String.format(Locale.ROOT, "{\"text\": \"%s\"}", text)));
+        return chunk;
+    }
+
+    private SearchHits innerHitsList(SearchHit... hits) {
+        return new SearchHits(hits, new TotalHits(hits.length, TotalHits.Relation.EQUAL_TO), 1.0f);
     }
 
     public void testBasics() throws IOException {

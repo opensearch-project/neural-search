@@ -227,6 +227,88 @@ public class RerankProcessorFactoryTests extends OpenSearchTestCase {
             () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
         );
     }
+
+    public void testCrossEncoder_whenInnerHitsOnNestedDocField_thenSuccessful() {
+        SearchResponseProcessor processor = factory.create(Map.of(), TAG, DESC, false, innerHitsConfig("embeddings.text"), pipelineContext);
+        assert (processor instanceof MLOpenSearchRerankProcessor);
+    }
+
+    public void testCrossEncoder_whenInnerHitsOnFlatDocField_thenFail() {
+        assertEquals(
+            DocumentContextSourceFetcher.INNER_HITS_REQUIREMENT_MESSAGE,
+            assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(Map.of(), TAG, DESC, false, innerHitsConfig("text_representation"), pipelineContext)
+            ).getMessage()
+        );
+    }
+
+    public void testCrossEncoder_whenInnerHitsOnTwoDocFields_thenFail() {
+        assertEquals(
+            DocumentContextSourceFetcher.INNER_HITS_REQUIREMENT_MESSAGE,
+            assertThrows(
+                IllegalArgumentException.class,
+                () -> factory.create(Map.of(), TAG, DESC, false, innerHitsConfig("embeddings.text", "chunks.text"), pipelineContext)
+            ).getMessage()
+        );
+    }
+
+    public void testCrossEncoder_whenInnerHitsWithoutDocFields_thenFail() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.ML_OPENSEARCH.getLabel(),
+                new HashMap<>(Map.of(MLOpenSearchRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(Map.of(DocumentContextSourceFetcher.INNER_HITS_FIELD, true))
+            )
+        );
+        assertEquals(
+            DocumentContextSourceFetcher.INNER_HITS_REQUIREMENT_MESSAGE,
+            assertThrows(IllegalArgumentException.class, () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext))
+                .getMessage()
+        );
+    }
+
+    public void testCrossEncoder_whenInnerHitsNotBoolean_thenFail() {
+        Map<String, Object> config = new HashMap<>(
+            Map.of(
+                RerankType.ML_OPENSEARCH.getLabel(),
+                new HashMap<>(Map.of(MLOpenSearchRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(
+                    Map.of(
+                        DocumentContextSourceFetcher.NAME,
+                        new ArrayList<>(List.of("embeddings.text")),
+                        DocumentContextSourceFetcher.INNER_HITS_FIELD,
+                        "yes"
+                    )
+                )
+            )
+        );
+        assertThrows(
+            String.format(Locale.ROOT, "[%s] property isn't a boolean", DocumentContextSourceFetcher.INNER_HITS_FIELD),
+            OpenSearchParseException.class,
+            () -> factory.create(Map.of(), TAG, DESC, false, config, pipelineContext)
+        );
+    }
+
+    private Map<String, Object> innerHitsConfig(String... documentFields) {
+        return new HashMap<>(
+            Map.of(
+                RerankType.ML_OPENSEARCH.getLabel(),
+                new HashMap<>(Map.of(MLOpenSearchRerankProcessor.MODEL_ID_FIELD, "model-id")),
+                RerankProcessorFactory.CONTEXT_CONFIG_FIELD,
+                new HashMap<>(
+                    Map.of(
+                        DocumentContextSourceFetcher.NAME,
+                        new ArrayList<>(List.of(documentFields)),
+                        DocumentContextSourceFetcher.INNER_HITS_FIELD,
+                        true
+                    )
+                )
+            )
+        );
+    }
     // End of MLOpenSearchRerankProcessor Tests
 
     // Start of ByFieldRerankProcessor Tests

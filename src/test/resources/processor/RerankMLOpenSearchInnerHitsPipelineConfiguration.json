@@ -1,0 +1,16 @@
+{
+    "description": "Pipeline for reranking nested chunks returned as inner hits with a cross encoder",
+    "response_processors": [
+        {
+            "rerank": {
+                "ml_opensearch": {
+                    "model_id": "%s"
+                },
+                "context": {
+                    "document_fields": ["chunks.text"],
+                    "inner_hits": true
+                }
+            }
+        }
+    ]
+}

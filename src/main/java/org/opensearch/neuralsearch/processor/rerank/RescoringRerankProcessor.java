@@ -76,8 +76,15 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
                 for (int i = 0; i < hits.length; i++) {
                     hits[i].score(scores.get(i));
                 }
-                // Re-sort by the new scores. Backwards comparison for desc ordering
-                Collections.sort(Arrays.asList(hits), (hit1, hit2) -> Float.compare(hit2.getScore(), hit1.getScore()));
+                // Re-sort by the new scores. Backwards comparison for desc ordering; unscored (NaN) hits keep their order at the end
+                Collections.sort(Arrays.asList(hits), (hit1, hit2) -> {
+                    boolean unscored1 = Float.isNaN(hit1.getScore());
+                    boolean unscored2 = Float.isNaN(hit2.getScore());
+                    if (unscored1 || unscored2) {
+                        return Boolean.compare(unscored1, unscored2);
+                    }
+                    return Float.compare(hit2.getScore(), hit1.getScore());
+                });
                 // Reconstruct the search response, replacing the max score
                 SearchHits newHits = new SearchHits(
                     hits,
