@@ -249,8 +249,8 @@ public class NeuralSearchTests extends OpenSearchQueryTestCase {
         assertTrue(settings.containsAll(SparseSettings.state().getSettings()));
         assertTrue(settings.contains(NeuralSearchSettings.HYBRID_COLLAPSE_DISTINCT_GROUPS_ENABLED));
         // A setting the plugin defines but never registers here cannot be set on a cluster at all, dynamically or in
-        // opensearch.yml — the fused fan-out budget would silently stay at its default, and fused mode's opt-in switch
-        // could never be turned on.
+        // opensearch.yml — the fused fan-out budget would silently stay at its default, and fused mode's kill switch
+        // could never be turned off.
         assertTrue(settings.contains(NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES));
         assertTrue(settings.contains(NeuralSearchSettings.HYBRID_FUSION_ENABLED));
     }

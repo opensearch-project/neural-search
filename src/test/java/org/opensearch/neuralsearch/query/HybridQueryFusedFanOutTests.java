@@ -781,7 +781,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
     /**
      * The switch is read above the {@code SearchRequest} cast, like the version refusal and for the same reason:
      * {@code _explain} and {@code _validate/query} rewrite on the coordinator with a non-search request and are dispatched
-     * still fused, so a cluster that has not opted in must refuse them too.
+     * still fused, so a cluster that has turned the switch off must refuse them too.
      */
     @SneakyThrows
     public void testFusedMode_whenTurnedOffAndTheRequestIsNotASearch_thenItIsStillRefused() {
@@ -828,7 +828,7 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         HybridQueryBuilder hybrid = fused(match, term);
         List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
         QueryBuilder afterRoundOne = hybrid.rewrite(coordinatorContext(request(hybrid), registered));
-        assertEquals("round 1 fanned out while the cluster was still opted in", 1, registered.size());
+        assertEquals("round 1 fanned out while the switch was still on", 1, registered.size());
         registered.getFirst()
             .accept(
                 multiSearchingClient(new ArrayList<>(), Set.of()),

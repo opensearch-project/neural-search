@@ -39,9 +39,10 @@ public class NeuralSearchClusterTestUtils {
     }
 
     /**
-     * Stub the cluster settings a fused hybrid rewrite reads, with fused mode turned on. Needed on every ClusterService
-     * mock a fused rewrite runs against: fused mode is an opt-in, so a mock whose cluster settings cannot be
-     * read behaves like a cluster that never opted in and refuses the query.
+     * Stub the cluster settings a fused hybrid rewrite reads, with fused mode turned on explicitly. A mock whose cluster
+     * settings cannot be read resolves the setting's default, which is on, so this is not what lets the rewrite run; it
+     * pins these tests to the fused path on their own terms, so a change to the default cannot flip what they assert
+     * without a change here.
      *
      * <p>Both fused settings have to be registered on the returned {@link ClusterSettings}, because a
      * {@code ClusterSettings} built from a narrower set throws on a lookup of anything outside it.

@@ -52,10 +52,10 @@ public class NeuralSearchSettingsAccessor {
             });
         clusterService.getClusterSettings().addSettingsUpdateConsumer(HYBRID_FUSION_ENABLED, value -> {
             // Nothing to cache: the gate reads this setting live, per request, so a request needs no state from here. The
-            // consumer exists to put the transition in the node log, because turning fused mode on changes the answer to
-            // any request whose body already carries a fusion block, and a cluster setting leaves no other trace of when
-            // that happened. WARN, not INFO, because it is a relevance change, and only a real change reaches a consumer,
-            // so one line means one flip.
+            // consumer exists to put the transition in the node log, because turning fused mode off (or back on) changes
+            // the answer to any request whose body carries a fusion block, and a cluster setting leaves no other trace of
+            // when that happened. WARN, not INFO, because it is a relevance change, and only a real change reaches a
+            // consumer, so one line means one flip.
             log.warn(
                 "[{}] is now [{}] - a query carrying a fusion block will be {} on this cluster",
                 HYBRID_FUSION_ENABLED.getKey(),
