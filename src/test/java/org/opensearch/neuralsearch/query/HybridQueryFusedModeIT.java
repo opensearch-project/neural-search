@@ -1433,20 +1433,20 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * The opt-in, from the operator's side. Fused mode ships off, so a cluster that has not set
-     * {@code plugins.neural_search.hybrid.fusion.enabled} must refuse a query carrying a {@code fusion} block instead of
-     * quietly answering it some other way — and the error has to name the setting, since nothing else in the response
-     * would tell a user why a documented query stopped working.
+     * The kill switch, from the operator's side. Fused mode ships on, and a cluster whose operator set
+     * {@code plugins.neural_search.hybrid.fusion.enabled} to {@code false} must refuse a query carrying a {@code fusion}
+     * block instead of quietly answering it some other way — and the error has to name the setting, since nothing else in
+     * the response would tell a user why a documented query stopped working.
      *
      * <p>The second half is the scope check: the same two legs without the {@code fusion} block are classic hybrid, which
      * this setting has nothing to do with, and must still be served. That is also why the refusal is a refusal rather than
      * a downgrade — dropping the block would have answered 200 from this very path, with un-normalized scores.
      *
-     * <p>Restored in a {@code finally}: the setting is persistent and {@link #cleanUp()} does not reset cluster settings,
+     * <p>Reset in a {@code finally}: the setting is persistent and {@link #cleanUp()} does not reset cluster settings,
      * so a leak here would refuse every fused query in every later suite of the run.
      */
     @SneakyThrows
-    public void testFusedMode_whenTheClusterHasNotOptedIn_thenRefusedWhileClassicStillServes() {
+    public void testFusedMode_whenTheClusterSwitchedItOff_thenRefusedWhileClassicStillServes() {
         if (indexExists(INDEX_NO_PIPELINE) == false) {
             createIndex(INDEX_NO_PIPELINE, indexConfigWithoutPipeline());
             addFourDocs(INDEX_NO_PIPELINE);
@@ -1472,11 +1472,11 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
             // un-normalized behaviour, not anything this change defines.
             assertNotEquals("dropping the fusion block does not answer what fused mode answers", 3, classicHits);
         } finally {
-            enableFusedMode();
+            resetFusedMode();
         }
 
-        // And back on again without a restart, which is the point of a dynamic setting: the same query the cluster just
-        // refused now fans out.
+        // And back on the default without a restart, which is the point of a dynamic setting: the same query the cluster
+        // just refused now fans out.
         assertEquals(3, getHitCount(search(INDEX_NO_PIPELINE, fusedTwoLegInlineConfigQuery(), 10)));
     }
 }

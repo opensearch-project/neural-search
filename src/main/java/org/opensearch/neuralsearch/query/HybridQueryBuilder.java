@@ -1111,12 +1111,13 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * Refuse fused mode unless the cluster has opted in to {@link NeuralSearchSettings#HYBRID_FUSION_ENABLED}.
+     * Refuse fused mode when {@link NeuralSearchSettings#HYBRID_FUSION_ENABLED} has been turned off on this cluster.
      *
      * <p>Read live off the cluster settings, like the leg budget, so an operator's update takes effect on the next
      * request. Falls back to the setting's own default when there is no cluster service to read: that is the same value
-     * an unconfigured cluster resolves, so an unreadable settings object refuses exactly where a cluster that never
-     * opted in does, instead of opening the path on the way through.
+     * an unconfigured cluster resolves, so an unreadable settings object fans out exactly where a cluster nobody has
+     * configured does. The default is on, and this gate keeps no second default of its own, so there is no state in
+     * which the two disagree.
      *
      * <p>A refusal rather than a downgrade to classic hybrid, because the two are not the same query: the fusion config
      * a fused request carries in its body has no classic equivalent without a search pipeline, so stripping it would

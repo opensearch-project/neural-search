@@ -120,7 +120,7 @@ public enum InfoStatName implements StatName {
      * Whether resolver (in-query {@code fusion}) mode is turned on for this cluster. The top of the adoption funnel: paired
      * with {@code query.hybrid.hybrid_query_with_fusion_requests} it separates clusters that enabled the feature from
      * clusters that then used it, and the gap between those two is the difference between awareness and value. The setting
-     * defaults to off, so without this an unused cluster and an unaware one are indistinguishable.
+     * is on by default, so this is also how a cluster that switched the feature off shows up.
      */
     HYBRID_FUSION_ENABLED("hybrid_fusion_enabled", "query.hybrid", InfoStatType.INFO_BOOLEAN, FusedStatsVersion.VALUE);
 
