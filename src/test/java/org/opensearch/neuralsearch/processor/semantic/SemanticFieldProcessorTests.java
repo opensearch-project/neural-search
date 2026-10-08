@@ -12,6 +12,7 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.get.MultiGetItemResponse;
+import org.opensearch.action.get.MultiGetRequest;
 import org.opensearch.action.get.MultiGetResponse;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.Metadata;
@@ -720,6 +721,132 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             embeddingWithFloat.put(entry.getKey(), entry.getValue().floatValue());
         }
         return embeddingWithFloat;
+    }
+
+    public void testExecute_whenSkipExistingEmbeddingAndRoutingPresent_thenMultiGetCarriesRouting() throws URISyntaxException, IOException {
+        semanticFieldProcessor = createSkipExistingEmbeddingProcessor();
+        final Map<String, Object> ingestDocSource = readDocSourceFromFile("processor/semantic/ingest_doc1.json");
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", "user-a", 1L, VersionType.INTERNAL, ingestDocSource);
+        mockGetModelAndInferenceAPI();
+        mockMultiGetDocsNotFound("1");
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> {});
+
+        // Without routing the lookup targets the _id shard, which misses a document written with custom routing
+        final MultiGetRequest multiGetRequest = captureMultiGetRequest();
+        assertEquals(1, multiGetRequest.getItems().size());
+        assertEquals("user-a", multiGetRequest.getItems().get(0).routing());
+    }
+
+    public void testExecute_whenSkipExistingEmbeddingAndNoRouting_thenMultiGetHasNoRouting() throws URISyntaxException, IOException {
+        semanticFieldProcessor = createSkipExistingEmbeddingProcessor();
+        final Map<String, Object> ingestDocSource = readDocSourceFromFile("processor/semantic/ingest_doc1.json");
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", null, 1L, VersionType.INTERNAL, ingestDocSource);
+        mockGetModelAndInferenceAPI();
+        mockMultiGetDocsNotFound("1");
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> {});
+
+        final MultiGetRequest multiGetRequest = captureMultiGetRequest();
+        assertEquals(1, multiGetRequest.getItems().size());
+        assertNull(multiGetRequest.getItems().get(0).routing());
+    }
+
+    public void testSubBatchExecute_whenSkipExistingEmbeddingAndRoutingDiffers_thenEachItemCarriesItsOwnRouting() throws URISyntaxException,
+        IOException {
+        semanticFieldProcessor = createSkipExistingEmbeddingProcessor();
+        final IngestDocumentWrapper userA = new IngestDocumentWrapper(
+            1,
+            0,
+            new IngestDocument(
+                "index",
+                "1",
+                "user-a",
+                1L,
+                VersionType.INTERNAL,
+                readDocSourceFromFile("processor/semantic/ingest_doc1.json")
+            ),
+            null
+        );
+        final IngestDocumentWrapper userB = new IngestDocumentWrapper(
+            2,
+            0,
+            new IngestDocument(
+                "index",
+                "2",
+                "user-b",
+                1L,
+                VersionType.INTERNAL,
+                readDocSourceFromFile("processor/semantic/ingest_doc2.json")
+            ),
+            null
+        );
+        mockGetModelAndInferenceAPI();
+        mockMultiGetDocsNotFound("1", "2");
+
+        semanticFieldProcessor.subBatchExecute(List.of(userA, userB), mock(Consumer.class));
+
+        // Routing is per document, so a batch must not apply one document's routing to the others
+        final Map<String, String> routingById = new HashMap<>();
+        for (MultiGetRequest.Item item : captureMultiGetRequest().getItems()) {
+            routingById.put(item.id(), item.routing());
+        }
+        assertEquals(Map.of("1", "user-a", "2", "user-b"), routingById);
+    }
+
+    private SemanticFieldProcessor createSkipExistingEmbeddingProcessor() {
+        final Map<String, Map<String, Object>> pathToFieldConfigMap = Map.of(
+            FIELD_NAME_PRODUCTS + PATH_SEPARATOR + FIELD_NAME_PRODUCT_DESCRIPTION,
+            Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_1, CHUNKING, true, SKIP_EXISTING_EMBEDDING, true),
+            FIELD_NAME_GEO_DATA,
+            Map.of(
+                TYPE,
+                SemanticFieldMapper.CONTENT_TYPE,
+                MODEL_ID,
+                DUMMY_MODEL_ID_2,
+                SPARSE_ENCODING_CONFIG,
+                Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.MAX_RATIO.getValue(), PruneUtils.PRUNE_RATIO_FIELD, 0.5),
+                SKIP_EXISTING_EMBEDDING,
+                true
+            )
+        );
+        return new SemanticFieldProcessor(
+            "tag",
+            "description",
+            1,
+            pathToFieldConfigMap,
+            mlCommonsClientAccessor,
+            environment,
+            clusterService,
+            chunker,
+            analysisRegistry,
+            openSearchClient
+        );
+    }
+
+    private void mockMultiGetDocsNotFound(final String... ids) {
+        final MultiGetItemResponse[] items = new MultiGetItemResponse[ids.length];
+        for (int i = 0; i < ids.length; i++) {
+            final GetResponse getResponse = Mockito.mock(GetResponse.class);
+            when(getResponse.isExists()).thenReturn(false);
+            final MultiGetItemResponse item = Mockito.mock(MultiGetItemResponse.class);
+            when(item.getId()).thenReturn(ids[i]);
+            when(item.getResponse()).thenReturn(getResponse);
+            items[i] = item;
+        }
+        final MultiGetResponse multiGetResponse = Mockito.mock(MultiGetResponse.class);
+        when(multiGetResponse.getResponses()).thenReturn(items);
+        doAnswer(invocationOnMock -> {
+            final ActionListener<MultiGetResponse> listener = (ActionListener<MultiGetResponse>) invocationOnMock.getArguments()[2];
+            listener.onResponse(multiGetResponse);
+            return null;
+        }).when(openSearchClient).execute(any(), any(), any());
+    }
+
+    private MultiGetRequest captureMultiGetRequest() {
+        final ArgumentCaptor<MultiGetRequest> requestCaptor = ArgumentCaptor.forClass(MultiGetRequest.class);
+        verify(openSearchClient).execute(any(), requestCaptor.capture(), any());
+        return requestCaptor.getValue();
     }
 
     private IngestDocumentWrapper createIngestDocWrapper(@NonNull final String id, @NonNull final Map<String, Object> source) {

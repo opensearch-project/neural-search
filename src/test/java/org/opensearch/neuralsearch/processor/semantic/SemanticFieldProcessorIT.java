@@ -13,6 +13,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
+import lombok.SneakyThrows;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.rest.RestStatus;
 import org.apache.lucene.search.join.ScoreMode;
 import org.junit.Before;
 import org.opensearch.index.query.QueryBuilder;
@@ -287,6 +293,95 @@ public class SemanticFieldProcessorIT extends BaseNeuralSearchIT {
         Map<String, Object> updatedDoc = (Map<String, Object>) getDocById(INDEX_WITH_SPARSE_MODEL, "1").get("_source");
 
         assertModelUpdate(originalDoc, updatedDoc, modelId, newModelId);
+    }
+
+    public void testReuseExistingEmbedding_withoutRouting_thenNoSecondInference() throws Exception {
+        // Control for the routed test below: confirms the predict-count signal detects reuse at all.
+        String modelId = prepareSparseEncodingModel();
+        loadModel(modelId);
+        createIndexWithModelId(INDEX_WITH_SPARSE_MODEL, "semantic/SemanticIndexMappingsSkipExistingEmbedding.json", modelId);
+
+        ingestDocument(INDEX_WITH_SPARSE_MODEL, INGEST_DOC1, "1");
+        long predictsAfterFirstWrite = getPredictRequestCount(modelId);
+
+        ingestDocument(INDEX_WITH_SPARSE_MODEL, INGEST_DOC1, "1", true);
+        assertEquals("unchanged document should reuse its embedding", predictsAfterFirstWrite, getPredictRequestCount(modelId));
+    }
+
+    public void testReuseExistingEmbedding_whenRoutingRequired_thenNoSecondInference() throws Exception {
+        String modelId = prepareSparseEncodingModel();
+        loadModel(modelId);
+        createIndexWithModelId(
+            INDEX_WITH_SPARSE_MODEL,
+            "semantic/SemanticIndexMappingsSkipExistingEmbeddingWithRequiredRouting.json",
+            modelId
+        );
+        String doc = "{\"product_description\": \"a waterproof hiking boot\"}";
+
+        // Single document: first write generates the embedding.
+        indexWithRouting(INDEX_WITH_SPARSE_MODEL, "1", "user-a", doc);
+        long predictsAfterFirstWrite = getPredictRequestCount(modelId);
+
+        // Re-writing the unchanged document must reuse the embedding. The existing-document lookup has to
+        // carry the routing to find it; otherwise it misses and the model is called again.
+        indexWithRouting(INDEX_WITH_SPARSE_MODEL, "1", "user-a", doc);
+        assertEquals("unchanged routed document should reuse its embedding", predictsAfterFirstWrite, getPredictRequestCount(modelId));
+
+        // Bulk path, which batches the existing-document lookup.
+        String bulkPayload = String.format(
+            LOCALE,
+            "{ \"index\": { \"_index\": \"%s\", \"_id\": \"2\" } }%n%s%n{ \"index\": { \"_index\": \"%s\", \"_id\": \"3\" } }%n%s%n",
+            INDEX_WITH_SPARSE_MODEL,
+            doc,
+            INDEX_WITH_SPARSE_MODEL,
+            doc
+        );
+        bulkIngest(bulkPayload, null, "user-a");
+        long predictsAfterFirstBulk = getPredictRequestCount(modelId);
+
+        bulkIngest(bulkPayload, null, "user-a");
+        assertEquals(
+            "unchanged routed documents in a bulk request should reuse their embeddings",
+            predictsAfterFirstBulk,
+            getPredictRequestCount(modelId)
+        );
+    }
+
+    @SneakyThrows
+    private void indexWithRouting(final String index, final String id, final String routing, final String doc) {
+        Request request = new Request("PUT", "/" + index + "/_doc/" + id + "?routing=" + routing + "&refresh=true");
+        request.setJsonEntity(doc);
+        Response response = client().performRequest(request);
+        int status = response.getStatusLine().getStatusCode();
+        assertTrue(
+            request.getEndpoint() + ": failed with " + status,
+            status == RestStatus.CREATED.getStatus() || status == RestStatus.OK.getStatus()
+        );
+    }
+
+    /**
+     * Total predict requests ml-commons has served for a model, summed across nodes. Used to tell
+     * an embedding that was reused apart from one that was regenerated.
+     */
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    private long getPredictRequestCount(final String modelId) {
+        Response response = client().performRequest(new Request("GET", "/_plugins/_ml/stats"));
+        String body = EntityUtils.toString(response.getEntity());
+        Map<String, Object> nodes = (Map<String, Object>) createParser(XContentType.JSON.xContent(), body).map().get("nodes");
+        long total = 0;
+        for (Object node : nodes.values()) {
+            Map<String, Object> models = (Map<String, Object>) ((Map<String, Object>) node).get("models");
+            if (models == null || models.containsKey(modelId) == false) {
+                continue;
+            }
+            Map<String, Object> predict = (Map<String, Object>) ((Map<String, Object>) models.get(modelId)).get("predict");
+            if (predict != null && predict.get("ml_action_request_count") != null) {
+                total += ((Number) predict.get("ml_action_request_count")).longValue();
+            }
+        }
+        assertTrue("no predict stats found for model " + modelId + " in: " + body, total > 0);
+        return total;
     }
 
     public void testReuseExitEmbedding_withSparseModel() throws Exception {
