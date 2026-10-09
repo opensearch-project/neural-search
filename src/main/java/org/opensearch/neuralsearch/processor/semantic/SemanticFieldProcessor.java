@@ -39,7 +39,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -200,8 +199,7 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
         }
 
-        final Map<String, String> docIdToRouting = new LinkedHashMap<>();
-        collectDocIdsToCheckReuse(ingestDocument, semanticFieldInfoList, docIdToRouting);
+        final Map<String, String> docIdToRouting = getDocIdToRoutingToCheckReuse(ingestDocument, semanticFieldInfoList);
         final Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
         if (shouldCheckExistDoc(docIdToRouting, index)) {
             getExistingDocs(docIdToRouting, (String) index, (existingDocs, exception) -> {
@@ -300,20 +298,26 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     }
 
     /**
-     * Collects the IDs of documents whose existing embeddings may be reused, with each document's routing.
+     * Gets the IDs of documents whose existing embeddings may be reused, with each document's routing.
      * The routing is needed so the existing-document lookup targets the shard the document was written to.
+     * Lookups are keyed by document ID alone. If one batch holds two documents with the same ID but
+     * different routing, only one is looked up; the other falls back to generating its embedding. This
+     * costs an extra inference call but never a wrong embedding, because reuse also requires the
+     * existing document's field value, model and chunks to match.
      */
-    private void collectDocIdsToCheckReuse(
+    private Map<String, String> getDocIdToRoutingToCheckReuse(
         @NonNull final IngestDocument ingestDocument,
-        @NonNull final List<SemanticFieldInfo> semanticFieldInfos,
-        @NonNull final Map<String, String> docIdToRouting
+        @NonNull final List<SemanticFieldInfo> semanticFieldInfos
     ) {
         final Object routing = ingestDocument.getSourceAndMetadata().get(ROUTING_FIELD);
+        final String routingValue = Objects.nonNull(routing) ? routing.toString() : null;
+        final Map<String, String> docIdToRouting = new HashMap<>();
         for (SemanticFieldInfo semanticFieldInfo : semanticFieldInfos) {
             if (semanticFieldInfo.getSkipExistingEmbedding() && Objects.nonNull(semanticFieldInfo.getDocId())) {
-                docIdToRouting.put(semanticFieldInfo.getDocId(), Objects.nonNull(routing) ? routing.toString() : null);
+                docIdToRouting.put(semanticFieldInfo.getDocId(), routingValue);
             }
         }
+        return docIdToRouting;
     }
 
     private void setModelInfo(@NonNull final IngestDocument ingestDocument, @NonNull final List<SemanticFieldInfo> semanticFieldInfoList) {
@@ -635,9 +639,9 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
         }
 
-        final Map<String, String> docIdToRouting = new LinkedHashMap<>();
+        final Map<String, String> docIdToRouting = new HashMap<>();
         for (Map.Entry<IngestDocumentWrapper, List<SemanticFieldInfo>> entry : docToSemanticFieldInfoMap.entrySet()) {
-            collectDocIdsToCheckReuse(entry.getKey().getIngestDocument(), entry.getValue(), docIdToRouting);
+            docIdToRouting.putAll(getDocIdToRoutingToCheckReuse(entry.getKey().getIngestDocument(), entry.getValue()));
         }
         // All docs should be in the same index so simply get the index from the first doc.
         final Object index = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
