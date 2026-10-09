@@ -52,6 +52,7 @@ import java.util.stream.Collectors;
 import static org.opensearch.neuralsearch.processor.EmbeddingContentType.PASSAGE;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.ID_FIELD;
 import static org.opensearch.neuralsearch.constants.DocFieldNames.INDEX_FIELD;
+import static org.opensearch.neuralsearch.constants.DocFieldNames.ROUTING_FIELD;
 import static org.opensearch.neuralsearch.constants.MappingConstants.PATH_SEPARATOR;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.CHUNKS_TEXT_FIELD_NAME;
 import static org.opensearch.neuralsearch.constants.SemanticInfoFieldConstants.MODEL_ID_FIELD_NAME;
@@ -198,10 +199,10 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
         }
 
-        final Set<String> docIdsToCheckReuse = getDocIdsToCheckReuse(List.of(semanticFieldInfoList));
+        final Map<String, String> docIdToRouting = getDocIdToRoutingToCheckReuse(ingestDocument, semanticFieldInfoList);
         final Object index = ingestDocument.getSourceAndMetadata().get(INDEX_FIELD);
-        if (shouldCheckExistDoc(docIdsToCheckReuse, index)) {
-            getExistingDocs(docIdsToCheckReuse, (String) index, (existingDocs, exception) -> {
+        if (shouldCheckExistDoc(docIdToRouting, index)) {
+            getExistingDocs(docIdToRouting, (String) index, (existingDocs, exception) -> {
                 if (exception != null) {
                     handler.accept(null, wrapGetExistDocException(exception));
                     return;
@@ -292,20 +293,31 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
         }).toList();
     }
 
-    private boolean shouldCheckExistDoc(@NonNull final Set<String> docIdsToCheckReuse, final Object index) {
-        return docIdsToCheckReuse.isEmpty() == false && index instanceof String;
+    private boolean shouldCheckExistDoc(@NonNull final Map<String, String> docIdToRouting, final Object index) {
+        return docIdToRouting.isEmpty() == false && index instanceof String;
     }
 
-    private Set<String> getDocIdsToCheckReuse(@NonNull final Collection<List<SemanticFieldInfo>> semanticFieldInfoList) {
-        final Set<String> docIdsToCheckReuse = new HashSet<>();
-        for (List<SemanticFieldInfo> semanticFieldInfos : semanticFieldInfoList) {
-            for (SemanticFieldInfo semanticFieldInfo : semanticFieldInfos) {
-                if (semanticFieldInfo.getSkipExistingEmbedding() && Objects.nonNull(semanticFieldInfo.getDocId())) {
-                    docIdsToCheckReuse.add(semanticFieldInfo.getDocId());
-                }
+    /**
+     * Gets the IDs of documents whose existing embeddings may be reused, with each document's routing.
+     * The routing is needed so the existing-document lookup targets the shard the document was written to.
+     * Lookups are keyed by document ID alone. If one batch holds two documents with the same ID but
+     * different routing, only one is looked up; the other falls back to generating its embedding. This
+     * costs an extra inference call but never a wrong embedding, because reuse also requires the
+     * existing document's field value, model and chunks to match.
+     */
+    private Map<String, String> getDocIdToRoutingToCheckReuse(
+        @NonNull final IngestDocument ingestDocument,
+        @NonNull final List<SemanticFieldInfo> semanticFieldInfos
+    ) {
+        final Object routing = ingestDocument.getSourceAndMetadata().get(ROUTING_FIELD);
+        final String routingValue = Objects.nonNull(routing) ? routing.toString() : null;
+        final Map<String, String> docIdToRouting = new HashMap<>();
+        for (SemanticFieldInfo semanticFieldInfo : semanticFieldInfos) {
+            if (semanticFieldInfo.getSkipExistingEmbedding() && Objects.nonNull(semanticFieldInfo.getDocId())) {
+                docIdToRouting.put(semanticFieldInfo.getDocId(), routingValue);
             }
         }
-        return docIdsToCheckReuse;
+        return docIdToRouting;
     }
 
     private void setModelInfo(@NonNull final IngestDocument ingestDocument, @NonNull final List<SemanticFieldInfo> semanticFieldInfoList) {
@@ -627,12 +639,15 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
             EventStatsManager.increment(EventStatName.SEMANTIC_FIELD_PROCESSOR_CHUNKING_EXECUTIONS);
         }
 
-        final Set<String> docIdsToCheckReuse = getDocIdsToCheckReuse(docToSemanticFieldInfoMap.values());
+        final Map<String, String> docIdToRouting = new HashMap<>();
+        for (Map.Entry<IngestDocumentWrapper, List<SemanticFieldInfo>> entry : docToSemanticFieldInfoMap.entrySet()) {
+            docIdToRouting.putAll(getDocIdToRoutingToCheckReuse(entry.getKey().getIngestDocument(), entry.getValue()));
+        }
         // All docs should be in the same index so simply get the index from the first doc.
         final Object index = ingestDocumentWrappers.getFirst().getIngestDocument().getSourceAndMetadata().get(INDEX_FIELD);
 
-        if (shouldCheckExistDoc(docIdsToCheckReuse, index)) {
-            getExistingDocs(docIdsToCheckReuse, (String) index, (existingDocs, exception) -> {
+        if (shouldCheckExistDoc(docIdToRouting, index)) {
+            getExistingDocs(docIdToRouting, (String) index, (existingDocs, exception) -> {
                 if (exception != null) {
                     addExceptionToImpactedDocs(docToSemanticFieldInfoMap.keySet(), wrapGetExistDocException(exception));
                     handler.accept(ingestDocumentWrappers);
@@ -686,13 +701,17 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
     }
 
     private void getExistingDocs(
-        @NonNull final Set<String> docIds,
+        @NonNull final Map<String, String> docIdToRouting,
         @NonNull final String index,
         @NonNull final BiConsumer<Map<String, Map<String, Object>>, Exception> handler
     ) {
         MultiGetRequest multiGetRequest = new MultiGetRequest();
-        for (String docId : docIds) {
-            multiGetRequest.add(index, docId);
+        for (Map.Entry<String, String> entry : docIdToRouting.entrySet()) {
+            MultiGetRequest.Item item = new MultiGetRequest.Item(index, entry.getKey());
+            if (Objects.nonNull(entry.getValue())) {
+                item.routing(entry.getValue());
+            }
+            multiGetRequest.add(item);
         }
         openSearchClient.execute(MultiGetAction.INSTANCE, multiGetRequest, ActionListener.wrap(response -> {
             MultiGetItemResponse[] items = response.getResponses();
