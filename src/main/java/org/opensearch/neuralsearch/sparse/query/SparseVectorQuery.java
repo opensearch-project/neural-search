@@ -68,6 +68,10 @@ public class SparseVectorQuery extends Query {
         if (visitor.acceptField(getFieldName())) {
             visitor.visitLeaf(this);
         }
+        // The filter can reference other fields, so visit it independently of the sparse field check.
+        if (filter != null) {
+            filter.visit(visitor.getSubVisitor(BooleanClause.Occur.FILTER, this));
+        }
     }
 
     @Override
