@@ -1110,6 +1110,36 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
     }
 
+    public void testDoToQuery_nonSeismicWithFilter_thenReject() {
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .sparseAnnQueryBuilder(new SparseAnnQueryBuilder().filter(new TermQueryBuilder("category", "science")));
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn("rank_features");
+        when(context.fieldMapper(FIELD_NAME)).thenReturn(fieldType);
+
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> queryBuilder.toQuery(context));
+
+        assertEquals("[neural_sparse] [method_parameters.filter] only works on [sparse_vector] fields", exception.getMessage());
+    }
+
+    public void testDoToQuery_nonSeismicWithEmptyMethodParameters_thenSucceeds() throws IOException {
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .sparseAnnQueryBuilder(new SparseAnnQueryBuilder());
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn("rank_features");
+        when(context.fieldMapper(FIELD_NAME)).thenReturn(fieldType);
+        BooleanQuery expected = new BooleanQuery.Builder().add(
+            FeatureField.newLinearQuery(FIELD_NAME, "hello", 1f),
+            BooleanClause.Occur.SHOULD
+        ).add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2f), BooleanClause.Occur.SHOULD).build();
+
+        assertEquals(expected, queryBuilder.toQuery(context));
+    }
+
     @SneakyThrows
     public void testDoToQuery_seismicWithAnalyzer() {
         NeuralSparseQueryBuilder sparseEncodingQueryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)

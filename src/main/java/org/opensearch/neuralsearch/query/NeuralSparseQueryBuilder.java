@@ -585,6 +585,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         boolean isSeismic = isSeismicFieldType(ft);
         if (!isSeismic) {
             validateFieldType(ft);
+            if (sparseAnnQueryBuilder != null && sparseAnnQueryBuilder.filter() != null) {
+                throw new IllegalArgumentException("[" + NAME + "] [method_parameters.filter] only works on [sparse_vector] fields");
+            }
         }
         Map<String, Float> queryTokens = getQueryTokens(context);
         BooleanQuery.Builder builder = new BooleanQuery.Builder();
