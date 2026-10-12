@@ -1052,6 +1052,76 @@ public class HybridQueryPhaseSearcherTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
+    public void testSearchWith_whenShardIsNotPartOfSlice_thenEmptyResult() {
+        HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        when(mockQueryShardContext.index()).thenReturn(dummyIndex);
+        MapperService mapperService = createMapperService();
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) mapperService.fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
+
+        Directory directory = newDirectory();
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
+        ft.freeze();
+        w.addDocument(document(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
+        w.addDocument(document(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT2, ft));
+        w.commit();
+
+        IndexReader reader = DirectoryReader.open(w);
+        SearchContext searchContext = mock(SearchContext.class);
+        ContextIndexSearcher contextIndexSearcher = new ContextIndexSearcher(
+            reader,
+            IndexSearcher.getDefaultSimilarity(),
+            IndexSearcher.getDefaultQueryCache(),
+            IndexSearcher.getDefaultQueryCachingPolicy(),
+            true,
+            null,
+            searchContext
+        );
+
+        ShardId shardId = new ShardId(dummyIndex, 1);
+        SearchShardTarget shardTarget = new SearchShardTarget(
+            randomAlphaOfLength(10),
+            shardId,
+            randomAlphaOfLength(10),
+            OriginalIndices.NONE
+        );
+        when(searchContext.shardTarget()).thenReturn(shardTarget);
+        when(searchContext.searcher()).thenReturn(contextIndexSearcher);
+        when(searchContext.size()).thenReturn(4);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        when(searchContext.queryResult()).thenReturn(querySearchResult);
+        when(searchContext.numberOfShards()).thenReturn(2);
+        IndexShard indexShard = mock(IndexShard.class);
+        when(indexShard.shardId()).thenReturn(new ShardId("test", "test", 0));
+        when(indexShard.getSearchOperationListener()).thenReturn(mock(SearchOperationListener.class));
+        when(searchContext.indexShard()).thenReturn(indexShard);
+        when(searchContext.bucketCollectorProcessor()).thenReturn(SearchContext.NO_OP_BUCKET_COLLECTOR_PROCESSOR);
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        when(searchContext.getQueryShardContext()).thenReturn(mockQueryShardContext);
+
+        HybridQueryBuilder queryBuilder = new HybridQueryBuilder();
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT1));
+        queryBuilder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY_TEXT2));
+        // the slice does not include this shard, so the query that reaches it is the slice's match-no-docs query
+        Query query = new MatchNoDocsQuery("this shard is not part of the slice");
+        Query hybridQuery = queryBuilder.toQuery(mockQueryShardContext);
+        when(searchContext.query()).thenReturn(query);
+        when(searchContext.parsedQuery()).thenReturn(new ParsedQuery(hybridQuery));
+
+        hybridQueryPhaseSearcher.searchWith(searchContext, contextIndexSearcher, query, new LinkedList<>(), false, false);
+
+        // the same result the hybrid collector returns for a shard without any matching document
+        assertNotNull(querySearchResult.topDocs());
+        TopDocs topDocs = querySearchResult.topDocs().topDocs;
+        assertEquals(0, topDocs.totalHits.value());
+        assertEquals(0, topDocs.scoreDocs.length);
+
+        releaseResources(directory, w, reader);
+    }
+
+    @SneakyThrows
     public void testBoolQuery_whenTooManyNestedLevels_thenSuccess() {
         HybridQueryPhaseSearcher hybridQueryPhaseSearcher = new HybridQueryPhaseSearcher();
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);

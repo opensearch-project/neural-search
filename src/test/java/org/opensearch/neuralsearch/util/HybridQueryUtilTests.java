@@ -8,6 +8,8 @@ import lombok.SneakyThrows;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
+import org.apache.lucene.search.ConstantScoreQuery;
+import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
 import org.opensearch.Version;
@@ -18,6 +20,7 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.MapperService;
 import org.opensearch.index.mapper.TextFieldMapper;
+import org.opensearch.index.query.ParsedQuery;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
@@ -27,10 +30,14 @@ import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryContext;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.internal.SearchContext;
+import org.opensearch.search.slice.TermsSliceQuery;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -213,6 +220,205 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         clauses.add(hybridMustClause);
         Query query = transformHybridQueryWrappedInBooleanMustQuery(clauses);
         assertNull(query);
+    }
+
+    @SneakyThrows
+    public void testExtractHybridQuery_whenShardIsNotPartOfSlice_thenEmptyHybridQueryWithSameNumberOfSubQueries() {
+        HybridQuery hybridQuery = createHybridQuery();
+        MatchNoDocsQuery shardQuery = new MatchNoDocsQuery("this shard is not part of the slice");
+        SearchContext searchContext = mockSearchContext(shardQuery, hybridQuery);
+
+        assertTrue(HybridQueryUtil.isHybridQuery(shardQuery, searchContext));
+        Query extractedQuery = HybridQueryUtil.extractHybridQuery(searchContext, shardQuery);
+
+        assertTrue(extractedQuery instanceof HybridQuery);
+        HybridQuery extractedHybridQuery = (HybridQuery) extractedQuery;
+        assertEquals(hybridQuery.getSubQueries().size(), extractedHybridQuery.getSubQueries().size());
+        extractedHybridQuery.getSubQueries().forEach(subQuery -> assertSame(shardQuery, subQuery));
+        assertSame(hybridQuery.getQueryContext(), extractedHybridQuery.getQueryContext());
+    }
+
+    @SneakyThrows
+    public void testExtractHybridQuery_whenShardIsNotPartOfSliceAndDlsRules_thenEmptyHybridQueryWithSameNumberOfSubQueries() {
+        HybridQuery hybridQuery = createHybridQuery();
+        MatchNoDocsQuery shardQuery = new MatchNoDocsQuery("this shard is not part of the slice");
+        SearchContext searchContext = mockSearchContext(shardQuery, extendWithDlsRules(hybridQuery));
+
+        assertTrue(HybridQueryUtil.isHybridQuery(shardQuery, searchContext));
+        Query extractedQuery = HybridQueryUtil.extractHybridQuery(searchContext, shardQuery);
+
+        assertTrue(extractedQuery instanceof HybridQuery);
+        HybridQuery extractedHybridQuery = (HybridQuery) extractedQuery;
+        assertEquals(hybridQuery.getSubQueries().size(), extractedHybridQuery.getSubQueries().size());
+        extractedHybridQuery.getSubQueries().forEach(subQuery -> assertSame(shardQuery, subQuery));
+    }
+
+    @SneakyThrows
+    public void testExtractHybridQuery_whenWrappedWithSliceFilter_thenFiltersAddedToEachSubQuery() {
+        HybridQuery hybridQuery = createHybridQuery();
+        Query sliceFilter = new TermsSliceQuery("_id", 0, 2);
+        Query otherFilter = new TermQuery(new Term(TEXT_FIELD_NAME, "value"));
+        BooleanQuery shardQuery = new BooleanQuery.Builder().add(hybridQuery, BooleanClause.Occur.MUST)
+            .add(sliceFilter, BooleanClause.Occur.FILTER)
+            .add(otherFilter, BooleanClause.Occur.FILTER)
+            .build();
+        SearchContext searchContext = mockSearchContext(shardQuery, hybridQuery);
+
+        assertTrue(HybridQueryUtil.isHybridQueryWrappedInBooleanQuery(searchContext, shardQuery));
+        Query extractedQuery = HybridQueryUtil.extractHybridQuery(searchContext, shardQuery);
+
+        assertTrue(extractedQuery instanceof HybridQuery);
+        Collection<Query> subQueries = ((HybridQuery) extractedQuery).getSubQueries();
+        assertEquals(hybridQuery.getSubQueries().size(), subQueries.size());
+        for (Query subQuery : subQueries) {
+            assertTrue(subQuery instanceof BooleanQuery);
+            assertEquals(Set.of(sliceFilter, otherFilter), clausesOf((BooleanQuery) subQuery, BooleanClause.Occur.FILTER));
+        }
+    }
+
+    @SneakyThrows
+    public void testExtractHybridQuery_whenDlsRulesWrappedWithSliceFilter_thenDlsRulesAndFilterAddedToEachSubQuery() {
+        HybridQuery hybridQuery = createHybridQuery();
+        BooleanQuery queryWithDlsRules = extendWithDlsRules(hybridQuery);
+        Query sliceFilter = new TermsSliceQuery("_id", 0, 2);
+        BooleanQuery shardQuery = new BooleanQuery.Builder().add(queryWithDlsRules, BooleanClause.Occur.MUST)
+            .add(sliceFilter, BooleanClause.Occur.FILTER)
+            .build();
+        SearchContext searchContext = mockSearchContext(shardQuery, queryWithDlsRules);
+
+        assertTrue(HybridQueryUtil.isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(searchContext, shardQuery));
+        Query extractedQuery = HybridQueryUtil.extractHybridQuery(searchContext, shardQuery);
+
+        assertTrue(extractedQuery instanceof HybridQuery);
+        Collection<Query> subQueries = ((HybridQuery) extractedQuery).getSubQueries();
+        assertEquals(hybridQuery.getSubQueries().size(), subQueries.size());
+        Set<Query> dlsRules = clausesOf(queryWithDlsRules, BooleanClause.Occur.SHOULD);
+        for (Query subQuery : subQueries) {
+            assertTrue(subQuery instanceof BooleanQuery);
+            assertEquals(dlsRules, clausesOf((BooleanQuery) subQuery, BooleanClause.Occur.SHOULD));
+            assertEquals(queryWithDlsRules.getMinimumNumberShouldMatch(), ((BooleanQuery) subQuery).getMinimumNumberShouldMatch());
+            assertEquals(Set.of(sliceFilter), clausesOf((BooleanQuery) subQuery, BooleanClause.Occur.FILTER));
+        }
+    }
+
+    @SneakyThrows
+    public void testIsHybridQueryWrappedInBooleanQuery_whenParsedQueryIsNotHybridQuery_thenFalse() {
+        HybridQuery hybridQuery = createHybridQuery();
+        BooleanQuery booleanQuery = new BooleanQuery.Builder().add(hybridQuery, BooleanClause.Occur.MUST)
+            .add(new TermQuery(new Term(TEXT_FIELD_NAME, "value")), BooleanClause.Occur.FILTER)
+            .build();
+        SearchContext searchContext = mockSearchContext(booleanQuery, booleanQuery);
+
+        assertFalse(HybridQueryUtil.isHybridQueryWrappedInBooleanQuery(searchContext, booleanQuery));
+    }
+
+    @SneakyThrows
+    public void testIsHybridQueryWrappedInBooleanQuery_whenClauseOtherThanFilterAfterHybridQuery_thenFalse() {
+        HybridQuery hybridQuery = createHybridQuery();
+        BooleanQuery shardQuery = new BooleanQuery.Builder().add(hybridQuery, BooleanClause.Occur.MUST)
+            .add(new TermQuery(new Term(TEXT_FIELD_NAME, "value")), BooleanClause.Occur.MUST_NOT)
+            .build();
+        SearchContext searchContext = mockSearchContext(shardQuery, hybridQuery);
+
+        assertFalse(HybridQueryUtil.isHybridQueryWrappedInBooleanQuery(searchContext, shardQuery));
+    }
+
+    @SneakyThrows
+    public void testExtractHybridQuery_whenShardQueryDoesNotContainHybridQueryInSupportedForm_thenFail() {
+        HybridQuery hybridQuery = createHybridQuery();
+        BooleanQuery shardQuery = new BooleanQuery.Builder().add(hybridQuery, BooleanClause.Occur.MUST)
+            .add(new TermQuery(new Term(TEXT_FIELD_NAME, "value")), BooleanClause.Occur.SHOULD)
+            .build();
+        SearchContext searchContext = mockSearchContext(shardQuery, hybridQuery);
+
+        assertTrue(HybridQueryUtil.isHybridQuery(shardQuery, searchContext));
+        IllegalArgumentException exception = expectThrows(
+            IllegalArgumentException.class,
+            () -> HybridQueryUtil.extractHybridQuery(searchContext, shardQuery)
+        );
+        assertEquals(
+            "hybrid query cannot be executed, the query on this shard is a [BooleanQuery] that wraps the hybrid query "
+                + "in a form that is not supported",
+            exception.getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testIsHybridQueryWrappedInBooleanQuery_whenNoParsedQuery_thenFalse() {
+        HybridQuery hybridQuery = createHybridQuery();
+        BooleanQuery shardQuery = new BooleanQuery.Builder().add(hybridQuery, BooleanClause.Occur.MUST)
+            .add(new TermsSliceQuery("_id", 0, 2), BooleanClause.Occur.FILTER)
+            .build();
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.query()).thenReturn(shardQuery);
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+
+        assertFalse(HybridQueryUtil.isHybridQueryWrappedInBooleanQuery(searchContext, shardQuery));
+    }
+
+    @SneakyThrows
+    public void testIsHybridQueryWrappedInBooleanQuery_whenHybridQueryIsNotFirstClause_thenFalse() {
+        HybridQuery hybridQuery = createHybridQuery();
+        BooleanQuery shardQuery = new BooleanQuery.Builder().add(new TermsSliceQuery("_id", 0, 2), BooleanClause.Occur.FILTER)
+            .add(hybridQuery, BooleanClause.Occur.MUST)
+            .build();
+        SearchContext searchContext = mockSearchContext(shardQuery, hybridQuery);
+
+        assertFalse(HybridQueryUtil.isHybridQueryWrappedInBooleanQuery(searchContext, shardQuery));
+    }
+
+    @SneakyThrows
+    public void testIsHybridQueryWrappedInBooleanQuery_whenSingleClause_thenFalse() {
+        HybridQuery hybridQuery = createHybridQuery();
+        BooleanQuery shardQuery = new BooleanQuery.Builder().add(hybridQuery, BooleanClause.Occur.MUST).build();
+        SearchContext searchContext = mockSearchContext(shardQuery, hybridQuery);
+
+        assertFalse(HybridQueryUtil.isHybridQueryWrappedInBooleanQuery(searchContext, shardQuery));
+    }
+
+    @SneakyThrows
+    public void testExtractHybridQuery_whenSearchContextHasNoQuery_thenGivenQueryReturned() {
+        HybridQuery hybridQuery = createHybridQuery();
+        SearchContext searchContext = mockSearchContext(null, hybridQuery);
+
+        assertSame(hybridQuery, HybridQueryUtil.extractHybridQuery(searchContext, hybridQuery));
+    }
+
+    private static HybridQuery createHybridQuery() {
+        return new HybridQuery(
+            List.of(new TermQuery(new Term(TEXT_FIELD_NAME, TERM_QUERY_TEXT)), new TermQuery(new Term(TEXT_FIELD_NAME, "another"))),
+            HybridQueryContext.builder().paginationDepth(10).build()
+        );
+    }
+
+    private static BooleanQuery extendWithDlsRules(final HybridQuery hybridQuery) {
+        return new BooleanQuery.Builder().add(
+            new ConstantScoreQuery(new TermQuery(new Term(TEXT_FIELD_NAME, "allowed"))),
+            BooleanClause.Occur.SHOULD
+        )
+            .add(new ConstantScoreQuery(new TermQuery(new Term(TEXT_FIELD_NAME, "also_allowed"))), BooleanClause.Occur.SHOULD)
+            .add(hybridQuery, BooleanClause.Occur.MUST)
+            .setMinimumNumberShouldMatch(1)
+            .build();
+    }
+
+    @SneakyThrows
+    private SearchContext mockSearchContext(final Query shardQuery, final Query parsedQuery) {
+        SearchContext searchContext = mock(SearchContext.class);
+        when(searchContext.query()).thenReturn(shardQuery);
+        when(searchContext.parsedQuery()).thenReturn(new ParsedQuery(parsedQuery));
+        MapperService mapperService = createMapperService();
+        when(searchContext.mapperService()).thenReturn(mapperService);
+        return searchContext;
+    }
+
+    private static Set<Query> clausesOf(final BooleanQuery booleanQuery, final BooleanClause.Occur occur) {
+        return booleanQuery.clauses()
+            .stream()
+            .filter(clause -> clause.occur() == occur)
+            .map(BooleanClause::query)
+            .collect(Collectors.toSet());
     }
 
     private static IndexMetadata getIndexMetadata() {
