@@ -39,6 +39,7 @@ import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
@@ -229,6 +230,19 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             copy.queryTokensMapSupplier(() -> this.twoPhaseSharedQueryToken);
         }
         return copy;
+    }
+
+    /**
+     * Exposes the filter in method parameters as a {@link BooleanClause.Occur#FILTER} child. The default
+     * {@link QueryBuilder#visit(QueryBuilderVisitor)} implementation visits only this builder, so composite query
+     * builders must override it to make their complete query tree available to visitors.
+     */
+    @Override
+    public void visit(QueryBuilderVisitor visitor) {
+        visitor.accept(this);
+        if (sparseAnnQueryBuilder != null && sparseAnnQueryBuilder.filter() != null) {
+            sparseAnnQueryBuilder.filter().visit(visitor.getChildVisitor(BooleanClause.Occur.FILTER));
+        }
     }
 
     @Override
@@ -571,6 +585,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
         boolean isSeismic = isSeismicFieldType(ft);
         if (!isSeismic) {
             validateFieldType(ft);
+            if (sparseAnnQueryBuilder != null && sparseAnnQueryBuilder.filter() != null) {
+                throw new IllegalArgumentException("[" + NAME + "] [method_parameters.filter] only works on [sparse_vector] fields");
+            }
         }
         Map<String, Float> queryTokens = getQueryTokens(context);
         BooleanQuery.Builder builder = new BooleanQuery.Builder();

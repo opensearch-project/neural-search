@@ -20,6 +20,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.opensearch.OpenSearchException;
 import org.opensearch.Version;
 import org.opensearch.action.IndicesRequest;
@@ -42,11 +43,14 @@ import org.opensearch.index.analysis.AnalyzerScope;
 import org.opensearch.index.analysis.IndexAnalyzers;
 import org.opensearch.index.analysis.NamedAnalyzer;
 import org.opensearch.index.mapper.MappedFieldType;
+import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.ml.common.input.parameter.MLAlgoParams;
 import org.opensearch.ml.common.input.parameter.textembedding.AsymmetricTextEmbeddingParameters;
 import org.opensearch.ml.common.input.parameter.textembedding.SparseEmbeddingFormat;
@@ -79,9 +83,11 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.opensearch.index.query.AbstractQueryBuilder.BOOST_FIELD;
 import static org.opensearch.index.query.AbstractQueryBuilder.NAME_FIELD;
@@ -123,6 +129,59 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
             .queryTokens(QUERY_TOKENS_IN_ID);
         // Initialize EventStatsManager for tests
         TestUtils.initializeEventStatsManager();
+    }
+
+    public void testVisit_whenFilterPresent_thenVisitsFilterClause() {
+        QueryBuilder filter = new TermQueryBuilder("category", "science");
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(sparseAnnQueryBuilder.filter(filter));
+        QueryBuilderVisitor visitor = mock(QueryBuilderVisitor.class);
+        QueryBuilderVisitor filterVisitor = mock(QueryBuilderVisitor.class);
+        when(visitor.getChildVisitor(BooleanClause.Occur.FILTER)).thenReturn(filterVisitor);
+
+        queryBuilder.visit(visitor);
+
+        InOrder inOrder = inOrder(visitor, filterVisitor);
+        inOrder.verify(visitor).accept(queryBuilder);
+        inOrder.verify(visitor).getChildVisitor(BooleanClause.Occur.FILTER);
+        inOrder.verify(filterVisitor).accept(filter);
+        verifyNoMoreInteractions(visitor, filterVisitor);
+    }
+
+    public void testVisit_whenMethodParametersAbsent_thenVisitsOnlyNeuralSparseQuery() {
+        assertVisitsOnlyNeuralSparseQuery(new NeuralSparseQueryBuilder());
+    }
+
+    public void testVisit_whenFilterAbsent_thenVisitsOnlyNeuralSparseQuery() {
+        assertVisitsOnlyNeuralSparseQuery(new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(sparseAnnQueryBuilder));
+    }
+
+    private void assertVisitsOnlyNeuralSparseQuery(NeuralSparseQueryBuilder queryBuilder) {
+        QueryBuilderVisitor visitor = mock(QueryBuilderVisitor.class);
+
+        queryBuilder.visit(visitor);
+
+        verify(visitor).accept(queryBuilder);
+        verifyNoMoreInteractions(visitor);
+    }
+
+    public void testVisit_whenFilterContainsNestedQuery_thenVisitsCompleteFilterTree() {
+        QueryBuilder termQuery = new TermQueryBuilder("category", "science");
+        BoolQueryBuilder filter = new BoolQueryBuilder().must(termQuery);
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().sparseAnnQueryBuilder(sparseAnnQueryBuilder.filter(filter));
+        QueryBuilderVisitor visitor = mock(QueryBuilderVisitor.class);
+        QueryBuilderVisitor filterVisitor = mock(QueryBuilderVisitor.class);
+        QueryBuilderVisitor termVisitor = mock(QueryBuilderVisitor.class);
+        when(visitor.getChildVisitor(BooleanClause.Occur.FILTER)).thenReturn(filterVisitor);
+        when(filterVisitor.getChildVisitor(BooleanClause.Occur.MUST)).thenReturn(termVisitor);
+
+        queryBuilder.visit(visitor);
+
+        InOrder inOrder = inOrder(visitor, filterVisitor, termVisitor);
+        inOrder.verify(visitor).accept(queryBuilder);
+        inOrder.verify(visitor).getChildVisitor(BooleanClause.Occur.FILTER);
+        inOrder.verify(filterVisitor).accept(filter);
+        inOrder.verify(filterVisitor).getChildVisitor(BooleanClause.Occur.MUST);
+        inOrder.verify(termVisitor).accept(termQuery);
     }
 
     @SneakyThrows
@@ -1049,6 +1108,36 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         targetQueryBuilder.add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2.f), BooleanClause.Occur.SHOULD);
 
         assertEquals(sparseEncodingQueryBuilder.doToQuery(mockedQueryShardContext), targetQueryBuilder.build());
+    }
+
+    public void testDoToQuery_nonSeismicWithFilter_thenReject() {
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .sparseAnnQueryBuilder(new SparseAnnQueryBuilder().filter(new TermQueryBuilder("category", "science")));
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn("rank_features");
+        when(context.fieldMapper(FIELD_NAME)).thenReturn(fieldType);
+
+        IllegalArgumentException exception = expectThrows(IllegalArgumentException.class, () -> queryBuilder.toQuery(context));
+
+        assertEquals("[neural_sparse] [method_parameters.filter] only works on [sparse_vector] fields", exception.getMessage());
+    }
+
+    public void testDoToQuery_nonSeismicWithEmptyMethodParameters_thenSucceeds() throws IOException {
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryTokensMapSupplier(QUERY_TOKENS_SUPPLIER)
+            .sparseAnnQueryBuilder(new SparseAnnQueryBuilder());
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn("rank_features");
+        when(context.fieldMapper(FIELD_NAME)).thenReturn(fieldType);
+        BooleanQuery expected = new BooleanQuery.Builder().add(
+            FeatureField.newLinearQuery(FIELD_NAME, "hello", 1f),
+            BooleanClause.Occur.SHOULD
+        ).add(FeatureField.newLinearQuery(FIELD_NAME, "world", 2f), BooleanClause.Occur.SHOULD).build();
+
+        assertEquals(expected, queryBuilder.toQuery(context));
     }
 
     @SneakyThrows

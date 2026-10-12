@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Allow `sort: [_score, <field>]` with `collapse`, using the field to break exact `_score` ties so the collapsed group head is deterministic ([#1984](https://github.com/opensearch-project/neural-search/issues/1984))
 
 ### Bug Fixes
+* [Neural Sparse Query] Expose embedded filters to query builder and Lucene query visitor traversal, and reject unsupported filters on `rank_features` fields instead of silently ignoring them ([#2044](https://github.com/opensearch-project/neural-search/pull/2044))
 * [Hybrid Query] Fix hybrid `collapse` sorted by ascending `_score` returning wrong documents and an undercounted `hits.total` on shards with more than 4,096 matching documents ([#1795](https://github.com/opensearch-project/neural-search/issues/1795))
 * [Ingest Processors] Pass `_routing` to the `skip_existing` lookup so writes to indices with required or custom routing no longer fail or silently re-embed ([#2024](https://github.com/opensearch-project/neural-search/issues/2024))
 * [Semantic Field] Fix the semantic field processor invoking the ingest handler twice on embedding-generation failure, which indexed the document without its embedding instead of failing the write ([#2033](https://github.com/opensearch-project/neural-search/pull/2033))
