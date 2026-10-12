@@ -20,6 +20,7 @@ import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.InnerHitsContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
@@ -83,7 +84,7 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         List<?> ctxList = (List<?>) ctxObj;
         List<String> contexts = ctxList.stream().map(str -> (String) str).collect(Collectors.toList());
         ActionListener<List<Float>> scoreListener = listener;
-        if (rerankingContext.containsKey(DocumentContextSourceFetcher.INNER_HITS_CHUNK_OFFSETS_FIELD)) {
+        if (rerankingContext.containsKey(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD)) {
             if (contexts.isEmpty()) {
                 listener.onResponse(Collections.nCopies(response.getHits().getHits().length, Float.NaN));
                 return;
@@ -109,20 +110,20 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         final Map<String, Object> rerankingContext,
         final ActionListener<List<Float>> listener
     ) {
-        List<List<Integer>> chunkOffsets = (List<List<Integer>>) rerankingContext.get(
-            DocumentContextSourceFetcher.INNER_HITS_CHUNK_OFFSETS_FIELD
+        List<List<SearchHit.NestedIdentity>> chunkIdentities = (List<List<SearchHit.NestedIdentity>>) rerankingContext.get(
+            InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD
         );
-        List<List<String>> listNames = (List<List<String>>) rerankingContext.get(DocumentContextSourceFetcher.INNER_HITS_LIST_NAMES_FIELD);
+        List<List<String>> listNames = (List<List<String>>) rerankingContext.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD);
         return ActionListener.wrap(scores -> {
             SearchHit[] hits = response.getHits().getHits();
             List<Float> hitScores = new ArrayList<>(hits.length);
             int cursor = 0;
             for (int i = 0; i < hits.length; i++) {
-                Map<Integer, Float> scoreByOffset = new HashMap<>();
+                Map<SearchHit.NestedIdentity, Float> scoreByIdentity = new HashMap<>();
                 float maxScore = Float.NaN;
-                for (Integer offset : chunkOffsets.get(i)) {
+                for (SearchHit.NestedIdentity identity : chunkIdentities.get(i)) {
                     float score = scores.get(cursor++);
-                    scoreByOffset.put(offset, score);
+                    scoreByIdentity.put(identity, score);
                     if (Float.isNaN(maxScore) || score > maxScore) {
                         maxScore = score;
                     }
@@ -137,7 +138,7 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
                     SearchHits list = innerHits.get(name);
                     SearchHit[] chunks = list.getHits();
                     for (SearchHit chunk : chunks) {
-                        chunk.score(scoreByOffset.get(chunk.getNestedIdentity().getOffset()));
+                        chunk.score(scoreByIdentity.get(chunk.getNestedIdentity()));
                     }
                     Arrays.sort(chunks, (chunk1, chunk2) -> Float.compare(chunk2.getScore(), chunk1.getScore()));
                     innerHits.put(

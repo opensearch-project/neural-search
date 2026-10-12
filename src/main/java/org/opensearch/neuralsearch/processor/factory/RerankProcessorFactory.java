@@ -14,6 +14,7 @@ import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.InnerHitsContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
@@ -167,27 +168,31 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
             final ClusterService clusterService
         ) {
             Map<String, Object> contextConfig = ConfigurationUtils.readMap(RERANK_PROCESSOR_TYPE, tag, config, CONTEXT_CONFIG_FIELD);
-            // An option of the document fetcher rather than a fetcher of its own, so it is consumed before the fetcher loop
-            boolean innerHits = ConfigurationUtils.readBooleanProperty(
-                RERANK_PROCESSOR_TYPE,
-                tag,
-                contextConfig,
-                DocumentContextSourceFetcher.INNER_HITS_FIELD,
-                false
-            );
             List<ContextSourceFetcher> fetchers = new ArrayList<>();
             for (String key : contextConfig.keySet()) {
                 Object cfg = contextConfig.get(key);
                 switch (key) {
                     case DocumentContextSourceFetcher.NAME:
-                        fetchers.add(DocumentContextSourceFetcher.create(cfg, clusterService, innerHits));
+                        fetchers.add(DocumentContextSourceFetcher.create(cfg, clusterService));
+                        break;
+                    case InnerHitsContextSourceFetcher.NAME:
+                        fetchers.add(InnerHitsContextSourceFetcher.create(cfg));
                         break;
                     default:
                         throw new IllegalArgumentException(String.format(Locale.ROOT, "unrecognized context field: %s", key));
                 }
             }
-            if (innerHits && fetchers.isEmpty()) {
-                throw new IllegalArgumentException(DocumentContextSourceFetcher.INNER_HITS_REQUIREMENT_MESSAGE);
+            boolean documentAndInnerHits = contextConfig.containsKey(DocumentContextSourceFetcher.NAME)
+                && contextConfig.containsKey(InnerHitsContextSourceFetcher.NAME);
+            if (documentAndInnerHits) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "%s and %s cannot be combined: the first reranks documents, the second reranks nested chunks",
+                        DocumentContextSourceFetcher.NAME,
+                        InnerHitsContextSourceFetcher.NAME
+                    )
+                );
             }
             if (includeQueryContextFetcher) {
                 fetchers.add(new QueryContextSourceFetcher(clusterService));

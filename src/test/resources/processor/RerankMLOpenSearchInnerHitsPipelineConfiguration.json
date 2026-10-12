@@ -7,8 +7,9 @@
                     "model_id": "%s"
                 },
                 "context": {
-                    "document_fields": ["chunks.text"],
-                    "inner_hits": true
+                    "inner_hits": {
+                        "paths": [{ "path": "chunks", "field": "text" }]
+                    }
                 }
             }
         }

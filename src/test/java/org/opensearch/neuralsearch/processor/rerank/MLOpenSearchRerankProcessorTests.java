@@ -43,6 +43,7 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.InnerHitsContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
@@ -450,7 +451,7 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
 
     @SneakyThrows
     private Map<String, Object> innerHitsContext(SearchResponse searchResponse) {
-        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("embeddings.text"), true);
+        InnerHitsContextSourceFetcher fetcher = new InnerHitsContextSourceFetcher("embeddings", "text");
         List<Map<String, Object>> captured = new ArrayList<>();
         fetcher.fetchContext(request, searchResponse, ActionListener.wrap(captured::add, e -> fail("Should not fail: " + e)));
         return captured.get(0);
