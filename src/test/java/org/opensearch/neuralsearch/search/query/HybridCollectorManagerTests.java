@@ -99,6 +99,11 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
     private static final String TEST_DOC_TEXT2 = "Hi to this place";
     private static final String TEST_DOC_TEXT3 = "We would like to welcome everyone";
     private static final String QUERY1 = "hello";
+    private static final String SCORE_ASCENDING_NOT_SUPPORTED_MESSAGE =
+        "Sorting a hybrid query by _score in ascending order is not supported; hybrid results are ranked by descending "
+            + "relevance. Use \"order\": \"desc\" for _score, or sort by a field.";
+    private static final String SCORE_MORE_THAN_ONCE_NOT_SUPPORTED_MESSAGE =
+        "Sorting a hybrid query by _score more than once is not supported; use a single \"_score\" sort criterion.";
     private static final String QUERY2 = "hi";
     protected static final String QUERY3 = "everyone";
 
@@ -398,13 +403,94 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         );
     }
 
+    @SneakyThrows
+    public void testCreateCollectorManager_whenSortByScoreAscending_thenFail() {
+        // "_score": {"order": "asc"} parses to a SCORE SortField with reverse == true
+        SearchContext searchContext = mockSearchContextForSortValidation(new Sort(new SortField(null, SortField.Type.SCORE, true)), false);
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(SCORE_ASCENDING_NOT_SUPPORTED_MESSAGE, illegalArgumentException.getMessage());
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenSortByScoreAscendingWithTrackScores_thenFailWithAscendingMessage() {
+        // the ascending check runs before the track_scores check so the user gets the actionable message
+        SearchContext searchContext = mockSearchContextForSortValidation(new Sort(new SortField(null, SortField.Type.SCORE, true)), false);
+        when(searchContext.trackScores()).thenReturn(true);
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(SCORE_ASCENDING_NOT_SUPPORTED_MESSAGE, illegalArgumentException.getMessage());
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenSortByScoreDescending_thenSuccessful() {
+        // an explicit non-reversed _score sort keeps working (core normally drops it before the collector manager runs)
+        SearchContext searchContext = mockSearchContextForSortValidation(new Sort(SortField.FIELD_SCORE), false);
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        assertTrue(hybridCollectorManager instanceof HybridCollectorManager);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenSortByScoreAscendingWithCollapse_thenCollapseCollectorCreated() {
+        // with collapse, ascending _score is a supported shape: the collapse collector keeps each sub-query's lowest-scoring window
+        SearchContext searchContext = mockSearchContextForSortValidation(new Sort(new SortField(null, SortField.Type.SCORE, true)), true);
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        Collector collector = hybridCollectorManager.newCollector();
+        assertTrue(collector instanceof HybridCollapsingTopDocsCollector);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenSortByScoreMoreThanOnce_thenFail() {
+        // core keeps every sort field, so sort: [{"_score": "asc"}, {"_score": "desc"}] reaches the collector manager as two SCORE fields
+        List<Sort> sorts = List.of(
+            new Sort(new SortField(null, SortField.Type.SCORE, true), SortField.FIELD_SCORE),
+            new Sort(SortField.FIELD_SCORE, new SortField(null, SortField.Type.SCORE, true)),
+            new Sort(SortField.FIELD_SCORE, SortField.FIELD_SCORE)
+        );
+        for (Sort sort : sorts) {
+            for (boolean withCollapse : new boolean[] { false, true }) {
+                SearchContext searchContext = mockSearchContextForSortValidation(sort, withCollapse);
+
+                IllegalArgumentException illegalArgumentException = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+                );
+                assertEquals(SCORE_MORE_THAN_ONCE_NOT_SUPPORTED_MESSAGE, illegalArgumentException.getMessage());
+            }
+        }
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreFieldAndScoreAgainWithCollapse_thenFail() {
+        // [_score desc, price, _score asc] passes the collapse rules for mixing _score with a field, but lists _score twice
+        SearchContext searchContext = mockSearchContextForSortValidation(
+            new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT), new SortField(null, SortField.Type.SCORE, true)),
+            true
+        );
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(SCORE_MORE_THAN_ONCE_NOT_SUPPORTED_MESSAGE, illegalArgumentException.getMessage());
+    }
+
     /**
-     * Mocks a non-concurrent SearchContext over a single-term hybrid query with the given two-key sort, and a
+     * Mocks a non-concurrent SearchContext over a single-term hybrid query with the given sort, and a
      * keyword collapse on {@link #TEXT_FIELD_NAME} when {@code withCollapse} is true.
      */
     private SearchContext mockSearchContextForSortValidation(Sort sort, boolean withCollapse) throws IOException {
         SearchContext searchContext = mock(SearchContext.class);
-        DocValueFormat[] docValueFormat = new DocValueFormat[] { DocValueFormat.RAW, DocValueFormat.RAW };
+        DocValueFormat[] docValueFormat = new DocValueFormat[sort.getSort().length];
+        Arrays.fill(docValueFormat, DocValueFormat.RAW);
         when(searchContext.sort()).thenReturn(new SortAndFormats(sort, docValueFormat));
         when(searchContext.minimumScore()).thenReturn(null);
 

@@ -10,10 +10,17 @@ import java.util.HashMap;
 import java.util.Collections;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 
 import lombok.SneakyThrows;
+import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.junit.BeforeClass;
+import org.opensearch.client.Request;
+import org.opensearch.client.Response;
 import org.opensearch.client.ResponseException;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.common.xcontent.XContentType;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.MatchQueryBuilder;
@@ -257,6 +264,97 @@ public class HybridQuerySortIT extends BaseNeuralSearchIT {
                 null
             )
         );
+    }
+
+    @SneakyThrows
+    public void testSort_whenSortByScoreAscending_thenFail() {
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+
+        ResponseException exception = expectThrows(
+            ResponseException.class,
+            () -> searchSortedByScore("[{\"_score\":{\"order\":\"asc\"}}]", null)
+        );
+
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
+        String responseBody = EntityUtils.toString(exception.getResponse().getEntity());
+        assertTrue(responseBody, responseBody.contains("Sorting a hybrid query by _score in ascending order is not supported"));
+    }
+
+    @SneakyThrows
+    public void testSort_whenSortByScoreMoreThanOnce_thenFail() {
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+
+        ResponseException exception = expectThrows(
+            ResponseException.class,
+            () -> searchSortedByScore("[{\"_score\":{\"order\":\"asc\"}},{\"_score\":{\"order\":\"desc\"}}]", null)
+        );
+
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
+        String responseBody = EntityUtils.toString(exception.getResponse().getEntity());
+        assertTrue(responseBody, responseBody.contains("Sorting a hybrid query by _score more than once is not supported"));
+    }
+
+    @SneakyThrows
+    public void testSort_whenSortByScoreAscendingWithCollapse_thenSuccessful() {
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+
+        Map<String, Object> response = searchSortedByScore(
+            "[{\"_score\":{\"order\":\"asc\"}}]",
+            "{\"field\":\"" + KEYWORD_FIELD_2_CATEGORY + "\"}"
+        );
+
+        assertEquals(0, ((Map<?, ?>) response.get("_shards")).get("failed"));
+        List<Map<String, Object>> hits = getNestedHits(response);
+        // one group per category among the matching documents
+        assertEquals(3, hits.size());
+        double previousScore = Double.NEGATIVE_INFINITY;
+        for (Map<String, Object> hit : hits) {
+            double score = ((Number) hit.get("_score")).doubleValue();
+            assertTrue("_score must be a normalized combined score, got " + score, score <= 1.0);
+            assertTrue("collapsed groups must be sorted by ascending _score", score >= previousScore);
+            previousScore = score;
+        }
+    }
+
+    @SneakyThrows
+    public void testSort_whenSortByScoreMoreThanOnceWithCollapse_thenFail() {
+        prepareResourcesBeforeTestExecution(SHARDS_COUNT_IN_MULTI_NODE_CLUSTER);
+
+        ResponseException exception = expectThrows(
+            ResponseException.class,
+            () -> searchSortedByScore(
+                "[{\"_score\":{\"order\":\"asc\"}},{\"_score\":{\"order\":\"desc\"}}]",
+                "{\"field\":\"" + KEYWORD_FIELD_2_CATEGORY + "\"}"
+            )
+        );
+
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
+        String responseBody = EntityUtils.toString(exception.getResponse().getEntity());
+        assertTrue(responseBody, responseBody.contains("Sorting a hybrid query by _score more than once is not supported"));
+    }
+
+    @SneakyThrows
+    private Map<String, Object> searchSortedByScore(final String sort, final String collapse) {
+        Request request = new Request("POST", "/" + TEST_MULTI_DOC_INDEX_WITH_TEXT_AND_INT_MULTIPLE_SHARDS + "/_search");
+        request.addParameter("search_pipeline", SEARCH_PIPELINE);
+        // a failed shard has to fail the request instead of being reported as a partial result
+        request.addParameter("allow_partial_search_results", Boolean.FALSE.toString());
+        String query = String.format(
+            Locale.ROOT,
+            "{\"hybrid\":{\"queries\":[{\"match\":{\"%s\":\"mission\"}},{\"term\":{\"%s\":\"part\"}},"
+                + "{\"range\":{\"%s\":{\"gte\":%d,\"lte\":%d}}}]}}",
+            TEXT_FIELD_1_NAME,
+            TEXT_FIELD_1_NAME,
+            INTEGER_FIELD_1_STOCK,
+            GTE_OF_RANGE_IN_HYBRID_QUERY,
+            LTE_OF_RANGE_IN_HYBRID_QUERY
+        );
+        request.setJsonEntity(
+            "{\"size\":10,\"query\":" + query + ",\"sort\":" + sort + (collapse == null ? "" : ",\"collapse\":" + collapse) + "}"
+        );
+        Response response = client().performRequest(request);
+        assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
     }
 
     @SneakyThrows

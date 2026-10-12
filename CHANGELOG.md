@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Ingest Processors] Pass `_routing` to the `skip_existing` lookup so writes to indices with required or custom routing no longer fail or silently re-embed ([#2024](https://github.com/opensearch-project/neural-search/issues/2024))
 * [Semantic Field] Fix the semantic field processor invoking the ingest handler twice on embedding-generation failure, which indexed the document without its embedding instead of failing the write ([#2033](https://github.com/opensearch-project/neural-search/pull/2033))
 * [Semantic Field] Pass `_routing` to the `skip_existing_embedding` lookup so unchanged documents in routed indices reuse their embeddings instead of being silently re-embedded ([#2040](https://github.com/opensearch-project/neural-search/pull/2040))
+* [Hybrid Query] Reject sorting a hybrid query by `_score` more than once, or by ascending `_score` without `collapse`, which returned wrong documents and scores ([#2046](https://github.com/opensearch-project/neural-search/pull/2046))
 
 ### Infrastructure
 
