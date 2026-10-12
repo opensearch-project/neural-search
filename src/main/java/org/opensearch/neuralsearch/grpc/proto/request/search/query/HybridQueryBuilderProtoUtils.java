@@ -109,7 +109,12 @@ public class HybridQueryBuilderProtoUtils {
 
         boolean hasFilter = filter != null;
         boolean hasPagination = paginationDepth != null;
-        HybridQueryBuilder.updateQueryStats(hasFilter, hasPagination, hasInnerHits);
+        // Always false, and correctly so rather than as a stub: the generated `HybridQuery` message has no `fusion` field
+        // (protobufs 1.7.0 carries boost, _name, queries, pagination_depth, filter), so resolver mode is not expressible
+        // over gRPC at all. The counter therefore reads 0 for gRPC traffic because the feature is unreachable there, not
+        // because it is unused -- worth saying wherever the number is presented. Supporting it needs a `fusion` field added
+        // to opensearch-protobufs upstream first.
+        HybridQueryBuilder.updateQueryStats(hasFilter, hasPagination, hasInnerHits, false);
         return compoundQueryBuilder;
     }
 

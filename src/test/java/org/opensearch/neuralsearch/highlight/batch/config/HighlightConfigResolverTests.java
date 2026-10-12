@@ -13,9 +13,12 @@ import org.opensearch.index.query.DisMaxQueryBuilder;
 import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
 import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
+import org.opensearch.neuralsearch.query.HybridFusionQueryBuilder;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.script.Script;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
@@ -223,6 +226,83 @@ public class HighlightConfigResolverTests extends OpenSearchTestCase {
         HighlightConfig config = HighlightConfigResolver.resolve(request);
         assertEquals(1, config.getTargetsOrEmpty().size());
         assertEquals("path.path", config.getTargetsOrEmpty().getFirst().getNestedPath());
+    }
+
+    /**
+     * Failure mode 1 of a fused hybrid: the coordinator has already replaced the hybrid with its window of {@code _id}
+     * clauses by the time this resolver reads {@code source().query()}, so the query text came back null and the processor
+     * failed the whole search with a 400 — on a search that had succeeded. Classic hybrid resolves the same request.
+     */
+    public void testFusedHybridResolvesQueryTextFromTheCarriedOriginal() {
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(new MatchQueryBuilder("body", "what are treatments"));
+
+        SearchRequest request = buildTopLevelRequest("body", "ignored");
+        request.source().query(fusedSubstitute(original, List.of()));
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertTrue(config.hasTargets());
+        assertEquals("what are treatments", config.getQueryText());
+    }
+
+    /** The wire-copy fallback: nothing carried means nothing to extract, which is the pre-existing graceful null. */
+    public void testFusedHybridWithoutTheOriginalStillFailsGracefully() {
+        SearchRequest request = buildTopLevelRequest("body", "ignored");
+        request.source().query(fusedSubstitute(null, List.of()));
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertTrue(config.hasTargets());
+        assertNull(config.getQueryText());
+    }
+
+    /**
+     * Failure mode 2 of a fused hybrid, which is silent rather than a 400: the targets live inside a leg's
+     * {@code inner_hits}, and they are collected by walking the query with a visitor. The substitute inherited the default
+     * accept-and-stop walk, so nothing was found and the response simply came back unhighlighted.
+     */
+    public void testFusedHybridFindsInnerHitsTargetsThroughTheCarriedOriginal() {
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(buildNestedWithInnerHit("chunks"));
+
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        // The legs are carried in the Tail too, exactly as an executed Tail carries them — the point being that the targets
+        // are found through the original, not by the substitute happening to hold a copy.
+        src.query(fusedSubstitute(original, original.queries()));
+        request.source(src);
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+        SemanticHighlightTarget target = config.getTargetsOrEmpty().getFirst();
+        assertEquals("chunks.text", target.getFieldName());
+        assertEquals("chunks", target.getNestedPath());
+        assertTrue(target.isNested());
+    }
+
+    /** Same request with nothing carried: no targets, which is what made the miss silent. */
+    public void testFusedHybridWithoutTheOriginalFindsNoInnerHitsTargets() {
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(buildNestedWithInnerHit("chunks"));
+
+        SearchRequest request = new SearchRequest();
+        SearchSourceBuilder src = new SearchSourceBuilder();
+        src.query(fusedSubstitute(null, original.queries()));
+        request.source(src);
+
+        HighlightConfig config = HighlightConfigResolver.resolve(request);
+        assertFalse(config.hasTargets());
+    }
+
+    private static HybridFusionQueryBuilder fusedSubstitute(HybridQueryBuilder original, List<QueryBuilder> tail) {
+        return new HybridFusionQueryBuilder(
+            new String[] { "d1" },
+            new String[] { "idx" },
+            new float[] { 1.0f },
+            tail,
+            tail,
+            List.of(),
+            original
+        );
     }
 
     private static SearchRequest buildTopLevelRequest(String fieldName, String queryText) {

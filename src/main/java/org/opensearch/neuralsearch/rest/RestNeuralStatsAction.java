@@ -13,6 +13,7 @@ import org.opensearch.common.util.set.Sets;
 import org.opensearch.core.rest.RestStatus;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettingsAccessor;
 import org.opensearch.neuralsearch.stats.NeuralStatsInput;
+import org.opensearch.neuralsearch.stats.common.StatName;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.info.InfoStatName;
 import org.opensearch.neuralsearch.stats.metrics.MetricStatName;
@@ -229,10 +230,13 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         // Determine which stat names to retrieve based on user parameters
         Optional<String[]> optionalStats = splitCommaSeparatedParam(request, STAT_PARAM);
         Version minClusterVersion = clusterUtil.getClusterMinVersion();
+        EnumSet<InfoStatName> supportedInfoStats = statsSupportedByAllNodes(InfoStatName.class, minClusterVersion);
+        EnumSet<EventStatName> supportedEventStats = statsSupportedByAllNodes(EventStatName.class, minClusterVersion);
+        EnumSet<MetricStatName> supportedMetricStats = statsSupportedByAllNodes(MetricStatName.class, minClusterVersion);
 
         if (optionalStats.isPresent() == false || optionalStats.get().length == 0) {
             // No specific stats requested, add all stats by default
-            addAllStats(neuralStatsInput, minClusterVersion);
+            addAllStats(neuralStatsInput, supportedInfoStats, supportedEventStats, supportedMetricStats);
             return;
         }
 
@@ -251,18 +255,18 @@ public class RestNeuralStatsAction extends BaseRestHandler {
             }
             if (includeInfo && InfoStatName.isValidName(normalizedStat)) {
                 InfoStatName infoStatName = InfoStatName.from(normalizedStat);
-                if (infoStatName.version().onOrBefore(minClusterVersion)) {
-                    neuralStatsInput.getInfoStatNames().add(InfoStatName.from(normalizedStat));
+                if (supportedInfoStats.contains(infoStatName)) {
+                    neuralStatsInput.getInfoStatNames().add(infoStatName);
                 }
             } else if (includeEvents && EventStatName.isValidName(normalizedStat)) {
                 EventStatName eventStatName = EventStatName.from(normalizedStat);
-                if (eventStatName.version().onOrBefore(minClusterVersion)) {
-                    neuralStatsInput.getEventStatNames().add(EventStatName.from(normalizedStat));
+                if (supportedEventStats.contains(eventStatName)) {
+                    neuralStatsInput.getEventStatNames().add(eventStatName);
                 }
             } else if (includeMetrics && MetricStatName.isValidName(normalizedStat)) {
                 MetricStatName metricStatName = MetricStatName.from(normalizedStat);
-                if (metricStatName.version().onOrBefore(minClusterVersion)) {
-                    neuralStatsInput.getMetricStatNames().add(MetricStatName.from(normalizedStat));
+                if (supportedMetricStats.contains(metricStatName)) {
+                    neuralStatsInput.getMetricStatNames().add(metricStatName);
                 }
             }
         }
@@ -276,46 +280,44 @@ public class RestNeuralStatsAction extends BaseRestHandler {
         }
     }
 
-    private void addAllStats(NeuralStatsInput neuralStatsInput, Version minVersion) {
-        if (minVersion == Version.CURRENT) {
-            if (neuralStatsInput.isIncludeInfo()) {
-                neuralStatsInput.getInfoStatNames().addAll(EnumSet.allOf(InfoStatName.class));
-            }
-            if (neuralStatsInput.isIncludeEvents()) {
-                neuralStatsInput.getEventStatNames().addAll(EnumSet.allOf(EventStatName.class));
-            }
-            if (neuralStatsInput.isIncludeMetrics()) {
-                neuralStatsInput.getMetricStatNames().addAll(EnumSet.allOf(MetricStatName.class));
-            }
-        } else {
-            if (neuralStatsInput.isIncludeInfo()) {
-                neuralStatsInput.getInfoStatNames()
-                    .addAll(
-                        EnumSet.allOf(InfoStatName.class)
-                            .stream()
-                            .filter(statName -> statName.version().onOrBefore(minVersion))
-                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(InfoStatName.class)))
-                    );
-            }
-            if (neuralStatsInput.isIncludeEvents()) {
-                neuralStatsInput.getEventStatNames()
-                    .addAll(
-                        EnumSet.allOf(EventStatName.class)
-                            .stream()
-                            .filter(statName -> statName.version().onOrBefore(minVersion))
-                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(EventStatName.class)))
-                    );
-            }
-            if (neuralStatsInput.isIncludeMetrics()) {
-                neuralStatsInput.getMetricStatNames()
-                    .addAll(
-                        EnumSet.allOf(MetricStatName.class)
-                            .stream()
-                            .filter(statName -> statName.version().onOrBefore(minVersion))
-                            .collect(Collectors.toCollection(() -> EnumSet.noneOf(MetricStatName.class)))
-                    );
-            }
+    private void addAllStats(
+        NeuralStatsInput neuralStatsInput,
+        EnumSet<InfoStatName> supportedInfoStats,
+        EnumSet<EventStatName> supportedEventStats,
+        EnumSet<MetricStatName> supportedMetricStats
+    ) {
+        if (neuralStatsInput.isIncludeInfo()) {
+            neuralStatsInput.getInfoStatNames().addAll(supportedInfoStats);
         }
+        if (neuralStatsInput.isIncludeEvents()) {
+            neuralStatsInput.getEventStatNames().addAll(supportedEventStats);
+        }
+        if (neuralStatsInput.isIncludeMetrics()) {
+            neuralStatsInput.getMetricStatNames().addAll(supportedMetricStats);
+        }
+    }
+
+    /**
+     * The stats every node in the cluster can exchange, given the version of the oldest one. Stat name enums go over the
+     * wire as ordinals, so a filtered set is only safe to send to an older node when it is a prefix of the current enum:
+     * a stat added after that node's version shifts the ordinal of every stat declared after it, and the older node either
+     * fails to read an ordinal its own enum does not have or, worse, reads it as a different stat. So stop at the first
+     * stat the oldest node cannot have rather than skipping it and keeping the ones that follow. A stat whose ordinal
+     * moved therefore has to declare the version its current position dates from, not the one it first shipped in.
+     *
+     * @param statClass the stat name enum to filter
+     * @param minVersion the version of the oldest node in the cluster
+     * @return the leading run of stats no older node in the cluster can misread
+     */
+    private static <E extends Enum<E> & StatName> EnumSet<E> statsSupportedByAllNodes(Class<E> statClass, Version minVersion) {
+        EnumSet<E> supportedStats = EnumSet.noneOf(statClass);
+        for (E statName : EnumSet.allOf(statClass)) {
+            if (statName.version().onOrBefore(minVersion) == false) {
+                break;
+            }
+            supportedStats.add(statName);
+        }
+        return supportedStats;
     }
 
     private Optional<String[]> splitCommaSeparatedParam(RestRequest request, String paramName) {

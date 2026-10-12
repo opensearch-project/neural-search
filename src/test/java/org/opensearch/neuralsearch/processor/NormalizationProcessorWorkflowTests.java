@@ -734,6 +734,62 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         testNormalization_withMinScore_thenFail(Float.NaN);
     }
 
+    /**
+     * A result whose topDocs a partial reduce has already consumed still held hybrid documents — they are now in the
+     * partially reduced TopDocs, raw and in the delimiter format, where this workflow cannot rewrite them. Dropping the
+     * result would normalize the rest and hand the final reduce a mix; the workflow refuses instead, naming the cause.
+     */
+    public void testExecute_whenAResultWasConsumedByAPartialReduce_thenRefusesWithAClearMessage() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(
+            new ScoreNormalizer(),
+            new ScoreCombiner()
+        );
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        for (int shard = 0; shard < 2; shard++) {
+            QuerySearchResult result = new QuerySearchResult();
+            result.topDocs(
+                new TopDocsAndMaxScore(
+                    new TopDocs(
+                        new TotalHits(2, TotalHits.Relation.EQUAL_TO),
+                        new ScoreDoc[] {
+                            createStartStopElementForHybridSearchResults(0),
+                            createDelimiterElementForHybridSearchResults(0),
+                            new ScoreDoc(shard, 0.5f),
+                            createStartStopElementForHybridSearchResults(0) }
+                    ),
+                    0.5f
+                ),
+                null
+            );
+            result.setSearchShardTarget(new SearchShardTarget("node", new ShardId("index", "uuid", shard), null, OriginalIndices.NONE));
+            result.setShardIndex(shard);
+            querySearchResults.add(result);
+        }
+        querySearchResults.get(1).consumeTopDocs();
+        assertTrue(querySearchResults.get(1).hasConsumedTopDocs());
+        assertFalse("a consumed result is not a null instance, so the null filter alone would keep it", querySearchResults.get(1).isNull());
+
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        when(searchRequest.source()).thenReturn(new SearchSourceBuilder().from(0));
+        when(searchPhaseContext.getNumShards()).thenReturn(2);
+        NormalizationProcessorWorkflowExecuteRequest request = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.empty())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .searchPhaseContext(searchPhaseContext)
+            .build();
+
+        IllegalStateException refused = expectThrows(IllegalStateException.class, () -> normalizationProcessorWorkflow.execute(request));
+        assertTrue(
+            refused.getMessage(),
+            refused.getMessage().startsWith("hybrid query results were partially reduced before normalization")
+        );
+        assertTrue("the remedy is named", refused.getMessage().contains("request processor"));
+    }
+
     public void testSearchResultTypes_whenNullInstanceShard_thenHandleGracefully() {
         NormalizationProcessorWorkflow normalizationProcessorWorkflow = spy(
             new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())

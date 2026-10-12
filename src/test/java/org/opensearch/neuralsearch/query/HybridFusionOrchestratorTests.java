@@ -1,0 +1,3490 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+package org.opensearch.neuralsearch.query;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+import org.apache.lucene.search.Explanation;
+import org.apache.lucene.search.TotalHits;
+import org.opensearch.ExceptionsHelper;
+import org.opensearch.OpenSearchStatusException;
+import org.opensearch.action.search.MultiSearchRequest;
+import org.opensearch.action.search.MultiSearchResponse;
+import org.opensearch.action.search.SearchPhaseExecutionException;
+import org.opensearch.action.search.SearchRequest;
+import org.opensearch.action.search.SearchResponse;
+import org.opensearch.action.search.SearchResponseSections;
+import org.opensearch.action.search.ShardSearchFailure;
+import org.opensearch.action.OriginalIndices;
+import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
+import org.opensearch.core.index.Index;
+import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.core.rest.RestStatus;
+import org.opensearch.index.query.ConstantScoreQueryBuilder;
+import org.opensearch.search.SearchShardTarget;
+import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.IdsQueryBuilder;
+import org.opensearch.index.query.MatchNoneQueryBuilder;
+import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.InnerHitBuilder;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
+import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
+import org.opensearch.neuralsearch.search.profile.FastPathDecision;
+import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
+import org.opensearch.search.aggregations.AggregationBuilders;
+import org.opensearch.search.aggregations.InternalAggregation;
+import org.opensearch.search.aggregations.InternalAggregations;
+import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.collapse.CollapseBuilder;
+import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
+import org.opensearch.search.pipeline.SearchPipelineService;
+import org.opensearch.search.sort.SortOrder;
+import org.opensearch.test.OpenSearchTestCase;
+
+public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
+
+    private static final String INDEX = "test-index";
+
+    private FusionSpec minMaxArithmetic() {
+        return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            new float[0]
+        );
+    }
+
+    private FusionSpec rrf(int rankConstant) {
+        return new FusionSpec(
+            FusionSpec.Shape.SCORE_RANKER_PROCESSOR,
+            FusionSpec.TECHNIQUE_RRF,
+            FusionSpec.NORMALIZATION_RRF,
+            rankConstant,
+            new float[0]
+        );
+    }
+
+    /**
+     * One MultiSearch item wrapping a SearchResponse whose hits carry the given (_id -> score) pairs, all from the default
+     * index. Every hit carries an {@code _index}, as a real leg response's hits always do — it comes from the shard target
+     * the response was read from — and fusion requires it.
+     */
+    private MultiSearchResponse.Item legItem(Map<String, Float> idToScore) {
+        return legItemFromIndex(INDEX, idToScore);
+    }
+
+    /** Like {@link #legItem} but from a named index, for asserting cross-index document identity. */
+    private MultiSearchResponse.Item legItemFromIndex(String index, Map<String, Float> idToScore) {
+        SearchHit[] hits = new SearchHit[idToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : idToScore.entrySet()) {
+            hits[i] = hitFrom(i, index, e.getKey(), e.getValue());
+            i++;
+        }
+        return successfulItem(hits);
+    }
+
+    /**
+     * One leg whose own hits span several indices — {@code "index/_id" -> score} — which is what a leg of a multi-index
+     * search actually returns. Insertion-ordered so the clause order under assertion is deterministic.
+     */
+    private MultiSearchResponse.Item legItemAcrossIndices(LinkedHashMap<String, Float> indexAndIdToScore) {
+        SearchHit[] hits = new SearchHit[indexAndIdToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : indexAndIdToScore.entrySet()) {
+            String[] indexAndId = e.getKey().split("/", 2);
+            hits[i] = hitFrom(i, indexAndId[0], indexAndId[1], e.getValue());
+            i++;
+        }
+        return successfulItem(hits);
+    }
+
+    private SearchHit hitFrom(int docId, String index, String id, float score) {
+        SearchHit hit = new SearchHit(docId, id, Map.of(), Map.of());
+        hit.score(score);
+        hit.shard(new SearchShardTarget("node-1", new ShardId(new Index(index, index + "-uuid"), 0), null, OriginalIndices.NONE));
+        return hit;
+    }
+
+    /**
+     * A leg that ran with {@code explain: true}: every hit carries the leg's own explanation of its raw score, which is
+     * what the fan-out records and the response side nests under the normalized value. Insertion-ordered so the recorded
+     * leg order is deterministic.
+     */
+    private MultiSearchResponse.Item explainedLegItem(LinkedHashMap<String, Float> idToScore) {
+        SearchHit[] hits = new SearchHit[idToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : idToScore.entrySet()) {
+            hits[i] = hitFrom(i, INDEX, e.getKey(), e.getValue());
+            hits[i].explanation(Explanation.match(e.getValue(), "leg raw score"));
+            i++;
+        }
+        return successfulItem(hits);
+    }
+
+    /**
+     * The fused score each Top clause carries, keyed by the {@code _id} it addresses — read off the query rather than
+     * assumed from the input, so an assertion about "the score round 2 ranks by" is about the query round 2 will run.
+     */
+    private Map<String, Float> fusedScoresById(QueryBuilder fused) {
+        Map<String, Float> byId = new LinkedHashMap<>();
+        for (QueryBuilder clause : ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().should()) {
+            ConstantScoreQueryBuilder top = (ConstantScoreQueryBuilder) clause;
+            for (QueryBuilder filter : ((BoolQueryBuilder) top.innerQuery()).filter()) {
+                if (filter instanceof IdsQueryBuilder ids) {
+                    byId.put(ids.ids().iterator().next(), top.boost());
+                }
+            }
+        }
+        return byId;
+    }
+
+    /**
+     * A leg item whose hits carry no {@code _index} — no shard target was ever set on them. Not a shape a real leg response
+     * can have (a coordinator-side hit's {@code _index} comes from the shard it was read from), which is exactly why fusion
+     * treats it as an invariant violation rather than something to work around.
+     */
+    private MultiSearchResponse.Item indexlessLegItem(Map<String, Float> idToScore) {
+        SearchHit[] hits = new SearchHit[idToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : idToScore.entrySet()) {
+            SearchHit hit = new SearchHit(i, e.getKey(), Map.of(), Map.of());
+            hit.score(e.getValue());
+            hits[i++] = hit;
+        }
+        return successfulItem(hits);
+    }
+
+    private MultiSearchResponse.Item successfulItem(SearchHit[] hits) {
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(hits.length, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        SearchResponse response = new SearchResponse(sections, null, 1, 1, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    private MultiSearchResponse.Item failedItem() {
+        return new MultiSearchResponse.Item(null, new RuntimeException("leg boom"));
+    }
+
+    /** A wholly-failed leg whose failure carries a specific status, the way a real sub-search failure does. */
+    private MultiSearchResponse.Item failedItemWithCause(Exception cause) {
+        return new MultiSearchResponse.Item(null, cause);
+    }
+
+    /** A SUCCESSFUL MultiSearch item that lost a shard under allow_partial=true: HTTP 200, fewer hits, non-empty
+     *  shardFailures (isFailure()==false). Models a partially-degraded leg. */
+    private MultiSearchResponse.Item partialLegItem(Map<String, Float> idToScore) {
+        SearchHit[] hits = new SearchHit[idToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : idToScore.entrySet()) {
+            hits[i] = hitFrom(i, INDEX, e.getKey(), e.getValue());
+            i++;
+        }
+        SearchHits searchHits = new SearchHits(hits, new TotalHits(hits.length, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        ShardSearchFailure[] failures = new ShardSearchFailure[] { new ShardSearchFailure(new RuntimeException("shard down")) };
+        // totalShards=2, successful=1, skipped=0, one shard failure → partial but SUCCESSFUL item.
+        SearchResponse response = new SearchResponse(sections, null, 2, 1, 0, 10, failures, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    private MultiSearchResponse multiSearch(MultiSearchResponse.Item... items) {
+        return new MultiSearchResponse(items, 10L);
+    }
+
+    // ---- buildLegMultiSearch ----
+
+    /**
+     * The assembly contract only: one leg request per sub-query, each carrying that sub-query and the window. What a leg
+     * inherits from the user's request is {@link CandidateScope}'s job and is covered by {@code CandidateScopeTests}.
+     */
+    public void testBuildLegMultiSearch_oneRequestPerLegBuiltFromTheScope() {
+        SearchRequest request = new SearchRequest(INDEX);
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+
+        MultiSearchRequest ms = HybridFusionOrchestrator.buildLegMultiSearch(CandidateScope.from(request), legs, 50);
+
+        assertEquals(2, ms.requests().size());
+        for (int i = 0; i < legs.size(); i++) {
+            SearchRequest leg = ms.requests().get(i);
+            assertEquals("leg " + i + " runs its own sub-query", legs.get(i), leg.source().query());
+            assertEquals(50, leg.source().size());
+            assertEquals(SearchPipelineService.NOOP_PIPELINE_ID, leg.pipeline());
+        }
+    }
+
+    // ---- buildFusedQuery: Top+Tail / Top-only / match_none ----
+
+    public void testBuildFusedQuery_topLevelWithAggs_keepsTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f, "3", 0.4f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().aggregation(
+            org.opensearch.search.aggregations.AggregationBuilders.terms("t").field("f")
+        );
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        assertTrue(fused instanceof HybridFusionQueryBuilder);
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("union of {1,2,3} scored in Top", 3, self.should().size());
+        assertEquals("aggs → Tail retained", 1, self.filter().size());
+    }
+
+    public void testBuildFusedQuery_topLevelPlainTopK_topOnly() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        // track_total_hits:false, no aggs/highlight/explain → plain top-K, Tail dropped.
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false);
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals(2, self.should().size());
+        assertEquals("plain top-K → no Tail", 0, self.filter().size());
+    }
+
+    public void testBuildFusedQuery_tailDecisionIsDepthIndependent() {
+        // The Tail decision comes from the REQUEST alone, never from whether this hybrid is top-level or nested: the
+        // fused query self-erases the same way at any depth, and an enclosing clause simply intersects it. So with aggs
+        // present the Tail is retained — nesting no longer silently downgrades agg/total_hits accuracy.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().aggregation(
+            org.opensearch.search.aggregations.AggregationBuilders.terms("t").field("f")
+        );
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("aggs → Tail retained regardless of nesting depth", 1, self.filter().size());
+    }
+
+    public void testBuildFusedQuery_whenSortedByField_keepsTail() {
+        // A non-_score sort ranks by the sort key, so the fused scores only pick the candidate set. With Top only, the
+        // request would sort a window-sized arbitrary subset of its matches; the Tail widens round 2 to the full union.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false).sort("price");
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("field sort → Tail retained so the sort covers the full leg union", 1, self.filter().size());
+    }
+
+    public void testBuildFusedQuery_whenSortedByScoreOnly_staysTopOnly() {
+        // Sorting by _score is the fused ranking itself, so it must not drag in a Tail the request does not need.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false).sort("_score");
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("_score sort → still plain top-K, no Tail", 0, self.filter().size());
+    }
+
+    public void testBuildFusedQuery_whenCollapseInnerHits_keepsTail() {
+        // collapse.inner_hits makes core re-run THIS query once per group, filtered to the group key. A group's members
+        // are whatever shares that key — unrelated to the fused window — so with Top only every member that ranked outside
+        // the window matches nothing and silently vanishes from the expansion, where classic hybrid returns all of them.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false)
+            .collapse(new CollapseBuilder("grp").setInnerHits(new InnerHitBuilder("members")));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("collapse.inner_hits → Tail retained so a group expands to all of its members", 1, self.filter().size());
+    }
+
+    public void testBuildFusedQuery_whenCollapseWithoutInnerHits_staysTopOnly() {
+        // Plain collapse groups the documents round 2 already returns — core runs no expansion search at all — so it must
+        // not drag in a Tail the request did not ask for.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false).collapse(new CollapseBuilder("grp"));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("collapse grouping alone → still plain top-K, no Tail", 0, self.filter().size());
+    }
+
+    public void testBuildFusedQuery_emptyResult_matchNone() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of()));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxArithmetic(), 10);
+
+        assertTrue(fused instanceof MatchNoneQueryBuilder);
+    }
+
+    public void testBuildFusedQuery_windowCapsRankedDocs() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.8f, "3", 0.7f, "4", 0.6f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            2
+        );
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("window=2 caps the Top to 2 docs", 2, self.should().size());
+    }
+
+    // ---- leg failure: a wholly-failed leg fails fast, a partially-degraded leg is fused ----
+
+    public void testBuildFusedQuery_whenAnyLegFailed_thenFailsFast() {
+        // A wholly-failed leg (all shards down / non-partial error -> Item.isFailure) fails the whole request — fusing
+        // over a missing leg would silently change the ranking function. (A merely partial leg degrades instead — see
+        // testBuildFusedQuery_whenLegPartiallyFailed_thenFused.) The failing leg's index is reported, cause chained.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), failedItem());
+
+        OpenSearchStatusException e = expectThrows(
+            OpenSearchStatusException.class,
+            () -> HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                ms,
+                legs,
+                minMaxArithmetic(),
+                10
+            )
+        );
+        assertTrue("reports the failing leg index", e.getMessage().contains("fused-mode sub-query 1 failed"));
+        assertNotNull("chains the leg failure as cause", e.getCause());
+        assertTrue(e.getCause().getMessage().contains("leg boom"));
+        // A bare RuntimeException really is a server error, so 500 here is the derived status, not a default.
+        assertEquals(RestStatus.INTERNAL_SERVER_ERROR, e.status());
+    }
+
+    public void testBuildFusedQuery_whenAllLegsFailed_thenFailsFast() {
+        // All legs failing also fails fast — on the first failed leg (index 0).
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(failedItem(), failedItem());
+
+        OpenSearchStatusException e = expectThrows(
+            OpenSearchStatusException.class,
+            () -> HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxArithmetic(), 10)
+        );
+        assertTrue(e.getMessage().contains("fused-mode sub-query 0 failed"));
+        assertNotNull(e.getCause());
+    }
+
+    /**
+     * A leg failure must keep the status the leg itself reported. The user's own mistake — say a malformed range bound,
+     * which classic hybrid answers with 400 {@code query_shard_exception} — was arriving as a 500 because the wrapper was
+     * an {@code IllegalStateException} and {@code ExceptionsHelper#status} has no case for it, leaving the real status
+     * reachable only under {@code caused_by}.
+     */
+    public void testBuildFusedQuery_whenLegFailedWithClientError_thenStatusStaysBadRequest() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItem(Map.of("1", 0.9f)),
+            failedItemWithCause(
+                new SearchPhaseExecutionException(
+                    "query",
+                    "all shards failed",
+                    new ShardSearchFailure[] { new ShardSearchFailure(new IllegalArgumentException("bad range bound")) }
+                )
+            )
+        );
+
+        OpenSearchStatusException e = expectThrows(
+            OpenSearchStatusException.class,
+            () -> HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxArithmetic(), 10)
+        );
+        assertEquals("the leg's own 400 must survive the wrapper", RestStatus.BAD_REQUEST, e.status());
+        assertEquals("and the status a REST layer derives must agree", RestStatus.BAD_REQUEST, ExceptionsHelper.status(e));
+    }
+
+    /** Same for a queue rejection: masking 429 as 500 means a client's retry-on-429 never fires. */
+    public void testBuildFusedQuery_whenLegRejected_thenStatusStaysTooManyRequests() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItem(Map.of("1", 0.9f)),
+            failedItemWithCause(new OpenSearchRejectedExecutionException("search queue full"))
+        );
+
+        OpenSearchStatusException e = expectThrows(
+            OpenSearchStatusException.class,
+            () -> HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxArithmetic(), 10)
+        );
+        assertEquals(RestStatus.TOO_MANY_REQUESTS, e.status());
+        assertEquals(RestStatus.TOO_MANY_REQUESTS, ExceptionsHelper.status(e));
+    }
+
+    public void testBuildFusedQuery_whenLegPartiallyFailed_thenFusedWithWarning() {
+        // A leg that lost some shards under allow_partial_search_results=true is a SUCCESSFUL item with fewer hits — it
+        // is fused (degrade, matching OpenSearch's default), not rejected. groupLegHits only hard-fails a wholly-failed
+        // item, so a partial-but-successful leg flows through — but emits a Warning header naming it, because per-leg
+        // normalization means the degraded leg can shift the fused ranking, not just drop docs.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(partialLegItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            10
+        );
+
+        assertTrue(fused instanceof HybridFusionQueryBuilder);
+        assertEquals(
+            "both legs' docs fused despite one leg's partial shard failure",
+            2,
+            ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().should().size()
+        );
+        assertWarnings(
+            "[hybrid] fused-mode sub-query [0] returned partial results (shard failures); fused scores were computed "
+                + "over an incomplete result set, so ranking may differ from a complete run"
+        );
+    }
+
+    public void testBuildFusedQuery_whenNoLegDegraded_thenNoWarning() {
+        // Clean legs must not emit a warning (OpenSearchTestCase fails the test on any unasserted warning).
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+
+        HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder().trackTotalHits(false), ms, legs, minMaxArithmetic(), 10);
+    }
+
+    // ---- document identity: _index + _id ----
+
+    public void testBuildFusedQuery_whenSameIdInDifferentIndices_thenNotConflated() {
+        // The bug this guards: keying on _id alone made a doc in idx-a and a DIFFERENT doc in idx-b with the same _id
+        // fuse as one entity, and the self-erased _id Top then boosted both to that one score. Keyed by _index + _id they
+        // stay two documents, and each Top clause is index-qualified so a score lands on exactly one of them.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex("idx-a", Map.of("1", 0.9f)), legItemFromIndex("idx-b", Map.of("1", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            10
+        );
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("same _id in two indices stays two distinct fused docs", 2, self.should().size());
+        for (QueryBuilder clause : self.should()) {
+            QueryBuilder inner = ((ConstantScoreQueryBuilder) clause).innerQuery();
+            assertTrue("multi-index Top clause must be index-qualified", inner instanceof BoolQueryBuilder);
+            assertEquals("qualified by _id AND _index", 2, ((BoolQueryBuilder) inner).filter().size());
+        }
+    }
+
+    /**
+     * The blocker this guards. Qualification used to be dropped when the window spanned a single index, but the window is
+     * not evidence about the request — one index outranking its siblings, or a window_size below the fused set size, both
+     * yield a single-index window for a search that round 2 still executes against every requested index, where a sibling
+     * index's same-_id doc matches the bare ids clause and inherits the fused score. So qualify unconditionally.
+     */
+    public void testBuildFusedQuery_whenWindowSpansOneIndex_thenTopIsStillQualified() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex("idx-a", Map.of("1", 0.9f)), legItemFromIndex("idx-a", Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            10
+        );
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals(2, self.should().size());
+        for (QueryBuilder clause : self.should()) {
+            QueryBuilder inner = ((ConstantScoreQueryBuilder) clause).innerQuery();
+            assertTrue("a single-index window must not drop the _index qualification", inner instanceof BoolQueryBuilder);
+            assertEquals("qualified by _id AND _index", 2, ((BoolQueryBuilder) inner).filter().size());
+        }
+    }
+
+    /**
+     * A hit with no {@code _index} cannot be fused, and the request fails rather than degrading. The previous behaviour was
+     * to drop the whole {@code indices} array and address the window by {@code _id} alone — which is the same-{@code _id}
+     * conflation the two tests above exist to prevent, reintroduced for every clause because one hit lacked an index. Since
+     * a coordinator-side hit always carries its {@code _index}, this shape is a broken invariant, not user input.
+     */
+    public void testBuildFusedQuery_whenAnyHitCarriesNoIndex_thenFailsRatherThanDegrading() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex("idx-a", Map.of("2", 0.8f)), indexlessLegItem(Map.of("1", 0.9f)));
+
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                ms,
+                legs,
+                minMaxArithmetic(),
+                10
+            )
+        );
+        assertTrue("names the offending leg and hit: " + e.getMessage(), e.getMessage().contains("sub-query 1 returned a hit [_id: 1]"));
+        assertTrue(e.getMessage().contains("no [_index]"));
+    }
+
+    // ---- inner_hits are registered without executing the legs ----
+
+    public void testBuildFusedQuery_whenLegHasInnerHits_thenRegisteredWithoutTail() {
+        // inner_hits are built in the fetch phase from the registered contexts, so a leg only needs to be REGISTERED,
+        // never executed. With track_total_hits:false and no aggs there is nothing else needing the Tail, so the query
+        // stays Top-only (no redundant leg re-execution) while inner_hits are still extractable.
+        QueryBuilder nestedLeg = new org.opensearch.index.query.NestedQueryBuilder(
+            "user",
+            new MatchQueryBuilder("user.name", "alice"),
+            org.apache.lucene.search.join.ScoreMode.None
+        ).innerHit(new org.opensearch.index.query.InnerHitBuilder());
+        List<QueryBuilder> legs = List.of(nestedLeg, new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            10
+        );
+
+        HybridFusionQueryBuilder fusedBuilder = (HybridFusionQueryBuilder) fused;
+        assertEquals("leg inner_hits no longer force the Tail", 0, fusedBuilder.buildSelfErasedQuery().filter().size());
+        Map<String, org.opensearch.index.query.InnerHitContextBuilder> innerHits = new java.util.HashMap<>();
+        fusedBuilder.extractInnerHitBuilders(innerHits);
+        assertFalse("inner_hits must still be registered for the fetch phase", innerHits.isEmpty());
+    }
+
+    // ---- knn/neural leg materialized in the Tail (no second ANN walk), addressed by _index + _id ----
+
+    /** A leg reporting a materializable writeable name, without touching KNN-internal construction/validation. */
+    private QueryBuilder legNamed(String writeableName) {
+        return new MatchQueryBuilder("vec", "q") {
+            @Override
+            public String getWriteableName() {
+                return writeableName;
+            }
+        };
+    }
+
+    /** An aggregation is the cheapest Tail trigger, so the materialized leg is there to inspect. */
+    private SearchSourceBuilder sourceWithAggregation() {
+        return new SearchSourceBuilder().aggregation(org.opensearch.search.aggregations.AggregationBuilders.terms("t").field("f"));
+    }
+
+    private BoolQueryBuilder tailOf(QueryBuilder fused) {
+        return (BoolQueryBuilder) ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().get(0);
+    }
+
+    /** Asserts a clause addresses exactly these ids inside exactly this index. */
+    private void assertAddressedTo(QueryBuilder clause, String index, String... ids) {
+        assertTrue("expected an _index-qualified bool, got " + clause, clause instanceof BoolQueryBuilder);
+        BoolQueryBuilder qualified = (BoolQueryBuilder) clause;
+        assertEquals("qualified by _id AND _index", 2, qualified.filter().size());
+        assertEquals(Set.of(ids), ((IdsQueryBuilder) qualified.filter().get(0)).ids());
+        TermQueryBuilder indexTerm = (TermQueryBuilder) qualified.filter().get(1);
+        assertEquals("_index", indexTerm.fieldName());
+        assertEquals(index, indexTerm.value());
+    }
+
+    public void testBuildFusedQuery_knnLeg_materializedAsQualifiedDocsInTail() {
+        // A materializable leg's Lucene match set IS its returned top-k, so legQueriesForTail replaces it with a direct
+        // address of those hits rather than re-walking the ANN graph — and addresses them by _index + _id, because the
+        // Tail is a filter and therefore decides the match set.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("knn"));
+        MultiSearchResponse ms = multiSearch(
+            legItemFromIndex(INDEX, Map.of("1", 0.9f)),
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))
+        );
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder tail = tailOf(fused);
+        assertEquals(2, tail.should().size());
+        assertEquals("the lexical leg stays a real query", legs.get(0), tail.should().get(0));
+        assertAddressedTo(tail.should().get(1), INDEX, "2", "3");
+    }
+
+    /**
+     * The blocker this guards. A leg of a multi-index search returns hits from several indices, and each id must be
+     * addressed inside the index it came from. Addressed by {@code _id} alone, every same-{@code _id} sibling document in
+     * the other index passed the Tail filter — counted into {@code total_hits}, into every aggregation bucket, and
+     * returned as a score-0 hit — which inflates exactly the numbers the Tail exists to make correct. Qualifying the Top
+     * did not help: the Tail was built straight from the leg hits, never from the ranked window's resolved indices.
+     */
+    public void testBuildFusedQuery_whenKnnLegSpansTwoIndices_thenTailAddressesEachIndexSeparately() {
+        LinkedHashMap<String, Float> knnHits = new LinkedHashMap<>();
+        knnHits.put("idx-a/1", 0.9f);
+        knnHits.put("idx-a/2", 0.8f);
+        knnHits.put("idx-b/1", 0.7f);
+        List<QueryBuilder> legs = List.of(legNamed("knn"));
+        MultiSearchResponse ms = multiSearch(legItemAcrossIndices(knnHits));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder tail = tailOf(fused);
+        assertEquals(1, tail.should().size());
+        BoolQueryBuilder perIndex = (BoolQueryBuilder) tail.should().get(0);
+        assertEquals("one qualified clause per index the leg returned hits from", 2, perIndex.should().size());
+        assertAddressedTo(perIndex.should().get(0), "idx-a", "1", "2");
+        assertAddressedTo(perIndex.should().get(1), "idx-b", "1");
+        assertTrue(
+            "no clause may address an _id without its _index",
+            perIndex.should().stream().noneMatch(clause -> clause instanceof IdsQueryBuilder)
+        );
+    }
+
+    /**
+     * The Top and the Tail must identify a document the same way — they are the scoring half and the matching half of one
+     * query, and a Tail narrower than the Top would filter away the very documents the Top scored. Both go through
+     * {@link HybridFusionQueryBuilder#addressDocuments}, so this compares the two builders directly rather than
+     * re-describing the shape.
+     */
+    public void testBuildFusedQuery_whenLegIsMaterialized_thenTopAndTailAddressTheDocumentIdentically() {
+        List<QueryBuilder> legs = List.of(legNamed("knn"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        QueryBuilder topAddress = ((ConstantScoreQueryBuilder) self.should().get(0)).innerQuery();
+        QueryBuilder tailAddress = ((BoolQueryBuilder) self.filter().get(0)).should().get(0);
+        assertEquals("Top and Tail must address the same document identically", topAddress, tailAddress);
+    }
+
+    public void testBuildFusedQuery_whenMaterializedLegHitsCarryNoIndex_thenFailsRatherThanDegrading() {
+        // The Tail is a filter, so an _id-only clause here widens the match set to every same-_id document in the cluster —
+        // inflating total_hits and every aggregation bucket. The invariant is asserted once, where every leg's hits enter
+        // fusion, so the Tail path refuses the same shape the Top path does.
+        List<QueryBuilder> legs = List.of(legNamed("knn"));
+        MultiSearchResponse ms = multiSearch(indexlessLegItem(Map.of("2", 0.8f, "3", 0.7f)));
+
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10)
+        );
+        assertTrue(e.getMessage().contains("cannot be fused"));
+    }
+
+    /**
+     * An ANN leg that matched nothing must keep matching nothing. {@code bool{should: []}} compiles to
+     * {@code MatchAllDocsQuery}, so an empty leg rendered as an empty bool would make the Tail match every document in the
+     * index — total_hits and every aggregation would report the whole corpus. The bare ids query this replaced was only
+     * accidentally safe (core rewrites an empty ids query to {@code match_none}), so the guard is explicit here.
+     */
+    public void testBuildFusedQuery_whenKnnLegReturnedNothing_thenTailClauseIsMatchNoneNotMatchAll() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("knn"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of()));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder tail = tailOf(fused);
+        assertEquals(2, tail.should().size());
+        assertTrue("an empty ANN leg must be match_none, never an empty bool", tail.should().get(1) instanceof MatchNoneQueryBuilder);
+    }
+
+    // ---- the truncation bound: an address of the returned hits stands for the match set only if nothing was truncated ----
+
+    /**
+     * The bound that makes materialization sound, and the under-count it closes. A materialized leg stands for the documents
+     * it <i>returned</i>, which is {@code min(matches, window_size)} because {@code newLegRequest} caps every leg at
+     * {@code size = window_size}. So a leg that filled the window may have matched documents it never returned — and the
+     * Tail, being a {@code filter}, would leave those out of {@code total_hits} and out of every aggregation bucket, at
+     * HTTP 200, where classic hybrid counts them. Such a leg is therefore kept as the real query and counted properly.
+     *
+     * <p>The same leg one window wider is the control: it came back short, so it was not truncated and the address is exact.
+     * That is what makes the first half a truncation test rather than materialization being switched off.
+     */
+    public void testBuildFusedQuery_whenMaterializableLegFilledTheWindow_thenKeptAsTheRealQueryInTheTail() {
+        List<QueryBuilder> legs = List.of(legNamed("knn"));
+        Map<String, Float> twoHits = Map.of("2", 0.8f, "3", 0.7f);
+
+        QueryBuilder truncated = HybridFusionOrchestrator.buildFusedQuery(
+            sourceWithAggregation(),
+            multiSearch(legItemFromIndex(INDEX, twoHits)),
+            legs,
+            minMaxArithmetic(),
+            twoHits.size()
+        );
+        assertSame(
+            "a leg that returned as many hits as the window let it may have matched more, so it must be counted for real",
+            legs.get(0),
+            tailOf(truncated).should().get(0)
+        );
+
+        QueryBuilder exact = HybridFusionOrchestrator.buildFusedQuery(
+            sourceWithAggregation(),
+            multiSearch(legItemFromIndex(INDEX, twoHits)),
+            legs,
+            minMaxArithmetic(),
+            twoHits.size() + 1
+        );
+        assertAddressedTo(tailOf(exact).should().get(0), INDEX, "2", "3");
+    }
+
+    /**
+     * The defect the bound was added for. {@code neural} is a materializable <i>name</i>, but against a
+     * {@code rank_features} semantic embedding field a {@code neural} query rewrites into {@code neural_sparse}, whose match
+     * set is every document holding a query token — far larger than the window. Fused mode substitutes the Tail before the
+     * legs are rewritten, so the coordinator sees the same {@code neural} name for the sparse leg as for a dense one and
+     * cannot tell them apart. The truncation test is what stops the sparse leg from being materialized, because over a real
+     * corpus it fills the window.
+     */
+    public void testBuildFusedQuery_whenNeuralLegFilledTheWindow_thenKeptAsTheRealQueryInTheTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("neural"));
+        MultiSearchResponse ms = multiSearch(
+            legItemFromIndex(INDEX, Map.of("1", 0.9f)),
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))
+        );
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 2);
+
+        assertSame(
+            "a neural leg that filled the window may be a sparse one, whose match set the window truncated",
+            legs.get(1),
+            tailOf(fused).should().get(1)
+        );
+    }
+
+    /**
+     * The test is a necessary condition, not a sufficient one — the type check stays. A term-defined leg that came back
+     * short of the window is still kept as the real query: materializing it would be exact but pointless, since re-running
+     * it walks no graph, and it would replace whatever inner structure the leg compiles to on the shard.
+     */
+    public void testBuildFusedQuery_whenNonAnnLegCameBackShort_thenStillNotMaterialized() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        assertSame("only an ANN leg is worth materializing", legs.get(0), tailOf(fused).should().get(0));
+    }
+
+    /**
+     * The bound belongs to the Tail, not to the carried form. On the Top-only path there is no Tail by construction, so what
+     * a substitute addresses cannot reach {@code total_hits} or an aggregation — applying the bound there would buy a
+     * shard-side ANN compile (and, for {@code neural}, a second inference) for a reporting field alone. Both paths share one
+     * materializer, so this pins that the truncation test did not leak into the one where nothing counts.
+     */
+    public void testBuildFusedQuery_whenTopOnlyAndNamedLegFilledTheWindow_thenStillMaterializedForRegistration() {
+        List<QueryBuilder> legs = List.of(legNamed("knn").queryName("vector"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 2);
+
+        assertEquals("registration must not turn a Top-only query into Top+Tail", 0, tailFilterCount(fused));
+        QueryBuilder carried = namedOnlyLegsOf(fused).get(0);
+        assertEquals("vector", carried.queryName());
+        assertAddressedTo(carried, INDEX, "2", "3");
+    }
+
+    // ---- weighted combination + highlight/totals tail triggers (explain/profile do NOT trigger the Tail) ----
+
+    public void testBuildFusedQuery_withPerLegWeights_fusesWithoutError() {
+        // Weighted arithmetic mean: exercises weightsParams() building the combination technique from FusionSpec weights.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f, "3", 0.4f)));
+        FusionSpec weighted = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            new float[] { 0.7f, 0.3f }
+        );
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            weighted,
+            10
+        );
+
+        assertTrue(fused instanceof HybridFusionQueryBuilder);
+        assertEquals(3, ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().should().size());
+    }
+
+    public void testBuildFusedQuery_explainDoesNotTriggerTail() {
+        // explain/profile no longer force the Tail: fusion is computed on the coordinator (Top is constant_score(ids)),
+        // so the Lucene tree has no fusion breakdown to explain and the Tail would only re-execute legs. With
+        // track_total_hits:false there is nothing else needing the Tail, so the query is Top-only.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false).explain(true);
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("explain alone → no Tail", 0, ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().size());
+    }
+
+    // ---- buildFusedQuery: the per-leg breakdown recorded for the request's `explain` ----
+
+    /**
+     * The contract of the recorded breakdown: one entry per document fusion ranked, one node per leg that matched it,
+     * that leg's own round-1 explanation kept under its normalized value, and a top value equal to the score round 2 will
+     * actually rank the document by. The last part is what makes the tree an account of the ranking rather than a
+     * plausible-looking set of numbers beside it.
+     */
+    public void testBuildFusedQuery_whenLegsRanExplained_thenEveryRankedDocumentIsRecorded() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.9f))),
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.6f)))
+        );
+        FusedDocExplanations explanations = new FusedDocExplanations();
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false).explain(true),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            10,
+            new FusedCoordinatorTimings(),
+            explanations
+        );
+
+        assertFalse("an explained fan-out records what it fused", explanations.isEmpty());
+        assertEquals(
+            "the wording is the combination technique's own",
+            "arithmetic_mean combination of:",
+            explanations.combinationDescription()
+        );
+        assertEquals("and the normalizer's own", "min_max normalization of:", explanations.normalizationDescription());
+
+        Explanation tree = explanations.explain(FusedDocExplanations.documentKey(INDEX, "1"), Float.NaN);
+        assertNotNull("the one ranked document is described", tree);
+        assertEquals("one node per leg that matched", 2, tree.getDetails().length);
+        for (int leg = 0; leg < 2; leg++) {
+            Explanation legNode = tree.getDetails()[leg];
+            assertEquals("min_max normalization of:", legNode.getDescription());
+            assertEquals("the leg's own explanation is kept under its normalized value", 1, legNode.getDetails().length);
+            assertEquals("leg raw score", legNode.getDetails()[0].getDescription());
+        }
+        assertEquals(
+            "the described score is the one fusion computed, which for an undegenerate document is also the one round 2 "
+                + "ranks by (see the floored case below, where the two differ)",
+            fusedScoresById(fused).get("1"),
+            tree.getValue().floatValue(),
+            0.0f
+        );
+    }
+
+    /**
+     * The normalization node's wording comes from the normalizer's {@code describe()}, not its {@code techniqueName()},
+     * which for rrf are different strings: the name alone would describe a normalization the request did not ask for,
+     * since two queries differing only in {@code rank_constant} score differently. It read the name at first, so this is
+     * the assertion that would have caught it — and the one the min_max case above structurally cannot make, min_max
+     * being the technique where the two strings coincide.
+     */
+    public void testBuildFusedQuery_whenNormalizationIsRrf_thenTheDescriptionNamesTheRankConstant() {
+        int rankConstant = 25;
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.9f))),
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.6f)))
+        );
+        FusedDocExplanations explanations = new FusedDocExplanations();
+
+        HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false).explain(true),
+            ms,
+            legs,
+            rrf(rankConstant),
+            10,
+            new FusedCoordinatorTimings(),
+            explanations
+        );
+
+        assertEquals(
+            "the configured rank constant, in classic hybrid's wording",
+            "rrf, rank_constant [" + rankConstant + "] normalization of:",
+            explanations.normalizationDescription()
+        );
+        // Pinned negatively as well, because the pre-fix string is a prefix of the correct one: a contains() assertion
+        // would have passed against it.
+        assertNotEquals("rrf normalization of:", explanations.normalizationDescription());
+
+        Explanation tree = explanations.explain(FusedDocExplanations.documentKey(INDEX, "1"), Float.NaN);
+        for (Explanation legNode : tree.getDetails()) {
+            assertEquals("rrf, rank_constant [" + rankConstant + "] normalization of:", legNode.getDescription());
+        }
+    }
+
+    /**
+     * A leg that did not match a document contributes no node rather than a zero one — the same choice classic hybrid
+     * makes. A zero node would read as "this leg scored it at zero" when the leg never saw it.
+     */
+    public void testBuildFusedQuery_whenALegDidNotMatchADocument_thenOnlyTheMatchingLegsAreRecorded() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        // Only document 2 is in both legs; 1 is leg 0's alone and 3 is leg 1's alone.
+        MultiSearchResponse ms = multiSearch(
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f))),
+            explainedLegItem(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.4f)))
+        );
+        FusedDocExplanations explanations = new FusedDocExplanations();
+
+        HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false).explain(true),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            10,
+            new FusedCoordinatorTimings(),
+            explanations
+        );
+
+        assertEquals(
+            "the document both legs matched keeps both nodes",
+            2,
+            explanations.explain(FusedDocExplanations.documentKey(INDEX, "2"), Float.NaN).getDetails().length
+        );
+        assertEquals(
+            "a document only leg 0 matched gets one node, not two with a zero",
+            1,
+            explanations.explain(FusedDocExplanations.documentKey(INDEX, "1"), Float.NaN).getDetails().length
+        );
+        assertEquals(
+            "and likewise for one only the last leg matched",
+            1,
+            explanations.explain(FusedDocExplanations.documentKey(INDEX, "3"), Float.NaN).getDetails().length
+        );
+    }
+
+    /**
+     * Recording happens after the window cut, so what is described is exactly what round 2 will rank. A document the
+     * window dropped has no Top clause to carry a fused score, so describing it would name a ranking that never happened.
+     */
+    public void testBuildFusedQuery_whenTheWindowDroppedADocument_thenOnlyTheWindowIsRecorded() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(explainedLegItem(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f, "3", 0.1f))));
+        FusedDocExplanations explanations = new FusedDocExplanations();
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false).explain(true),
+            ms,
+            legs,
+            minMaxArithmetic(),
+            1,
+            new FusedCoordinatorTimings(),
+            explanations
+        );
+
+        Map<String, Float> ranked = fusedScoresById(fused);
+        assertEquals("window=1 ranks one document", 1, ranked.size());
+        String rankedId = ranked.keySet().iterator().next();
+        assertNotNull(
+            "the ranked document is described",
+            explanations.explain(FusedDocExplanations.documentKey(INDEX, rankedId), Float.NaN)
+        );
+        for (String dropped : List.of("1", "2", "3")) {
+            if (dropped.equals(rankedId)) {
+                continue;
+            }
+            assertNull(
+                "a document the window dropped has no fused score to describe",
+                explanations.explain(FusedDocExplanations.documentKey(INDEX, dropped), Float.NaN)
+            );
+        }
+    }
+
+    /**
+     * The cost of the always-constructed collector on the path that never asks for it. An unexplained request's legs return
+     * hits with no explanation, so nothing is recorded and nothing about the fused query changes — which is what makes the
+     * explained and unexplained runs compute the same ranking rather than two code paths that agree by inspection.
+     */
+    public void testBuildFusedQuery_whenLegsRanUnexplained_thenNothingIsRecorded() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false);
+        FusedDocExplanations explanations = new FusedDocExplanations();
+
+        QueryBuilder recorded = HybridFusionOrchestrator.buildFusedQuery(
+            source,
+            multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f))),
+            legs,
+            minMaxArithmetic(),
+            10,
+            new FusedCoordinatorTimings(),
+            explanations
+        );
+        QueryBuilder plain = HybridFusionOrchestrator.buildFusedQuery(
+            source,
+            multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f))),
+            legs,
+            minMaxArithmetic(),
+            10
+        );
+
+        assertTrue("legs that ran unexplained have nothing to record", explanations.isEmpty());
+        assertNull("so no document gets a tree", explanations.combinationDescription());
+        assertEquals("and the fused query is the one the overload without a collector builds", plain, recorded);
+    }
+
+    public void testBuildFusedQuery_profileDoesNotTriggerTail() {
+        // Same as explain: profiling the self-erased query would only time a redundant re-execution of legs that already
+        // ran in the fan-out, so profile is not a Tail trigger. With track_total_hits:false the query is Top-only.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+        SearchSourceBuilder source = new SearchSourceBuilder().trackTotalHits(false).profile(true);
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(source, ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("profile alone → no Tail", 0, ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().size());
+    }
+
+    public void testBuildFusedQuery_defaultTrackTotalHits_keepsTailForAccurateCount() {
+        // No aggs/explain and track_total_hits left at default → wantsTotalsBeyondWindow keeps the Tail for the count.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("default totals → Tail retained", 1, ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().size());
+    }
+
+    public void testBuildFusedQuery_nullSource_keepsTail() {
+        // A null source (defensive) is treated as "wants totals" → Tail retained.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(null, ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals(1, ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().size());
+    }
+
+    public void testBuildFusedQuery_neuralNamedLeg_materializedAsQualifiedDocs() {
+        // "neural" is also a materializable name → its leg is addressed by its returned hits in the Tail, not re-walked.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("neural"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        assertAddressedTo(tailOf(fused).should().get(1), INDEX, "2");
+    }
+
+    // ---- a leg's _name reaches matched_queries without the Tail: carried for registration, not for execution ----
+
+    private List<QueryBuilder> namedOnlyLegsOf(QueryBuilder fused) {
+        return ((HybridFusionQueryBuilder) fused).namedOnlyQueries();
+    }
+
+    private SearchSourceBuilder topOnlySource() {
+        return new SearchSourceBuilder().trackTotalHits(false);
+    }
+
+    /**
+     * The measured defect. {@code matched_queries} is reported from the names registered while a query is converted, and the
+     * Tail was the only thing that converted legs — so a Top-only request silently dropped a field classic hybrid always
+     * returns. The leg forms are now carried for registration alone, which leaves the executed query Top-only.
+     */
+    public void testBuildFusedQuery_whenTopOnlyAndLegIsNamed_thenOnlyTheNamedLegIsCarriedWithoutTail() {
+        List<QueryBuilder> legs = List.of(
+            new MatchQueryBuilder("text", "hello").queryName("lexical"),
+            new TermQueryBuilder("text", "place")
+        );
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("registration must not turn a Top-only query into Top+Tail", 0, tailFilterCount(fused));
+        // Only the named leg is carried. Carrying the unnamed one registers nothing, and it is not free: every carried leg
+        // is converted on the shard, so an unnamed leg costs a toQuery a Top-only request would otherwise never pay.
+        List<QueryBuilder> carried = namedOnlyLegsOf(fused);
+        assertEquals("the unnamed leg has nothing to register", 1, carried.size());
+        assertEquals("lexical", carried.get(0).queryName());
+    }
+
+    public void testBuildFusedQuery_whenTopOnlyAndNoLegIsNamed_thenNothingIsCarried() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("the common case pays nothing", 0, namedOnlyLegsOf(fused).size());
+        assertEquals(0, tailFilterCount(fused));
+    }
+
+    /**
+     * With the Tail present the legs are converted as a side effect of being executed, so a second copy on the wire would
+     * register names the shard already has. The two lists are never both populated.
+     */
+    public void testBuildFusedQuery_whenTailIsBuiltAndLegIsNamed_thenTheTailCarriesTheName() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello").queryName("lexical"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("the executed Tail registers its own names", 0, namedOnlyLegsOf(fused).size());
+        assertEquals("lexical", tailOf(fused).should().get(0).queryName());
+    }
+
+    /**
+     * A materialized leg answers to its own {@code _name}. The substitute is a fresh builder, so before this a named
+     * kNN/neural leg lost {@code matched_queries} in <i>every</i> configuration — Tail or not. What it reports is the
+     * documents the leg returned, the same bound materialization the match set already accepts.
+     */
+    public void testBuildFusedQuery_whenMaterializedLegIsNamed_thenTheSubstituteKeepsTheName() {
+        List<QueryBuilder> legs = List.of(legNamed("knn").queryName("vector"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        QueryBuilder materialized = tailOf(fused).should().get(0);
+        assertEquals("vector", materialized.queryName());
+        assertAddressedTo(materialized, INDEX, "2");
+    }
+
+    /** Both halves of the fix at once: a Top-only request whose only leg is a named ANN leg. */
+    public void testBuildFusedQuery_whenTopOnlyAndMaterializedLegIsNamed_thenTheCarriedFormKeepsTheName() {
+        List<QueryBuilder> legs = List.of(legNamed("knn").queryName("vector"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals(0, tailFilterCount(fused));
+        QueryBuilder carried = namedOnlyLegsOf(fused).get(0);
+        assertEquals("vector", carried.queryName());
+        assertAddressedTo(carried, INDEX, "2");
+    }
+
+    /**
+     * Skipping the unnamed legs makes a carried leg's position in the list stop matching its position among the legs, so a
+     * materialized substitute has to be built from <i>its own</i> leg's hits and not from the hits of whatever landed at the
+     * same output index. Only a named leg behind an unnamed one can catch that.
+     */
+    public void testBuildFusedQuery_whenOnlyALaterLegIsNamed_thenTheSubstituteAddressesThatLegsOwnHits() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("knn").queryName("vector"));
+        MultiSearchResponse ms = multiSearch(
+            legItemFromIndex(INDEX, Map.of("1", 0.9f)),
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))
+        );
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+
+        List<QueryBuilder> carried = namedOnlyLegsOf(fused);
+        assertEquals("only the second leg is named", 1, carried.size());
+        assertEquals("vector", carried.get(0).queryName());
+        assertAddressedTo(carried.get(0), INDEX, "2", "3");
+    }
+
+    /**
+     * A {@code _name} nested inside a leg counts. Only {@code bool} overrides {@code visit(QueryBuilderVisitor)} in core, so
+     * a visitor walk — like a shallow {@code queryName()} check — is blind to these shapes; the rendered form is what is
+     * inspected instead.
+     */
+    public void testBuildFusedQuery_whenNameIsNestedInsideALeg_thenStillCarried() {
+        QueryBuilder underConstantScore = new ConstantScoreQueryBuilder(new MatchQueryBuilder("text", "hello").queryName("inner"));
+        QueryBuilder underNested = new org.opensearch.index.query.NestedQueryBuilder(
+            "user",
+            new MatchQueryBuilder("user.name", "alice").queryName("deep"),
+            org.apache.lucene.search.join.ScoreMode.None
+        );
+        // bool is the one container core teaches to visit(), so it is the only shape a visitor walk would have found.
+        QueryBuilder underBool = new BoolQueryBuilder().must(new MatchQueryBuilder("text", "hello").queryName("in_bool"));
+        QueryBuilder underFunctionScore = new org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder(
+            new MatchQueryBuilder("text", "hello").queryName("scored")
+        );
+        for (QueryBuilder leg : List.of(underConstantScore, underNested, underBool, underFunctionScore)) {
+            List<QueryBuilder> legs = List.of(leg);
+            MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+
+            QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+
+            assertEquals("a name below the leg's own level must still be registered: " + leg, 1, namedOnlyLegsOf(fused).size());
+            assertEquals("and the query stays Top-only", 0, tailFilterCount(fused));
+        }
+    }
+
+    public void testBuildFusedQuery_whenALegIsWrappedButUnnamed_thenNotCarried() {
+        // The counterpart of the test above: a wrapped leg carrying no name anywhere is not carried, so the rendered check
+        // is not simply always-true.
+        List<QueryBuilder> legs = List.of(new ConstantScoreQueryBuilder(new MatchQueryBuilder("text", "hello")));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals(0, namedOnlyLegsOf(fused).size());
+    }
+
+    /**
+     * The documented gap. A {@code _name} nested inside a <i>materializable</i> leg — on a {@code knn} filter, say — is
+     * detected, so the leg is carried, but the substitute is an address of the returned hits and inherits only the leg's
+     * own name: the shard never sees the leg's structure, so an inner name has nothing to be registered against. Registering
+     * the original leg instead is what materialization exists to avoid (a second graph walk and, for {@code neural}, a second
+     * inference call) for a reporting field. Pinned so the asymmetry is a decision on record rather than a surprise.
+     */
+    public void testBuildFusedQuery_whenNameIsNestedInsideAMaterializableLeg_thenTheSubstituteCarriesNoName() {
+        QueryBuilder annLegWithNamedFilter = new ConstantScoreQueryBuilder(new MatchQueryBuilder("f", "v").queryName("filter_name")) {
+            @Override
+            public String getWriteableName() {
+                return "knn";
+            }
+        };
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            topOnlySource(),
+            ms,
+            List.of(annLegWithNamedFilter),
+            minMaxArithmetic(),
+            10
+        );
+
+        QueryBuilder carried = namedOnlyLegsOf(fused).get(0);
+        assertAddressedTo(carried, INDEX, "2");
+        assertNull("materialization cannot carry a name from inside the leg it replaced", carried.queryName());
+    }
+
+    private int tailFilterCount(QueryBuilder fused) {
+        return ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().size();
+    }
+
+    // ---- fused scores are floored above the non-scoring Tail ----
+
+    private FusionSpec l2Arithmetic() {
+        return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            "l2",
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            new float[0]
+        );
+    }
+
+    private FusionSpec zScoreArithmetic() {
+        return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            "z_score",
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            new float[0]
+        );
+    }
+
+    private FusionSpec minMaxWeighted(float... weights) {
+        return new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            FusionSpec.DEFAULT_RANK_CONSTANT,
+            weights
+        );
+    }
+
+    private ConstantScoreQueryBuilder topClause(QueryBuilder fused, int position) {
+        return (ConstantScoreQueryBuilder) ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().should().get(position);
+    }
+
+    /**
+     * The tie this closes. The Top scores and the Tail does not, which is the whole mechanism separating the fused window
+     * from everything else; a ranked document at exactly {@code 0.0} ties with the Tail-only documents it is meant to
+     * outrank, and Lucene then breaks that tie by ascending doc id — so a document fusion did not rank can be returned
+     * ahead of one it did, and with {@code size == window_size} the ranked one is dropped outright.
+     *
+     * <p>{@code l2} is one of the two ways to reach exactly {@code 0.0}: a leg whose raw scores are all {@code 0.0} has a
+     * zero norm, and {@code L2ScoreNormalizer.MIN_SCORE} is {@code 0.0f} — unlike min_max's and z_score's {@code 0.001f}.
+     * A document appearing only in such a leg therefore fuses to {@code 0.0} under default weights.
+     */
+    public void testBuildFusedQuery_whenL2LegHasZeroNorm_thenRankedScoreIsFlooredAboveTheTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        // Leg 0's only hit scores 0.0 → zero norm → normalizes to L2's MIN_SCORE of 0.0f. Doc 3 is in no other leg.
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("3", 0.0f)), legItem(Map.of("1", 5.0f, "2", 3.0f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, l2Arithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("union of {1,2,3} ranked", 3, self.should().size());
+        assertAddressedTo(((ConstantScoreQueryBuilder) self.should().get(2)).innerQuery(), INDEX, "3");
+        assertEquals(
+            "a fused score of exactly 0.0 is floored, so it still outranks the Tail",
+            HybridFusionOrchestrator.MIN_RANKED_SCORE,
+            topClause(fused, 2).boost(),
+            0.0f
+        );
+        assertTrue("every ranked document outscores a Tail-only document", topClause(fused, 0).boost() > 0.0f);
+    }
+
+    /**
+     * What the floor's <i>value</i> has to satisfy, and the reason it is not {@link Float#MIN_VALUE}: the score does not
+     * reach Lucene's comparison untouched. An enclosing clause's {@code boost}, a rescore's {@code query_weight} (core's
+     * {@code QueryRescorer} multiplies every window document's first-pass score by it, matched or not) and a
+     * {@code score_mode: multiply} rescore all attenuate it first, and {@code Float.MIN_VALUE} is subnormal — any factor at
+     * or below {@code 0.5} rounds it back to exactly {@code 0.0} and restores the tie the floor exists to break.
+     *
+     * <p>Asserted on the constant rather than through a query because that is where the requirement lives: the arithmetic
+     * below is core's and Lucene's, and this is the only place the plugin gets to choose a value that survives it.
+     */
+    public void testMinRankedScore_survivesTheAttenuationAFusedScoreMeetsDownstream() {
+        assertEquals(
+            "subnormal, so a factor of 0.5 annihilates it — the trap this constant exists to avoid",
+            0.0f,
+            Float.MIN_VALUE * 0.5f,
+            0.0f
+        );
+
+        for (float factor : new float[] { 0.5f, 0.1f, 0.001f, 1e-6f, 1e-12f }) {
+            assertTrue(
+                "the floor must stay above the Tail's 0.0 after being multiplied by " + factor,
+                HybridFusionOrchestrator.MIN_RANKED_SCORE * factor > 0.0f
+            );
+        }
+        assertTrue(
+            "and it must stay far below the smallest score a real config produces — min_max floors a normalized score at "
+                + "0.001 and arithmetic_mean divides by a weight sum of 1.0",
+            HybridFusionOrchestrator.MIN_RANKED_SCORE < 0.001f * 1e-9f
+        );
+    }
+
+    /**
+     * The second route to exactly {@code 0.0}, and the one that works with any normalization technique: a {@code weights}
+     * entry of {@code 0.0} zeroes its leg's contribution, so a document that matched only that leg fuses to {@code 0.0}.
+     * Two such documents also pin down what the floor must NOT do: they were tied at {@code 0.0} before it and stay tied
+     * after, in the same key order — flooring is not allowed to invent an order fusion did not produce, only to lift the
+     * whole tie above the Tail.
+     */
+    public void testBuildFusedQuery_whenLegWeightIsZero_thenAllZeroScoresAreFlooredAndKeepTheirOrder() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 5.0f, "2", 3.0f)), legItem(Map.of("3", 7.0f, "4", 2.0f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxWeighted(1.0f, 0.0f), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals(4, self.should().size());
+        assertEquals("leg 0 at weight 1.0 still ranks normally", 1.0f, topClause(fused, 0).boost(), 0.001f);
+        // Docs 3 and 4 matched only the zero-weighted leg, so both fused to exactly 0.0 and were tied on the composite key.
+        assertAddressedTo(((ConstantScoreQueryBuilder) self.should().get(2)).innerQuery(), INDEX, "3");
+        assertAddressedTo(((ConstantScoreQueryBuilder) self.should().get(3)).innerQuery(), INDEX, "4");
+        assertEquals(HybridFusionOrchestrator.MIN_RANKED_SCORE, topClause(fused, 2).boost(), 0.0f);
+        assertEquals(HybridFusionOrchestrator.MIN_RANKED_SCORE, topClause(fused, 3).boost(), 0.0f);
+    }
+
+    /**
+     * The combination node has to report the score fusion computed, not the floored score round 2 ranks by. Same input as
+     * the test above, run explained: documents 3 and 4 matched only the zero-weighted leg, so fusion produced exactly
+     * {@code 0.0} for them while their Top clause carries {@link HybridFusionOrchestrator#MIN_RANKED_SCORE}. Recording the
+     * floored value instead would label the combination node {@code 1e-30} over children that combine to {@code 0.0}, and
+     * because the hit's score is that same {@code 1e-30} the wrapper naming the floor would be suppressed
+     * ({@code FusedDocExplanations#explain} returns the combination node bare when the two agree) — so the tree would
+     * claim a number its own children do not produce, with nothing pointing at the floor.
+     *
+     * <p>The single rendered child is the caveat the fix does not remove: the zero-weighted leg's slot still counted its
+     * weight into the combiner's divisor while rendering no node, so the parent is deliberately not the mean of what is
+     * shown. Classic renders a partially-matched document the same way.
+     */
+    public void testBuildFusedQuery_whenAZeroFusedScoreIsFloored_thenTheCombinationNodeKeepsTheComputedScore() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            explainedLegItem(new LinkedHashMap<>(Map.of("1", 5.0f, "2", 3.0f))),
+            explainedLegItem(new LinkedHashMap<>(Map.of("3", 7.0f, "4", 2.0f)))
+        );
+        FusedDocExplanations explanations = new FusedDocExplanations();
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().explain(true),
+            ms,
+            legs,
+            minMaxWeighted(1.0f, 0.0f),
+            10,
+            new FusedCoordinatorTimings(),
+            explanations
+        );
+
+        // Round 2 ranks document 3 by the floored score: that is what its Top clause boost carries.
+        assertEquals(HybridFusionOrchestrator.MIN_RANKED_SCORE, fusedScoresById(fused).get("3"), 0.0f);
+
+        Explanation tree = explanations.explain(FusedDocExplanations.documentKey(INDEX, "3"), HybridFusionOrchestrator.MIN_RANKED_SCORE);
+        assertNotNull("the document is in the window, so it is described", tree);
+        assertEquals(
+            "the floor moved the score, so the top node names what round 2 returned rather than relabelling the combination",
+            "score of the fused hybrid query as round 2 returned it, computed from:",
+            tree.getDescription()
+        );
+        assertEquals(HybridFusionOrchestrator.MIN_RANKED_SCORE, tree.getValue().floatValue(), 0.0f);
+
+        assertEquals("the combination is its only child", 1, tree.getDetails().length);
+        Explanation combination = tree.getDetails()[0];
+        assertEquals(explanations.combinationDescription(), combination.getDescription());
+        assertEquals("the combination node reports what fusion computed, not the floor", 0.0f, combination.getValue().floatValue(), 0.0f);
+        assertEquals("only the leg that matched is rendered", 1, combination.getDetails().length);
+    }
+
+    /**
+     * Both branches of {@code scoreAboveTail}, called directly, because fused mode reaches only one of them through
+     * {@link HybridFusionOrchestrator#buildFusedQuery}. A <i>non-finite</i> score is floored, not refused: z_score returns
+     * a raw {@code +Infinity} leg score unchanged through its equal-to-mean edge case (the integration control below
+     * measures it end to end), so a fused {@code +Infinity} is reachable and is floored to {@code MIN_RANKED_SCORE} exactly
+     * as {@code 0.0} is — a degenerate score ranks a document last rather than failing an otherwise legal request. A
+     * {@code NaN} is floored the same way, defensively; nothing in scope produces a fused {@code NaN}, since min_max's and
+     * l2's {@code Inf/Inf} is dropped by arithmetic_mean before it can combine.
+     *
+     * <p>Only a <i>negative</i> score is refused, and with an {@code IllegalStateException} rather than an
+     * {@code IllegalArgumentException} because no change to the request fixes it: a negative fused score would mean the
+     * non-negativity invariant broke, and answering with a coordinator-invented order is worse than failing. {@code -0.0f}
+     * sits on the flooring side, not the refusing side — {@code [-0.0f < 0.0f]} is {@code false} — which is the one place
+     * this deliberately disagrees with {@code HybridFusionQueryBuilder#requireUsableAsBoosts}, which rejects it. Asserted so
+     * the two stay differently by intention rather than by accident.
+     */
+    public void testScoreAboveTail_floorsNonFiniteAndRefusesOnlyNegative() {
+        for (float floored : new float[] { Float.POSITIVE_INFINITY, Float.NaN, 0.0f, -0.0f }) {
+            assertEquals(
+                "a non-finite or zero fused score of [" + floored + "] is floored to the window bottom, not refused",
+                HybridFusionOrchestrator.MIN_RANKED_SCORE,
+                HybridFusionOrchestrator.scoreAboveTail(floored),
+                0.0f
+            );
+        }
+
+        for (float refused : new float[] { Float.NEGATIVE_INFINITY, -1.0f, -Float.MIN_VALUE }) {
+            IllegalStateException e = expectThrows(
+                IllegalStateException.class,
+                "expected a negative fused score of [" + refused + "] to be refused",
+                () -> HybridFusionOrchestrator.scoreAboveTail(refused)
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("a fused score must be non-negative"));
+        }
+
+        assertEquals(
+            "anything already above the floor passes through untouched",
+            0.25f,
+            HybridFusionOrchestrator.scoreAboveTail(0.25f),
+            0.0f
+        );
+    }
+
+    /**
+     * min_max's leg of the non-finite story, and the reason the floor no longer refuses. The same raw {@code +Infinity}
+     * that z_score carries through to a fused {@code +Infinity} (the test above), min_max launders to {@code 0.0}. So the
+     * three in-scope normalizers do not agree on the intermediate value — they agree only on the floored result, which is
+     * what the fix restored. Measured rather than assumed, because the laundering is a claim about shared scalar arithmetic
+     * and would rot silently.
+     *
+     * <p>The two non-finite inputs are laundered differently under min_max, which is why each is asserted rather than looped
+     * over. {@code NaN} never reaches the combiner: {@code Floats.compare(NaN, NaN) == 0}, so a single-hit leg whose min,
+     * max and score are all {@code NaN} matches min_max's single-score edge case and normalizes to {@code 1.0} — the top of
+     * its own leg. {@code +Infinity} does make min_max emit {@code NaN}, since {@code (Inf - min) / (Inf - min)} is
+     * {@code Inf/Inf}, but arithmetic_mean's {@code score >= 0.0} participation rule is false for {@code NaN}, so that leg's
+     * slot leaves both numerator and denominator and the document fuses to exactly {@code 0.0} — floored, not refused.
+     * z_score is the one normalizer that does not launder: its equal-to-mean edge case returns the leg {@code maxScore}, so
+     * a {@code +Infinity} hit stays {@code +Infinity} and reaches the floor as such.
+     *
+     * <p>That laundering is not something this path could fix — it is in the scalar math classic hybrid shares, and
+     * changing it would change classic's scores too. It is recorded here because it is what made the refusal look
+     * unreachable when only min_max was measured.
+     */
+    public void testBuildFusedQuery_whenALegHitScoreIsNonFinite_thenLaunderedByFusionRatherThanRefused() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+
+        MultiSearchResponse withNaN = multiSearch(legItem(Map.of("1", Float.NaN)), legItem(Map.of("2", 3.0f)));
+        QueryBuilder fusedNaN = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), withNaN, legs, minMaxArithmetic(), 10);
+        assertEquals("both documents are ranked", 2, ((HybridFusionQueryBuilder) fusedNaN).buildSelfErasedQuery().should().size());
+        // Each doc matched one leg at a normalized 1.0 and contributed 0.0 to the other, so both fuse to 0.5 and tie —
+        // the NaN hit is ranked exactly as a legitimate best hit of its leg would be.
+        assertEquals("the NaN hit ranks as its leg's best", 0.5f, topClause(fusedNaN, 0).boost(), 0.0f);
+        assertEquals(0.5f, topClause(fusedNaN, 1).boost(), 0.0f);
+
+        MultiSearchResponse withInfinity = multiSearch(legItem(Map.of("1", Float.POSITIVE_INFINITY)), legItem(Map.of("2", 3.0f)));
+        QueryBuilder fusedInfinity = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder(),
+            withInfinity,
+            legs,
+            minMaxArithmetic(),
+            10
+        );
+        assertEquals(2, ((HybridFusionQueryBuilder) fusedInfinity).buildSelfErasedQuery().should().size());
+        assertAddressedTo(topClause(fusedInfinity, 0).innerQuery(), INDEX, "2");
+        assertEquals("the leg that scored finitely is unaffected", 0.5f, topClause(fusedInfinity, 0).boost(), 0.0f);
+        assertAddressedTo(topClause(fusedInfinity, 1).innerQuery(), INDEX, "1");
+        assertEquals(
+            "and the +Infinity hit fused to exactly 0.0, so it was floored above the Tail rather than refused",
+            HybridFusionOrchestrator.MIN_RANKED_SCORE,
+            topClause(fusedInfinity, 1).boost(),
+            0.0f
+        );
+    }
+
+    /**
+     * The z_score twin of the min_max non-finite case above, and the reason the floor no longer refuses a non-finite
+     * score. min_max launders a raw {@code +Infinity} leg hit to {@code 0.0} (Inf/Inf → NaN, dropped by arithmetic_mean),
+     * but z_score's equal-to-mean edge case returns the leg {@code maxScore} unchanged, so the same hit normalizes to
+     * {@code +Infinity} and arithmetic_mean keeps it — a fused {@code +Infinity}. Before the floor was widened this reached
+     * {@link HybridFusionOrchestrator#scoreAboveTail} as {@code +Infinity} and failed the request with an
+     * {@link IllegalStateException} (a server error) for an in-scope config; now the document is floored above the Tail and
+     * the request succeeds, matching min_max for the identical input.
+     */
+    public void testBuildFusedQuery_whenALegHitScoreIsNonFiniteUnderZScore_thenFlooredRatherThanRefused() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", Float.POSITIVE_INFINITY)), legItem(Map.of("2", 3.0f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, zScoreArithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("both documents are ranked, neither refused", 2, self.should().size());
+        // Doc 1's +Infinity sorted it to the top of the window before the floor ran, so it is should()-clause 0 — but its
+        // score is floored to the window bottom, so at query time doc 2's finite 1.5 outscores it. The floor lifts the
+        // score above the Tail's 0.0 without inventing an order: the effective ranking (doc 2 over doc 1) is what min_max
+        // produces for the same input, only reached from a +Infinity fused score rather than a laundered 0.0.
+        assertAddressedTo(topClause(fused, 0).innerQuery(), INDEX, "1");
+        assertAddressedTo(topClause(fused, 1).innerQuery(), INDEX, "2");
+        assertEquals(
+            "the +Infinity hit fused to +Infinity under z_score and was floored above the Tail rather than refused",
+            HybridFusionOrchestrator.MIN_RANKED_SCORE,
+            topClause(fused, 0).boost(),
+            0.0f
+        );
+        assertEquals("the finitely-scored document keeps its real fused score", 1.5f, topClause(fused, 1).boost(), 0.001f);
+        assertTrue(
+            "so at query time the finite document outscores the floored +Infinity one",
+            topClause(fused, 1).boost() > topClause(fused, 0).boost()
+        );
+    }
+
+    /**
+     * The l2 control for the same input, and the correction to a natural but wrong assumption: l2 does <i>not</i> reach the
+     * non-finite floor. A leg holding a {@code +Infinity} hit has an {@code +Infinity} L2 norm (the sum of squares
+     * overflows), so {@code +Infinity / +Infinity} is {@code NaN} — which arithmetic_mean drops, exactly as it drops
+     * min_max's {@code NaN}. So of the three in-scope normalizers only z_score propagates a non-finite score; l2 and
+     * min_max both launder it to {@code 0.0}. Pinned so a future change to l2's norm handling that let {@code +Infinity}
+     * through would surface here rather than as a server error in production.
+     */
+    public void testBuildFusedQuery_whenALegHitScoreIsNonFiniteUnderL2_thenLaunderedLikeMinMax() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", Float.POSITIVE_INFINITY)), legItem(Map.of("2", 3.0f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, l2Arithmetic(), 10);
+
+        BoolQueryBuilder self = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+        assertEquals("both documents are ranked, neither refused", 2, self.should().size());
+        assertAddressedTo(topClause(fused, 1).innerQuery(), INDEX, "1");
+        assertEquals(
+            "the +Infinity hit was laundered to 0.0 by l2 and floored above the Tail, exactly as under min_max",
+            HybridFusionOrchestrator.MIN_RANKED_SCORE,
+            topClause(fused, 1).boost(),
+            0.0f
+        );
+    }
+
+    /**
+     * The one property of {@code MIN_RANKED_SCORE} that reads like a guarantee and is not: its lower bound is per
+     * multiplication and does not compose. Attenuation is applied a factor at a time — Lucene for an enclosing clause's
+     * {@code boost}, core's {@code QueryRescorer} once per rescorer in the chain — and each step rounds to float32, so the
+     * factors multiply. Every factor used below is individually far inside the bound that
+     * {@link #testMinRankedScore_survivesTheAttenuationAFusedScoreMeetsDownstream} asserts; chained, they annihilate the
+     * floor and restore the Tail tie it exists to break.
+     *
+     * <p>Pinned rather than fixed, and the constant's javadoc carries the reasoning: no float32 value survives arbitrary
+     * multiplication, raising this one only trades tolerance below for headroom above, and the attenuating values are legal
+     * core parameters. What this test protects is the honesty of the bound — change the constant and it reports the new one.
+     */
+    public void testMinRankedScore_attenuationBoundIsPerFactorAndDoesNotCompose() {
+        assertTrue("a single factor at the documented bound survives", HybridFusionOrchestrator.MIN_RANKED_SCORE * 7.0065e-16f > 0.0f);
+        assertEquals(
+            "and just below it the product rounds to zero rather than to the smallest subnormal",
+            0.0f,
+            HybridFusionOrchestrator.MIN_RANKED_SCORE * 7.006e-16f,
+            0.0f
+        );
+
+        // Three rescorers at query_weight 1e-6 — a factor twelve orders of magnitude inside the per-factor bound.
+        float chained = HybridFusionOrchestrator.MIN_RANKED_SCORE;
+        for (int rescorer = 0; rescorer < 3; rescorer++) {
+            assertTrue("each factor on its own leaves the floor positive", HybridFusionOrchestrator.MIN_RANKED_SCORE * 1e-6f > 0.0f);
+            chained = chained * 1e-6f;
+        }
+        assertEquals("but three of them in sequence annihilate it", 0.0f, chained, 0.0f);
+
+        // And the boundary for the mildest factor that still composes to zero, which is where the count matters.
+        float compounded = HybridFusionOrchestrator.MIN_RANKED_SCORE;
+        for (int rescorer = 0; rescorer < 5; rescorer++) {
+            compounded = compounded * 0.001f;
+        }
+        assertTrue("five rescorers at query_weight 0.001 still hold", compounded > 0.0f);
+        assertEquals("six do not", 0.0f, compounded * 0.001f, 0.0f);
+    }
+
+    // ---- rrf dispatch: rank scores, not min_max normalization, and the resolved rank_constant is honored ----
+
+    /** The scoring should-clause boosts in Top order — i.e. the fused scores, highest first. */
+    private float[] topScores(QueryBuilder fused) {
+        List<QueryBuilder> should = ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().should();
+        float[] scores = new float[should.size()];
+        for (int i = 0; i < should.size(); i++) {
+            scores[i] = should.get(i).boost();
+        }
+        return scores;
+    }
+
+    public void testBuildFusedQuery_rrf_fusesRankScores() {
+        // leg0 ranks 1 > 2; leg1 ranks 2 > 3. RRF sums rank scores, so doc 2 (rank 1 in leg0 + rank 0 in leg1) tops the
+        // window, then doc 1 (rank 0, one leg) then doc 3 (rank 1, one leg). Scores must be the rank arithmetic, NOT the
+        // min_max normalization of the raw scores — this is what proves the lookup resolved RrfScalarNormalizer.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f, "3", 0.4f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+            10
+        );
+
+        float rank0 = RRFScoreNormalizer.scoreForRank(0, FusionSpec.DEFAULT_RANK_CONSTANT);
+        float rank1 = RRFScoreNormalizer.scoreForRank(1, FusionSpec.DEFAULT_RANK_CONSTANT);
+        assertArrayEquals("doc2 (both legs), then doc1, then doc3", new float[] { rank1 + rank0, rank0, rank1 }, topScores(fused), 0.0f);
+    }
+
+    public void testBuildFusedQuery_rrf_honorsRankConstant() {
+        // The rank constant is read from the FusionSpec rather than defaulted: the same single-leg hit set fuses to
+        // 1/(k+1) and 1/(k+2) for whichever k was configured.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        for (int rankConstant : new int[] { 1, 10_000 }) {
+            MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)));
+            QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                ms,
+                legs,
+                rrf(rankConstant),
+                10
+            );
+            assertArrayEquals(
+                "rank_constant " + rankConstant + " drives the rank scores",
+                new float[] { RRFScoreNormalizer.scoreForRank(0, rankConstant), RRFScoreNormalizer.scoreForRank(1, rankConstant) },
+                topScores(fused),
+                0.0f
+            );
+        }
+    }
+
+    public void testBuildFusedQuery_rrf_ignoresRawScoreMagnitude() {
+        // Two legs whose raw scores are orders of magnitude apart fuse identically to two legs with comparable scores,
+        // because RRF reads rank only. Under min_max the per-leg normalization would differ.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        float[] comparable = topScores(
+            HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                multiSearch(legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("1", 0.8f, "2", 0.4f))),
+                legs,
+                rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+                10
+            )
+        );
+        float[] skewed = topScores(
+            HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                multiSearch(legItem(Map.of("1", 900.0f, "2", 0.5f)), legItem(Map.of("1", 0.008f, "2", 0.004f))),
+                legs,
+                rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+                10
+            )
+        );
+        assertArrayEquals("rank-only fusion is invariant to raw score magnitude", comparable, skewed, 0.0f);
+    }
+
+    /**
+     * RRF ties by construction, and the tie order is the fast path's {@code _index}+{@code _id} order, not insertion.
+     * Two documents that hold the same rank in each leg (doc "b" and doc "a" both rank 0 in their respective single-leg
+     * appearances) receive bit-identical RRF scores; {@code toRankedDocs} then orders that equal-score run by
+     * {@code (_index, _id)}, so "a" precedes "b" in the Top even though "b" was inserted first. This is the exact
+     * substitution the fast path makes for round 2's {@code _doc} order, and RRF is where equal scores are not contrived.
+     */
+    public void testBuildFusedQuery_rrf_equalScoreTiesOrderByIndexThenId() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        // "b" appears rank 0 in leg0, "a" appears rank 0 in leg1 → identical single-rank RRF score, distinct ids.
+        MultiSearchResponse ms = multiSearch(legItem(idToScore("b", 0.9f)), legItem(idToScore("a", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            new SearchSourceBuilder().trackTotalHits(false),
+            ms,
+            legs,
+            rrf(FusionSpec.DEFAULT_RANK_CONSTANT),
+            10
+        );
+
+        float rank0 = RRFScoreNormalizer.scoreForRank(0, FusionSpec.DEFAULT_RANK_CONSTANT);
+        assertArrayEquals("both hold rank 0 → bit-identical RRF scores", new float[] { rank0, rank0 }, topScores(fused), 0.0f);
+        assertEquals("the equal-score run orders by _id (a before b), not insertion (b before a)", List.of("a", "b"), topIds(fused));
+    }
+
+    /** A single-entry ordered id→score map (Map.of does not preserve order, and these tests assert ranked order). */
+    private Map<String, Float> idToScore(String id, float score) {
+        Map<String, Float> m = new LinkedHashMap<>();
+        m.put(id, score);
+        return m;
+    }
+
+    /** The Top clauses' {@code _id}s in ranked order — the order round 2 (or the assembled page) presents them. */
+    private List<String> topIds(QueryBuilder fused) {
+        return new ArrayList<>(fusedScoresById(fused).keySet());
+    }
+
+    // ---- hits.total from the legs (adaptive Tail) ----
+
+    /** A leg whose response carries the given hits.total, the way a leg tracked to a threshold reports it. */
+    private MultiSearchResponse.Item legItemWithTotal(Map<String, Float> idToScore, TotalHits totalHits) {
+        SearchHit[] hits = new SearchHit[idToScore.size()];
+        int i = 0;
+        for (Map.Entry<String, Float> e : idToScore.entrySet()) {
+            hits[i] = hitFrom(i, INDEX, e.getKey(), e.getValue());
+            i++;
+        }
+        SearchHits searchHits = new SearchHits(hits, totalHits, 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        SearchResponse response = new SearchResponse(sections, null, 1, 1, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    private static TotalHits gte(long value) {
+        return new TotalHits(value, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO);
+    }
+
+    private static TotalHits eq(long value) {
+        return new TotalHits(value, TotalHits.Relation.EQUAL_TO);
+    }
+
+    private BoolQueryBuilder selfErased(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> legs,
+        int window,
+        TotalHits[] out
+    ) {
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
+            source,
+            ms,
+            legs,
+            minMaxArithmetic(),
+            window,
+            new FusedCoordinatorTimings(),
+            new FusedDocExplanations(),
+            null,
+            derived -> out[0] = derived
+        );
+        return ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery();
+    }
+
+    public void testBuildFusedQuery_whenALegAlreadyExceedsTheDefaultThreshold_thenTheTailIsDroppedAndTheTotalIsDerived() {
+        // Default totals (unset → 10 000). The lexical leg counted past the threshold, so core reported it as {10000, gte} —
+        // which is exactly what round 2's Tail would have reported for the union. The Tail is therefore not built, and the
+        // consumer receives that same total to put on the response.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[1];
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 10, derived);
+
+        assertEquals("a leg past the threshold proves the union is past it: no Tail", 0, self.filter().size());
+        assertEquals(2, self.should().size());
+        assertEquals("and the response gets what the Tail would have said", gte(10_000).value(), derived[0].value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+    }
+
+    public void testBuildFusedQuery_whenEveryLegIsExactAndBelowTheThreshold_thenTheTailStaysAndNothingIsDerived() {
+        // Both legs counted exactly (small match sets). The union's size is genuinely unknown without the Tail, and today's
+        // response gives it exactly — so the Tail is kept and the consumer is told round 2's own total stands.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItemWithTotal(Map.of("2", 0.8f), eq(12)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 10, derived);
+
+        assertEquals("exact legs below the threshold → the Tail counts the union, as today", 1, self.filter().size());
+        assertNull("and nothing replaces round 2's own total", derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenNoConsumerIsAttached_thenTheTailIsKeptEvenThoughALegExceedsTheThreshold() {
+        // Fail closed: without somewhere to put the derived total (the filter is not registered, or this hybrid is nested),
+        // dropping the Tail would leave round 2's window-sized total on the response. Behaviour is exactly today's.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(new SearchSourceBuilder(), ms, legs, minMaxArithmetic(), 10);
+
+        assertEquals("no consumer → no derivation → Tail", 1, ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().size());
+    }
+
+    public void testBuildFusedQuery_whenTheLegLandsExactlyOnTheThreshold_thenTheTailIsKept() {
+        // {10000, eq} means the leg has exactly 10 000 matches; the union may have exactly that many too, in which case today
+        // reports eq, not gte. Only a leg core capped (gte) proves the union is strictly beyond the threshold.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 10, derived);
+
+        assertEquals(1, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenAnIntegerThresholdAboveTheWindowIsExceeded_thenThatThresholdIsDerived() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(500)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[1];
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2).trackTotalHitsUpTo(500), ms, legs, 10, derived);
+
+        assertEquals(0, self.filter().size());
+        assertEquals(500L, derived[0].value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived[0].relation());
+    }
+
+    public void testBuildFusedQuery_whenExactTotalsAreRequested_thenTheTailIsKeptWhateverTheLegsSay() {
+        // track_total_hits:true — only the Tail can count the union exactly.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2).trackTotalHits(true), ms, legs, 10, derived);
+
+        assertEquals(1, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenThePageReachesPastTheRankedWindow_thenTheTailIsKept() {
+        // Two ranked documents, size 10: today the Tail's score-0 documents fill the remaining slots. Dropping it would
+        // silently shorten the page, so the leg count is not allowed to stand in for the Tail here.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(10), ms, legs, 10, derived);
+
+        assertEquals("size past the ranked window → Tail documents are part of the answer", 1, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenThePageFitsInTheRankedWindow_thenTheTailCanBeDropped() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[1];
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().from(1).size(1), ms, legs, 10, derived);
+
+        assertEquals(0, self.filter().size());
+        assertNotNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenCollapseSearchAfterOrMinScoreIsPresent_thenTheTailIsKept() {
+        // Shapes where Tail-only documents, or core's own counting rule, are part of the answer: kept exactly as today.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        List<SearchSourceBuilder> sources = List.of(
+            new SearchSourceBuilder().size(1).collapse(new CollapseBuilder("grp")),
+            new SearchSourceBuilder().size(1).searchAfter(new Object[] { 0.5f }),
+            new SearchSourceBuilder().size(1).minScore(0.1f)
+        );
+        for (SearchSourceBuilder source : sources) {
+            MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+            TotalHits[] derived = new TotalHits[] { eq(42) };
+
+            BoolQueryBuilder self = selfErased(source, ms, legs, 10, derived);
+
+            assertEquals(source.toString(), 1, self.filter().size());
+            assertNull(source.toString(), derived[0]);
+        }
+    }
+
+    public void testBuildFusedQuery_whenTotalsAreDisabled_thenNothingChanges() {
+        // The explicit opt-out is already Top-only; the consumer learns that round 2's total (none) stands.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().trackTotalHits(false), ms, legs, 10, derived);
+
+        assertEquals(0, self.filter().size());
+        assertNull(derived[0]);
+    }
+
+    public void testLegTotalHitsThreshold() {
+        assertEquals(
+            "unset → core's default",
+            Integer.valueOf(10_000),
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder(), 100)
+        );
+        assertEquals(Integer.valueOf(10_000), HybridFusionOrchestrator.legTotalHitsThreshold(null, 100));
+        assertNull(
+            "disabled → nothing to count toward",
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHits(false), 100)
+        );
+        assertNull(
+            "exact → only the Tail can",
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHits(true), 100)
+        );
+        assertNull(
+            "at or below the window → round 2 reaches it itself",
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHitsUpTo(100), 100)
+        );
+        assertEquals(
+            Integer.valueOf(101),
+            HybridFusionOrchestrator.legTotalHitsThreshold(new SearchSourceBuilder().trackTotalHitsUpTo(101), 100)
+        );
+    }
+
+    public void testTotalHitsFromLegs_readsOnlyACappedLeg() {
+        SearchSourceBuilder source = new SearchSourceBuilder();
+        assertNull("no leg counted", HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { null, null }, 100));
+        assertNull("exact below threshold", HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { eq(9_999), null }, 100));
+        assertNull("exactly on the threshold, eq", HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { eq(10_000) }, 100));
+        assertNull(
+            "gte but below the threshold (not a shape core produces, refused all the same)",
+            HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { gte(5) }, 100)
+        );
+        TotalHits derived = HybridFusionOrchestrator.totalHitsFromLegs(source, new TotalHits[] { eq(3), gte(10_000) }, 100);
+        assertEquals(10_000L, derived.value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, derived.relation());
+        assertNull(
+            "no threshold to derive against",
+            HybridFusionOrchestrator.totalHitsFromLegs(new SearchSourceBuilder().trackTotalHits(true), new TotalHits[] { gte(10_000) }, 100)
+        );
+    }
+
+    public void testBuildFusedQuery_whenSortedByScoreAscending_thenTheTailIsKept() {
+        // _score descending is the fused ranking itself; ascending puts the score-0 Tail documents FIRST, so without the
+        // Tail the page changes. Only a descending _score sort is transparent to the derivation.
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder asc = selfErased(new SearchSourceBuilder().size(2).sort("_score", SortOrder.ASC), ms, legs, 10, derived);
+        assertEquals(1, asc.filter().size());
+        assertNull(derived[0]);
+
+        BoolQueryBuilder desc = selfErased(new SearchSourceBuilder().size(2).sort("_score", SortOrder.DESC), ms, legs, 10, derived);
+        assertEquals(0, desc.filter().size());
+        assertNotNull(derived[0]);
+    }
+
+    public void testBuildFusedQuery_whenANamedAnnLegFilledTheWindow_thenTheTailIsKeptForMatchedQueries() {
+        // Without the Tail a named ANN leg is registered as an address of the documents it RETURNED; a leg that filled its
+        // window may have matched a page document it did not return, and that document would lose its matched_queries entry.
+        List<QueryBuilder> legs = List.of(
+            new MatchQueryBuilder("text", "hello"),
+            new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10).queryName("vec")
+        );
+        // window 2: the kNN leg returns 2 → filled.
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(Map.of("1", 0.9f), gte(10_000)),
+            legItem(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.7f)))
+        );
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(2), ms, legs, 2, derived);
+
+        assertEquals("a named ANN leg that filled its window keeps the Tail", 1, self.filter().size());
+        assertNull(derived[0]);
+
+        // The same leg unnamed, or named but short of the window, does not.
+        List<QueryBuilder> unnamed = List.of(
+            new MatchQueryBuilder("text", "hello"),
+            new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10)
+        );
+        assertEquals(0, selfErased(new SearchSourceBuilder().size(2), ms, unnamed, 2, derived).filter().size());
+        MultiSearchResponse shortLeg = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        assertEquals(0, selfErased(new SearchSourceBuilder().size(2), shortLeg, legs, 2, derived).filter().size());
+    }
+
+    public void testRequestShapeAllowsDerivedTotalHits() {
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder()));
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().sort("_score")));
+        assertFalse("null source", HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(null));
+        assertFalse(
+            "aggs",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(
+                new SearchSourceBuilder().aggregation(AggregationBuilders.terms("t").field("f"))
+            )
+        );
+        assertFalse(
+            "highlighter",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(
+                new SearchSourceBuilder().highlighter(new HighlightBuilder().field("text"))
+            )
+        );
+        assertFalse("field sort", HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().sort("price")));
+        assertFalse(
+            "_score asc",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().sort("_score", SortOrder.ASC))
+        );
+        assertFalse(
+            "collapse",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().collapse(new CollapseBuilder("grp")))
+        );
+        assertFalse(
+            "search_after",
+            HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().searchAfter(new Object[] { 1 }))
+        );
+        assertFalse("min_score", HybridFusionOrchestrator.requestShapeAllowsDerivedTotalHits(new SearchSourceBuilder().minScore(0.1f)));
+    }
+
+    public void testRequestedPageEnd_usesCoreDefaults() {
+        assertEquals("from 0, size 10 by default", 10, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder()));
+        assertEquals(35, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder().from(30).size(5)));
+        assertEquals(0, HybridFusionOrchestrator.requestedPageEnd(new SearchSourceBuilder().size(0)));
+    }
+
+    // ---- fast path: answer from the legs, no round 2 ----
+
+    private HybridFusionOrchestrator.FusedResult fusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> legs,
+        int window,
+        boolean armed,
+        TotalHits[] totalOut
+    ) {
+        return fusedResult(source, ms, legs, window, armed, totalOut, new FusedCoordinatorTimings());
+    }
+
+    private HybridFusionOrchestrator.FusedResult fusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> legs,
+        int window,
+        boolean armed,
+        TotalHits[] totalOut,
+        FusedCoordinatorTimings timings
+    ) {
+        return HybridFusionOrchestrator.buildFusedResult(
+            source,
+            ms,
+            legs,
+            minMaxArithmetic(),
+            window,
+            timings,
+            new FusedDocExplanations(),
+            null,
+            derived -> totalOut[0] = derived,
+            armed
+        );
+    }
+
+    private HybridFusionOrchestrator.FusedResult fusedResult(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> legs,
+        int window,
+        boolean armed,
+        TotalHits[] totalOut,
+        FusedCoordinatorTimings timings,
+        TotalHits countedUnion
+    ) {
+        return HybridFusionOrchestrator.buildFusedResult(
+            source,
+            ms,
+            legs,
+            minMaxArithmetic(),
+            window,
+            timings,
+            new FusedDocExplanations(),
+            null,
+            derived -> totalOut[0] = derived,
+            armed,
+            countedUnion
+        );
+    }
+
+    public void testBuildFusedResult_whenArmedAndTotalsDisabled_thenThePageIsAssembledAndRoundTwoIsMatchNone() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        // leg 0: 1 (0.9), 2 (0.5) ; leg 1: 2 (0.8), 3 (0.3) → fused order 2, 1, 3 (min_max + arithmetic mean over the union)
+        MultiSearchResponse ms = multiSearch(
+            legItem(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f))),
+            legItem(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.3f)))
+        );
+        TotalHits[] total = new TotalHits[] { eq(42) };
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(3).trackTotalHits(false),
+            ms,
+            legs,
+            10,
+            true,
+            total
+        );
+
+        assertTrue("round 2 has nothing to do", result.substitute() instanceof MatchNoneQueryBuilder);
+        assertTrue(result.tookFastPath());
+        SearchHits page = result.assembledHits();
+        assertEquals(3, page.getHits().length);
+        assertNull("totals disabled → no total, as round 2 would report", page.getTotalHits());
+        // scores are the floored fused scores in descending order, and the hits ARE the legs' instances
+        float previous = Float.MAX_VALUE;
+        for (SearchHit hit : page.getHits()) {
+            assertTrue(hit.getScore() <= previous);
+            assertTrue(hit.getScore() >= HybridFusionOrchestrator.MIN_RANKED_SCORE);
+            previous = hit.getScore();
+        }
+        assertEquals("max_score is the top fused score", page.getHits()[0].getScore(), page.getMaxScore(), 0.0f);
+        assertNull("the totals consumer is told round 2's own total stands", total[0]);
+    }
+
+    public void testBuildFusedResult_whenArmedWithDefaultTotalsAndALegProvesTheCount_thenThePageCarriesTheDerivedTotal() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] total = new TotalHits[] { eq(42) };
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(new SearchSourceBuilder().size(2), ms, legs, 10, true, total);
+
+        assertTrue(result.tookFastPath());
+        assertEquals(10_000L, result.assembledHits().getTotalHits().value());
+        assertEquals(TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO, result.assembledHits().getTotalHits().relation());
+        assertNull("the page carries the total; the totals consumer must not overwrite it", total[0]);
+    }
+
+    public void testBuildFusedResult_whenArmedButNoLegProvesTheCount_thenFallsBackToTwoRoundsWithTheTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItemWithTotal(Map.of("2", 0.8f), eq(12)));
+        TotalHits[] total = new TotalHits[] { eq(42) };
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(new SearchSourceBuilder().size(2), ms, legs, 10, true, total);
+
+        assertFalse(result.tookFastPath());
+        assertTrue(result.substitute() instanceof HybridFusionQueryBuilder);
+        assertEquals(
+            "the two-round path keeps the Tail, exactly as before",
+            1,
+            ((HybridFusionQueryBuilder) result.substitute()).buildSelfErasedQuery().filter().size()
+        );
+        assertNull(total[0]);
+    }
+
+    public void testBuildFusedResult_whenThePageReachesPastTheRankedWindow_thenFallsBackToTwoRounds() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)));
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(10).trackTotalHits(false),
+            ms,
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+
+        assertFalse("2 ranked docs, size 10: Tail-only documents would fill the page on the two-round path", result.tookFastPath());
+        assertTrue(result.substitute() instanceof HybridFusionQueryBuilder);
+    }
+
+    public void testBuildFusedResult_whenNotArmed_thenBehavesExactlyLikeBuildFusedQuery() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
+        TotalHits[] total = new TotalHits[1];
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(new SearchSourceBuilder().size(2), ms, legs, 10, false, total);
+
+        assertFalse(result.tookFastPath());
+        assertTrue(result.substitute() instanceof HybridFusionQueryBuilder);
+        assertEquals(
+            "Tail dropped for the count as the totals change does",
+            0,
+            ((HybridFusionQueryBuilder) result.substitute()).buildSelfErasedQuery().filter().size()
+        );
+        assertNotNull("and the derived total travels through the totals consumer", total[0]);
+    }
+
+    public void testBuildFusedResult_whenNothingFused_thenMatchNoneAndNothingAssembled() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().trackTotalHits(false),
+            multiSearch(legItem(Map.of())),
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+        assertTrue(result.substitute() instanceof MatchNoneQueryBuilder);
+        assertNull(result.assembledHits());
+    }
+
+    public void testAssemblePage_slicesFromAndSize() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        MultiSearchResponse ms = multiSearch(legItem(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.8f, "3", 0.7f, "4", 0.6f))));
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().from(1).size(2).trackTotalHits(false),
+            ms,
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+
+        SearchHits page = result.assembledHits();
+        assertEquals(2, page.getHits().length);
+        assertEquals("2", page.getHits()[0].getId());
+        assertEquals("3", page.getHits()[1].getId());
+        assertEquals("max_score is the top fused score across the whole ranking, not the page", 1.0f, page.getMaxScore(), 0.0001f);
+        // size 0: an empty page, max_score null, like core
+        SearchHits empty = fusedResult(new SearchSourceBuilder().size(0).trackTotalHits(false), ms, legs, 10, true, new TotalHits[1])
+            .assembledHits();
+        assertEquals(0, empty.getHits().length);
+        assertTrue(Float.isNaN(empty.getMaxScore()));
+    }
+
+    /**
+     * Equal fused scores on the assembled page follow round 2's merge order as far as the coordinator can know it: shard
+     * order first (what {@code TopDocs.merge} does with the shard index), then — where round 2 would fall back to Lucene
+     * doc ids the coordinator never sees — the ranking's own {@code _index}, {@code _id} key order. Scores are never
+     * reordered across a tie.
+     */
+    public void testAssemblePage_whenFusedScoresTie_thenTiesAreOrderedByShardThenIdAndScoresNeverReorder() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"));
+        // one leg, every raw score equal: min_max normalizes them all to 1.0, so every document ties at the same fused score
+        SearchHit[] tied = new SearchHit[] {
+            hitInShard(7, "10", 0.7f, 1),
+            hitInShard(3, "2", 0.7f, 0),
+            hitInShard(9, "1", 0.7f, 1),
+            hitInShard(1, "3", 0.7f, 0) };
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(4).trackTotalHits(false),
+            multiSearch(successfulItem(tied)),
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+        assertTrue(result.tookFastPath());
+        List<String> ids = Arrays.stream(result.assembledHits().getHits()).map(SearchHit::getId).toList();
+        assertEquals(
+            "shard 0 before shard 1 (round 2's order); within a shard by _id, so \"1\" before \"10\"",
+            List.of("2", "3", "1", "10"),
+            ids
+        );
+        for (SearchHit hit : result.assembledHits().getHits()) {
+            assertEquals(1.0f, hit.getScore(), 0.0f);
+        }
+
+        // a higher fused score in a later shard still comes first: the shard key only ever settles exact ties
+        SearchHit[] mixed = new SearchHit[] { hitInShard(1, "a", 0.5f, 0), hitInShard(2, "b", 0.9f, 1), hitInShard(3, "c", 0.5f, 1) };
+        result = fusedResult(
+            new SearchSourceBuilder().size(3).trackTotalHits(false),
+            multiSearch(successfulItem(mixed)),
+            legs,
+            10,
+            true,
+            new TotalHits[1]
+        );
+        assertEquals(List.of("b", "a", "c"), Arrays.stream(result.assembledHits().getHits()).map(SearchHit::getId).toList());
+    }
+
+    private SearchHit hitInShard(int docId, String id, float score, int shard) {
+        SearchHit hit = new SearchHit(docId, id, Map.of(), Map.of());
+        hit.score(score);
+        hit.shard(new SearchShardTarget("node-1", new ShardId(new Index(INDEX, INDEX + "-uuid"), shard), null, OriginalIndices.NONE));
+        return hit;
+    }
+
+    public void testTotalHitsForFastPath() {
+        // ranked count reaching the threshold reproduces core's clamp; below it, only a capped leg proves the count
+        assertEquals(
+            new TotalHits(5, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+            HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder().trackTotalHitsUpTo(5), 7, new TotalHits[] { null }, 100)
+        );
+        assertEquals(
+            new TotalHits(7, TotalHits.Relation.EQUAL_TO),
+            HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder().trackTotalHitsUpTo(7), 7, new TotalHits[] { null }, 100)
+        );
+        assertNull(HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder(), 7, new TotalHits[] { eq(100) }, 100));
+        assertEquals(
+            new TotalHits(10_000, TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO),
+            HybridFusionOrchestrator.totalHitsForFastPath(new SearchSourceBuilder(), 7, new TotalHits[] { gte(10_000) }, 100)
+        );
+        assertNull(
+            "exact totals are never answered from the legs",
+            HybridFusionOrchestrator.totalHitsForFastPath(
+                new SearchSourceBuilder().trackTotalHits(true),
+                7,
+                new TotalHits[] { gte(10_000) },
+                100
+            )
+        );
+    }
+
+    public void testRequestShapeAllowsFastPath() {
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder()));
+        assertTrue(HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().trackTotalHits(false).from(3).size(7)));
+        assertTrue(
+            "explain is answered from the legs",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().explain(true))
+        );
+        assertTrue(
+            "fetch-phase fields travel with the legs",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().fetchSource(true).docValueField("f").version(true).seqNoAndPrimaryTerm(true)
+            )
+        );
+        assertFalse(HybridFusionOrchestrator.requestShapeAllowsFastPath(null));
+        assertFalse(
+            "aggs",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().aggregation(AggregationBuilders.terms("t").field("f"))
+            )
+        );
+        assertFalse(
+            "highlight",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().highlighter(new org.opensearch.search.fetch.subphase.highlight.HighlightBuilder().field("f"))
+            )
+        );
+        assertFalse("any sort, even _score", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().sort("_score")));
+        assertFalse(
+            "collapse",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().collapse(new CollapseBuilder("grp")))
+        );
+        assertFalse(
+            "search_after",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().searchAfter(new Object[] { 1 }))
+        );
+        assertFalse("min_score", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().minScore(0.1f)));
+        assertFalse(
+            "rescore",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().addRescorer(new org.opensearch.search.rescore.QueryRescorerBuilder(new MatchAllQueryBuilder()))
+            )
+        );
+        assertFalse(
+            "script_fields",
+            HybridFusionOrchestrator.requestShapeAllowsFastPath(
+                new SearchSourceBuilder().scriptField("s", new org.opensearch.script.Script("1"))
+            )
+        );
+        assertFalse("profile", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().profile(true)));
+        assertFalse("exact totals", HybridFusionOrchestrator.requestShapeAllowsFastPath(new SearchSourceBuilder().trackTotalHits(true)));
+    }
+
+    /** The refusal names the first feature in check order, and {@code profile} can be read as absent for the report. */
+    public void testRequestShapeFastPathRefusal_thenTheFirstFeatureInCheckOrderIsNamed() {
+        assertNull(HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder(), false));
+        assertEquals(
+            FastPathDecision.REQUEST_SHAPE,
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false).reason()
+        );
+        assertTrue(
+            "the first failing check is the one reported",
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().sort("_score").minScore(0.1f), false)
+                .detail()
+                .startsWith("sort ")
+        );
+        assertEquals(
+            FastPathDecision.EXACT_TOTALS,
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().trackTotalHits(true), false).reason()
+        );
+        FastPathDecision.Refusal profiled = HybridFusionOrchestrator.requestShapeFastPathRefusal(
+            new SearchSourceBuilder().profile(true),
+            false
+        );
+        assertEquals(FastPathDecision.REQUEST_SHAPE, profiled.reason());
+        assertTrue(profiled.detail().startsWith("profile "));
+        assertNull(
+            "read as the unprofiled twin, the same source allows the fast path",
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true), true)
+        );
+        assertEquals(
+            "the profile flag is the only thing ignored",
+            FastPathDecision.EXACT_TOTALS,
+            HybridFusionOrchestrator.requestShapeFastPathRefusal(new SearchSourceBuilder().profile(true).trackTotalHits(true), true)
+                .reason()
+        );
+    }
+
+    /** Before the legs run: a nested hybrid, then the shape, then the legs — in that order. */
+    public void testDecideFastPathBeforeLegs_thenNestedShapeAndLegsRefuseInOrder() {
+        SearchRequest request = new SearchRequest("idx").source(new SearchSourceBuilder().size(2).trackTotalHits(false));
+        List<QueryBuilder> plainLegs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+
+        FastPathDecision nested = HybridFusionOrchestrator.decideFastPathBeforeLegs(request, plainLegs, 10, false);
+        assertEquals(FastPathDecision.NESTED_HYBRID, nested.refusedBy());
+        assertNull("nothing past the first refusal is evaluated", nested.fetchBudgetBytes());
+
+        SearchRequest aggregated = new SearchRequest("idx").source(
+            new SearchSourceBuilder().aggregation(AggregationBuilders.terms("t").field("f")).profile(true)
+        );
+        FastPathDecision shape = HybridFusionOrchestrator.decideFastPathBeforeLegs(aggregated, plainLegs, 10, true);
+        assertEquals(
+            "the shape is read with profile ignored, so aggregations is what refuses",
+            FastPathDecision.REQUEST_SHAPE,
+            shape.refusedBy()
+        );
+        assertTrue(shape.detail().startsWith("aggregations"));
+
+        FastPathDecision named = HybridFusionOrchestrator.decideFastPathBeforeLegs(
+            request,
+            List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place").queryName("lex")),
+            10,
+            true
+        );
+        assertEquals(FastPathDecision.LEG_NAME, named.refusedBy());
+        assertTrue("the leg is identified", named.detail().startsWith("leg 1 "));
+
+        FastPathDecision innerHits = HybridFusionOrchestrator.decideFastPathBeforeLegs(
+            request,
+            List.of(
+                new org.opensearch.index.query.NestedQueryBuilder(
+                    "n",
+                    new MatchAllQueryBuilder(),
+                    org.apache.lucene.search.join.ScoreMode.Max
+                ).innerHit(new InnerHitBuilder("members"))
+            ),
+            10,
+            true
+        );
+        assertEquals(FastPathDecision.LEG_INNER_HITS, innerHits.refusedBy());
+    }
+
+    /** After the legs: the verdict on the timings says why an armed request fell back, and that a taken one settled. */
+    public void testBuildFusedResult_thenTheDecisionOnTheTimingsRecordsTheVerdict() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+
+        // taken: totals disabled settle trivially
+        FusedCoordinatorTimings taken = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(2).trackTotalHits(false),
+            multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            taken
+        );
+        assertTrue(result.tookFastPath());
+        assertTrue(taken.fastPath().allowsSoFar());
+        assertEquals(Boolean.TRUE, taken.fastPath().countSettled());
+        assertEquals(Map.of("would_take", true, "count_settled", true), taken.fastPath().toMap());
+
+        // fallback: default totals and no leg proves the count
+        FusedCoordinatorTimings unsettled = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(2),
+            multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItemWithTotal(Map.of("2", 0.8f), eq(12))),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            unsettled
+        );
+        assertFalse(result.tookFastPath());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, unsettled.fastPath().refusedBy());
+        assertEquals(Boolean.FALSE, unsettled.fastPath().countSettled());
+
+        // fallback: the page reaches past the ranked window
+        FusedCoordinatorTimings beyond = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(10).trackTotalHits(false),
+            multiSearch(legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            beyond
+        );
+        assertFalse(result.tookFastPath());
+        assertEquals(FastPathDecision.PAGE_BEYOND_WINDOW, beyond.fastPath().refusedBy());
+        assertEquals("the count was settled; the page was the problem", Boolean.TRUE, beyond.fastPath().countSettled());
+
+        // fallback: nothing ranked
+        FusedCoordinatorTimings empty = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(2).trackTotalHits(false),
+            multiSearch(legItem(Map.of()), legItem(Map.of())),
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            empty
+        );
+        assertFalse(result.tookFastPath());
+        assertEquals(FastPathDecision.NO_CANDIDATES, empty.fastPath().refusedBy());
+
+        // un-armed (a profiled request's twin): the same verdict is completed for the report, and nothing is assembled
+        FusedCoordinatorTimings profiled = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        result = fusedResult(
+            new SearchSourceBuilder().size(2).profile(true),
+            multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            false,
+            new TotalHits[1],
+            profiled
+        );
+        assertFalse(result.tookFastPath());
+        assertTrue("its unprofiled twin would have taken the fast path", profiled.fastPath().allowsSoFar());
+        assertEquals(Boolean.TRUE, profiled.fastPath().countSettled());
+
+        // a decision refused before the legs is left alone by the legs' verdict
+        FusedCoordinatorTimings refusedEarly = new FusedCoordinatorTimings().fastPath(
+            new FastPathDecision().refuse(FastPathDecision.LEG_NAME, "leg 1 carries _name")
+        );
+        fusedResult(
+            new SearchSourceBuilder().size(2),
+            multiSearch(legItemWithTotal(Map.of("1", 0.9f), eq(37)), legItem(Map.of("2", 0.8f))),
+            legs,
+            10,
+            false,
+            new TotalHits[1],
+            refusedEarly
+        );
+        assertEquals(FastPathDecision.LEG_NAME, refusedEarly.fastPath().refusedBy());
+        assertNull(refusedEarly.fastPath().countSettled());
+    }
+
+    /**
+     * The two reasons an unsettled count can carry, and why the distinction exists. A profiled request is never armed and
+     * so never issues the count round, which means a count its unprofiled twin settles is reported as unsettled here. Saying
+     * only "no leg proved it" would describe a request whose count is in fact derivable, so when the twin would have issued
+     * the round the reason becomes {@code count_round_not_run_under_profile}. {@code count_settled} stays {@code false}
+     * either way: nothing settled the count for the request that actually ran.
+     */
+    public void testDecideFastPathAfterLegs_namesTheProfileAsTheReasonOnlyWhenTheTwinWouldHaveCounted() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f)), eq(40)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f)), eq(20))
+        );
+        SearchSourceBuilder source = new SearchSourceBuilder().size(2).trackTotalHitsUpTo(10_000);
+
+        FastPathDecision twinWouldCount = new FastPathDecision().twinWouldHaveCounted(true);
+        fusedResult(source, ms, legs, 10, false, new TotalHits[1], new FusedCoordinatorTimings().fastPath(twinWouldCount));
+        assertEquals(FastPathDecision.COUNT_ROUND_NOT_RUN_UNDER_PROFILE, twinWouldCount.refusedBy());
+        assertEquals("the count is derivable, just not for a profiled request", Boolean.FALSE, twinWouldCount.countSettled());
+        assertEquals(Boolean.FALSE, twinWouldCount.toMap().get("would_take"));
+
+        FastPathDecision twinWouldNot = new FastPathDecision();
+        fusedResult(source, ms, legs, 10, false, new TotalHits[1], new FusedCoordinatorTimings().fastPath(twinWouldNot));
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, twinWouldNot.refusedBy());
+        assertEquals(Boolean.FALSE, twinWouldNot.countSettled());
+
+        // The page bound keeps its precedence over both: it is the more specific refusal, and it is checked first.
+        FastPathDecision pageBeyond = new FastPathDecision().twinWouldHaveCounted(true);
+        fusedResult(
+            new SearchSourceBuilder().size(10).trackTotalHitsUpTo(10_000),
+            ms,
+            legs,
+            10,
+            false,
+            new TotalHits[1],
+            new FusedCoordinatorTimings().fastPath(pageBeyond)
+        );
+        assertEquals(FastPathDecision.PAGE_BEYOND_WINDOW, pageBeyond.refusedBy());
+    }
+
+    // ---- L9: exact hits.total from round 1 (leg counts + overlap aggregations) ----
+
+    /** A leg item with an exact ({@code eq}) or capped ({@code gte}) total and, optionally, its overlap aggregation. */
+    private int countingLegItems = 0;
+
+    private MultiSearchResponse.Item countingLegItem(TotalHits total, InternalAggregation overlap) {
+        // A real leg returns min(its match count, window) hits, so a fixture that reports a total and no hits is a shape no
+        // shard produces — and the count round's page test reads those hits. Emit ids unique across calls, so two legs of a
+        // fixture fuse to the sum of their hits rather than to one overlapping set.
+        int emitted = Objects.isNull(total) ? 0 : (int) Math.min(total.value(), 100);
+        SearchHit[] hits = new SearchHit[emitted];
+        for (int i = 0; i < emitted; i++) {
+            hits[i] = hitFrom(i, INDEX, "cli-" + (countingLegItems++) + "-" + i, 1.0f - i / 1000.0f);
+        }
+        SearchHits searchHits = new SearchHits(hits, total, 1.0f);
+        InternalAggregations aggregations = overlap == null ? null : InternalAggregations.from(List.of(overlap));
+        SearchResponseSections sections = new SearchResponseSections(searchHits, aggregations, null, false, false, null, 0);
+        SearchResponse response = new SearchResponse(sections, null, 1, 1, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    /** A leg item that answered on fewer shards than it searched, or did not run to completion. */
+    private MultiSearchResponse.Item degradedLegItem(TotalHits total, InternalAggregation overlap, int missingShards, boolean timedOut) {
+        int emitted = Objects.isNull(total) ? 0 : (int) Math.min(total.value(), 100);
+        SearchHit[] hits = new SearchHit[emitted];
+        for (int i = 0; i < emitted; i++) {
+            hits[i] = hitFrom(i, INDEX, "deg-" + (countingLegItems++) + "-" + i, 1.0f - i / 1000.0f);
+        }
+        SearchHits searchHits = new SearchHits(hits, total, 1.0f);
+        InternalAggregations aggregations = overlap == null ? null : InternalAggregations.from(List.of(overlap));
+        SearchResponseSections sections = new SearchResponseSections(searchHits, aggregations, null, timedOut, false, null, 0);
+        SearchResponse response = new SearchResponse(sections, null, 4, 4 - missingShards, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    public void testUnionCountRequest_refusesALegThatDidNotAnswerOnEveryShard() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        assertNotNull(
+            "the control",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(10), null, 0, false), degradedLegItem(eq(3), null, 0, false) },
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a leg that lost a shard cannot be shown to be below the threshold either",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { degradedLegItem(eq(10), null, 1, false), degradedLegItem(eq(3), null, 0, false) },
+                100,
+                true
+            )
+        );
+    }
+
+    public void testAnsweredCompletely_isOneShardAccountingCheckPlusCompletion() {
+        // successful == total already implies no failures: a shard that failed is absent from successfulShards.
+        assertTrue(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 0, false).getResponse()));
+        assertFalse(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 1, false).getResponse()));
+        assertFalse(HybridFusionOrchestrator.answeredCompletely(degradedLegItem(eq(1), null, 0, true).getResponse()));
+        assertFalse(HybridFusionOrchestrator.answeredCompletely(null));
+    }
+
+    /** A response with core's own shard accounting: {@code successfulShards} INCLUDES the skipped ones. */
+    private SearchResponse shardAccountedResponse(int total, int successful, int skipped) {
+        SearchHits hits = new SearchHits(new SearchHit[0], eq(0), 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(hits, null, null, false, false, null, 0);
+        return new SearchResponse(sections, null, total, successful, skipped, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+    }
+
+    /**
+     * A skipped shard must not make a complete answer look incomplete. {@code AbstractSearchAsyncAction#skipShard}
+     * increments {@code successfulOps} <b>and</b> {@code skippedOps}, and {@code buildSearchResponse} reports the first as
+     * {@code successfulShards} and the second as {@code skippedShards} — so skipped is a SUBSET of successful, and
+     * {@code successful + skipped == total} over-counts and refuses a search that answered everywhere.
+     *
+     * <p>This is not a corner: {@code can_match} pre-filtering runs for any multi-shard search touching a read-only index
+     * (UltraWarm, rolled-over ISM indices, searchable snapshots) and skips a shard wherever a leg cannot match, so the old
+     * arithmetic disabled the optimization outright on time-series and log-style deployments. Every other fixture here uses
+     * {@code skipped = 0}, which is why nothing caught it.
+     */
+    public void testAnsweredCompletely_treatsASkippedShardAsAnswered() {
+        assertTrue(
+            "4 of 4 answered, one of them by being skipped",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 4, 1))
+        );
+        assertTrue(
+            "every shard skipped is still every shard accounted for",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 4, 4))
+        );
+        assertTrue("no skips at all", HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 4, 0)));
+        assertFalse(
+            "one shard neither answered nor was skipped",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 3, 0))
+        );
+        assertFalse(
+            "a skip does not make up for a shard that never answered",
+            HybridFusionOrchestrator.answeredCompletely(shardAccountedResponse(4, 3, 1))
+        );
+    }
+
+    /**
+     * The minimum cluster wiring a {@code NeuralQueryBuilder} needs to be constructed at all: its builder validates the
+     * semantic-field feature against the cluster's minimum node version.
+     */
+    private void initClusterMinVersionForNeuralLegs() {
+        org.opensearch.cluster.node.DiscoveryNodes nodes = org.mockito.Mockito.mock(org.opensearch.cluster.node.DiscoveryNodes.class);
+        org.mockito.Mockito.when(nodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.CURRENT);
+        org.opensearch.cluster.ClusterState clusterState = org.mockito.Mockito.mock(org.opensearch.cluster.ClusterState.class);
+        org.mockito.Mockito.when(clusterState.getNodes()).thenReturn(nodes);
+        org.opensearch.cluster.service.ClusterService clusterService = org.mockito.Mockito.mock(
+            org.opensearch.cluster.service.ClusterService.class
+        );
+        org.mockito.Mockito.when(clusterService.state()).thenReturn(clusterState);
+        org.opensearch.neuralsearch.util.NeuralSearchClusterUtil.instance()
+            .initialize(clusterService, org.mockito.Mockito.mock(org.opensearch.cluster.metadata.IndexNameExpressionResolver.class));
+    }
+
+    /**
+     * The arming gate, on the shape where it is the <b>only</b> thing refusing: two lexical legs, every other condition for
+     * a count satisfied. Un-armed round 2 runs whatever happens, so the count would be a third round doing work its Tail
+     * does inside round 2 — measured on WANDS as +5 ms cold to issue the count against +3 ms to keep the Tail — while armed
+     * it removes round 2 outright. Worth pinning on a leg shape that carries no other refusal, because the two un-armed
+     * assertions further down both involve an ANN leg and so cannot tell the gate apart from a per-leg rule.
+     */
+    public void testUnionCountRequest_isRefusedUnarmedEvenWhenEveryLegAndTheShapeAllowIt() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        List<QueryBuilder> lexical = List.of(hello, place);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        assertNotNull(
+            "armed, this is exactly the shape the count is for",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(eq(10), eq(3)), 100, true)
+        );
+        assertNull(
+            "un-armed the same shape is refused by the gate alone, with no leg giving a reason of its own",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(eq(10), eq(3)), 100, false)
+        );
+    }
+
+    /**
+     * A short {@code neural} leg is refused even when armed, unlike a short {@code knn} leg. The difference is what
+     * re-executing it costs: the count's disjunction is built from the ORIGINAL leg builders, whose {@code vectorSupplier()}
+     * round 1 never set ({@code rewriteQueryAgainstKnnField} returns a NEW builder holding the {@code SetOnce}), so
+     * rewriting the count re-enters the inference branch and calls the model a second time — and
+     * {@code MLCommonsClientAccessor} caches model metadata, not embeddings. Against a remote connector that is a network
+     * call and per-call spend, which the knn measurement (+4 ms allowed vs +8 ms refused) says nothing about.
+     *
+     * <p>Asserted on the armed path only. Un-armed the arming gate refuses first, so an un-armed assertion here would hold
+     * with the inference test deleted and would be pinning the gate rather than the carve-out — the gate has its own test
+     * above.
+     */
+    public void testUnionCountRequest_refusesAShortNeuralLegEvenArmedButServesAShortKnnLeg() {
+        initClusterMinVersionForNeuralLegs();
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder neural = NeuralQueryBuilder.builder().fieldName("vec").queryText("shoes").modelId("m1").k(10).build();
+        QueryBuilder knn = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        assertNull(
+            "a short neural leg would cost a second inference, which no round trip saved pays for",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(neural, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        // The same shape with knn instead: served, because knn carries its vector and only re-walks a graph.
+        assertNotNull(
+            "a short knn leg is a graph walk, which armed buys away a round trip",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(knn, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        assertNull(
+            "and un-armed the gate refuses it before any leg is weighed",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(knn, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                false
+            )
+        );
+    }
+
+    /**
+     * The premise the rule above rests on, asserted rather than argued: a {@code neural} leg that FILLED the window IS
+     * admitted, and what enters the disjunction is the user's own builder with {@code vectorSupplier() == null} — so
+     * rewriting it infers again. That is fine there only because {@code legInTailForm} keeps a window-filling leg verbatim,
+     * so round 2's Tail carries the same unresolved builder and pays the same inference. If this ever started carrying a
+     * resolved copy, the short-leg refusal above would be measuring the wrong thing.
+     */
+    public void testUnionCountRequest_admitsAFilledNeuralLegAsTheUnresolvedOriginal() {
+        initClusterMinVersionForNeuralLegs();
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        NeuralQueryBuilder neural = NeuralQueryBuilder.builder().fieldName("vec").queryText("shoes").modelId("m1").k(100).build();
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        SearchRequest count = HybridFusionOrchestrator.unionCountRequest(
+            armedScope(source),
+            source,
+            List.of(neural, hello),
+            lexicalItems(eq(100), eq(3)),
+            100,
+            true
+        );
+
+        assertNotNull("a filled neural leg is re-executed by the Tail too, so counting it is cost-neutral", count);
+        BoolQueryBuilder disjunction = (BoolQueryBuilder) count.source().query();
+        assertSame("the count carries the user's own leg, not a resolved copy", neural, disjunction.should().get(0));
+        assertNull("whose vector is still unresolved, so a rewrite of it would infer", neural.vectorSupplier());
+    }
+
+    /** The same rule where it actually bites: a leg whose can_match skipped a shard must still be counted. */
+    public void testUnionCountRequest_servesLegsWhoseCanMatchSkippedAShard() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        assertNotNull(
+            "a skipped shard is a shard that answered, so the union is still countable",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { skippedShardLegItem(eq(10), 1), skippedShardLegItem(eq(3), 2) },
+                100,
+                true
+            )
+        );
+    }
+
+    /** A leg item that answered on every shard, some of them by being skipped as unable to match. */
+    private MultiSearchResponse.Item skippedShardLegItem(TotalHits total, int skipped) {
+        int emitted = (int) Math.min(total.value(), 100);
+        SearchHit[] hits = new SearchHit[emitted];
+        for (int i = 0; i < emitted; i++) {
+            hits[i] = hitFrom(i, INDEX, "skp-" + (countingLegItems++) + "-" + i, 1.0f - i / 1000.0f);
+        }
+        SearchHits searchHits = new SearchHits(hits, total, 1.0f);
+        SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        // total 4, successful 4 -- of which `skipped` were skipped, exactly as core reports it.
+        SearchResponse response = new SearchResponse(sections, null, 4, 4, skipped, 10, ShardSearchFailure.EMPTY_ARRAY, null);
+        return new MultiSearchResponse.Item(response, null);
+    }
+
+    /**
+     * Nothing fused: round 2 is a {@code match_none} either way and {@code buildSubstitute} returns before it reads a count,
+     * so issuing one is a distributed round for nothing. The page test alone does not catch it — a {@code size: 0} request
+     * asks for page end 0, and {@code 0 > 0} is false.
+     */
+    public void testUnionCountRequest_refusedWhenTheLegsRankedNothing() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchSourceBuilder sizeZero = new SearchSourceBuilder().size(0).trackTotalHitsUpTo(10_000);
+
+        assertNull(
+            "no candidates, so there is nothing a count could settle for",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(sizeZero),
+                sizeZero,
+                legs,
+                new MultiSearchResponse.Item[] { countingLegItem(eq(0), null), countingLegItem(eq(0), null) },
+                100,
+                true
+            )
+        );
+        // The same size: 0 request WITH candidates is still served -- the refusal above is about the empty legs, not the size.
+        SearchSourceBuilder alsoSizeZero = new SearchSourceBuilder().size(0).trackTotalHitsUpTo(10_000);
+        assertNotNull(
+            "a size: 0 request that fused something still wants its count",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(alsoSizeZero), alsoSizeZero, legs, lexicalItems(eq(10), eq(3)), 100, true)
+        );
+    }
+
+    /** The shapes finding 1 of the review named: no leg may carry an aggregation, so nothing scans an unbounded match set. */
+    public void testBuildLegMultiSearch_noLegHostsForTheShapesThatWouldBeUnbounded() {
+        QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
+        QueryBuilder ann2 = new KNNQueryBuilder("vec2", new float[] { 3f, 4f }, 10);
+        QueryBuilder title = new MatchQueryBuilder("title", "hello");
+        QueryBuilder body = new MatchQueryBuilder("body", "world");
+        for (List<QueryBuilder> legs : List.of(
+            List.of(ann, title, body),   // a predicate leg would have hosted
+            List.of(ann, ann2),          // an ANN leg would have sat inside a filter
+            List.of(ann, ann2, title),
+            List.of(title, body, new TermQueryBuilder("text", "place")) // lexical-only: the count round, no host
+        )) {
+            CandidateScope scope = CandidateScope.from(new SearchRequest(INDEX).source(new SearchSourceBuilder().trackTotalHitsUpTo(500)));
+            scope.enableLegTotalHits(500);
+
+            MultiSearchRequest ms = HybridFusionOrchestrator.buildLegMultiSearch(scope, legs, 50);
+
+            for (int i = 0; i < ms.requests().size(); i++) {
+                assertNull("leg " + i + " of " + legs.size() + " must carry no aggregation", ms.requests().get(i).source().aggregations());
+            }
+        }
+    }
+
+    public void testBuildLegMultiSearch_noOverlapAggregationWithoutLegCounting_orWithAPostFilter() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+
+        MultiSearchRequest notCounting = HybridFusionOrchestrator.buildLegMultiSearch(
+            CandidateScope.from(new SearchRequest(INDEX)),
+            legs,
+            50
+        );
+        for (SearchRequest leg : notCounting.requests()) {
+            assertNull(leg.source().aggregations());
+        }
+
+        CandidateScope postFiltered = CandidateScope.from(
+            new SearchRequest(INDEX).source(new SearchSourceBuilder().trackTotalHitsUpTo(500).postFilter(new TermQueryBuilder("text", "x")))
+        );
+        postFiltered.enableLegTotalHits(500);
+        assertFalse(postFiltered.legUnionCountAllowed());
+        for (SearchRequest leg : HybridFusionOrchestrator.buildLegMultiSearch(postFiltered, legs, 50).requests()) {
+            assertNull("a post_filter applies to hits but not to aggregations, so the counts would disagree", leg.source().aggregations());
+        }
+    }
+
+    // ---- the lazy union count: one size:0 round over the legs' disjunction, for lexical-only hybrids ----
+
+    private CandidateScope armedScope(SearchSourceBuilder source) {
+        CandidateScope scope = CandidateScope.from(new SearchRequest(INDEX).source(source));
+        scope.enableLegTotalHits(source.trackTotalHitsUpTo() == null ? 10_000 : source.trackTotalHitsUpTo());
+        return scope;
+    }
+
+    private MultiSearchResponse.Item[] lexicalItems(TotalHits first, TotalHits second) {
+        return new MultiSearchResponse.Item[] { countingLegItem(first, null), countingLegItem(second, null) };
+    }
+
+    public void testBuildFusedResult_withNoCountedUnionAndNoLegProofKeepsRoundTwo() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(4899)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.3f)), eq(2000))
+        );
+        FusedCoordinatorTimings timings = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000),
+            ms,
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            timings,
+            null
+        );
+
+        // No eager aggregation is attached to lexical-only legs any more, so without a count round nothing proves the
+        // union and the request keeps the Tail — the pre-L9 behaviour, which is what makes the count round optional.
+        assertFalse(result.tookFastPath());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, timings.fastPath().refusedBy());
+    }
+
+    public void testUnionCountRequest_legsBelowTheThreshold_countsTheDisjunctionAndNothingElse() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        SearchRequest count = HybridFusionOrchestrator.unionCountRequest(
+            armedScope(source),
+            source,
+            List.of(hello, place),
+            lexicalItems(eq(4899), eq(2000)),
+            100,
+            true
+        );
+
+        assertNotNull("both legs came back exact and below the threshold, so one count settles the union", count);
+        BoolQueryBuilder disjunction = (BoolQueryBuilder) count.source().query();
+        assertEquals(List.of(hello, place), disjunction.should());
+        assertEquals("1", disjunction.minimumShouldMatch());
+        assertEquals("a count fetches nothing", 0, count.source().size());
+        assertEquals(0, count.source().from());
+        assertFalse(count.source().fetchSource().fetchSource());
+        assertEquals(Integer.valueOf(10_000), count.source().trackTotalHitsUpTo());
+        assertNull("no aggregation: that is the whole point of counting this way", count.source().aggregations());
+        assertFalse("a profile of a discarded request only costs", count.source().profile());
+        assertArrayEquals(new String[] { INDEX }, count.indices());
+        assertEquals(SearchPipelineService.NOOP_PIPELINE_ID, count.pipeline());
+    }
+
+    /**
+     * v-I1: a derived total may never come back below the page it is reported with. Each leg and the count are
+     * independently routed reads, so without a PIT the count can land on a copy missing a refresh the legs' copy had and
+     * return a value below the ranked count — a response with more hits than its own `total`, which a client can see.
+     */
+    public void testBuildFusedResult_discardsACountedUnionBelowTheRankedCount() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(40)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.4f)), eq(20))
+        );
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        // The legs fuse to 3 documents. A count of 2 contradicts the page, so it is refused and the Tail counts instead.
+        FusedCoordinatorTimings refused = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        TotalHits[] skewedTotal = new TotalHits[1];
+        HybridFusionOrchestrator.FusedResult skewed = fusedResult(source, ms, legs, 10, true, skewedTotal, refused, eq(2));
+        assertFalse("a count below the ranked page is not usable", skewed.tookFastPath());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, refused.fastPath().refusedBy());
+        // The refusal above is the decideFastPathAfterLegs floor: the count is nulled against the ranked count, so nothing
+        // settles the total. These two are what the fallback then owes — it has to carry the Tail and publish nothing, or
+        // round 2 returns its 3 ranked documents under "total": 2.
+        assertTrue("the fallback has to count for itself", refused.tailBuilt());
+        assertNull("and publish no derived total", skewedTotal[0]);
+
+        // Exactly at the ranked count is consistent and stands.
+        FusedCoordinatorTimings atTheEdge = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult edge = fusedResult(source, ms, legs, 10, true, new TotalHits[1], atTheEdge, eq(3));
+        assertTrue(edge.tookFastPath());
+        assertEquals(eq(3), edge.assembledHits().getTotalHits());
+
+        // A capped count is never "below": the threshold is above the window, hence above anything ranked.
+        FusedCoordinatorTimings capped = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult gteResult = fusedResult(source, ms, legs, 10, true, new TotalHits[1], capped, gte(10_000));
+        assertTrue(gteResult.tookFastPath());
+        assertEquals(gte(10_000), gteResult.assembledHits().getTotalHits());
+    }
+
+    /**
+     * v-I3: the count is only worth issuing when the page fits what the legs actually ranked. Gating on the window instead
+     * left every request whose legs fuse to fewer than {@code from + size} documents paying for a count it then discarded.
+     */
+    public void testUnionCountRequest_refusesWhenTheLegsRankedFewerDocumentsThanThePage() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        List<QueryBuilder> legs = List.of(hello, place);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(10).trackTotalHitsUpTo(10_000);
+
+        // Two legs returning the same two documents fuse to 2 — short of a page of 10 — so the count would be discarded.
+        assertNull(
+            "the legs ranked 2 documents for a page of 10",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] {
+                    legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(40)),
+                    legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.8f, "2", 0.4f)), eq(20)) },
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a query matching nothing is the common case of the same thing",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { legItemWithTotal(Map.of(), eq(0)), legItemWithTotal(Map.of(), eq(0)) },
+                100,
+                true
+            )
+        );
+        // Ten distinct documents across the legs is exactly the page, so the count is worth issuing.
+        Map<String, Float> five = new LinkedHashMap<>();
+        Map<String, Float> fiveMore = new LinkedHashMap<>();
+        for (int i = 0; i < 5; i++) {
+            five.put("a" + i, 0.9f - i / 100.0f);
+            fiveMore.put("b" + i, 0.8f - i / 100.0f);
+        }
+        assertNotNull(
+            "the legs ranked exactly the page",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { legItemWithTotal(five, eq(40)), legItemWithTotal(fiveMore, eq(20)) },
+                100,
+                true
+            )
+        );
+    }
+
+    /**
+     * v-T5(a): the fan-out bound belongs to the count round, and is asserted where the constant is actually read — on both
+     * sides of it, so the bound is pinned as a boundary rather than just as a refusal.
+     */
+    public void testUnionCountRequest_refusesAFanOutWiderThanTheBound() {
+        SearchSourceBuilder source = new SearchSourceBuilder().size(1).trackTotalHitsUpTo(10_000);
+
+        assertNotNull(
+            "exactly at the bound is served: the disjunction carries one should clause per leg, as the Tail carries one leg",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                lexicalLegs(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT),
+                countingLegItems(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT),
+                100,
+                true
+            )
+        );
+        assertNull(
+            "one past the bound: the disjunction is wider than this algorithm builds",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                lexicalLegs(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT + 1),
+                countingLegItems(HybridFusionOrchestrator.MAX_LEGS_FOR_UNION_COUNT + 1),
+                100,
+                true
+            )
+        );
+    }
+
+    /** {@code n} distinct lexical legs. */
+    private List<QueryBuilder> lexicalLegs(int n) {
+        List<QueryBuilder> legs = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            legs.add(new TermQueryBuilder("text", "t" + i));
+        }
+        return legs;
+    }
+
+    /** {@code n} leg items, each exact, below the threshold, and carrying hits so the ranked-page test can read them. */
+    private MultiSearchResponse.Item[] countingLegItems(int n) {
+        MultiSearchResponse.Item[] items = new MultiSearchResponse.Item[n];
+        for (int i = 0; i < n; i++) {
+            items[i] = countingLegItem(eq(3), null);
+        }
+        return items;
+    }
+
+    public void testUnionCountRequest_refusedForEveryShapeTheCountCannotSettle() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
+        List<QueryBuilder> lexical = List.of(hello, place);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        // A short ANN leg (10 hits against a window of 100 — the default shape, knn k=10 on a few shards) is the one leg the
+        // Tail does not re-execute, so the count's graph walk is work the Tail would not have done. UN-ARMED that question
+        // never arises: the arming gate refuses first, whatever the legs look like (pinned on its own shape by
+        // testUnionCountRequest_isRefusedUnarmedEvenWhenEveryLegAndTheShapeAllowIt)...
+        assertNull(
+            "un-armed, the gate refuses before the legs are weighed at all",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(ann, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                false
+            )
+        );
+        // ...but ARMED the count settles the total, round 2 becomes a match_none, and a whole round trip (query and page
+        // fetch) goes away for one graph walk. That trade is worth taking, so the same shape is served.
+        assertNotNull(
+            "armed, the count buys away round 2 entirely, which is worth one graph walk",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(ann, hello),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+
+        // An ANN leg that FILLED the window is served: the Tail keeps it verbatim, so both paths re-execute it and the
+        // count is cost-neutral. 100 hits at a window of 100 is the truncated case legInTailForm keeps as the real query.
+        SearchRequest withFilledAnn = HybridFusionOrchestrator.unionCountRequest(
+            armedScope(source),
+            source,
+            List.of(ann, hello),
+            lexicalItems(eq(100), eq(3)),
+            100,
+            true
+        );
+        assertNotNull("an ANN leg the window truncated is counted: the Tail would have re-executed it too", withFilledAnn);
+        assertEquals(List.of(ann, hello), ((BoolQueryBuilder) withFilledAnn.source().query()).should());
+        assertNull(
+            "a leg already past the threshold proves the union is too: totalHitsFromLegs answers, no round needed",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(gte(10_000), eq(3)), 100, true)
+        );
+        assertNull(
+            "a leg landing ON the threshold: its own count is capped, so the disjunction's would tell us nothing new",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(eq(10_000), eq(3)), 100, true)
+        );
+        assertNull(
+            "a leg that was not asked to count",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, lexical, lexicalItems(null, eq(3)), 100, true)
+        );
+        assertNull(
+            "one leg is not a union",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(hello),
+                new MultiSearchResponse.Item[] { countingLegItem(eq(10), null) },
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a named leg registers its name from the disjunction",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(hello, new TermQueryBuilder("text", "place").queryName("p")),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a nested hybrid is illegal anywhere but the root, so the disjunction would be rejected with a 400",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(hello, new HybridQueryBuilder().add(place)),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a self-erased fused hybrid is equally illegal nested, and is a separate instanceof in the same guard",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                List.of(
+                    hello,
+                    new HybridFusionQueryBuilder(new String[] { "d1" }, new String[] { INDEX }, new float[] { 1.0f }, List.of(place))
+                ),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        SearchSourceBuilder aggregating = new SearchSourceBuilder().size(3)
+            .trackTotalHitsUpTo(10_000)
+            .aggregation(AggregationBuilders.filter("a", new MatchAllQueryBuilder()));
+        assertNull(
+            "an aggregating request needs the Tail for its own reasons, so a count buys it nothing",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(aggregating),
+                aggregating,
+                lexical,
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        SearchSourceBuilder pastTheWindow = new SearchSourceBuilder().from(90).size(100).trackTotalHitsUpTo(10_000);
+        assertNull(
+            "the page cannot be served from the window, so the request falls back whatever the count says",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(pastTheWindow),
+                pastTheWindow,
+                lexical,
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        SearchSourceBuilder totalsOff = new SearchSourceBuilder().size(3).trackTotalHits(false);
+        assertNull(
+            "no count is wanted at all",
+            HybridFusionOrchestrator.unionCountRequest(armedScope(totalsOff), totalsOff, lexical, lexicalItems(eq(10), eq(3)), 100, true)
+        );
+        SearchSourceBuilder shallowThreshold = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(50);
+        assertNull(
+            "a threshold inside the window is reached by round 2's own Top count",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(shallowThreshold),
+                shallowThreshold,
+                lexical,
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+        CandidateScope unarmed = CandidateScope.from(new SearchRequest(INDEX).source(source));
+        assertFalse(unarmed.legUnionCountAllowed());
+        assertNull(
+            "the legs were not asked to count, so their relations prove nothing",
+            HybridFusionOrchestrator.unionCountRequest(unarmed, source, lexical, lexicalItems(eq(10), eq(3)), 100, true)
+        );
+        assertNull(
+            "a failed leg: the request is about to fail anyway",
+            HybridFusionOrchestrator.unionCountRequest(
+                armedScope(source),
+                source,
+                lexical,
+                new MultiSearchResponse.Item[] {
+                    new MultiSearchResponse.Item(null, new IllegalStateException("leg failed")),
+                    countingLegItem(eq(3), null) },
+                100,
+                true
+            )
+        );
+    }
+
+    public void testUnionCountRequest_readsTheSameViewAsTheLegs() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+        SearchRequest request = new SearchRequest(INDEX).source(source).routing("r1").preference("_local");
+        request.allowPartialSearchResults(false);
+        CandidateScope scope = CandidateScope.from(request);
+        scope.enableLegTotalHits(10_000);
+
+        SearchRequest count = HybridFusionOrchestrator.unionCountRequest(
+            scope,
+            source,
+            List.of(hello, place),
+            lexicalItems(eq(10), eq(3)),
+            100,
+            true
+        );
+
+        assertNotNull(count);
+        // Whatever decides WHICH shards answer has to be inherited, or the count can be of a different document set
+        // than the legs read.
+        assertEquals("r1", count.routing());
+        assertEquals("_local", count.preference());
+        assertEquals(Boolean.FALSE, count.allowPartialSearchResults());
+    }
+
+    public void testBuildFusedResult_aCountedUnionSettlesTheCountAndIsWhatThePageReports() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f, "2", 0.5f)), eq(4899)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.3f)), eq(2000))
+        );
+        TotalHits[] consumed = new TotalHits[1];
+        FusedCoordinatorTimings timings = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000),
+            ms,
+            legs,
+            10,
+            true,
+            consumed,
+            timings,
+            eq(5405)
+        );
+
+        assertTrue("the count is settled, so the fast path stands", result.tookFastPath());
+        assertEquals(eq(5405), result.assembledHits().getTotalHits());
+        assertEquals(Boolean.TRUE, timings.fastPath().countSettled());
+        assertNull("the page carries its own total; round 2's must not overwrite it", consumed[0]);
+    }
+
+    public void testBuildFusedResult_aCountedUnionOutranksTheRankedWindowsOwnCount() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f)), eq(1)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f)), eq(1))
+        );
+
+        HybridFusionOrchestrator.FusedResult result = fusedResult(
+            new SearchSourceBuilder().size(2).trackTotalHitsUpTo(10_000),
+            ms,
+            legs,
+            10,
+            true,
+            new TotalHits[1],
+            new FusedCoordinatorTimings().fastPath(new FastPathDecision()),
+            eq(2)
+        );
+
+        // Core computed both the value and the relation for the legs' own disjunction; an inference from the ranked
+        // window is a fallback for when nothing did.
+        assertEquals(eq(2), result.assembledHits().getTotalHits());
+    }
+
+    // ---- branch coverage for the union-count refusals (each operand of each short-circuit) ----
+
+    /** A leg item whose response carries no {@code hits.total} at all, as a leg never asked to count returns. */
+    private MultiSearchResponse.Item uncountedLegItem() {
+        return countingLegItem(null, null);
+    }
+
+    public void testUnionCountRequest_refusesOnEachGuardIndependently() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder place = new TermQueryBuilder("text", "place");
+        List<QueryBuilder> legs = List.of(hello, place);
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+        CandidateScope scope = armedScope(source);
+
+        assertNull("no scope", HybridFusionOrchestrator.unionCountRequest(null, source, legs, lexicalItems(eq(10), eq(3)), 100, true));
+        assertNull("no items", HybridFusionOrchestrator.unionCountRequest(scope, source, legs, null, 100, true));
+        assertNull("no legs", HybridFusionOrchestrator.unionCountRequest(scope, source, null, lexicalItems(eq(10), eq(3)), 100, true));
+        assertNull(
+            "one item per leg or the leg-to-item mapping is not the one the union is computed over",
+            HybridFusionOrchestrator.unionCountRequest(
+                scope,
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { countingLegItem(eq(10), null) },
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a leg that was not asked to count proves nothing",
+            HybridFusionOrchestrator.unionCountRequest(
+                scope,
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { uncountedLegItem(), countingLegItem(eq(3), null) },
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a null item",
+            HybridFusionOrchestrator.unionCountRequest(
+                scope,
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { null, countingLegItem(eq(3), null) },
+                100,
+                true
+            )
+        );
+        assertNull(
+            // Not the same as isFailure(): an item can carry neither a response nor an exception.
+            "an item with no response",
+            HybridFusionOrchestrator.unionCountRequest(
+                scope,
+                source,
+                legs,
+                new MultiSearchResponse.Item[] { new MultiSearchResponse.Item(null, null), countingLegItem(eq(3), null) },
+                100,
+                true
+            )
+        );
+        assertNull(
+            "a leg that is itself a FUSED hybrid cannot be nested either",
+            HybridFusionOrchestrator.unionCountRequest(
+                scope,
+                source,
+                List.of(
+                    hello,
+                    new HybridFusionQueryBuilder(new String[0], new String[0], new float[0], List.of(), List.of(), List.of(), null)
+                ),
+                lexicalItems(eq(10), eq(3)),
+                100,
+                true
+            )
+        );
+    }
+
+    /**
+     * What a settled count actually buys, at the only call that can have one. A count is issued for an armed request
+     * alone, so the union it establishes is spent by removing round 2 outright — the page is assembled and carries the
+     * counted total — rather than by trimming round 2's Tail. Without a count the same request keeps round 2 and its Tail,
+     * which is what makes the first half a statement about the count and not about the shape.
+     *
+     * <p>Replaces a pair of tests that drove this through {@code buildFusedQuery}'s un-armed path with a non-null count.
+     * That state is unreachable: {@code unionCountRequest} returns null when the fast path is un-armed, so an un-armed
+     * request never has a counted union to pass. The floor on a skewed count is covered on its reachable route by
+     * {@link #testBuildFusedResult_discardsACountedUnionBelowTheRankedCount}.
+     */
+    public void testBuildFusedResult_aSettledCountRemovesRoundTwoRatherThanTrimmingIt() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(new LinkedHashMap<>(Map.of("1", 0.9f)), eq(40)),
+            legItemWithTotal(new LinkedHashMap<>(Map.of("2", 0.8f)), eq(20))
+        );
+        SearchSourceBuilder source = new SearchSourceBuilder().size(2).trackTotalHitsUpTo(10_000);
+
+        TotalHits[] withCount = new TotalHits[1];
+        FusedCoordinatorTimings countedTimings = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult counted = fusedResult(source, ms, legs, 10, true, withCount, countedTimings, eq(55));
+        assertTrue("the count settled the union, so there is nothing left for round 2 to do", counted.tookFastPath());
+        assertFalse(countedTimings.tailBuilt());
+        assertEquals("the counted union is what the assembled page reports", eq(55), counted.assembledHits().getTotalHits());
+        assertNull("and the totals consumer is told round 2's own total stands, so it cannot overwrite the page's", withCount[0]);
+
+        TotalHits[] withoutCount = new TotalHits[1];
+        FusedCoordinatorTimings tailTimings = new FusedCoordinatorTimings().fastPath(new FastPathDecision());
+        HybridFusionOrchestrator.FusedResult uncounted = fusedResult(source, ms, legs, 10, true, withoutCount, tailTimings, null);
+        assertFalse("nothing knows the count, so round 2 has to run and count for itself", uncounted.tookFastPath());
+        assertEquals(FastPathDecision.COUNT_NOT_SETTLED, tailTimings.fastPath().refusedBy());
+        assertTrue("with its Tail", tailTimings.tailBuilt());
+        assertNull("and the consumer is told nothing was derived", withoutCount[0]);
+    }
+}

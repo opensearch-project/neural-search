@@ -74,12 +74,24 @@ public class ScoreNormalizationFactory {
     }
 
     /**
+     * Combination techniques a normalization technique may be paired with, by name. Exposed so callers that validate before
+     * any technique instance exists — notably the fused-mode gate, which validates names at query rewrite — read the same
+     * matrix {@link #isTechniquesCompatible} enforces, rather than keeping a second copy of it.
+     *
+     * @param normalizationTechniqueName name of the normalization technique
+     * @return the combination technique names supported for it, empty for an unrecognized normalization technique
+     */
+    public static Set<String> supportedCombinationTechniques(final String normalizationTechniqueName) {
+        return COMBINATION_TECHNIQUE_FOR_NORMALIZATION_METHODS.getOrDefault(normalizationTechniqueName, Set.of());
+    }
+
+    /**
      * Validate normalization technique based on combination technique and other params that needs to be validated
      * @param techniqueCompatibilityCheckDTO data transfer object that contains combination technique and other params that needs to be validated
      */
     public void isTechniquesCompatible(TechniqueCompatibilityCheckDTO techniqueCompatibilityCheckDTO) {
         ScoreNormalizationTechnique normalizationTechnique = techniqueCompatibilityCheckDTO.getScoreNormalizationTechnique();
-        Set<String> supportedTechniques = COMBINATION_TECHNIQUE_FOR_NORMALIZATION_METHODS.get(normalizationTechnique.techniqueName());
+        Set<String> supportedTechniques = supportedCombinationTechniques(normalizationTechnique.techniqueName());
 
         if (supportedTechniques.contains(techniqueCompatibilityCheckDTO.getScoreCombinationTechnique().techniqueName()) == false) {
             throw new IllegalArgumentException(

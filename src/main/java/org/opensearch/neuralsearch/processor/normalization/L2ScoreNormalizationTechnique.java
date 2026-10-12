@@ -33,7 +33,6 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOf
 public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
     public static final String TECHNIQUE_NAME = "l2";
-    private static final float MIN_SCORE = 0.0f;
 
     public L2ScoreNormalizationTechnique() {
         this(Map.of(), new ScoreNormalizationUtil());
@@ -117,7 +116,10 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
         // or it has results for all the sub-queries. In edge case of shard having results only for one sub-query, there will be TopDocs for
         // rest of sub-queries with zero total hits
         int numOfSubqueries = getNumOfSubqueries(queryTopDocs);
-        float[] l2Norms = new float[numOfSubqueries];
+        L2ScoreNormalizer.NormAccumulator[] accumulatorPerSubquery = new L2ScoreNormalizer.NormAccumulator[numOfSubqueries];
+        for (int index = 0; index < numOfSubqueries; index++) {
+            accumulatorPerSubquery[index] = new L2ScoreNormalizer.NormAccumulator();
+        }
         for (CompoundTopDocs compoundQueryTopDocs : queryTopDocs) {
             if (Objects.isNull(compoundQueryTopDocs)) {
                 continue;
@@ -126,21 +128,20 @@ public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechniqu
             int bound = topDocsPerSubQuery.size();
             for (int index = 0; index < bound; index++) {
                 for (ScoreDoc scoreDocs : topDocsPerSubQuery.get(index).scoreDocs) {
-                    l2Norms[index] += scoreDocs.score * scoreDocs.score;
+                    accumulatorPerSubquery[index].add(scoreDocs.score);
                 }
             }
         }
-        for (int index = 0; index < l2Norms.length; index++) {
-            l2Norms[index] = (float) Math.sqrt(l2Norms[index]);
-        }
         List<Float> l2NormList = new ArrayList<>();
         for (int index = 0; index < numOfSubqueries; index++) {
-            l2NormList.add(l2Norms[index]);
+            l2NormList.add(accumulatorPerSubquery[index].norm());
         }
         return l2NormList;
     }
 
     private float normalizeSingleScore(final float score, final float l2Norm) {
-        return l2Norm == 0 ? MIN_SCORE : score / l2Norm;
+        // Delegate the arithmetic to the shared core so the classic shard path and the resolver coordinator path use one
+        // implementation of the l2 formula (see L2ScoreNormalizer).
+        return L2ScoreNormalizer.normalizeSingleScore(score, l2Norm);
     }
 }

@@ -26,6 +26,7 @@ import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.mapper.IndexFieldMapper;
+import org.opensearch.neuralsearch.query.HybridFusionQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralQueryBuilder;
 import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
@@ -443,7 +444,8 @@ public class ProcessorUtils {
      * Extracts a query text suitable for semantic highlighting from a {@link QueryBuilder}.
      *
      * <p>Recognizes leaf clauses ({@code match}, {@code term}, {@code neural}, {@code neural_knn}),
-     * the {@code hybrid} composite, and unwraps containers that compose other clauses without
+     * the {@code hybrid} composite — including the internal query a fused-mode {@code hybrid} self-erases
+     * into, which is read through the hybrid it carries — and unwraps containers that compose other clauses without
      * altering their text intent: {@code nested}, {@code bool} (must/should/filter), {@code dis_max},
      * {@code constant_score}, {@code boosting} (positive only), {@code function_score}, and
      * {@code script_score}. Unsupported types throw {@link IllegalArgumentException}.
@@ -479,6 +481,18 @@ public class ProcessorUtils {
                 }
 
                 return text.toString();
+            }
+            case HybridFusionQueryBuilder fusedHybrid -> {
+                // Fused mode replaces the hybrid with a window of _id clauses at the coordinator, before any response
+                // processor runs, and carries the hybrid it replaced for exactly this. Extracting from the substitute
+                // itself would be worse than failing: its Tail legs are addressed by an _index filter, and the bool case
+                // below reads filter clauses, so it would return an index name as the query text.
+                HybridQueryBuilder original = fusedHybrid.originalQuery();
+                if (Objects.nonNull(original)) {
+                    return extractQueryTextFromBuilder(original);
+                }
+                // Nothing carried (a copy read from the wire): fall through to the unsupported-type failure below rather
+                // than invent text from the window.
             }
             case NestedQueryBuilder nestedQuery -> {
                 return extractQueryTextFromBuilder(nestedQuery.query());
