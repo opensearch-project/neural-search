@@ -16,7 +16,6 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Junqiu Lei              | [junqiu-lei](https://github.com/junqiu-lei)               | Amazon      |
 | Martin Gaievski         | [martin-gaievski](https://github.com/martin-gaievski)     | Amazon      |
 | Naveen Tatikonda        | [naveentatikonda](https://github.com/naveentatikonda)     | Amazon      |
-| Vijayan Balasubramanian | [VijayanB](https://github.com/VijayanB)                   | Amazon      |
 | Varun Jain              | [vibrantvarun](https://github.com/vibrantvarun)           | Amazon      |
 | Zhichao Geng            | [zhichao-aws](https://github.com/zhichao-aws)             | Amazon      |
 | Yuye Zhu                | [yuye-aws](https://github.com/yuye-aws)                   | Amazon      |
@@ -32,3 +31,4 @@ This document contains a list of maintainers in this repo. See [opensearch-proje
 | Junshen Wu              | [wujunshen](https://github.com/wujunshen)   | Independent |
 | Yaliang Wu              | [ylwu-amzn](https://github.com/ylwu-amzn)                 | Amazon      |
 | Jing Zhang              | [jngz-es](https://github.com/jngz-es)                     | Amazon      |
+| Vijayan Balasubramanian | [VijayanB](https://github.com/VijayanB)                   | Amazon      |
