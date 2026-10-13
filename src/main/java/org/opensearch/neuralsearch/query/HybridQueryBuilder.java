@@ -43,7 +43,6 @@ import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
-import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
@@ -1521,7 +1520,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
         @Override
         public void accept(final QueryBuilder queryBuilder) {
-            if (found || Objects.isNull(queryBuilder) || entered.add(queryBuilder) == false) {
+            if (found || entered.add(queryBuilder) == false) {
                 return;
             }
             if (queryBuilder instanceof HybridQueryBuilder hybridQueryBuilder
@@ -1529,12 +1528,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 found = true;
                 return;
             }
-            if (Objects.nonNull(xContentRegistry) && queryBuilder instanceof WrapperQueryBuilder wrapperQueryBuilder) {
-                accept(parse(wrapperQueryBuilder.source()));
-                return;
-            }
-            if (Objects.nonNull(xContentRegistry) && queryBuilder instanceof TemplateQueryBuilder templateQueryBuilder) {
-                accept(parse(templateQueryBuilder.getContent()));
+            if (Objects.nonNull(xContentRegistry)
+                && (queryBuilder instanceof WrapperQueryBuilder || queryBuilder instanceof TemplateQueryBuilder)) {
+                acceptHeldQuery(queryBuilder);
                 return;
             }
             queryBuilder.visit(this);
@@ -1545,32 +1541,30 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             return this;
         }
 
-        /** The query in a wrapper's source, or null when it cannot be parsed: the wrapper's own rewrite reports that. */
-        private QueryBuilder parse(final byte[] source) {
-            if (Objects.isNull(source)) {
-                return null;
-            }
-            try (
-                XContentParser parser = MediaTypeRegistry.xContent(source)
-                    .xContent()
-                    .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, source)
-            ) {
-                return parseInnerQueryBuilder(parser);
+        /**
+         * Accepts the query a wrapper or template holds, parsed without rewriting. One that does not parse is skipped: the
+         * wrapper's or template's own rewrite reports it.
+         */
+        private void acceptHeldQuery(final QueryBuilder holder) {
+            QueryBuilder heldQuery;
+            try (XContentParser parser = createHeldQueryParser(holder)) {
+                heldQuery = parseInnerQueryBuilder(parser);
             } catch (IOException | RuntimeException e) {
-                return null;
+                return;
             }
+            accept(heldQuery);
         }
 
-        /** The query in a template's content, or null when it cannot be parsed: the template's own rewrite reports that. */
-        private QueryBuilder parse(final Map<String, Object> content) {
-            if (Objects.isNull(content)) {
-                return null;
+        private XContentParser createHeldQueryParser(final QueryBuilder holder) throws IOException {
+            if (holder instanceof WrapperQueryBuilder wrapperQueryBuilder) {
+                byte[] source = wrapperQueryBuilder.source();
+                return MediaTypeRegistry.xContent(source)
+                    .xContent()
+                    .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, source);
             }
             try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-                builder.map(content);
-                return parse(BytesReference.toBytes(BytesReference.bytes(builder)));
-            } catch (IOException | RuntimeException e) {
-                return null;
+                String content = builder.map(((TemplateQueryBuilder) holder).getContent()).toString();
+                return MediaTypeRegistry.JSON.xContent().createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, content);
             }
         }
     }

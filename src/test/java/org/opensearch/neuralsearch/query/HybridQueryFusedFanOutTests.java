@@ -1212,6 +1212,24 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         assertEquals("the fused rewrite fanned out its legs", 1, registered.size());
     }
 
+    /** A [wrapper] or [template] leg that does not hold a query is left to its own rewrite, which reports it in the leg search. */
+    @SneakyThrows
+    public void testFusedMode_whenAWrapperOrTemplateLegDoesNotHoldAQuery_thenLeftToItsOwnRewrite() {
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put("wrapper with malformed JSON", fused(new WrapperQueryBuilder("{\"match\":"), termLeg()));
+        shapes.put("template with an unknown query", fused(new TemplateQueryBuilder(Map.of("not_a_query", Map.of())), termLeg()));
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+            when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+
+            query.rewrite(coordinatorContext);
+
+            assertEquals(shape.getKey() + ": the fused rewrite fanned out its legs", 1, registered.size());
+        }
+    }
+
     /**
      * The classic direction needs no parsing: a fused hybrid inside a [wrapper] is refused by its own rewrite, because it is
      * not part of the request's query, and a [template] sub-query is replaced by the fused hybrid it holds, which the next
