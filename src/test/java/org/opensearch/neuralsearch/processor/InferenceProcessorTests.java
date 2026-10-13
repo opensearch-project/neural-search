@@ -233,6 +233,73 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         assertEquals(bioEmbedding, ingestDocument.getFieldValue("author.author_bio_embedding", List.class));
     }
 
+    @SuppressWarnings("unchecked")
+    public void test_buildMapWithTargetKeys_deepSiblingFlatDottedKeys_mergeIntoSameNestedParent() {
+        // field_map has two flat keys that diverge BELOW the first path segment:
+        // "author.name.first" -> "first_embedding"
+        // "author.name.last" -> "last_embedding"
+        // Both resolve to originalKey "author" with nested target maps {name={first_embedding=...}}
+        // and {name={last_embedding=...}}. A shallow merge of the top-level "author" maps would
+        // replace the inner "name" map wholesale and drop one sibling; a recursive deep merge must
+        // preserve both under author -> name.
+        Map<String, Object> siblingFieldMap = new LinkedHashMap<>();
+        siblingFieldMap.put("author.name.first", "first_embedding");
+        siblingFieldMap.put("author.name.last", "last_embedding");
+
+        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null, siblingFieldMap);
+
+        Map<String, Object> source = new HashMap<>();
+        Map<String, Object> authorMap = new HashMap<>();
+        Map<String, Object> nameMap = new HashMap<>();
+        nameMap.put("first", "Jane");
+        nameMap.put("last", "Doe");
+        authorMap.put("name", nameMap);
+        source.put("author", authorMap);
+        source.put(IndexFieldMapper.NAME, "my_index");
+        source.put("_id", "1");
+        IngestDocument ingestDocument = new IngestDocument(source, new HashMap<>());
+
+        Map<String, Object> processMap = processor.buildMapWithTargetKeys(ingestDocument);
+
+        assertTrue("expected top-level 'author' key in processMap", processMap.containsKey("author"));
+        Map<String, Object> authorProcessMap = (Map<String, Object>) processMap.get("author");
+        assertTrue("expected nested 'name' key under 'author'", authorProcessMap.containsKey("name"));
+        Map<String, Object> nameProcessMap = (Map<String, Object>) authorProcessMap.get("name");
+        assertEquals("both nested siblings must be preserved", 2, nameProcessMap.size());
+        assertEquals("Jane", nameProcessMap.get("first_embedding"));
+        assertEquals("Doe", nameProcessMap.get("last_embedding"));
+    }
+
+    public void test_buildNLPResult_deepSiblingFlatDottedKeys_bothEmbeddingsWritten() {
+        Map<String, Object> siblingFieldMap = new LinkedHashMap<>();
+        siblingFieldMap.put("author.name.first", "first_embedding");
+        siblingFieldMap.put("author.name.last", "last_embedding");
+
+        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null, siblingFieldMap);
+
+        Map<String, Object> source = new HashMap<>();
+        Map<String, Object> authorMap = new HashMap<>();
+        Map<String, Object> nameMap = new HashMap<>();
+        nameMap.put("first", "Jane");
+        nameMap.put("last", "Doe");
+        authorMap.put("name", nameMap);
+        source.put("author", authorMap);
+        source.put(IndexFieldMapper.NAME, "my_index");
+        source.put("_id", "1");
+        IngestDocument ingestDocument = new IngestDocument(source, new HashMap<>());
+
+        Map<String, Object> processMap = processor.buildMapWithTargetKeys(ingestDocument);
+        List<Float> firstEmbedding = Arrays.asList(1.0f, 2.0f);
+        List<Float> lastEmbedding = Arrays.asList(3.0f, 4.0f);
+        List<Object> results = Arrays.asList(firstEmbedding, lastEmbedding);
+
+        Map<String, Object> nlpResult = processor.buildNLPResult(processMap, results, ingestDocument.getSourceAndMetadata());
+        nlpResult.forEach(ingestDocument::setFieldValue);
+
+        assertEquals(firstEmbedding, ingestDocument.getFieldValue("author.name.first_embedding", List.class));
+        assertEquals(lastEmbedding, ingestDocument.getFieldValue("author.name.last_embedding", List.class));
+    }
+
     public void test_batchExecute_subBatches() {
         final int docCount = 5;
         List<List<Float>> inferenceResults = createMockVectorWithLength(6);
