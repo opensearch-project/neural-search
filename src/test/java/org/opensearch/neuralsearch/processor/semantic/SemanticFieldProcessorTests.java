@@ -46,6 +46,7 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -856,6 +857,100 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
     private IngestDocumentWrapper createIngestDocWrapper(@NonNull final String id, @NonNull final Map<String, Object> source, Exception e) {
         final IngestDocument ingestDocument = new IngestDocument("index", id, "routing", 1L, VersionType.INTERNAL, source);
         return new IngestDocumentWrapper(1, 0, ingestDocument, e);
+    }
+
+    /**
+     * Regression test mirroring the InferenceProcessor field_map overwrite bug: two sibling semantic
+     * fields nested under the same parent object ("author.name" and "author.bio") must each produce
+     * their own independent embedding instead of one overwriting the other. Unlike InferenceProcessor's
+     * flat field_map (which splits a key at the first dot and collapses to the parent segment),
+     * SemanticFieldProcessor keys fields by their full dotted path from the mapping tree, so each
+     * sibling is tracked and written back independently.
+     */
+    @SuppressWarnings("unchecked")
+    public void testExecute_whenSiblingSemanticFieldsShareParent_thenBothEmbeddingsGeneratedIndependently() {
+        final String FIELD_NAME_AUTHOR = "author";
+        final String FIELD_NAME_NAME = "name";
+        final String FIELD_NAME_BIO = "bio";
+
+        final Map<String, Map<String, Object>> pathToFieldConfigMap = Map.of(
+            FIELD_NAME_AUTHOR + PATH_SEPARATOR + FIELD_NAME_NAME,
+            Map.of(
+                TYPE,
+                SemanticFieldMapper.CONTENT_TYPE,
+                MODEL_ID,
+                DUMMY_MODEL_ID_2,
+                SPARSE_ENCODING_CONFIG,
+                Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.NONE.getValue())
+            ),
+            FIELD_NAME_AUTHOR + PATH_SEPARATOR + FIELD_NAME_BIO,
+            Map.of(
+                TYPE,
+                SemanticFieldMapper.CONTENT_TYPE,
+                MODEL_ID,
+                DUMMY_MODEL_ID_2,
+                SPARSE_ENCODING_CONFIG,
+                Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.NONE.getValue())
+            )
+        );
+        semanticFieldProcessor = new SemanticFieldProcessor(
+            "tag",
+            "description",
+            1,
+            pathToFieldConfigMap,
+            mlCommonsClientAccessor,
+            environment,
+            clusterService,
+            chunker,
+            analysisRegistry,
+            openSearchClient
+        );
+
+        final String nameValue = "Jane Doe";
+        final String bioValue = "An author bio";
+        final Map<String, Object> authorMap = new HashMap<>();
+        authorMap.put(FIELD_NAME_NAME, nameValue);
+        authorMap.put(FIELD_NAME_BIO, bioValue);
+        final Map<String, Object> ingestDocSource = new HashMap<>();
+        ingestDocSource.put(FIELD_NAME_AUTHOR, authorMap);
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", "routing", 1L, VersionType.INTERNAL, ingestDocSource);
+
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(DUMMY_MODEL_ID_2, sparseEmbeddingModel));
+            return null;
+        }).when(mlCommonsClientAccessor).getModels(any(), any(), any());
+
+        // Return a distinct, text-derived token embedding per unique raw text, keyed by request order,
+        // so a sibling-field collision would surface as a mismatched token rather than passing by luck.
+        doAnswer(invocationOnMock -> {
+            final TextInferenceRequest textInferenceRequest = invocationOnMock.getArgument(0);
+            final List<String> inputTexts = textInferenceRequest.getInputTexts();
+            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
+            final List<Map<String, ?>> responses = new java.util.ArrayList<>();
+            for (final String text : inputTexts) {
+                responses.add(Map.of("response", List.of(Map.of(text, 1.0))));
+            }
+            listener.onResponse(responses);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> { assertNull("No error should occur", e); });
+
+        final Map<String, Object> sourceAndMetadata = ingestDocument.getSourceAndMetadata();
+        final Map<String, Object> nameSemanticInfo = (Map<String, Object>) ((Map<String, Object>) sourceAndMetadata.get(FIELD_NAME_AUTHOR))
+            .get(FIELD_NAME_NAME + "_semantic_info");
+        final Map<String, Object> bioSemanticInfo = (Map<String, Object>) ((Map<String, Object>) sourceAndMetadata.get(FIELD_NAME_AUTHOR))
+            .get(FIELD_NAME_BIO + "_semantic_info");
+
+        assertNotNull("name's semantic info must be present", nameSemanticInfo);
+        assertNotNull("bio's semantic info must be present", bioSemanticInfo);
+
+        final Map<String, Object> nameEmbedding = (Map<String, Object>) nameSemanticInfo.get("embedding");
+        final Map<String, Object> bioEmbedding = (Map<String, Object>) bioSemanticInfo.get("embedding");
+
+        assertEquals("name's embedding must be derived from its own text, not its sibling's", Set.of(nameValue), nameEmbedding.keySet());
+        assertEquals("bio's embedding must be derived from its own text, not its sibling's", Set.of(bioValue), bioEmbedding.keySet());
     }
 
 }
