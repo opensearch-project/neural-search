@@ -395,10 +395,11 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
      * that one, and a leg sub-search is a search action of its own: it re-enters this filter, gets its own merger, and
      * labels its legs itself, so the outer request must not number it too. That is what makes {@code hybrid_N} mean "the
      * Nth fused hybrid this request fans out" — a contiguous numbering over siblings, with nesting expressed by the label
-     * path a leg's entries carry rather than by the index. Classic hybrids are walked through, since they fan nothing out
-     * and may still contain a fused one. Stopping is only sound while this visitor owns the whole descent, so it has to be
-     * entered by handing the query to {@link #accept} — {@code query.visit(finder)} would let the query's own {@code visit}
-     * carry on into its children after {@code accept} declined to.
+     * path a leg's entries carry rather than by the index. Classic hybrids are walked through, since they fan nothing out;
+     * one that holds a fused hybrid is refused later, in its own rewrite, and this walk runs before that. Stopping is only
+     * sound while this visitor owns the whole descent, so it has to be entered by handing the query to {@link #accept} —
+     * {@code query.visit(finder)} would let the query's own {@code visit} carry on into its children after {@code accept}
+     * declined to.
      */
     private static final class FusedHybridFinder implements QueryBuilderVisitor {
         private final Set<QueryBuilder> entered = Collections.newSetFromMap(new IdentityHashMap<>());

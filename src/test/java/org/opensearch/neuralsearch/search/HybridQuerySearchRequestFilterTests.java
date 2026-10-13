@@ -943,7 +943,10 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         assertNull("the one below it labels itself, from its own leg sub-search", inner.legProfileConsumer());
     }
 
-    /** A classic hybrid is walked through rather than stopped at: it fans nothing out, and may still contain a fused one. */
+    /**
+     * A classic hybrid is walked through rather than stopped at, since it fans nothing out. This pins only the walk, which runs
+     * before the rewrite: the rewrite then refuses a fused hybrid nested in a classic one.
+     */
     @SuppressWarnings("unchecked")
     public void testApply_whenAFusedHybridIsNestedInAClassicHybrid_thenItIsStillFound() {
         HybridQueryBuilder fused = fusedHybrid();

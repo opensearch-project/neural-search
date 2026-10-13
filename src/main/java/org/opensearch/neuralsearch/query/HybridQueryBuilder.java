@@ -38,11 +38,16 @@ import org.opensearch.common.CheckedConsumer;
 import org.opensearch.common.SetOnce;
 import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.common.settings.Settings;
+import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
@@ -55,6 +60,8 @@ import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.QueryShardException;
+import org.opensearch.index.query.TemplateQueryBuilder;
+import org.opensearch.index.query.WrapperQueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.search.SearchService;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -240,6 +247,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static final String ERROR_MSG_FILTER_MUST_BE_QUERY_OBJECT = "[%s] query's [%s] field must be a query object";
     public static final String ERROR_MSG_FUSION_REACHED_SHARD =
         "[%s] query [%s] (resolver/fused mode) must self-erase at the coordinator and must not reach a shard";
+    public static final String ERROR_MSG_MIXED_HYBRID_NESTING =
+        "a [%s] query without [%s] cannot be nested in a [%s] query with [%s], or the other way around; use [%s] on both";
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
@@ -559,6 +568,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (Objects.nonNull(fusion)) {
             return doRewriteFused(queryShardContext);
         }
+        // Ahead of rewriting the sub-queries: a fused hybrid among them would register its leg fan-out in its own rewrite,
+        // and then self-erase into a standard query that the nested-hybrid check on the shard does not recognize. One held by
+        // a wrapper or template sub-query needs no parsing here: inside a wrapper, its own rewrite refuses it as not part of
+        // the request's query; a template is replaced by the query it holds, which the next rewrite round checks here.
+        requireNoNestedHybridOfOtherMode(queries, false, null);
         HybridQueryBuilder newBuilder = new HybridQueryBuilder();
         boolean changed = false;
         for (QueryBuilder query : queries) {
@@ -641,6 +655,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // Then, before any config resolution: the whole request's fan-out has to be within the cluster's budget. A body
         // whose only purpose is to multiply sub-searches should cost one tree walk, not a pipeline lookup per hybrid.
         validateFusedLegSearchBudget(searchRequest);
+        // Then the hybrids below this one: a hybrid without fusion in a leg would run inside that leg's sub-search, which
+        // runs without a search pipeline, so its scores would never be normalized.
+        requireNoNestedHybridOfOtherMode(queries, true, queryRewriteContext.getXContentRegistry());
         // And, when the request carries a rescore, this hybrid has to be the request's own query — a rescore is confined to
         // the fused window, which is the request's ranking only then. Refused here, before any fan-out.
         requireFusedHybridIsRequestQueryWhenRescoring(searchRequest);
@@ -1456,6 +1473,105 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         @Override
         public QueryBuilderVisitor getChildVisitor(final Occur occur) {
             return this;
+        }
+    }
+
+    /**
+     * Refuse a hybrid query of the other mode anywhere among the given sub-queries: a hybrid without {@code fusion} below a
+     * fused hybrid ({@code fused} true), or a fused hybrid below a hybrid without {@code fusion}. A fused hybrid nested in a
+     * fused hybrid is supported, and a hybrid without {@code fusion} directly under another one (a single-clause {@code bool}
+     * counts, because Lucene's rewrite removes it) is refused on the shard.
+     *
+     * @param xContentRegistry when not null, the walk also parses the query held by a {@code wrapper} or {@code template}
+     *     sub-query: a leg search rewrites such a sub-query into the query it holds only after this check has run
+     */
+    private static void requireNoNestedHybridOfOtherMode(
+        final List<QueryBuilder> subQueries,
+        final boolean fused,
+        final NamedXContentRegistry xContentRegistry
+    ) {
+        NestedHybridModeFinder finder = new NestedHybridModeFinder(fused == false, xContentRegistry);
+        for (QueryBuilder query : subQueries) {
+            finder.accept(query);
+        }
+        if (finder.found) {
+            String fusionField = FUSION_FIELD.getPreferredName();
+            throw new IllegalArgumentException(
+                String.format(Locale.ROOT, ERROR_MSG_MIXED_HYBRID_NESTING, NAME, fusionField, NAME, fusionField, fusionField)
+            );
+        }
+    }
+
+    /**
+     * Finds a hybrid query of the given mode at any depth, descending the way {@link LegSearchCounter} does: it hands
+     * itself back as the child visitor and descends into each builder it is handed, keyed by identity. With a registry it
+     * also parses, without rewriting, the query a {@code wrapper} or {@code template} query holds. A query that a builder's
+     * own {@code visit} does not hand out, such as the filter of a {@code function_score} function, is not inspected.
+     */
+    private static final class NestedHybridModeFinder implements QueryBuilderVisitor {
+        private final Set<QueryBuilder> entered = Collections.newSetFromMap(new IdentityHashMap<>());
+        private final boolean findFused;
+        private final NamedXContentRegistry xContentRegistry;
+        private boolean found;
+
+        private NestedHybridModeFinder(final boolean findFused, final NamedXContentRegistry xContentRegistry) {
+            this.findFused = findFused;
+            this.xContentRegistry = xContentRegistry;
+        }
+
+        @Override
+        public void accept(final QueryBuilder queryBuilder) {
+            if (found || Objects.isNull(queryBuilder) || entered.add(queryBuilder) == false) {
+                return;
+            }
+            if (queryBuilder instanceof HybridQueryBuilder hybridQueryBuilder
+                && Objects.nonNull(hybridQueryBuilder.fusion()) == findFused) {
+                found = true;
+                return;
+            }
+            if (Objects.nonNull(xContentRegistry) && queryBuilder instanceof WrapperQueryBuilder wrapperQueryBuilder) {
+                accept(parse(wrapperQueryBuilder.source()));
+                return;
+            }
+            if (Objects.nonNull(xContentRegistry) && queryBuilder instanceof TemplateQueryBuilder templateQueryBuilder) {
+                accept(parse(templateQueryBuilder.getContent()));
+                return;
+            }
+            queryBuilder.visit(this);
+        }
+
+        @Override
+        public QueryBuilderVisitor getChildVisitor(final Occur occur) {
+            return this;
+        }
+
+        /** The query in a wrapper's source, or null when it cannot be parsed: the wrapper's own rewrite reports that. */
+        private QueryBuilder parse(final byte[] source) {
+            if (Objects.isNull(source)) {
+                return null;
+            }
+            try (
+                XContentParser parser = MediaTypeRegistry.xContent(source)
+                    .xContent()
+                    .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, source)
+            ) {
+                return parseInnerQueryBuilder(parser);
+            } catch (IOException | RuntimeException e) {
+                return null;
+            }
+        }
+
+        /** The query in a template's content, or null when it cannot be parsed: the template's own rewrite reports that. */
+        private QueryBuilder parse(final Map<String, Object> content) {
+            if (Objects.isNull(content)) {
+                return null;
+            }
+            try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
+                builder.map(content);
+                return parse(BytesReference.toBytes(BytesReference.bytes(builder)));
+            } catch (IOException | RuntimeException e) {
+                return null;
+            }
         }
     }
 
