@@ -122,6 +122,16 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         );
     }
 
+    public void testFetchContext_whenInnerHitsListsAreEmpty_thenSucceedsWithoutChunks() {
+        SearchHit hit = createHit("1");
+        hit.setInnerHits(Map.of("chunks", innerHitsList()));
+
+        Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("embeddings", "text"), createSearchResponse(hit));
+
+        assertEquals(List.of(), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+        assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD));
+    }
+
     public void testFetchContext_whenNoHits_thenSucceedsEmpty() {
         Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("embeddings", "text"), createSearchResponse());
 

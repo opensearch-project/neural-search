@@ -59,7 +59,8 @@ public abstract class RescoringRerankProcessor extends RerankProcessor {
         final ActionListener<SearchResponse> listener
     ) {
         try {
-            if (searchResponse.getHits().getTotalHits().value() == 0) {
+            boolean emptyPage = searchResponse.getHits().getHits().length == 0;
+            if (searchResponse.getHits().getTotalHits().value() == 0 || emptyPage) {
                 listener.onResponse(searchResponse);
                 return;
             }

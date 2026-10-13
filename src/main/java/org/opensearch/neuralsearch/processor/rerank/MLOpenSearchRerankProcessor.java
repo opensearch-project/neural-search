@@ -137,16 +137,23 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
                 for (String name : names) {
                     SearchHits list = innerHits.get(name);
                     SearchHit[] chunks = list.getHits();
+                    float listMaxScore = Float.NEGATIVE_INFINITY;
                     for (SearchHit chunk : chunks) {
-                        chunk.score(scoreByIdentity.get(chunk.getNestedIdentity()));
+                        float score = scoreByIdentity.get(chunk.getNestedIdentity());
+                        chunk.score(score);
+                        listMaxScore = Math.max(listMaxScore, score);
                     }
-                    Arrays.sort(chunks, (chunk1, chunk2) -> Float.compare(chunk2.getScore(), chunk1.getScore()));
+                    // An explicit inner_hits sort wins: chunks get rerank scores but keep the requested order and sort values
+                    boolean explicitlySorted = chunks[0].getSortValues().length > 0;
+                    if (!explicitlySorted) {
+                        Arrays.sort(chunks, (chunk1, chunk2) -> Float.compare(chunk2.getScore(), chunk1.getScore()));
+                    }
                     innerHits.put(
                         name,
                         new SearchHits(
                             chunks,
                             list.getTotalHits(),
-                            chunks[0].getScore(),
+                            listMaxScore,
                             list.getSortFields(),
                             list.getCollapseField(),
                             list.getCollapseValues()

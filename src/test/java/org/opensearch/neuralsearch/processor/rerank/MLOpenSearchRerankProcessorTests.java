@@ -8,7 +8,9 @@ import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -50,6 +52,7 @@ import org.opensearch.neuralsearch.query.ext.RerankSearchExtBuilder;
 import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.search.SearchExtBuilder;
+import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -447,6 +450,54 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assertEquals(0.9f, semanticChunks.getAt(0).getScore(), 0.0001f);
         assertEquals(2, semanticChunks.getAt(1).getNestedIdentity().getOffset());
         assertEquals(0.5f, semanticChunks.getAt(1).getScore(), 0.0001f);
+    }
+
+    @SneakyThrows
+    public void testRerank_whenInnerHitsSortedByField_thenKeepsOrderAndUpdatesScores() {
+        SearchHit newer = createChunk(0, "alpha");
+        newer.sortValues(new Object[] { 2L }, new DocValueFormat[] { DocValueFormat.RAW });
+        SearchHit older = createChunk(1, "beta");
+        older.sortValues(new Object[] { 1L }, new DocValueFormat[] { DocValueFormat.RAW });
+        SearchHit parent = createParentHit(0, "0");
+        parent.setInnerHits(new LinkedHashMap<>(Map.of("chunks", innerHitsList(newer, older))));
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+        doAnswer(invocation -> {
+            ActionListener<List<Float>> inferenceListener = invocation.getArgument(1);
+            inferenceListener.onResponse(List.of(0.1f, 0.9f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(isA(SimilarityInferenceRequest.class), isA(ActionListener.class));
+        Map<String, Object> scoringContext = new HashMap<>(innerHitsContext(response));
+        scoringContext.put(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchHit rerankedParent = argCaptor.getValue().getHits().getAt(0);
+        assertEquals(0.9f, rerankedParent.getScore(), 0.0001f);
+        SearchHits chunks = rerankedParent.getInnerHits().get("chunks");
+        assertEquals(0, chunks.getAt(0).getNestedIdentity().getOffset());
+        assertEquals(0.1f, chunks.getAt(0).getScore(), 0.0001f);
+        assertEquals(1, chunks.getAt(1).getNestedIdentity().getOffset());
+        assertEquals(0.9f, chunks.getAt(1).getScore(), 0.0001f);
+        assertEquals(0.9f, chunks.getMaxScore(), 0.0001f);
+    }
+
+    public void testRerank_whenPageIsPastTheEnd_thenReturnsResponseUnchanged() {
+        SearchHits searchHits = new SearchHits(new SearchHit[0], new TotalHits(5, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, Map.of(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD, List.of()), listener);
+
+        verify(listener, times(1)).onResponse(response);
+        verify(mlCommonsClientAccessor, never()).inferenceSimilarity(any(), any());
     }
 
     @SneakyThrows

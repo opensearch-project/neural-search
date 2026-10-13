@@ -50,6 +50,9 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         List<List<SearchHit.NestedIdentity>> chunkIdentities = new ArrayList<>();
         List<List<String>> listNames = new ArrayList<>();
         boolean anyMatchingList = false;
+        // OpenSearch returns an empty list for every inner_hits name even when a hit has no nested matches, so an empty
+        // list proves the query requests inner hits; its path is unknown, though
+        boolean anyEmptyList = false;
         for (SearchHit hit : searchResponse.getHits()) {
             Map<SearchHit.NestedIdentity, SearchHit> chunkByIdentity = new LinkedHashMap<>();
             List<String> matchingLists = new ArrayList<>();
@@ -57,6 +60,7 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
             for (Map.Entry<String, SearchHits> entry : inners.entrySet()) {
                 SearchHit[] innerHitArray = entry.getValue().getHits();
                 if (innerHitArray.length == 0) {
+                    anyEmptyList = true;
                     continue;
                 }
                 if (!path.equals(nestedPath(innerHitArray[0].getNestedIdentity()))) {
@@ -74,7 +78,7 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
             chunkIdentities.add(new ArrayList<>(chunkByIdentity.keySet()));
             listNames.add(matchingLists);
         }
-        boolean innerHitsMissingFromQuery = !anyMatchingList && searchResponse.getHits().getHits().length > 0;
+        boolean innerHitsMissingFromQuery = !anyMatchingList && !anyEmptyList && searchResponse.getHits().getHits().length > 0;
         if (innerHitsMissingFromQuery) {
             listener.onFailure(
                 new IllegalArgumentException(
