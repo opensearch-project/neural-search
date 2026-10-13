@@ -22,6 +22,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Semantic Field] Pass `_routing` to the `skip_existing_embedding` lookup so unchanged documents in routed indices reuse their embeddings instead of being silently re-embedded ([#2040](https://github.com/opensearch-project/neural-search/pull/2040))
 * [Hybrid Query] Reject sorting a hybrid query by `_score` more than once, or by ascending `_score` without `collapse`, which returned wrong documents and scores ([#2046](https://github.com/opensearch-project/neural-search/pull/2046))
 * [Hybrid Query] Fix hybrid query failing with a `ClassCastException` when a point in time `slice` or an alias filter excludes a shard ([#2045](https://github.com/opensearch-project/neural-search/pull/2045))
+* [Ingest Processors] Fix `field_map` entries sharing the same first dotted path segment (e.g. `author.name` and `author.bio`) overwriting each other, which silently dropped embeddings for all but the last field ([#0000](https://github.com/opensearch-project/neural-search/pull/0000))
 
 ### Infrastructure
 
