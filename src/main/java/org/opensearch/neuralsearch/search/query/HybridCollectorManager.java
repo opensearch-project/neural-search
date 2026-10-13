@@ -192,15 +192,14 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         SortField[] sortFields = searchContext.sort().sort.getSort();
         boolean hasFieldSort = false;
         boolean hasScoreSort = false;
+        int scoreSortCount = 0;
         for (SortField sortField : sortFields) {
             SortField.Type type = sortField.getType();
             if (type.equals(SortField.Type.SCORE)) {
                 hasScoreSort = true;
+                scoreSortCount++;
             } else {
                 hasFieldSort = true;
-            }
-            if (hasScoreSort && hasFieldSort) {
-                break;
             }
         }
         if (hasScoreSort && hasFieldSort) {
@@ -224,6 +223,26 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
                     "_score must be sorted descending when combined with a field in a hybrid query with collapse"
                 );
             }
+        }
+        // "_score" listed more than once (core keeps every sort field, so the Sort has several SCORE fields): only the first sort
+        // value is replaced with the combined score, so the response would carry raw, un-normalized sub-query scores in the other
+        // sort values and in _score, which core reads from the last SCORE field. This applies with and without collapse.
+        if (scoreSortCount > 1) {
+            throw new IllegalArgumentException(
+                "Sorting a hybrid query by _score more than once is not supported; use a single \"_score\" sort criterion."
+            );
+        }
+        // A lone "_score" sort in ascending order (SortField reverse == true; a lone descending one is the default ranking and core
+        // drops it): without collapse, the sort collectors key every sub-query's queue on the summed raw score of all sub-queries
+        // instead of that sub-query's own score, do not refresh the score of an entry that replaces the bottom of a queue, and the
+        // shard results are merged on raw sort values, so the result would carry wrong documents and wrong scores. With collapse,
+        // ascending _score is a supported shape: the collapse collectors keep each sub-query's lowest-scoring window with that
+        // sub-query's own score.
+        if (hasScoreSort && hasFieldSort == false && searchContext.collapse() == null && sortFields[0].getReverse()) {
+            throw new IllegalArgumentException(
+                "Sorting a hybrid query by _score in ascending order is not supported; hybrid results are ranked by descending "
+                    + "relevance. Use \"order\": \"desc\" for _score, or sort by a field."
+            );
         }
         if (trackScores && hasFieldSort) {
             throw new IllegalArgumentException(
