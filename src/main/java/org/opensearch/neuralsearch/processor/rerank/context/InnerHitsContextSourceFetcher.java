@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -139,7 +140,9 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
             );
             return "";
         }
-        // ponytail: a chunk field is assumed single-valued; a list would stringify as "[a, b]"
+        if (value instanceof List<?> values) {
+            return values.stream().map(String::valueOf).collect(Collectors.joining(" "));
+        }
         return String.valueOf(value);
     }
 

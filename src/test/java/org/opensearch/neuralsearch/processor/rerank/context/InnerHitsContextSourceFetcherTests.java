@@ -57,6 +57,15 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         assertEquals(List.of("alpha"), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
     }
 
+    public void testFetchContext_whenFieldIsMultiValued_thenJoinsValues() {
+        SearchHit parent = createHit("1");
+        parent.setInnerHits(Map.of("chunks", innerHitsList(createInnerHit(identity("chunks", 0), "{\"text\": [\"alpha\", \"beta\"]}"))));
+
+        Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("chunks", "text"), createSearchResponse(parent));
+
+        assertEquals(List.of("alpha beta"), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+    }
+
     public void testFetchContext_whenNestedInNested_thenMatchesFullPathAndKeepsChunksApart() {
         SearchHit parent = createHit("1");
         SearchHit.NestedIdentity firstSection = new SearchHit.NestedIdentity("sections", 0, identity("chunks", 0));
