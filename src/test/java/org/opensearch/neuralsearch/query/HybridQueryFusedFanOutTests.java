@@ -18,6 +18,7 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSI
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES_CEILING;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -1218,6 +1219,13 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
         shapes.put("wrapper with malformed JSON", fused(new WrapperQueryBuilder("{\"match\":"), termLeg()));
         shapes.put("template with an unknown query", fused(new TemplateQueryBuilder(Map.of("not_a_query", Map.of())), termLeg()));
+        String tooManySubQueries = "{\"hybrid\":{\"queries\":["
+            + String.join(
+                ",",
+                Collections.nCopies(HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES + 1, "{\"match\":{\"" + TEXT_FIELD_NAME + "\":\"hello\"}}")
+            )
+            + "]}}";
+        shapes.put("wrapper holding a hybrid with too many sub-queries", fused(new WrapperQueryBuilder(tooManySubQueries), termLeg()));
         for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
             QueryBuilder query = shape.getValue();
             List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
@@ -1231,38 +1239,61 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
     }
 
     /**
-     * The classic direction needs no parsing: a fused hybrid inside a [wrapper] is refused by its own rewrite, because it is
-     * not part of the request's query, and a [template] sub-query is replaced by the fused hybrid it holds, which the next
-     * rewrite round of the outer hybrid refuses as mixed nesting before the fused hybrid is rewritten.
+     * A fused hybrid inside a [wrapper] or [template] sub-query of a hybrid without [fusion] is read without being rewritten,
+     * so it is refused as mixed nesting before its own rewrite could fan out.
      */
     @SneakyThrows
     public void testClassicMode_whenFusedHybridIsInsideAWrapperOrTemplateSubQuery_thenRejectedBeforeAnyFanOut() {
         String fusedJson = "{\"hybrid\":{\"fusion\":{},\"queries\":[{\"match\":{\"" + TEXT_FIELD_NAME + "\":\"hello\"}}]}}";
-        HybridQueryBuilder wrapperInClassic = classic(new WrapperQueryBuilder(fusedJson), termLeg());
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put("wrapper", classic(new WrapperQueryBuilder(fusedJson), termLeg()));
+        shapes.put(
+            "template",
+            classic(
+                new TemplateQueryBuilder(
+                    Map.of("hybrid", Map.of("fusion", Map.of(), "queries", List.of(Map.of("match", Map.of(TEXT_FIELD_NAME, "hello")))))
+                ),
+                termLeg()
+            )
+        );
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+            when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+
+            IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+
+            assertEquals(shape.getKey(), MIXED_NESTING_MESSAGE, error.getMessage());
+            assertTrue(shape.getKey() + ": rejected before any fan-out", registered.isEmpty());
+        }
+    }
+
+    /**
+     * A template is read with the request's variables substituted, so a hybrid without [fusion] in a template whose
+     * variables sit where only the substituted value parses is still found. Without the variables the template cannot be
+     * read and is left to its own rewrite.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenHybridWithoutFusionIsInsideATemplateLegWithVariables_thenRejectedBeforeAnyFanOut() {
+        Map<String, Object> boostedMatch = Map.of("match", Map.of(TEXT_FIELD_NAME, Map.of("query", "hello", "boost", "${boost}")));
+        HybridQueryBuilder query = fused(new TemplateQueryBuilder(Map.of("hybrid", Map.of("queries", List.of(boostedMatch)))), termLeg());
+
         List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
-        QueryCoordinatorContext coordinatorContext = coordinatorContext(request(wrapperInClassic), registered);
+        QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
         when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+        when(coordinatorContext.getContextVariables()).thenReturn(Map.of("boost", 2.0f));
 
-        IllegalArgumentException wrapperError = expectThrows(
-            IllegalArgumentException.class,
-            () -> wrapperInClassic.rewrite(coordinatorContext)
-        );
-        assertThat(wrapperError.getMessage(), containsString("must be part of the request's [query]"));
-        assertTrue("wrapper: rejected before any fan-out", registered.isEmpty());
+        IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+        assertEquals(MIXED_NESTING_MESSAGE, error.getMessage());
+        assertTrue("rejected before any fan-out", registered.isEmpty());
 
-        HybridQueryBuilder templateInClassic = classic(
-            new TemplateQueryBuilder(
-                Map.of("hybrid", Map.of("fusion", Map.of(), "queries", List.of(Map.of("match", Map.of(TEXT_FIELD_NAME, "hello")))))
-            ),
-            termLeg()
-        );
-        QueryCoordinatorContext templateContext = coordinatorContext(request(templateInClassic), registered);
-        when(templateContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
-        QueryBuilder afterOneRound = templateInClassic.rewrite(templateContext);
+        List<BiConsumer<Client, ActionListener<?>>> registeredWithoutVariables = new ArrayList<>();
+        QueryCoordinatorContext contextWithoutVariables = coordinatorContext(request(query), registeredWithoutVariables);
+        when(contextWithoutVariables.getXContentRegistry()).thenReturn(queryParsingRegistry());
 
-        IllegalArgumentException templateError = expectThrows(IllegalArgumentException.class, () -> afterOneRound.rewrite(templateContext));
-        assertEquals(MIXED_NESTING_MESSAGE, templateError.getMessage());
-        assertTrue("template: rejected before any fan-out", registered.isEmpty());
+        query.rewrite(contextWithoutVariables);
+        assertEquals("without the variables the template is left to its own rewrite", 1, registeredWithoutVariables.size());
     }
 
     /**

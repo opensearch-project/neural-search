@@ -121,13 +121,9 @@ public class HybridQueryMixedNestingIT extends BaseNeuralSearchIT {
             + "\"}}";
         String template = "{\"template\":" + fused(SPINDLE, MOTOR) + "}";
 
-        // a fused hybrid inside a wrapper is not part of the request's query, which its own rewrite refuses
-        ResponseException wrapperException = expectThrows(ResponseException.class, () -> search(classic(wrapper, BEARING), "", true));
-        assertEquals(RestStatus.BAD_REQUEST.getStatus(), wrapperException.getResponse().getStatusLine().getStatusCode());
-        String wrapperResponse = EntityUtils.toString(wrapperException.getResponse().getEntity());
-        assertTrue(wrapperResponse, wrapperResponse.contains("must be part of the request's [query]"));
-
-        assertMixedNestingRejected(classic(template, BEARING), "", true);
+        for (String subQuery : List.of(wrapper, template)) {
+            assertMixedNestingRejected(classic(subQuery, BEARING), "", true);
+        }
     }
 
     @SneakyThrows

@@ -39,14 +39,12 @@ import org.opensearch.common.SetOnce;
 import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
-import org.opensearch.common.xcontent.XContentFactory;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
-import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
@@ -568,10 +566,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             return doRewriteFused(queryShardContext);
         }
         // Ahead of rewriting the sub-queries: a fused hybrid among them would register its leg fan-out in its own rewrite,
-        // and then self-erase into a standard query that the nested-hybrid check on the shard does not recognize. One held by
-        // a wrapper or template sub-query needs no parsing here: inside a wrapper, its own rewrite refuses it as not part of
-        // the request's query; a template is replaced by the query it holds, which the next rewrite round checks here.
-        requireNoNestedHybridOfOtherMode(queries, false, null);
+        // and then self-erase into a standard query that the nested-hybrid check on the shard does not recognize.
+        requireNoNestedHybridOfOtherMode(queries, false, queryShardContext);
         HybridQueryBuilder newBuilder = new HybridQueryBuilder();
         boolean changed = false;
         for (QueryBuilder query : queries) {
@@ -656,7 +652,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         validateFusedLegSearchBudget(searchRequest);
         // Then the hybrids below this one: a hybrid without fusion in a leg would run inside that leg's sub-search, which
         // runs without a search pipeline, so its scores would never be normalized.
-        requireNoNestedHybridOfOtherMode(queries, true, queryRewriteContext.getXContentRegistry());
+        requireNoNestedHybridOfOtherMode(queries, true, queryRewriteContext);
         // And, when the request carries a rescore, this hybrid has to be the request's own query — a rescore is confined to
         // the fused window, which is the request's ranking only then. Refused here, before any fan-out.
         requireFusedHybridIsRequestQueryWhenRescoring(searchRequest);
@@ -1481,15 +1477,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * fused hybrid is supported, and a hybrid without {@code fusion} directly under another one (a single-clause {@code bool}
      * counts, because Lucene's rewrite removes it) is refused on the shard.
      *
-     * @param xContentRegistry when not null, the walk also parses the query held by a {@code wrapper} or {@code template}
-     *     sub-query: a leg search rewrites such a sub-query into the query it holds only after this check has run
+     * @param rewriteContext the context of this rewrite, used to read the query a {@code wrapper} or {@code template}
+     *     sub-query holds without rewriting it: rewriting it would let a fused hybrid there fan out, and a leg search
+     *     replaces such a sub-query by the query it holds only after this check has run
      */
     private static void requireNoNestedHybridOfOtherMode(
         final List<QueryBuilder> subQueries,
         final boolean fused,
-        final NamedXContentRegistry xContentRegistry
+        final QueryRewriteContext rewriteContext
     ) {
-        NestedHybridModeFinder finder = new NestedHybridModeFinder(fused == false, xContentRegistry);
+        NestedHybridModeFinder finder = new NestedHybridModeFinder(fused == false, rewriteContext);
         for (QueryBuilder query : subQueries) {
             finder.accept(query);
         }
@@ -1503,19 +1500,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     /**
      * Finds a hybrid query of the given mode at any depth, descending the way {@link LegSearchCounter} does: it hands
-     * itself back as the child visitor and descends into each builder it is handed, keyed by identity. With a registry it
-     * also parses, without rewriting, the query a {@code wrapper} or {@code template} query holds. A query that a builder's
-     * own {@code visit} does not hand out, such as the filter of a {@code function_score} function, is not inspected.
+     * itself back as the child visitor and descends into each builder it is handed, keyed by identity. It also reads the
+     * query a {@code wrapper} or {@code template} query holds, without rewriting it. A query that a builder's own
+     * {@code visit} does not hand out, such as the filter of a {@code function_score} function, is not inspected.
      */
     private static final class NestedHybridModeFinder implements QueryBuilderVisitor {
         private final Set<QueryBuilder> entered = Collections.newSetFromMap(new IdentityHashMap<>());
         private final boolean findFused;
-        private final NamedXContentRegistry xContentRegistry;
+        private final QueryRewriteContext rewriteContext;
         private boolean found;
 
-        private NestedHybridModeFinder(final boolean findFused, final NamedXContentRegistry xContentRegistry) {
+        private NestedHybridModeFinder(final boolean findFused, final QueryRewriteContext rewriteContext) {
             this.findFused = findFused;
-            this.xContentRegistry = xContentRegistry;
+            this.rewriteContext = rewriteContext;
         }
 
         @Override
@@ -1528,8 +1525,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 found = true;
                 return;
             }
-            if (Objects.nonNull(xContentRegistry)
-                && (queryBuilder instanceof WrapperQueryBuilder || queryBuilder instanceof TemplateQueryBuilder)) {
+            if (queryBuilder instanceof WrapperQueryBuilder || queryBuilder instanceof TemplateQueryBuilder) {
                 acceptHeldQuery(queryBuilder);
                 return;
             }
@@ -1542,29 +1538,31 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
 
         /**
-         * Accepts the query a wrapper or template holds, parsed without rewriting. One that does not parse is skipped: the
-         * wrapper's or template's own rewrite reports it.
+         * Accepts the query a wrapper or template holds. One that cannot be read is skipped: the wrapper's or template's own
+         * rewrite reports it.
          */
         private void acceptHeldQuery(final QueryBuilder holder) {
             QueryBuilder heldQuery;
-            try (XContentParser parser = createHeldQueryParser(holder)) {
-                heldQuery = parseInnerQueryBuilder(parser);
+            try {
+                heldQuery = readHeldQuery(holder);
             } catch (IOException | RuntimeException e) {
                 return;
             }
             accept(heldQuery);
         }
 
-        private XContentParser createHeldQueryParser(final QueryBuilder holder) throws IOException {
-            if (holder instanceof WrapperQueryBuilder wrapperQueryBuilder) {
-                byte[] source = wrapperQueryBuilder.source();
-                return MediaTypeRegistry.xContent(source)
-                    .xContent()
-                    .createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, source);
+        private QueryBuilder readHeldQuery(final QueryBuilder holder) throws IOException {
+            if (holder instanceof TemplateQueryBuilder) {
+                // A template's own rewrite substitutes the request's variables and parses the result, without rewriting it.
+                return holder.rewrite(rewriteContext);
             }
-            try (XContentBuilder builder = XContentFactory.jsonBuilder()) {
-                String content = builder.map(((TemplateQueryBuilder) holder).getContent()).toString();
-                return MediaTypeRegistry.JSON.xContent().createParser(xContentRegistry, LoggingDeprecationHandler.INSTANCE, content);
+            byte[] source = ((WrapperQueryBuilder) holder).source();
+            try (
+                XContentParser parser = MediaTypeRegistry.xContent(source)
+                    .xContent()
+                    .createParser(rewriteContext.getXContentRegistry(), LoggingDeprecationHandler.INSTANCE, source)
+            ) {
+                return parseInnerQueryBuilder(parser);
             }
         }
     }
