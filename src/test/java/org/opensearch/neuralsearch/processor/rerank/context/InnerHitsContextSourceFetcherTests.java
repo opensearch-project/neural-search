@@ -54,7 +54,6 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
             List.of(List.of(identity("embeddings", 0), identity("embeddings", 1))),
             context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD)
         );
-        assertEquals(List.of(List.of("keyword_chunks", "semantic_chunks")), context.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD));
     }
 
     public void testFetchContext_whenFieldIsInsideObject_thenExtractsValue() {
@@ -122,6 +121,22 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         assertEquals(List.of(List.of(firstSection, secondSection)), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
     }
 
+    public void testFetchContext_whenChunksAreInnerHitsOfInnerHits_thenCollectsThem() {
+        SearchHit.NestedIdentity firstChunk = new SearchHit.NestedIdentity("sections", 0, identity("chunks", 0));
+        SearchHit.NestedIdentity secondChunk = new SearchHit.NestedIdentity("sections", 1, identity("chunks", 2));
+        SearchHit firstSection = createInnerHit(identity("sections", 0), "{\"title\": \"one\"}");
+        firstSection.setInnerHits(Map.of("sections.chunks", innerHitsList(createInnerHit(firstChunk, "{\"text\": \"alpha\"}"))));
+        SearchHit secondSection = createInnerHit(identity("sections", 1), "{\"title\": \"two\"}");
+        secondSection.setInnerHits(Map.of("sections.chunks", innerHitsList(createInnerHit(secondChunk, "{\"text\": \"beta\"}"))));
+        SearchHit parent = createHit("1");
+        parent.setInnerHits(Map.of("sections", innerHitsList(firstSection, secondSection)));
+
+        Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("sections.chunks", "text"), createSearchResponse(parent));
+
+        assertEquals(List.of("alpha", "beta"), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+        assertEquals(List.of(List.of(firstChunk, secondChunk)), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+    }
+
     public void testFetchContext_whenSourceUsesFullFieldPath_thenExtractsValue() {
         SearchHit parent = createHit("1");
         parent.setInnerHits(Map.of("chunks", innerHitsList(createInnerHit(identity("embeddings", 0), "{\"embeddings.text\": \"alpha\"}"))));
@@ -148,7 +163,6 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
             List.of(List.of(identity("embeddings", 0)), List.of(), List.of()),
             context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD)
         );
-        assertEquals(List.of(List.of("chunks"), List.of(), List.of()), context.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD));
     }
 
     public void testFetchContext_whenNestedQueryHasNoInnerHits_thenFail() {
@@ -232,14 +246,12 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("embeddings", "text"), createSearchResponse(hit));
 
         assertEquals(List.of(), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
-        assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD));
     }
 
     public void testFetchContext_whenNoHits_thenSucceedsEmpty() {
         Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("embeddings", "text"), createSearchResponse());
 
         assertEquals(List.of(), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
-        assertEquals(List.of(), context.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD));
     }
 
     public void testCreate_whenOnePath_thenSuccessful() {

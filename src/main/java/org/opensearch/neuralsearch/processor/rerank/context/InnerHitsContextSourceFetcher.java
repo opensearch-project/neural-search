@@ -39,8 +39,6 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
     public static final String FIELD_FIELD = "field";
     /** Per top hit, the nested identities of its unique chunks, aligned with {@link DocumentContextSourceFetcher#DOCUMENT_CONTEXT_LIST_FIELD}. */
     public static final String CHUNK_IDENTITIES_FIELD = "inner_hits_chunk_identities";
-    /** Per top hit, the names of the inner hits lists that hold chunks of the configured nested path. */
-    public static final String LIST_NAMES_FIELD = "inner_hits_list_names";
 
     private final String path;
     private final String field;
@@ -68,22 +66,10 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         }
         List<String> contexts = new ArrayList<>();
         List<List<SearchHit.NestedIdentity>> chunkIdentities = new ArrayList<>();
-        List<List<String>> listNames = new ArrayList<>();
         int missingFieldCount = 0;
         for (SearchHit hit : searchResponse.getHits()) {
             Map<SearchHit.NestedIdentity, SearchHit> chunkByIdentity = new LinkedHashMap<>();
-            List<String> matchingLists = new ArrayList<>();
-            Map<String, SearchHits> inners = hit.getInnerHits() == null ? Map.of() : hit.getInnerHits();
-            for (Map.Entry<String, SearchHits> entry : inners.entrySet()) {
-                SearchHit[] innerHitArray = entry.getValue().getHits();
-                if (innerHitArray.length == 0 || !path.equals(nestedPath(innerHitArray[0].getNestedIdentity()))) {
-                    continue;
-                }
-                matchingLists.add(entry.getKey());
-                for (SearchHit innerHit : innerHitArray) {
-                    chunkByIdentity.putIfAbsent(innerHit.getNestedIdentity(), innerHit);
-                }
-            }
+            collectChunks(hit, chunkByIdentity);
             for (SearchHit chunk : chunkByIdentity.values()) {
                 String text = chunkText(chunk);
                 if (text == null) {
@@ -93,7 +79,6 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
                 contexts.add(text);
             }
             chunkIdentities.add(new ArrayList<>(chunkByIdentity.keySet()));
-            listNames.add(matchingLists);
         }
         if (missingFieldCount > 0) {
             log.warn(
@@ -109,16 +94,33 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         }
         listener.onResponse(
             new HashMap<>(
-                Map.of(
-                    DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD,
-                    contexts,
-                    CHUNK_IDENTITIES_FIELD,
-                    chunkIdentities,
-                    LIST_NAMES_FIELD,
-                    listNames
-                )
+                Map.of(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD, contexts, CHUNK_IDENTITIES_FIELD, chunkIdentities)
             )
         );
+    }
+
+    /**
+     * Collects the unique chunks of the configured path from the hit's inner hits lists, descending into the inner hits of
+     * other paths' inner hits, where chunks of a nested-in-nested path end up when both levels request inner hits.
+     */
+    private void collectChunks(final SearchHit hit, final Map<SearchHit.NestedIdentity, SearchHit> chunkByIdentity) {
+        if (hit.getInnerHits() == null) {
+            return;
+        }
+        for (SearchHits list : hit.getInnerHits().values()) {
+            SearchHit[] innerHits = list.getHits();
+            if (innerHits.length == 0) {
+                continue;
+            }
+            boolean onPath = path.equals(nestedPath(innerHits[0].getNestedIdentity()));
+            for (SearchHit innerHit : innerHits) {
+                if (onPath) {
+                    chunkByIdentity.putIfAbsent(innerHit.getNestedIdentity(), innerHit);
+                } else {
+                    collectChunks(innerHit, chunkByIdentity);
+                }
+            }
+        }
     }
 
     /** Whether the query has a nested query on the configured path that returns inner hits. A request without a query passes. */

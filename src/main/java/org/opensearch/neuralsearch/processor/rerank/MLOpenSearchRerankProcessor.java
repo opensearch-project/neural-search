@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.processor.rerank;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -114,7 +115,6 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         List<List<SearchHit.NestedIdentity>> chunkIdentities = (List<List<SearchHit.NestedIdentity>>) rerankingContext.get(
             InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD
         );
-        List<List<String>> listNames = (List<List<String>>) rerankingContext.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD);
         return ActionListener.wrap(scores -> {
             int expected = chunkIdentities.stream().mapToInt(List::size).sum();
             if (scores.size() != expected) {
@@ -136,41 +136,58 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
                     }
                 }
                 hitScores.add(maxScore);
-                List<String> names = listNames.get(i);
-                if (names.isEmpty()) {
-                    continue;
+                if (!scoreByIdentity.isEmpty()) {
+                    rescoreInnerHits(hits[i], scoreByIdentity);
                 }
-                Map<String, SearchHits> innerHits = new HashMap<>(hits[i].getInnerHits());
-                for (String name : names) {
-                    SearchHits list = innerHits.get(name);
-                    SearchHit[] chunks = list.getHits();
-                    float listMaxScore = Float.NEGATIVE_INFINITY;
-                    for (SearchHit chunk : chunks) {
-                        float score = scoreByIdentity.get(chunk.getNestedIdentity());
-                        chunk.score(score);
-                        listMaxScore = Math.max(listMaxScore, score);
-                    }
-                    // An explicit inner_hits sort wins: chunks get rerank scores but keep the requested order and sort values
-                    boolean explicitlySorted = chunks[0].getSortValues().length > 0;
-                    if (!explicitlySorted) {
-                        Arrays.sort(chunks, (chunk1, chunk2) -> Float.compare(chunk2.getScore(), chunk1.getScore()));
-                    }
-                    innerHits.put(
-                        name,
-                        new SearchHits(
-                            chunks,
-                            list.getTotalHits(),
-                            listMaxScore,
-                            list.getSortFields(),
-                            list.getCollapseField(),
-                            list.getCollapseValues()
-                        )
-                    );
-                }
-                hits[i].setInnerHits(innerHits);
             }
             listener.onResponse(hitScores);
         }, listener::onFailure);
+    }
+
+    /**
+     * Writes the chunk scores into every inner hits list holding scored chunks and re-sorts it, descending into the inner
+     * hits of inner hits for nested-in-nested chunks.
+     */
+    private static void rescoreInnerHits(final SearchHit hit, final Map<SearchHit.NestedIdentity, Float> scoreByIdentity) {
+        if (hit.getInnerHits() == null) {
+            return;
+        }
+        Map<String, SearchHits> innerHits = new LinkedHashMap<>(hit.getInnerHits());
+        for (Map.Entry<String, SearchHits> entry : innerHits.entrySet()) {
+            SearchHits list = entry.getValue();
+            SearchHit[] chunks = list.getHits();
+            if (chunks.length == 0) {
+                continue;
+            }
+            if (!scoreByIdentity.containsKey(chunks[0].getNestedIdentity())) {
+                for (SearchHit innerHit : chunks) {
+                    rescoreInnerHits(innerHit, scoreByIdentity);
+                }
+                continue;
+            }
+            float listMaxScore = Float.NEGATIVE_INFINITY;
+            for (SearchHit chunk : chunks) {
+                float score = scoreByIdentity.get(chunk.getNestedIdentity());
+                chunk.score(score);
+                listMaxScore = Math.max(listMaxScore, score);
+            }
+            // An explicit inner_hits sort wins: chunks get rerank scores but keep the requested order and sort values
+            boolean explicitlySorted = chunks[0].getSortValues().length > 0;
+            if (!explicitlySorted) {
+                Arrays.sort(chunks, (chunk1, chunk2) -> Float.compare(chunk2.getScore(), chunk1.getScore()));
+            }
+            entry.setValue(
+                new SearchHits(
+                    chunks,
+                    list.getTotalHits(),
+                    listMaxScore,
+                    list.getSortFields(),
+                    list.getCollapseField(),
+                    list.getCollapseValues()
+                )
+            );
+        }
+        hit.setInnerHits(innerHits);
     }
 
 }

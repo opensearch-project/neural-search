@@ -561,8 +561,59 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
+    public void testRerank_whenChunksAreInnerHitsOfInnerHits_thenScoresAndSortsThem() {
+        SearchHit section = new SearchHit(0, "section-0", new SearchHit.NestedIdentity("sections", 0, null), Map.of(), Map.of());
+        section.setInnerHits(Map.of("sections.chunks", innerHitsList(createSectionChunk(0, "alpha"), createSectionChunk(1, "beta"))));
+        SearchHit parent = createParentHit(0, "0");
+        parent.setInnerHits(Map.of("sections", innerHitsList(section)));
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+
+        doAnswer(invocation -> {
+            ActionListener<List<Float>> inferenceListener = invocation.getArgument(1);
+            inferenceListener.onResponse(List.of(0.2f, 0.8f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(isA(SimilarityInferenceRequest.class), isA(ActionListener.class));
+
+        Map<String, Object> scoringContext = new HashMap<>(
+            innerHitsContext(new InnerHitsContextSourceFetcher("sections.chunks", "text"), response)
+        );
+        scoringContext.put(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchHit reranked = argCaptor.getValue().getHits().getAt(0);
+        assertEquals(0.8f, reranked.getScore(), 0.0001f);
+        SearchHits chunks = reranked.getInnerHits().get("sections").getAt(0).getInnerHits().get("sections.chunks");
+        assertEquals(1, chunks.getAt(0).getNestedIdentity().getChild().getOffset());
+        assertEquals(0.8f, chunks.getAt(0).getScore(), 0.0001f);
+        assertEquals(0, chunks.getAt(1).getNestedIdentity().getChild().getOffset());
+        assertEquals(0.2f, chunks.getAt(1).getScore(), 0.0001f);
+        assertEquals(0.8f, chunks.getMaxScore(), 0.0001f);
+    }
+
+    private SearchHit createSectionChunk(int offset, String text) {
+        SearchHit.NestedIdentity identity = new SearchHit.NestedIdentity(
+            "sections",
+            0,
+            new SearchHit.NestedIdentity("chunks", offset, null)
+        );
+        SearchHit chunk = new SearchHit(offset, "chunk-" + offset, identity, Map.of(), Map.of());
+        chunk.sourceRef(new BytesArray(String.format(Locale.ROOT, "{\"text\": \"%s\"}", text)));
+        return chunk;
+    }
+
     private Map<String, Object> innerHitsContext(SearchResponse searchResponse) {
-        InnerHitsContextSourceFetcher fetcher = new InnerHitsContextSourceFetcher("embeddings", "text");
+        return innerHitsContext(new InnerHitsContextSourceFetcher("embeddings", "text"), searchResponse);
+    }
+
+    @SneakyThrows
+    private Map<String, Object> innerHitsContext(InnerHitsContextSourceFetcher fetcher, SearchResponse searchResponse) {
         List<Map<String, Object>> captured = new ArrayList<>();
         fetcher.fetchContext(request, searchResponse, ActionListener.wrap(captured::add, e -> fail("Should not fail: " + e)));
         return captured.get(0);
