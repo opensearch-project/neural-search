@@ -18,6 +18,7 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSI
 import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES_CEILING;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -59,6 +60,10 @@ import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.Rewriteable;
 import org.opensearch.index.query.TemplateQueryBuilder;
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.WrapperQueryBuilder;
+import org.opensearch.core.xcontent.NamedXContentRegistry;
+import org.opensearch.core.ParseField;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
@@ -107,6 +112,9 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
     private static final String INDEX_NAME = "test-index";
     /** A nested path, for the two shapes that need one: a sort's nested filter, and a [nested] query. */
     private static final String NESTED_PATH = "nested";
+    private static final String MIXED_NESTING_MESSAGE =
+        "a [hybrid] query without [fusion] cannot be nested in a [hybrid] query with [fusion], or the other way around; "
+            + "use [fusion] on both";
 
     /** The cluster service the current {@link #initClusterUtil} call installed, so a test can swap only the resolver. */
     private ClusterService clusterService;
@@ -1119,6 +1127,235 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
         assertEquals("the fan-out is unchanged", List.of(2), fanOut.legCountPerMultiSearch());
     }
 
+    /** A hybrid without [fusion] as a leg of a fused hybrid is a 400 before anything is fanned out, at any depth. */
+    @SneakyThrows
+    public void testFusedMode_whenHybridWithoutFusionIsNestedAtAnyDepth_thenRejectedBeforeAnyFanOut() {
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put("as a leg", fused(classic(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"), termLeg()), termLeg()));
+        shapes.put(
+            "inside a bool in a leg",
+            fused(QueryBuilders.boolQuery().must(classic(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"), termLeg())), termLeg())
+        );
+        shapes.put(
+            "below a nested fused hybrid",
+            fused(fused(classic(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"), termLeg()), termLeg()), termLeg())
+        );
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+
+            IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+
+            assertEquals(shape.getKey(), MIXED_NESTING_MESSAGE, error.getMessage());
+            assertTrue(shape.getKey() + ": rejected before any fan-out", registered.isEmpty());
+        }
+    }
+
+    /** A fused hybrid below a hybrid without [fusion] is a 400 from the outer rewrite, before the inner one can run. */
+    @SneakyThrows
+    public void testClassicMode_whenFusedHybridIsNestedAtAnyDepth_thenRejectedBeforeAnyFanOut() {
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put("as a sub-query", classic(nestedChain(1), termLeg()));
+        shapes.put("inside a bool in a sub-query", classic(QueryBuilders.boolQuery().must(nestedChain(1)), termLeg()));
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+
+            IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+
+            assertEquals(shape.getKey(), MIXED_NESTING_MESSAGE, error.getMessage());
+            assertTrue(shape.getKey() + ": rejected before the fused hybrid fanned out", registered.isEmpty());
+        }
+    }
+
+    /**
+     * A hybrid without [fusion] inside a [wrapper] or [template] leg is only seen by the leg search, after the wrapper or
+     * template has been rewritten into it, so the fused rewrite parses the query they hold to find it.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenHybridWithoutFusionIsInsideAWrapperOrTemplateLeg_thenRejectedBeforeAnyFanOut() {
+        String classicJson = "{\"hybrid\":{\"queries\":[{\"match\":{\"" + TEXT_FIELD_NAME + "\":\"hello\"}}]}}";
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put("wrapper", fused(new WrapperQueryBuilder(classicJson), termLeg()));
+        shapes.put(
+            "template",
+            fused(
+                new TemplateQueryBuilder(Map.of("hybrid", Map.of("queries", List.of(Map.of("match", Map.of(TEXT_FIELD_NAME, "hello")))))),
+                termLeg()
+            )
+        );
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+            when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+
+            IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+
+            assertEquals(shape.getKey(), MIXED_NESTING_MESSAGE, error.getMessage());
+            assertTrue(shape.getKey() + ": rejected before any fan-out", registered.isEmpty());
+        }
+    }
+
+    /** A fused hybrid inside a [wrapper] leg is the same mode, so this check lets the fused rewrite fan out. */
+    @SneakyThrows
+    public void testFusedMode_whenFusedHybridIsInsideAWrapperLeg_thenNotRejectedAsMixedNesting() {
+        String fusedJson = "{\"hybrid\":{\"fusion\":{},\"queries\":[{\"match\":{\"" + TEXT_FIELD_NAME + "\":\"hello\"}}]}}";
+        HybridQueryBuilder query = fused(new WrapperQueryBuilder(fusedJson), termLeg());
+        List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+        QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+        when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+
+        query.rewrite(coordinatorContext);
+
+        assertEquals("the fused rewrite fanned out its legs", 1, registered.size());
+    }
+
+    /** A [wrapper] or [template] leg that does not hold a query is left to its own rewrite, which reports it in the leg search. */
+    @SneakyThrows
+    public void testFusedMode_whenAWrapperOrTemplateLegDoesNotHoldAQuery_thenLeftToItsOwnRewrite() {
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put("wrapper with malformed JSON", fused(new WrapperQueryBuilder("{\"match\":"), termLeg()));
+        shapes.put("template with an unknown query", fused(new TemplateQueryBuilder(Map.of("not_a_query", Map.of())), termLeg()));
+        String tooManySubQueries = "{\"hybrid\":{\"queries\":["
+            + String.join(
+                ",",
+                Collections.nCopies(HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES + 1, "{\"match\":{\"" + TEXT_FIELD_NAME + "\":\"hello\"}}")
+            )
+            + "]}}";
+        shapes.put("wrapper holding a hybrid with too many sub-queries", fused(new WrapperQueryBuilder(tooManySubQueries), termLeg()));
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+            when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+
+            query.rewrite(coordinatorContext);
+
+            assertEquals(shape.getKey() + ": the fused rewrite fanned out its legs", 1, registered.size());
+        }
+    }
+
+    /**
+     * A fused hybrid inside a [wrapper] or [template] sub-query of a hybrid without [fusion] is read without being rewritten,
+     * so it is refused as mixed nesting before its own rewrite could fan out.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenFusedHybridIsInsideAWrapperOrTemplateSubQuery_thenRejectedBeforeAnyFanOut() {
+        String fusedJson = "{\"hybrid\":{\"fusion\":{},\"queries\":[{\"match\":{\"" + TEXT_FIELD_NAME + "\":\"hello\"}}]}}";
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put("wrapper", classic(new WrapperQueryBuilder(fusedJson), termLeg()));
+        shapes.put(
+            "template",
+            classic(
+                new TemplateQueryBuilder(
+                    Map.of("hybrid", Map.of("fusion", Map.of(), "queries", List.of(Map.of("match", Map.of(TEXT_FIELD_NAME, "hello")))))
+                ),
+                termLeg()
+            )
+        );
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+            when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+
+            IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+
+            assertEquals(shape.getKey(), MIXED_NESTING_MESSAGE, error.getMessage());
+            assertTrue(shape.getKey() + ": rejected before any fan-out", registered.isEmpty());
+        }
+    }
+
+    /**
+     * A template is read with the request's variables substituted, so a hybrid without [fusion] in a template whose
+     * variables sit where only the substituted value parses is still found. Without the variables the template cannot be
+     * read and is left to its own rewrite.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenHybridWithoutFusionIsInsideATemplateLegWithVariables_thenRejectedBeforeAnyFanOut() {
+        Map<String, Object> boostedMatch = Map.of("match", Map.of(TEXT_FIELD_NAME, Map.of("query", "hello", "boost", "${boost}")));
+        HybridQueryBuilder query = fused(new TemplateQueryBuilder(Map.of("hybrid", Map.of("queries", List.of(boostedMatch)))), termLeg());
+
+        List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+        QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+        when(coordinatorContext.getXContentRegistry()).thenReturn(queryParsingRegistry());
+        when(coordinatorContext.getContextVariables()).thenReturn(Map.of("boost", 2.0f));
+
+        IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+        assertEquals(MIXED_NESTING_MESSAGE, error.getMessage());
+        assertTrue("rejected before any fan-out", registered.isEmpty());
+
+        List<BiConsumer<Client, ActionListener<?>>> registeredWithoutVariables = new ArrayList<>();
+        QueryCoordinatorContext contextWithoutVariables = coordinatorContext(request(query), registeredWithoutVariables);
+        when(contextWithoutVariables.getXContentRegistry()).thenReturn(queryParsingRegistry());
+
+        query.rewrite(contextWithoutVariables);
+        assertEquals("without the variables the template is left to its own rewrite", 1, registeredWithoutVariables.size());
+    }
+
+    /**
+     * The check descends by itself: [boosting] and [script_score] hand their query to the visitor without visiting it, so a
+     * walk that relied on each builder's own visit would not see a hybrid inside a [bool] below them.
+     */
+    @SneakyThrows
+    public void testMixedNestingCheck_whenTheOtherModeIsBelowABuilderThatDoesNotVisitItsQuery_thenRejected() {
+        Map<String, QueryBuilder> shapes = new LinkedHashMap<>();
+        shapes.put(
+            "without fusion, in a bool below boosting in a leg",
+            fused(
+                QueryBuilders.boostingQuery(
+                    QueryBuilders.boolQuery().must(classic(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"), termLeg())),
+                    QueryBuilders.matchAllQuery()
+                ).negativeBoost(0.5f),
+                termLeg()
+            )
+        );
+        shapes.put(
+            "fused, in a bool below boosting in a sub-query",
+            classic(
+                QueryBuilders.boostingQuery(QueryBuilders.boolQuery().must(nestedChain(1)), QueryBuilders.matchAllQuery())
+                    .negativeBoost(0.5f),
+                termLeg()
+            )
+        );
+        shapes.put(
+            "fused, in a bool below script_score in a sub-query",
+            classic(QueryBuilders.scriptScoreQuery(QueryBuilders.boolQuery().must(nestedChain(1)), new Script("_score")), termLeg())
+        );
+        for (Map.Entry<String, QueryBuilder> shape : shapes.entrySet()) {
+            QueryBuilder query = shape.getValue();
+            List<BiConsumer<Client, ActionListener<?>>> registered = new ArrayList<>();
+            QueryCoordinatorContext coordinatorContext = coordinatorContext(request(query), registered);
+
+            IllegalArgumentException error = expectThrows(IllegalArgumentException.class, () -> query.rewrite(coordinatorContext));
+
+            assertEquals(shape.getKey(), MIXED_NESTING_MESSAGE, error.getMessage());
+            assertTrue(shape.getKey() + ": rejected before any fan-out", registered.isEmpty());
+        }
+    }
+
+    /**
+     * Fused nested in fused stays supported, and the check lets through a hybrid without [fusion] nested in another one,
+     * which the shard refuses as before.
+     */
+    @SneakyThrows
+    public void testMixedNestingCheck_whenBothLevelsHaveTheSameMode_thenNotRejected() {
+        FanOut fanOut = drive(request(nestedChain(2)));
+        assertEquals("the fused-in-fused body is accepted and fans out", 1, fanOut.multiSearches());
+
+        HybridQueryBuilder classic = classic(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"), termLeg());
+        QueryBuilder rewritten = classic.rewrite(coordinatorContext(request(classic), new ArrayList<>()));
+        assertTrue(rewritten instanceof HybridQueryBuilder);
+        assertNull(((HybridQueryBuilder) rewritten).fusion());
+
+        HybridQueryBuilder classicInClassic = classic(classic(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"), termLeg()), termLeg());
+        QueryBuilder rewrittenNested = classicInClassic.rewrite(coordinatorContext(request(classicInClassic), new ArrayList<>()));
+        assertTrue(rewrittenNested instanceof HybridQueryBuilder);
+    }
+
     // ------------------------------------------------ harness ------------------------------------------------
 
     /** A chain {@code depth} fused hybrids deep, each holding the level below plus one term leg: 2 legs per level. */
@@ -1178,6 +1415,37 @@ public class HybridQueryFusedFanOutTests extends OpenSearchQueryTestCase {
             );
         }
         return fused(legs.toArray(new QueryBuilder[0]));
+    }
+
+    /** Parses the queries the wrapper and template tests carry: hybrid, match and term. */
+    private NamedXContentRegistry queryParsingRegistry() {
+        return new NamedXContentRegistry(
+            List.of(
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(MatchQueryBuilder.NAME),
+                    MatchQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent)
+            )
+        );
+    }
+
+    private HybridQueryBuilder classic(final QueryBuilder... subQueries) {
+        HybridQueryBuilder hybrid = new HybridQueryBuilder();
+        for (QueryBuilder subQuery : subQueries) {
+            hybrid.add(subQuery);
+        }
+        return hybrid;
+    }
+
+    private QueryBuilder termLeg() {
+        return QueryBuilders.termQuery(TEXT_FIELD_NAME, "kw");
     }
 
     private HybridQueryBuilder fused(final QueryBuilder... legs) {
