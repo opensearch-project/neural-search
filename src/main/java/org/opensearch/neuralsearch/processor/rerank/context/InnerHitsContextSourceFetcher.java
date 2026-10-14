@@ -12,10 +12,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.apache.lucene.search.BooleanClause;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.xcontent.support.XContentMapValues;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 
@@ -47,13 +51,24 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         final SearchResponse searchResponse,
         final ActionListener<Map<String, Object>> listener
     ) {
+        if (!requestsInnerHitsOnPath(searchRequest)) {
+            listener.onFailure(
+                new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "The query has no nested query on the path [%s] with inner hits, so [%s] cannot rerank chunks. "
+                            + "Add \"inner_hits\": {} to the nested query on [%s].",
+                        path,
+                        NAME,
+                        path
+                    )
+                )
+            );
+            return;
+        }
         List<String> contexts = new ArrayList<>();
         List<List<SearchHit.NestedIdentity>> chunkIdentities = new ArrayList<>();
         List<List<String>> listNames = new ArrayList<>();
-        boolean anyMatchingList = false;
-        // OpenSearch returns an empty list for every inner_hits name even when a hit has no nested matches, so an empty
-        // list proves the query requests inner hits; its path is unknown, though
-        boolean anyEmptyList = false;
         int missingFieldCount = 0;
         for (SearchHit hit : searchResponse.getHits()) {
             Map<SearchHit.NestedIdentity, SearchHit> chunkByIdentity = new LinkedHashMap<>();
@@ -61,11 +76,7 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
             Map<String, SearchHits> inners = hit.getInnerHits() == null ? Map.of() : hit.getInnerHits();
             for (Map.Entry<String, SearchHits> entry : inners.entrySet()) {
                 SearchHit[] innerHitArray = entry.getValue().getHits();
-                if (innerHitArray.length == 0) {
-                    anyEmptyList = true;
-                    continue;
-                }
-                if (!path.equals(nestedPath(innerHitArray[0].getNestedIdentity()))) {
+                if (innerHitArray.length == 0 || !path.equals(nestedPath(innerHitArray[0].getNestedIdentity()))) {
                     continue;
                 }
                 matchingLists.add(entry.getKey());
@@ -73,7 +84,6 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
                     chunkByIdentity.putIfAbsent(innerHit.getNestedIdentity(), innerHit);
                 }
             }
-            anyMatchingList |= !matchingLists.isEmpty();
             for (SearchHit chunk : chunkByIdentity.values()) {
                 String text = chunkText(chunk);
                 if (text == null) {
@@ -84,22 +94,6 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
             }
             chunkIdentities.add(new ArrayList<>(chunkByIdentity.keySet()));
             listNames.add(matchingLists);
-        }
-        boolean innerHitsMissingFromQuery = !anyMatchingList && !anyEmptyList && searchResponse.getHits().getHits().length > 0;
-        if (innerHitsMissingFromQuery) {
-            listener.onFailure(
-                new IllegalArgumentException(
-                    String.format(
-                        Locale.ROOT,
-                        "No inner hits on the nested path [%s] found in the search results, so [%s] cannot rerank chunks. "
-                            + "Add \"inner_hits\": {} to the nested query on [%s].",
-                        path,
-                        NAME,
-                        path
-                    )
-                )
-            );
-            return;
         }
         if (missingFieldCount > 0) {
             log.warn(
@@ -125,6 +119,28 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
                 )
             )
         );
+    }
+
+    /** Whether the query has a nested query on the configured path that returns inner hits. A request without a query passes. */
+    private boolean requestsInnerHitsOnPath(final SearchRequest searchRequest) {
+        if (searchRequest == null || searchRequest.source() == null || searchRequest.source().query() == null) {
+            return true;
+        }
+        boolean[] found = { false };
+        searchRequest.source().query().visit(new QueryBuilderVisitor() {
+            @Override
+            public void accept(QueryBuilder query) {
+                if (query instanceof NestedQueryBuilder nested && path.equals(nested.path()) && nested.innerHit() != null) {
+                    found[0] = true;
+                }
+            }
+
+            @Override
+            public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
+                return this;
+            }
+        });
+        return found[0];
     }
 
     /** Joins the relative field names of a (possibly multi-level) nested identity into the full nested path. */

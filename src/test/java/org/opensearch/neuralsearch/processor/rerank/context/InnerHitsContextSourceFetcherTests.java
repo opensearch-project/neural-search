@@ -13,12 +13,18 @@ import java.util.Map;
 import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.action.search.SearchResponseSections;
 import org.opensearch.action.search.ShardSearchFailure;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
+import org.opensearch.index.query.InnerHitBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
+import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.test.MockLogAppender;
@@ -145,12 +151,58 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         assertEquals(List.of(List.of("chunks"), List.of(), List.of()), context.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD));
     }
 
-    public void testFetchContext_whenNoHitHasMatchingList_thenFail() {
-        InnerHitsContextSourceFetcher fetcher = new InnerHitsContextSourceFetcher("embeddings", "text");
+    public void testFetchContext_whenNestedQueryHasNoInnerHits_thenFail() {
+        assertMissingInnerHitsFailure(nested("embeddings", false));
+    }
 
+    public void testFetchContext_whenInnerHitsOnlyOnOtherPath_thenFail() {
+        assertMissingInnerHitsFailure(QueryBuilders.boolQuery().should(nested("comments", true)).should(nested("embeddings", false)));
+    }
+
+    public void testFetchContext_whenQueryHasNoNestedQuery_thenFail() {
+        assertMissingInnerHitsFailure(QueryBuilders.matchAllQuery());
+    }
+
+    public void testFetchContext_whenInnerHitsInsideCompoundQuery_thenSucceeds() {
+        QueryBuilder query = QueryBuilders.boolQuery()
+            .must(QueryBuilders.constantScoreQuery(QueryBuilders.disMaxQuery().add(nested("embeddings", true))));
+
+        Map<String, Object> context = fetch(
+            new InnerHitsContextSourceFetcher("embeddings", "text"),
+            requestWithQuery(query),
+            createSearchResponse(createHit("1"))
+        );
+
+        assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+    }
+
+    public void testFetchContext_whenInnerHitsOnNestedInNestedPath_thenSucceeds() {
+        NestedQueryBuilder chunks = nested("sections.chunks", true);
+        QueryBuilder query = QueryBuilders.nestedQuery("sections", chunks, ScoreMode.Max);
+
+        Map<String, Object> context = fetch(
+            new InnerHitsContextSourceFetcher("sections.chunks", "text"),
+            requestWithQuery(query),
+            createSearchResponse(createHit("1"))
+        );
+
+        assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+    }
+
+    public void testFetchContext_whenRequestHasNoQuery_thenSucceeds() {
+        Map<String, Object> context = fetch(
+            new InnerHitsContextSourceFetcher("embeddings", "text"),
+            new SearchRequest().source(new SearchSourceBuilder()),
+            createSearchResponse(createHit("1"))
+        );
+
+        assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+    }
+
+    private void assertMissingInnerHitsFailure(QueryBuilder query) {
         List<Exception> failures = new ArrayList<>();
-        fetcher.fetchContext(
-            new SearchRequest(),
+        new InnerHitsContextSourceFetcher("embeddings", "text").fetchContext(
+            requestWithQuery(query),
             createSearchResponse(createHit("1")),
             ActionListener.wrap(result -> fail("Should not succeed"), failures::add)
         );
@@ -158,10 +210,19 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         assertEquals(1, failures.size());
         assertTrue(failures.get(0) instanceof IllegalArgumentException);
         assertEquals(
-            "No inner hits on the nested path [embeddings] found in the search results, so [inner_hits] "
+            "The query has no nested query on the path [embeddings] with inner hits, so [inner_hits] "
                 + "cannot rerank chunks. Add \"inner_hits\": {} to the nested query on [embeddings].",
             failures.get(0).getMessage()
         );
+    }
+
+    private static NestedQueryBuilder nested(String path, boolean innerHits) {
+        NestedQueryBuilder nested = QueryBuilders.nestedQuery(path, QueryBuilders.matchAllQuery(), ScoreMode.Max);
+        return innerHits ? nested.innerHit(new InnerHitBuilder()) : nested;
+    }
+
+    private static SearchRequest requestWithQuery(QueryBuilder query) {
+        return new SearchRequest().source(new SearchSourceBuilder().query(query));
     }
 
     public void testFetchContext_whenInnerHitsListsAreEmpty_thenSucceedsWithoutChunks() {
@@ -237,8 +298,13 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
 
     @SneakyThrows
     private Map<String, Object> fetch(InnerHitsContextSourceFetcher fetcher, SearchResponse response) {
+        return fetch(fetcher, new SearchRequest(), response);
+    }
+
+    @SneakyThrows
+    private Map<String, Object> fetch(InnerHitsContextSourceFetcher fetcher, SearchRequest request, SearchResponse response) {
         List<Map<String, Object>> captured = new ArrayList<>();
-        fetcher.fetchContext(new SearchRequest(), response, ActionListener.wrap(captured::add, e -> fail("Should not fail: " + e)));
+        fetcher.fetchContext(request, response, ActionListener.wrap(captured::add, e -> fail("Should not fail: " + e)));
         assertEquals(1, captured.size());
         return captured.get(0);
     }
