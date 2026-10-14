@@ -516,6 +516,37 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assertTrue(Float.isNaN(chunk0.getScore()));
     }
 
+    public void testRerank_whenNoChunksOnPage_thenKeepsOriginalScoresWithoutCallingModel() {
+        SearchHit parent0 = createParentHit(0, "0");
+        parent0.score(2.0f);
+        SearchHit parent1 = createParentHit(1, "1");
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent0, parent1 }, new TotalHits(2, TotalHits.Relation.EQUAL_TO), 2.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+        Map<String, Object> scoringContext = Map.of(
+            QueryContextSourceFetcher.QUERY_TEXT_FIELD,
+            "query text",
+            DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD,
+            List.of(),
+            InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD,
+            List.of(List.of(), List.of())
+        );
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        verify(mlCommonsClientAccessor, never()).inferenceSimilarity(any(), any());
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchHits rerankedHits = argCaptor.getValue().getHits();
+        assertEquals("0", rerankedHits.getAt(0).getId());
+        assertEquals(2.0f, rerankedHits.getAt(0).getScore(), 0.0f);
+        assertEquals("1", rerankedHits.getAt(1).getId());
+        assertEquals(1.0f, rerankedHits.getAt(1).getScore(), 0.0f);
+        assertEquals(2.0f, rerankedHits.getMaxScore(), 0.0f);
+    }
+
     public void testRerank_whenPageIsPastTheEnd_thenReturnsResponseUnchanged() {
         SearchHits searchHits = new SearchHits(new SearchHit[0], new TotalHits(5, TotalHits.Relation.EQUAL_TO), 1.0f);
         SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);

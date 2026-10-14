@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
-* [Rerank] Add `context.inner_hits.paths` to the `ml_opensearch` rerank processor, scoring each nested chunk returned as an inner hit, re-sorting the inner hits and scoring the parent with its best chunk ([#2039](https://github.com/opensearch-project/neural-search/pull/2039))
+* [Rerank] Add `context.inner_hits.paths` to the `ml_opensearch` rerank processor, scoring each nested chunk returned as an inner hit, re-sorting the inner hits and scoring the parent with its best chunk; parents without chunks rank last ([#2039](https://github.com/opensearch-project/neural-search/pull/2039))
 * [Hybrid Query] Add fusion mode to the hybrid query ([#2036](https://github.com/opensearch-project/neural-search/pull/2036))
 * [Hybrid Query] Turn fusion mode on by default; `plugins.neural_search.hybrid.fusion.enabled` becomes the switch that turns it off ([#2037](https://github.com/opensearch-project/neural-search/pull/2037))
 

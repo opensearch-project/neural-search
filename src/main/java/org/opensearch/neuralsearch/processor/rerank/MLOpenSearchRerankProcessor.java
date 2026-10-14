@@ -6,7 +6,6 @@ package org.opensearch.neuralsearch.processor.rerank;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -86,7 +85,8 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         ActionListener<List<Float>> scoreListener = listener;
         if (rerankingContext.containsKey(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD)) {
             if (contexts.isEmpty()) {
-                listener.onResponse(Collections.nCopies(response.getHits().getHits().length, Float.NaN));
+                // No chunks anywhere on the page: nothing to rerank, keep the original scores
+                listener.onResponse(Arrays.stream(response.getHits().getHits()).map(SearchHit::getScore).collect(Collectors.toList()));
                 return;
             }
             scoreListener = innerHitsScoreListener(response, rerankingContext, listener);
@@ -103,6 +103,7 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
 
     /**
      * Spreads the flat chunk scores back over each hit's inner hits lists, re-sorts them and reports the per-hit maximum.
+     * A hit without chunks gets a NaN score, which ranks it after all scored hits.
      */
     @SuppressWarnings("unchecked")
     private ActionListener<List<Float>> innerHitsScoreListener(
