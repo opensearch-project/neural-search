@@ -54,6 +54,7 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         // OpenSearch returns an empty list for every inner_hits name even when a hit has no nested matches, so an empty
         // list proves the query requests inner hits; its path is unknown, though
         boolean anyEmptyList = false;
+        int missingFieldCount = 0;
         for (SearchHit hit : searchResponse.getHits()) {
             Map<SearchHit.NestedIdentity, SearchHit> chunkByIdentity = new LinkedHashMap<>();
             List<String> matchingLists = new ArrayList<>();
@@ -74,7 +75,12 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
             }
             anyMatchingList |= !matchingLists.isEmpty();
             for (SearchHit chunk : chunkByIdentity.values()) {
-                contexts.add(chunkText(chunk));
+                String text = chunkText(chunk);
+                if (text == null) {
+                    missingFieldCount++;
+                    text = "";
+                }
+                contexts.add(text);
             }
             chunkIdentities.add(new ArrayList<>(chunkByIdentity.keySet()));
             listNames.add(matchingLists);
@@ -94,6 +100,18 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
                 )
             );
             return;
+        }
+        if (missingFieldCount > 0) {
+            log.warn(
+                String.format(
+                    Locale.ROOT,
+                    "Field [%s] is missing in %d of %d chunks on the nested path [%s], reranking them with an empty string",
+                    field,
+                    missingFieldCount,
+                    contexts.size(),
+                    path
+                )
+            );
         }
         listener.onResponse(
             new HashMap<>(
@@ -121,7 +139,10 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         return fullPath.toString();
     }
 
-    /** Reads the chunk text from the inner hit's own source, falling back to the full field path (as in semantic highlighting). */
+    /**
+     * Reads the chunk text from the inner hit's own source, falling back to the full field path (as in semantic highlighting).
+     * Returns null when the field is missing.
+     */
     private String chunkText(final SearchHit innerHit) {
         Map<String, Object> source = innerHit.hasSource() ? innerHit.getSourceAsMap() : Map.of();
         Object value = XContentMapValues.extractValue(field, source);
@@ -129,16 +150,7 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
             value = XContentMapValues.extractValue(path + "." + field, source);
         }
         if (value == null) {
-            log.warn(
-                String.format(
-                    Locale.ROOT,
-                    "Could not find field %s in nested chunk %s of document %s for reranking! Using the empty string instead.",
-                    field,
-                    innerHit.getNestedIdentity(),
-                    innerHit.getId()
-                )
-            );
-            return "";
+            return null;
         }
         if (value instanceof List<?> values) {
             return values.stream().map(String::valueOf).collect(Collectors.joining(" "));

@@ -10,6 +10,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
@@ -19,6 +21,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.bytes.BytesArray;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
+import org.opensearch.test.MockLogAppender;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
@@ -64,6 +67,36 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("chunks", "text"), createSearchResponse(parent));
 
         assertEquals(List.of("alpha beta"), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+    }
+
+    public void testFetchContext_whenFieldMissingInChunks_thenUsesEmptyStringAndWarnsOnce() throws IllegalAccessException {
+        SearchHit parent = createHit("1");
+        parent.setInnerHits(
+            Map.of(
+                "chunks",
+                innerHitsList(
+                    createInnerHit(identity("chunks", 0), "{\"other\": \"alpha\"}"),
+                    createInnerHit(identity("chunks", 1), "{\"text\": \"beta\"}"),
+                    createInnerHit(identity("chunks", 2), "{}")
+                )
+            )
+        );
+        String loggerName = InnerHitsContextSourceFetcher.class.getName();
+        try (MockLogAppender appender = MockLogAppender.createForLoggers(LogManager.getLogger(loggerName))) {
+            appender.addExpectation(
+                new MockLogAppender.SeenEventExpectation(
+                    "aggregated warning",
+                    loggerName,
+                    Level.WARN,
+                    "Field [text] is missing in 2 of 3 chunks on the nested path [chunks]*"
+                )
+            );
+
+            Map<String, Object> context = fetch(new InnerHitsContextSourceFetcher("chunks", "text"), createSearchResponse(parent));
+
+            assertEquals(List.of("", "beta", ""), context.get(DocumentContextSourceFetcher.DOCUMENT_CONTEXT_LIST_FIELD));
+            appender.assertAllExpectationsMatched();
+        }
     }
 
     public void testFetchContext_whenNestedInNested_thenMatchesFullPathAndKeepsChunksApart() {
