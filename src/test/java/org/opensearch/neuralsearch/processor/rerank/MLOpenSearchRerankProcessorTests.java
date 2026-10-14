@@ -564,8 +564,16 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     public void testRerank_whenChunksAreInnerHitsOfInnerHits_thenScoresAndSortsThem() {
         SearchHit section = new SearchHit(0, "section-0", new SearchHit.NestedIdentity("sections", 0, null), Map.of(), Map.of());
         section.setInnerHits(Map.of("sections.chunks", innerHitsList(createSectionChunk(0, "alpha"), createSectionChunk(1, "beta"))));
+        // A section without chunks and an empty list must be skipped
+        SearchHit sectionWithoutChunks = new SearchHit(
+            1,
+            "section-1",
+            new SearchHit.NestedIdentity("sections", 1, null),
+            Map.of(),
+            Map.of()
+        );
         SearchHit parent = createParentHit(0, "0");
-        parent.setInnerHits(Map.of("sections", innerHitsList(section)));
+        parent.setInnerHits(Map.of("sections", innerHitsList(section, sectionWithoutChunks), "other", innerHitsList()));
         SearchHits searchHits = new SearchHits(new SearchHit[] { parent }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
         SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
         response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
@@ -595,6 +603,8 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assertEquals(0, chunks.getAt(1).getNestedIdentity().getChild().getOffset());
         assertEquals(0.2f, chunks.getAt(1).getScore(), 0.0001f);
         assertEquals(0.8f, chunks.getMaxScore(), 0.0001f);
+        assertNull(reranked.getInnerHits().get("sections").getAt(1).getInnerHits());
+        assertEquals(0, reranked.getInnerHits().get("other").getHits().length);
     }
 
     private SearchHit createSectionChunk(int offset, String text) {
