@@ -115,6 +115,12 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         );
         List<List<String>> listNames = (List<List<String>>) rerankingContext.get(InnerHitsContextSourceFetcher.LIST_NAMES_FIELD);
         return ActionListener.wrap(scores -> {
+            int expected = chunkIdentities.stream().mapToInt(List::size).sum();
+            if (scores.size() != expected) {
+                throw new IllegalStateException(
+                    String.format(Locale.ROOT, "Expected %d chunk scores from the rerank model, got %d", expected, scores.size())
+                );
+            }
             SearchHit[] hits = response.getHits().getHits();
             List<Float> hitScores = new ArrayList<>(hits.length);
             int cursor = 0;
@@ -161,9 +167,6 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
                     );
                 }
                 hits[i].setInnerHits(innerHits);
-            }
-            if (cursor != scores.size()) {
-                throw new IllegalStateException("scores and nested chunks are not the same length");
             }
             listener.onResponse(hitScores);
         }, listener::onFailure);

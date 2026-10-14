@@ -487,6 +487,35 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assertEquals(0.9f, chunks.getMaxScore(), 0.0001f);
     }
 
+    @SneakyThrows
+    public void testRerank_whenModelReturnsWrongNumberOfChunkScores_thenFailsWithoutTouchingHits() {
+        SearchHit chunk0 = createChunk(0, "alpha");
+        SearchHit chunk1 = createChunk(1, "beta");
+        SearchHit parent = createParentHit(0, "0");
+        parent.setInnerHits(new LinkedHashMap<>(Map.of("chunks", innerHitsList(chunk0, chunk1))));
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+        doAnswer(invocation -> {
+            ActionListener<List<Float>> inferenceListener = invocation.getArgument(1);
+            inferenceListener.onResponse(List.of(0.1f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(isA(SimilarityInferenceRequest.class), isA(ActionListener.class));
+        Map<String, Object> scoringContext = new HashMap<>(innerHitsContext(response));
+        scoringContext.put(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argCaptor.capture());
+        assertEquals("Expected 2 chunk scores from the rerank model, got 1", argCaptor.getValue().getMessage());
+        assertEquals(1.0f, parent.getScore(), 0.0f);
+        assertSame(chunk0, parent.getInnerHits().get("chunks").getAt(0));
+        assertTrue(Float.isNaN(chunk0.getScore()));
+    }
+
     public void testRerank_whenPageIsPastTheEnd_thenReturnsResponseUnchanged() {
         SearchHits searchHits = new SearchHits(new SearchHit[0], new TotalHits(5, TotalHits.Relation.EQUAL_TO), 1.0f);
         SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
