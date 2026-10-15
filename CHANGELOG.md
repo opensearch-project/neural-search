@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Ingest Processors] Fix `field_map` entries sharing the same first dotted path segment (e.g. `author.name` and `author.bio`) overwriting each other, which silently dropped embeddings for all but the last field ([#2052](https://github.com/opensearch-project/neural-search/pull/2052))
 * [Hybrid Query] Reject a hybrid query without `fusion` nested in a hybrid query with `fusion`, and the other way around ([#2051](https://github.com/opensearch-project/neural-search/pull/2051))
 * [Ingest Processors] Deep-merge `field_map` target maps so sibling keys that diverge below the first path segment (e.g. `author.name.first` and `author.name.last`) are no longer dropped ([#2054](https://github.com/opensearch-project/neural-search/pull/2054))
+* [Semantic Field] Stop logging the full ingest document on chunking or model-info failure; log only the document `_id` and `_index` so customer content is no longer written to service logs ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
 
 ### Infrastructure
 

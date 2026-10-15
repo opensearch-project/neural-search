@@ -691,8 +691,18 @@ public class SemanticFieldProcessor extends AbstractBatchingSystemProcessor {
 
     private void logAndUpdate(@NonNull final IngestDocumentWrapper wrapper, @NonNull final String operation, @NonNull final Exception e) {
         final IngestDocument doc = wrapper.getIngestDocument();
+        // Only log non-sensitive document identifiers (index and id). Never log the document source or
+        // metadata (e.g. doc.toString()) because it contains customer content that must not be written
+        // to service logs. The exception is passed as the throwable so its stack trace is preserved.
+        final Map<String, Object> sourceAndMetadata = doc.getSourceAndMetadata();
         log.error(
-            String.format(Locale.ROOT, "Failed to %s ingest document %s. Root cause: %s", operation, doc.toString(), e.getMessage()),
+            String.format(
+                Locale.ROOT,
+                "Failed to %s ingest document with id [%s] in index [%s].",
+                operation,
+                sourceAndMetadata.get(ID_FIELD),
+                sourceAndMetadata.get(INDEX_FIELD)
+            ),
             e
         );
         if (wrapper.getException() == null) {
