@@ -12,10 +12,10 @@ import java.util.Set;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
-import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizer;
-import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizer;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
-import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.L2ScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.MinMaxScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.ZScoreNormalizer;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class ScalarNormalizerTests extends OpenSearchTestCase {

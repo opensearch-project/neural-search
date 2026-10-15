@@ -543,6 +543,11 @@ public class FusionSpecTests extends OpenSearchTestCase {
 
     public void testFromPipelineConfig_whenNoFusionProcessor_thenNull() {
         // A pipeline with no normalization/score-ranker processor yields null → caller fails fast.
+        assertNull(
+            FusionSpec.fromPipelineConfig(
+                Map.of("phase_results_processors", List.of(Map.of("unrelated-processor", Map.of("tag", "not-fusion"))))
+            )
+        );
         assertNull(FusionSpec.fromPipelineConfig(Map.of("phase_results_processors", List.of())));
         assertNull(FusionSpec.fromPipelineConfig(Map.of()));
         assertNull(FusionSpec.fromPipelineConfig(null));

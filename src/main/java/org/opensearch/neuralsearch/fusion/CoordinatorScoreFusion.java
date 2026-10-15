@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.ScoreCombinationCore;
+import org.opensearch.neuralsearch.fusion.math.MinMaxScoreNormalizer;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -21,7 +21,7 @@ import lombok.NoArgsConstructor;
  * Coordinator-side score fusion for the resolver (fused) mode, over a per-leg score view keyed by document key (the
  * shape the coordinator has after fanning legs out as a {@code MultiSearch}). It deliberately reuses the same relevance
  * math as classic shard-side hybrid — {@link MinMaxScoreNormalizer} for normalization and the caller-supplied
- * {@link ScoreCombinationTechnique#combine(float[])} for combination — so that, for an identical hit set, this path and
+ * {@link ScoreCombinationCore#combine(float[])} for combination — so that, for an identical hit set, this path and
  * classic produce identical fused scores to float precision. Only the data shape differs (a key→score map here vs.
  * {@code CompoundTopDocs} there), never the arithmetic.
  *
@@ -36,7 +36,7 @@ import lombok.NoArgsConstructor;
  * </ul>
  *
  * <p>The normalization step is pluggable via {@link ScalarNormalizer} (resolved by name through
- * {@link ScalarNormalizers}); the combination step is the caller-supplied {@link ScoreCombinationTechnique}. This
+ * {@link ScalarNormalizers}); the combination step is the caller-supplied {@link ScoreCombinationCore}. This
  * class owns only the shape-level work that is identical for every technique: per-leg normalization dispatch, the doc
  * union, and building each doc's per-leg input array. Adding a technique therefore touches neither this class nor the
  * orchestrator — {@code rrf} joined this path that way, as a normalizer over ranks rather than a second fusion routine.
@@ -52,7 +52,7 @@ public final class CoordinatorScoreFusion {
 
     /**
      * Fuse legs with {@code min_max} normalization followed by the given combination technique. Convenience wrapper over
-     * {@link #fuse(List, ScalarNormalizer, ScoreCombinationTechnique)}; this is the pairing the classic-vs-fused
+     * {@link #fuse(List, ScalarNormalizer, ScoreCombinationCore)}; this is the pairing the classic-vs-fused
      * differential test pins.
      *
      * @param legRawScores        one entry per leg, each a {@code key -> raw score} map of that leg's hits (order is
@@ -62,7 +62,7 @@ public final class CoordinatorScoreFusion {
      */
     public static Map<String, Float> fuseMinMax(
         final List<Map<String, Float>> legRawScores,
-        final ScoreCombinationTechnique combinationTechnique
+        final ScoreCombinationCore combinationTechnique
     ) {
         return fuse(legRawScores, MinMaxScalarNormalizer.INSTANCE, combinationTechnique);
     }
@@ -78,7 +78,7 @@ public final class CoordinatorScoreFusion {
     public static Map<String, Float> fuse(
         final List<Map<String, Float>> legRawScores,
         final ScalarNormalizer normalizer,
-        final ScoreCombinationTechnique combinationTechnique
+        final ScoreCombinationCore combinationTechnique
     ) {
         return fuseDetailed(legRawScores, normalizer, combinationTechnique).fused();
     }
@@ -110,7 +110,7 @@ public final class CoordinatorScoreFusion {
     public static FusionResult fuseDetailed(
         final List<Map<String, Float>> legRawScores,
         final ScalarNormalizer normalizer,
-        final ScoreCombinationTechnique combinationTechnique
+        final ScoreCombinationCore combinationTechnique
     ) {
         final int legCount = legRawScores.size();
 

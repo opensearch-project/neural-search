@@ -5,12 +5,9 @@
 package org.opensearch.neuralsearch.processor.normalization;
 
 import org.opensearch.neuralsearch.processor.dto.TechniqueCompatibilityCheckDTO;
-import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
 
-import java.util.Locale;
 import java.util.Map;
+import org.opensearch.neuralsearch.fusion.math.FusionTechniquePairing;
 import java.util.Set;
 import java.util.Optional;
 import java.util.function.Function;
@@ -33,29 +30,6 @@ public class ScoreNormalizationFactory {
         params -> new RRFNormalizationTechnique(params, scoreNormalizationUtil),
         ZScoreNormalizationTechnique.TECHNIQUE_NAME,
         params -> new ZScoreNormalizationTechnique()
-    );
-
-    private static final Map<String, Set<String>> COMBINATION_TECHNIQUE_FOR_NORMALIZATION_METHODS = Map.of(
-        MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME,
-        Set.of(
-            ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME
-        ),
-        L2ScoreNormalizationTechnique.TECHNIQUE_NAME,
-        Set.of(
-            ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME
-        ),
-        RRFNormalizationTechnique.TECHNIQUE_NAME,
-        Set.of(
-            ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-            HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME
-        ),
-        ZScoreNormalizationTechnique.TECHNIQUE_NAME,
-        Set.of(ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME)
     );
 
     /**
@@ -82,7 +56,7 @@ public class ScoreNormalizationFactory {
      * @return the combination technique names supported for it, empty for an unrecognized normalization technique
      */
     public static Set<String> supportedCombinationTechniques(final String normalizationTechniqueName) {
-        return COMBINATION_TECHNIQUE_FOR_NORMALIZATION_METHODS.getOrDefault(normalizationTechniqueName, Set.of());
+        return FusionTechniquePairing.combinationTechniquesFor(normalizationTechniqueName);
     }
 
     /**
@@ -90,20 +64,10 @@ public class ScoreNormalizationFactory {
      * @param techniqueCompatibilityCheckDTO data transfer object that contains combination technique and other params that needs to be validated
      */
     public void isTechniquesCompatible(TechniqueCompatibilityCheckDTO techniqueCompatibilityCheckDTO) {
-        ScoreNormalizationTechnique normalizationTechnique = techniqueCompatibilityCheckDTO.getScoreNormalizationTechnique();
-        Set<String> supportedTechniques = supportedCombinationTechniques(normalizationTechnique.techniqueName());
-
-        if (supportedTechniques.contains(techniqueCompatibilityCheckDTO.getScoreCombinationTechnique().techniqueName()) == false) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "provided combination technique %s is not supported for normalization technique %s. Supported techniques are: %s",
-                    techniqueCompatibilityCheckDTO.getScoreCombinationTechnique().techniqueName(),
-                    normalizationTechnique.techniqueName(),
-                    String.join(", ", supportedTechniques)
-                )
-            );
-        }
+        FusionTechniquePairing.requireCompatible(
+            techniqueCompatibilityCheckDTO.getScoreNormalizationTechnique().techniqueName(),
+            techniqueCompatibilityCheckDTO.getScoreCombinationTechnique().techniqueName()
+        );
     }
 
 }

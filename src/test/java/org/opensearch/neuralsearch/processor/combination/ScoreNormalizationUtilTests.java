@@ -19,6 +19,7 @@ public class ScoreNormalizationUtilTests extends OpenSearchQueryTestCase {
         List<Float> weights = scoreCombinationUtil.getWeights(Map.of());
         assertNotNull(weights);
         assertTrue(weights.isEmpty());
+        assertEquals(1.0f, scoreCombinationUtil.getWeightForSubQuery(weights, 0), 0.0f);
     }
 
     public void testCombinationWeights_whenWeightsArePassed_thenSuccessful() {
@@ -27,6 +28,7 @@ public class ScoreNormalizationUtilTests extends OpenSearchQueryTestCase {
         assertNotNull(weights);
         assertEquals(2, weights.size());
         assertTrue(weights.containsAll(List.of(0.4f, 0.6f)));
+        assertEquals(0.4f, scoreCombinationUtil.getWeightForSubQuery(weights, 0), 0.0f);
     }
 
     public void testCombinationWeights_whenInvalidWeightsArePassed_thenFail() {
@@ -47,6 +49,7 @@ public class ScoreNormalizationUtilTests extends OpenSearchQueryTestCase {
 
     public void testWeightsValidation_whenNumberOfScoresDifferentFromNumberOfWeights_thenFail() {
         ScoreCombinationUtil scoreCombinationUtil = new ScoreCombinationUtil();
+        scoreCombinationUtil.validateIfWeightsMatchScores(new float[] { 0.6f, 0.5f }, List.of(0.4f, 0.6f));
         IllegalArgumentException exception1 = expectThrows(
             IllegalArgumentException.class,
             () -> scoreCombinationUtil.validateIfWeightsMatchScores(new float[] { 0.6f, 0.5f }, List.of(0.4f, 0.2f, 0.4f))

@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor.normalization;
+package org.opensearch.neuralsearch.fusion.math;
 
 import java.util.Collection;
 
@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * Stateless L2 score-normalization arithmetic, shared by the classic shard-side hybrid path
- * ({@link L2ScoreNormalizationTechnique}, which iterates {@code CompoundTopDocs}) and the resolver (fused) mode's
+ * ({@code L2ScoreNormalizationTechnique}, which iterates {@code CompoundTopDocs}) and the resolver (fused) mode's
  * coordinator path (which works on an {@code _id}-keyed per-leg score view). Extracting the scalar math here — rather
  * than reimplementing it per path — is what guarantees the two produce identical fused scores for the same hit set;
  * any classic-vs-resolver difference can then only be the hit set, never a second copy of the formula.

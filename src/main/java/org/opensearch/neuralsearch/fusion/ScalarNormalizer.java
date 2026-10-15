@@ -8,7 +8,7 @@ import java.util.Map;
 
 /**
  * Per-leg normalization step of coordinator-side fusion: turns one leg's raw scores into that leg's normalized scores.
- * Paired with {@link org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique}, which combines the
+ * Paired with {@link org.opensearch.neuralsearch.fusion.math.ScoreCombinationCore}, which combines the
  * normalized values <i>across</i> legs — one interface normalizes within a leg, the other combines between legs.
  *
  * <p>The contract is a whole-leg transform rather than a per-score function on purpose: every technique needs to see the

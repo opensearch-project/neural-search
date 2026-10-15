@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
+import org.opensearch.neuralsearch.fusion.math.L2ScoreNormalizer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -32,7 +34,7 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOf
 @ToString(onlyExplicitlyIncluded = true)
 public class L2ScoreNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
-    public static final String TECHNIQUE_NAME = "l2";
+    public static final String TECHNIQUE_NAME = FusionTechniqueNames.L2;
 
     public L2ScoreNormalizationTechnique() {
         this(Map.of(), new ScoreNormalizationUtil());

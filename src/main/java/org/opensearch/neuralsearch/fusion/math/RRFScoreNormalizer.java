@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor.normalization;
+package org.opensearch.neuralsearch.fusion.math;
 
 import java.util.Comparator;
 import java.util.HashMap;
@@ -22,7 +22,7 @@ import lombok.NoArgsConstructor;
  * Stateless reciprocal rank fusion arithmetic: the rank score formula, rank constant parsing and
  * validation, and derivation of zero based ranks from an ordered queue of results.
  * <p>
- * RRF is applied from more than one place. The shard side {@link RRFNormalizationTechnique} works on
+ * RRF is applied from more than one place. The shard side {@code RRFNormalizationTechnique} works on
  * {@link org.opensearch.neuralsearch.processor.CompoundTopDocs}, while coordinator side fusion works on
  * per sub-query maps of document id to score. The shapes differ but the arithmetic must not, so it is
  * defined here once instead of being re-derived per call site.
@@ -102,7 +102,7 @@ public final class RRFScoreNormalizer {
 
     /**
      * How a rrf normalization step names itself in an {@code explain} response, rank constant included. Here for the same
-     * reason the arithmetic is: {@link RRFNormalizationTechnique} renders this shard side and
+     * reason the arithmetic is: {@code RRFNormalizationTechnique} renders this shard side and
      * {@link org.opensearch.neuralsearch.fusion.RrfScalarNormalizer} renders it on the coordinator, and a request explained
      * on one path has to read the same as the same request explained on the other. The rank constant belongs in the text
      * because it changes every score in the tree below it — a description that omitted it would not identify the
@@ -112,7 +112,7 @@ public final class RRFScoreNormalizer {
      * @return the description, for example {@code rrf, rank_constant [60]}
      */
     public static String describeWithRankConstant(final int rankConstant) {
-        return String.format(Locale.ROOT, "%s, rank_constant [%s]", RRFNormalizationTechnique.TECHNIQUE_NAME, rankConstant);
+        return String.format(Locale.ROOT, "%s, rank_constant [%s]", FusionTechniqueNames.RRF, rankConstant);
     }
 
     /**

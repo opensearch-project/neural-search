@@ -39,7 +39,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.profile.FastPathDecision;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;

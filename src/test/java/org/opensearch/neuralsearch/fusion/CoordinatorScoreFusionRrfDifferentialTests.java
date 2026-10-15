@@ -21,7 +21,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
 import org.opensearch.test.OpenSearchTestCase;

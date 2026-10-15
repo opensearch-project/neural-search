@@ -4,16 +4,16 @@
  */
 package org.opensearch.neuralsearch.fusion;
 
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 
 /**
  * {@code rrf} implementation of {@link ScalarNormalizer}: reciprocal rank fusion expressed as a per-leg normalization.
  * Ranks the leg's scores, then replaces each score with its rank score {@code 1/(rank_constant + rank + 1)} via the
- * shared {@link RRFScoreNormalizer} — the same arithmetic {@link RRFNormalizationTechnique} applies shard-side, so the
+ * shared {@link RRFScoreNormalizer} — the same arithmetic {@code RRFNormalizationTechnique} applies shard-side, so the
  * rank score for a given rank is identical on both paths.
  *
  * <p>RRF fits {@link ScalarNormalizer} because that contract is a whole-leg transform: rank is derived from the leg's
@@ -58,14 +58,14 @@ public final class RrfScalarNormalizer implements ScalarNormalizer {
 
     @Override
     public String techniqueName() {
-        return RRFNormalizationTechnique.TECHNIQUE_NAME;
+        return FusionTechniqueNames.RRF;
     }
 
     /**
      * Overridden because rrf is the one technique here that carries a parameter, and the name alone would describe a
      * normalization the request did not ask for: two queries differing only in {@code rank_constant} score differently and
      * would otherwise explain identically. Rendered through the shared
-     * {@link RRFScoreNormalizer#describeWithRankConstant} so this reads exactly as {@link RRFNormalizationTechnique}'s
+     * {@link RRFScoreNormalizer#describeWithRankConstant} so this reads exactly as {@code RRFNormalizationTechnique}'s
      * {@code describe()} does for the same rank constant.
      */
     @Override

@@ -4,14 +4,14 @@
  */
 package org.opensearch.neuralsearch.fusion;
 
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 
-import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -22,7 +22,7 @@ import lombok.NoArgsConstructor;
  * {@link CoordinatorScoreFusion} nor the orchestrator changes.
  *
  * <p>Names map to factories rather than instances, mirroring classic's
- * {@link org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory}, because a technique may be
+ * {@code ScoreNormalizationFactory}, because a technique may be
  * parameterized: {@code rrf} carries a rank_constant. The three score-based techniques are stateless, so their factories
  * hand back a shared singleton and ignore the parameters.
  *
@@ -33,7 +33,7 @@ import lombok.NoArgsConstructor;
  *
  * <p>{@code rrf} reaches this registry under a normalization name even though the score-ranker-processor has no
  * normalization clause, because that is what classic does too: {@code RRFProcessorFactory} builds an
- * {@link org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique}. So {@code combination=rrf}
+ * {@code RRFNormalizationTechnique}. So {@code combination=rrf}
  * resolves to {@code normalization=rrf} in {@code FusionSpec}, and rank-based fusion needs no routing of its own.
  *
  * <p>An earlier note here suggested geometric/harmonic mean would need an explicit presence mask rather than
@@ -54,7 +54,7 @@ public final class ScalarNormalizers {
         parameters -> ZScoreScalarNormalizer.INSTANCE,
         L2ScalarNormalizer.INSTANCE.techniqueName(),
         parameters -> L2ScalarNormalizer.INSTANCE,
-        RRFNormalizationTechnique.TECHNIQUE_NAME,
+        FusionTechniqueNames.RRF,
         parameters -> new RrfScalarNormalizer(RRFScoreNormalizer.resolveRankConstant(parameters))
     );
 
