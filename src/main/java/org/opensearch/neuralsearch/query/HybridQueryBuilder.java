@@ -689,14 +689,20 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         requireSupportedTechniques(fusionSpec);
 
         int window = effectiveWindowSize();
+        String windowField = effectiveWindowSizeField();
         // Each leg fires size=window per shard, so an unbounded window is a per-shard memory/CPU amplifier. Cap it at
         // index.max_result_window (resolved coordinator-side from the targeted indices), mirroring classic hybrid's
         // pagination_depth ceiling.
-        validateWindowSizeAgainstMaxResultWindow(searchRequest, window);
+        validateWindowSizeAgainstMaxResultWindow(searchRequest, window, windowField);
+        // A pagination_depth that window_size overrides sizes nothing, but it still gets classic's ceiling: a depth one
+        // mode accepts, the other accepts too.
+        if (hasExplicitWindowSize() && Objects.nonNull(paginationDepth)) {
+            validateWindowSizeAgainstMaxResultWindow(searchRequest, paginationDepth, PAGINATION_DEPTH_FIELD.getPreferredName());
+        }
         // The self-erased query holds one bool clause per ranked doc, so the window is also bounded by Lucene's clause
         // ceiling — a different (and much lower) limit than max_result_window, and the only one that would otherwise be
         // discovered at query time on every shard.
-        validateWindowSizeAgainstMaxClauseCount(window);
+        validateWindowSizeAgainstMaxClauseCount(window, windowField);
         List<QueryBuilder> legs = queries;
         // Validate weights (range, sum, count) before the leg fan-out — a bad weights array otherwise burns a full
         // MultiSearch before the combiner is built in the async callback.
@@ -986,6 +992,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         marker.queryName(queryName);
         marker.boost(boost);
+        marker.paginationDepth(paginationDepth);
         marker.fusion(this.fusion);
         marker.resolvedFusionSpec = this.resolvedFusionSpec;
         marker.fusedSupplier = fused::get;
@@ -1636,7 +1643,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         copy.queryName(queryName);
         copy.boost(boost);
-        // Always null on a fused builder (`pagination_depth` with `fusion` is a parse-time 400), copied for exactness.
+        // The nested hybrid's own depth, never the enclosing one's: it sizes this copy's window when it names no window_size.
         copy.paginationDepth(paginationDepth);
         copy.fusion(fusion);
         copy.resolvedFusionSpec = resolved;
@@ -1751,12 +1758,37 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
     }
 
-    /** Fused-mode candidate window (top docs per leg), read from the {@code fusion.window_size} key, defaulting when unset. */
+    /**
+     * Fused-mode candidate window (top docs per leg): {@code fusion.window_size} when set, else {@code pagination_depth},
+     * else the default. {@code pagination_depth} is classic hybrid's name for how deep the candidates reach, so a classic
+     * query that adds {@code fusion} keeps paging as deep as it asked to; an explicit {@code window_size} is the
+     * fused-mode setting for the same thing, and wins over it.
+     *
+     * <p>The depth is taken as is, although classic's is per shard and this window is global per leg. Scaling it by the
+     * number of shards searched would not stay bounded: every leg already asks every shard for the whole window, so a
+     * shard-scaled window grows the request's work with the square of the shard count.
+     */
     private int effectiveWindowSize() {
-        if (Objects.nonNull(fusion) && fusion.get(FUSION_KEY_WINDOW_SIZE) instanceof Number) {
+        if (hasExplicitWindowSize()) {
             return ((Number) fusion.get(FUSION_KEY_WINDOW_SIZE)).intValue();
         }
+        if (Objects.nonNull(paginationDepth)) {
+            return paginationDepth;
+        }
         return DEFAULT_FUSION_WINDOW_SIZE;
+    }
+
+    /** The request field {@link #effectiveWindowSize} reads, for the errors that bound the window to name. */
+    private String effectiveWindowSizeField() {
+        if (hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth)) {
+            return PAGINATION_DEPTH_FIELD.getPreferredName();
+        }
+        return FUSION_FIELD.getPreferredName() + "." + FUSION_KEY_WINDOW_SIZE;
+    }
+
+    /** Whether the request names a window itself. Fused-only: every caller runs under {@link #doRewriteFused}. */
+    private boolean hasExplicitWindowSize() {
+        return fusion.get(FUSION_KEY_WINDOW_SIZE) instanceof Number;
     }
 
     /**
@@ -1765,7 +1797,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * from the request's concrete indices (there is no shard {@link QueryShardContext} at rewrite), mirroring the
      * ceiling classic hybrid enforces on {@code pagination_depth}. A no-window (default) request is always within bounds.
      */
-    private static void validateWindowSizeAgainstMaxResultWindow(final SearchRequest searchRequest, final int window) {
+    private static void validateWindowSizeAgainstMaxResultWindow(final SearchRequest searchRequest, final int window, final String field) {
         for (IndexMetadata indexMetadata : NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest)) {
             if (Objects.isNull(indexMetadata)) {
                 continue;
@@ -1775,10 +1807,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 throw new IllegalArgumentException(
                     String.format(
                         Locale.ROOT,
-                        "[%s] query [%s.%s] (%d) must be less than or equal to [%s] (%d) for index [%s]",
+                        "[%s] query [%s] (%d) must be less than or equal to [%s] (%d) for index [%s]",
                         NAME,
-                        FUSION_FIELD.getPreferredName(),
-                        FUSION_KEY_WINDOW_SIZE,
+                        field,
                         window,
                         IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey(),
                         maxResultWindow,
@@ -1805,7 +1836,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * filter is a MatchAll that {@code BooleanQuery.rewrite} removes, collapsing the clause back to
      * {@code constant_score(ids)}.
      */
-    private static void validateWindowSizeAgainstMaxClauseCount(final int window) {
+    private static void validateWindowSizeAgainstMaxClauseCount(final int window, final String field) {
         int maxClauseCount = IndexSearcher.getMaxClauseCount();
         // Reserve the one clause the Tail filter occupies in the same bool. Whether a request needs the Tail is only known
         // once the legs have answered, so the window has to fit either way.
@@ -1813,11 +1844,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "[%s] query [%s.%s] (%d) must be less than [%s] (%d): the fused query holds one clause per ranked "
+                    "[%s] query [%s] (%d) must be less than [%s] (%d): the fused query holds one clause per ranked "
                         + "document plus one for the tail",
                     NAME,
-                    FUSION_FIELD.getPreferredName(),
-                    FUSION_KEY_WINDOW_SIZE,
+                    field,
                     window,
                     SearchService.INDICES_MAX_CLAUSE_COUNT_SETTING.getKey(),
                     maxClauseCount
@@ -1896,7 +1926,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      *       fuse by a technique the user did not ask for — the shorthand {@code "fusion": "pipeline"} one level up makes
      *       {@code "combination": "rrf"} an easy thing to write);</li>
      *   <li>{@code window_size} non-positive → 400 (upper bound vs {@code index.max_result_window} is shard-side);</li>
-     *   <li>{@code pagination_depth} co-set with {@code fusion} → 400 (fused pages over {@code window_size}).</li>
+     *   <li>{@code pagination_depth} non-positive → 400. A positive one is accepted, so a classic hybrid query keeps its
+     *       syntax when {@code fusion} is added, and is the window when {@code window_size} is unset (see
+     *       {@link #effectiveWindowSize}); its upper bounds are checked at rewrite, alongside the window's.</li>
      * </ul>
      */
     private static void validateFusion(final Map<String, Object> fusion, final Integer paginationDepth, final XContentParser parser) {
@@ -1989,18 +2021,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }
 
-        if (Objects.nonNull(paginationDepth)) {
+        // Here rather than on the shard, where classic hybrid checks it: a fused query never reaches doToQuery.
+        if (Objects.nonNull(paginationDepth) && paginationDepth <= 0) {
             throw new ParsingException(
                 parser.getTokenLocation(),
-                String.format(
-                    Locale.ROOT,
-                    "[%s] query does not support [%s] together with [%s]; fused mode pages over [%s.%s]",
-                    NAME,
-                    PAGINATION_DEPTH_FIELD.getPreferredName(),
-                    FUSION_FIELD.getPreferredName(),
-                    FUSION_FIELD.getPreferredName(),
-                    FUSION_KEY_WINDOW_SIZE
-                )
+                String.format(Locale.ROOT, "[%s] query [%s] must be greater than 0", NAME, PAGINATION_DEPTH_FIELD.getPreferredName())
             );
         }
     }
