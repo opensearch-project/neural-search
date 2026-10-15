@@ -2303,12 +2303,24 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     public void testDoRewriteFused_whenPaginationDepthWithoutWindowSize_thenDepthIsTheWindow() {
         initClusterUtilWithMaxResultWindow(10000);
         HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"))));
-        builder.paginationDepth(37);
-        assertEquals(37, legWindowOf(builder));
+        builder.paginationDepth(370);
+        assertEquals(370, legWindowOf(builder));
 
         HybridQueryBuilder defaults = fusedBuilder(new HashMap<>());
-        defaults.paginationDepth(37);
-        assertEquals("the defaults form (fusion: {}) reads the depth too", 37, legWindowOf(defaults));
+        defaults.paginationDepth(370);
+        assertEquals("the defaults form (fusion: {}) reads the depth too", 370, legWindowOf(defaults));
+    }
+
+    public void testDoRewriteFused_whenPaginationDepthBelowTheDefaultWindow_thenTheDefaultStands() {
+        // A depth raises the window but never lowers it below what the query fuses without the parameter.
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>());
+        builder.paginationDepth(10);
+        assertEquals(100, legWindowOf(builder));
+
+        HybridQueryBuilder explicit = fusedBuilder(new HashMap<>(Map.of("window_size", 10)));
+        explicit.paginationDepth(10);
+        assertEquals("an explicit window_size still goes below the default", 10, legWindowOf(explicit));
     }
 
     public void testDoRewriteFused_whenWindowSizeAndPaginationDepth_thenWindowSizeWins() {
@@ -2357,15 +2369,27 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     public void testDoRewriteFused_whenPaginationDepthExceedsMaxClauseCount_thenFailsNamingTheDepth() {
         initClusterUtilWithMaxResultWindow(10000);
         int savedMaxClauseCount = IndexSearcher.getMaxClauseCount();
-        IndexSearcher.setMaxClauseCount(8);
+        IndexSearcher.setMaxClauseCount(150);
         try {
             HybridQueryBuilder builder = fusedBuilder(new HashMap<>());
-            builder.paginationDepth(8);
+            builder.paginationDepth(200);
             QueryCoordinatorContext ctx = coordinatorContextFor(builder);
             doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
             IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
-            assertThat(e.getMessage(), containsString("[hybrid] query [pagination_depth] (8) must be less than"));
+            assertThat(e.getMessage(), containsString("[hybrid] query [pagination_depth] (200) must be less than"));
             assertThat(e.getMessage(), containsString("indices.query.bool.max_clause_count"));
+
+            // A depth below the default does not size the window, so the error names the setting that can lower it.
+            HybridQueryBuilder belowDefault = fusedBuilder(new HashMap<>());
+            belowDefault.paginationDepth(10);
+            IndexSearcher.setMaxClauseCount(50);
+            QueryCoordinatorContext belowDefaultCtx = coordinatorContextFor(belowDefault);
+            doAnswer(invocation -> null).when(belowDefaultCtx).registerAsyncAction(any());
+            IllegalArgumentException belowDefaultError = expectThrows(
+                IllegalArgumentException.class,
+                () -> belowDefault.doRewrite(belowDefaultCtx)
+            );
+            assertThat(belowDefaultError.getMessage(), containsString("[hybrid] query [fusion.window_size] (100) must be less than"));
         } finally {
             IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
         }
@@ -2398,6 +2422,100 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         ((HybridQueryBuilder) outer.queries().get(0)).paginationDepth(7);
         List<QueryBuilder> projected = HybridQueryBuilder.projectResolvedConfigOntoLegs(outer.queries(), resolved);
         assertEquals(7, ((HybridQueryBuilder) projected.get(0)).paginationDepth().intValue());
+    }
+
+    /**
+     * Runs a fused request end to end through round 1 — legs answered — with a ranked-page consumer attached, and returns
+     * the {@code _index}/{@code _id} pairs the rewrite handed it, or {@code null} when it handed nothing.
+     */
+    private List<String> rankedWindowPublishedFor(HybridQueryBuilder builder, SearchSourceBuilder source) {
+        return rankedWindowPublishedFor(builder, source, legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f, "3", 0.4f)));
+    }
+
+    @SneakyThrows
+    private List<String> rankedWindowPublishedFor(
+        HybridQueryBuilder builder,
+        SearchSourceBuilder source,
+        org.opensearch.action.search.MultiSearchResponse.Item... legItems
+    ) {
+        java.util.concurrent.atomic.AtomicReference<List<String>> published = new java.util.concurrent.atomic.AtomicReference<>();
+        builder.fusedRankedPageConsumer((indices, ids) -> {
+            List<String> keys = new ArrayList<>();
+            for (int i = 0; i < ids.length; i++) {
+                keys.add(indices[i] + "/" + ids[i]);
+            }
+            published.set(keys);
+        });
+        SearchRequest searchRequest = new SearchRequest("test-index").source(source);
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(any());
+        builder.doRewrite(ctx);
+
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(legItems, 10L);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
+            l.onResponse(msResponse);
+            return null;
+        }).when(client).multiSearch(any(), any());
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> {}, e -> fail(e.getMessage())));
+        return published.get();
+    }
+
+    public void testDoRewriteFused_whenThePageIsTheFusedRanking_thenTheRankedWindowIsHandedToThePage() {
+        initClusterUtilWithMaxResultWindow(10000);
+        Set<String> rankedWindow = Set.of("test-index/1", "test-index/2", "test-index/3");
+        HybridQueryBuilder withDepth = fusedBuilder(new HashMap<>());
+        withDepth.paginationDepth(10);
+        assertEquals(rankedWindow, new HashSet<>(rankedWindowPublishedFor(withDepth, new SearchSourceBuilder().query(withDepth))));
+
+        // Not only with pagination_depth: every fused page ends at the ranked documents.
+        HybridQueryBuilder windowOnly = fusedBuilder(new HashMap<>(Map.of("window_size", 50)));
+        assertEquals(rankedWindow, new HashSet<>(rankedWindowPublishedFor(windowOnly, new SearchSourceBuilder().query(windowOnly))));
+    }
+
+    public void testDoRewriteFused_whenThePageIsNotTheFusedRanking_thenNothingIsHandedToThePage() {
+        initClusterUtilWithMaxResultWindow(10000);
+        // Ordered by a field: ranked and Tail-only documents interleave, so there is no ranked slice to keep.
+        HybridQueryBuilder sorted = fusedBuilder(new HashMap<>());
+        assertNull(rankedWindowPublishedFor(sorted, new SearchSourceBuilder().query(sorted).sort("rank")));
+
+        // Nothing ranked: round 2 is a match_none that returns no hits, so there is no page to keep to anything.
+        HybridQueryBuilder unmatched = fusedBuilder(new HashMap<>());
+        assertNull(rankedWindowPublishedFor(unmatched, new SearchSourceBuilder().query(unmatched), legItem(Map.of()), legItem(Map.of())));
+
+        // Not the request's query: the hits are scored by the enclosing query, not by this hybrid's ranking.
+        HybridQueryBuilder nested = fusedBuilder(new HashMap<>());
+        assertNull(rankedWindowPublishedFor(nested, new SearchSourceBuilder().query(QueryBuilders.boolQuery().must(nested))));
+    }
+
+    public void testRequestPagesTheFusedRanking() {
+        assertFalse(HybridQueryBuilder.requestPagesTheFusedRanking(null));
+        assertTrue(HybridQueryBuilder.requestPagesTheFusedRanking(new SearchSourceBuilder()));
+        // "sort": [] parses to an empty list rather than none.
+        SearchSourceBuilder emptySort = new SearchSourceBuilder().sort("rank");
+        emptySort.sorts().clear();
+        assertTrue(HybridQueryBuilder.requestPagesTheFusedRanking(emptySort));
+        assertTrue(HybridQueryBuilder.requestPagesTheFusedRanking(new SearchSourceBuilder().sort("_score")));
+        assertTrue(
+            HybridQueryBuilder.requestPagesTheFusedRanking(
+                new SearchSourceBuilder().sort("_score", org.opensearch.search.sort.SortOrder.DESC).sort("rank")
+            )
+        );
+        assertFalse(
+            HybridQueryBuilder.requestPagesTheFusedRanking(
+                new SearchSourceBuilder().sort("_score", org.opensearch.search.sort.SortOrder.ASC)
+            )
+        );
+        assertFalse(HybridQueryBuilder.requestPagesTheFusedRanking(new SearchSourceBuilder().sort("rank").sort("_score")));
     }
 
     /**

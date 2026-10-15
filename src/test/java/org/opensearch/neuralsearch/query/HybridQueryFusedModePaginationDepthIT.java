@@ -7,10 +7,9 @@ package org.opensearch.neuralsearch.query;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getTotalHits;
 
-import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.apache.hc.core5.http.io.entity.EntityUtils;
@@ -26,11 +25,12 @@ import lombok.SneakyThrows;
 
 /**
  * {@code pagination_depth} on a fused hybrid query: accepted, so a classic hybrid query keeps its syntax when
- * {@code fusion} is added, and used as the fused window when {@code fusion.window_size} is unset.
+ * {@code fusion} is added. Without {@code fusion.window_size} it sizes the fused window, never below the default, and
+ * the page ends where the ranked documents end.
  *
  * <p>Both legs score by a unique numeric rank, so classic and fused agree on the order and every assertion about which
- * documents a page holds is exact. Multi-shard on purpose: classic's depth is per shard and the fused window is not, which
- * is the one way the two differ here, and a single shard would hide it.
+ * documents a page holds is exact. Multi-shard on purpose: classic's depth is per shard and the fused window is not, and
+ * a single shard would hide the difference.
  */
 public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
 
@@ -38,8 +38,10 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
     private static final String PIPELINE = "fused-pagination-depth-norm-pipeline";
     private static final String RANK_FIELD = "rank";
     private static final int SHARDS = 3;
-    private static final int DOCS = 30;
-    private static final int DEPTH = 10;
+    private static final int DOCS = 150;
+    /** Above the default window (100), so the depth is what sizes it, and below the corpus, so pages can pass it. */
+    private static final int DEPTH = 120;
+    private static final int DEFAULT_WINDOW = 100;
     private static final String INLINE_FUSION = "{\"normalization\":{\"technique\":\"min_max\"},"
         + "\"combination\":{\"technique\":\"arithmetic_mean\"}}";
 
@@ -76,6 +78,10 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
         return "{\"hybrid\":{" + fields + "\"queries\":[" + leg + "," + leg + "]}}";
     }
 
+    private static String fusedWithDepth(int depth) {
+        return hybrid("\"pagination_depth\":" + depth + ",\"fusion\":" + INLINE_FUSION + ",");
+    }
+
     @SneakyThrows
     private Map<String, Object> search(String params, String body) {
         Request request = new Request("POST", "/" + INDEX + "/_search" + params);
@@ -104,7 +110,7 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
 
     /** The ids of ranks {@code highest} down to {@code lowest}, which is the order both modes return them in. */
     private static List<String> ranks(int highest, int lowest) {
-        List<String> ids = new java.util.ArrayList<>();
+        List<String> ids = new ArrayList<>();
         for (int rank = highest; rank >= lowest; rank--) {
             ids.add(String.valueOf(rank));
         }
@@ -112,89 +118,128 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Without {@code window_size} the depth is the window: a Top-only request ({@code track_total_hits: false}) asking for
-     * the whole corpus gets exactly the depth's worth of ranked documents. With {@code window_size} beside it, the window
-     * is {@code window_size}; with neither, it is the default, which covers this corpus.
+     * Without {@code window_size} the depth sizes the window: a Top-only request ({@code track_total_hits: false}) asking for
+     * the whole corpus gets the depth's worth of ranked documents. A depth below the default does not lower the window,
+     * {@code window_size} beside a depth wins, and with neither the window is the default.
      */
-    public void testPaginationDepth_whenNoWindowSize_thenItIsTheFusedWindow() {
+    public void testPaginationDepth_whenNoWindowSize_thenItSizesTheFusedWindow() {
         ensureIndex();
-        String depthOnly = hybrid("\"pagination_depth\":" + DEPTH + ",\"fusion\":" + INLINE_FUSION + ",");
-        Map<String, Object> response = search("", "{\"track_total_hits\":false,\"size\":" + DOCS + ",\"query\":" + depthOnly + "}");
-        assertEquals(ranks(DOCS, DOCS - DEPTH + 1), ids(response));
-        assertTrue("every ranked document carries a fused score", scores(response).stream().allMatch(score -> score > 0.0));
+        String wholeCorpusTopOnly = "{\"track_total_hits\":false,\"size\":" + DOCS + ",\"query\":";
+
+        Map<String, Object> depthSized = search("", wholeCorpusTopOnly + fusedWithDepth(DEPTH) + "}");
+        assertEquals(ranks(DOCS, DOCS - DEPTH + 1), ids(depthSized));
+        assertTrue("every ranked document carries a fused score", scores(depthSized).stream().allMatch(score -> score > 0.0));
+
+        assertEquals(
+            "a depth below the default does not lower the window",
+            ranks(DOCS, DOCS - DEFAULT_WINDOW + 1),
+            ids(search("", wholeCorpusTopOnly + fusedWithDepth(10) + "}"))
+        );
 
         String windowWins = hybrid(
             "\"pagination_depth\":" + DEPTH + ",\"fusion\":{\"window_size\":15,\"normalization\":{\"technique\":\"min_max\"}},"
         );
-        assertEquals(
-            ranks(DOCS, DOCS - 15 + 1),
-            ids(search("", "{\"track_total_hits\":false,\"size\":" + DOCS + ",\"query\":" + windowWins + "}"))
-        );
+        assertEquals(ranks(DOCS, DOCS - 15 + 1), ids(search("", wholeCorpusTopOnly + windowWins + "}")));
 
         String neither = hybrid("\"fusion\":" + INLINE_FUSION + ",");
-        assertEquals(DOCS, ids(search("", "{\"track_total_hits\":false,\"size\":" + DOCS + ",\"query\":" + neither + "}")).size());
+        assertEquals(ranks(DOCS, DOCS - DEFAULT_WINDOW + 1), ids(search("", wholeCorpusTopOnly + neither + "}")));
     }
 
     /**
-     * A classic body with {@code pagination_depth} runs fused by adding {@code "fusion": "pipeline"} and nothing else, and
-     * pages within the depth the same way: the same first page as classic, then the next page of the ranking.
+     * The documentation's own pagination example — {@code pagination_depth: 10}, pages {@code from: 0} and {@code from: 6}
+     * of {@code size: 5} — runs fused by adding {@code "fusion": "pipeline"} and nothing else, and returns the same pages
+     * as classic.
      */
     @SneakyThrows
-    public void testPaginationDepth_whenClassicBodyAddsFusion_thenPagesWithinTheDepthMatchClassic() {
+    public void testPaginationDepth_whenClassicBodyAddsFusion_thenTheDocumentedPagesMatchClassic() {
         ensureIndex();
         createSearchPipeline(PIPELINE, "min_max", "arithmetic_mean", Map.of());
         String params = "?search_pipeline=" + PIPELINE;
-        String classic = hybrid("\"pagination_depth\":" + DEPTH + ",");
-        String fused = hybrid("\"pagination_depth\":" + DEPTH + ",\"fusion\":\"pipeline\",");
+        String classic = hybrid("\"pagination_depth\":10,");
+        String fused = hybrid("\"pagination_depth\":10,\"fusion\":\"pipeline\",");
 
-        List<String> classicPageOne = ids(search(params, "{\"from\":0,\"size\":5,\"query\":" + classic + "}"));
-        List<String> classicPageTwo = ids(search(params, "{\"from\":5,\"size\":5,\"query\":" + classic + "}"));
-        Map<String, Object> fusedPageOne = search(params, "{\"from\":0,\"size\":5,\"query\":" + fused + "}");
-        Map<String, Object> fusedPageTwo = search(params, "{\"from\":5,\"size\":5,\"query\":" + fused + "}");
-
-        assertEquals(ranks(DOCS, DOCS - 4), classicPageOne);
-        assertEquals(classicPageOne, ids(fusedPageOne));
-        assertEquals(classicPageTwo, ids(fusedPageTwo));
-        assertTrue(scores(fusedPageTwo).stream().allMatch(score -> score > 0.0));
+        for (int from : new int[] { 0, 6 }) {
+            String page = "{\"from\":" + from + ",\"size\":5,\"query\":";
+            List<String> classicPage = ids(search(params, page + classic + "}"));
+            Map<String, Object> fusedPage = search(params, page + fused + "}");
+            assertEquals(ranks(DOCS - from, DOCS - from - 4), classicPage);
+            assertEquals(classicPage, ids(fusedPage));
+            assertTrue(scores(fusedPage).stream().allMatch(score -> score > 0.0));
+        }
     }
 
     /**
-     * A page that reaches past the depth: the fused window holds the depth's top documents, so the ranked part ends there.
-     * Top-only, the page is short and then empty (HTTP 200 — classic instead fails with "Reached end of search result"
-     * once {@code from} passes the candidates it collected). With totals tracked, the Tail fills the rest at score 0.
+     * A page that reaches past the ranked documents is short, and one entirely past them is empty — HTTP 200, whether or
+     * not totals are tracked. Totals and aggregations still cover the whole match set. The same holds for every fused
+     * page, with or without {@code pagination_depth}.
      */
-    public void testPaginationDepth_whenPageReachesPastTheDepth_thenRankedPartEndsAtTheDepth() {
+    public void testPaginationDepth_whenPageReachesPastTheRankedDocuments_thenShortThenEmpty() {
         ensureIndex();
-        String query = hybrid("\"pagination_depth\":" + DEPTH + ",\"fusion\":" + INLINE_FUSION + ",");
+        String query = fusedWithDepth(DEPTH);
+        for (String totals : new String[] { "", "\"track_total_hits\":false," }) {
+            Map<String, Object> straddling = search("", "{" + totals + "\"from\":" + (DEPTH - 2) + ",\"size\":5,\"query\":" + query + "}");
+            assertEquals(totals, ranks(DOCS - DEPTH + 2, DOCS - DEPTH + 1), ids(straddling));
+            Map<String, Object> beyond = search("", "{" + totals + "\"from\":" + DEPTH + ",\"size\":5,\"query\":" + query + "}");
+            assertTrue(totals, ids(beyond).isEmpty());
+        }
 
-        Map<String, Object> straddling = search("", "{\"track_total_hits\":false,\"from\":8,\"size\":5,\"query\":" + query + "}");
-        assertEquals(ranks(DOCS - 8, DOCS - DEPTH + 1), ids(straddling));
-        Map<String, Object> beyond = search("", "{\"track_total_hits\":false,\"from\":" + DEPTH + ",\"size\":5,\"query\":" + query + "}");
-        assertTrue(ids(beyond).isEmpty());
+        Map<String, Object> beyondWithAggs = search(
+            "",
+            "{\"from\":"
+                + DEPTH
+                + ",\"size\":5,\"query\":"
+                + query
+                + ",\"aggs\":{\"docs\":{\"value_count\":{\"field\":\""
+                + RANK_FIELD
+                + "\"}}}}"
+        );
+        assertTrue(ids(beyondWithAggs).isEmpty());
+        assertEquals(Map.of("value", DOCS, "relation", "eq"), getTotalHits(beyondWithAggs));
+        Map<String, Object> aggregations = (Map<String, Object>) beyondWithAggs.get("aggregations");
+        assertEquals(DOCS, ((Number) ((Map<String, Object>) aggregations.get("docs")).get("value")).intValue());
 
-        Map<String, Object> tailFilled = search("", "{\"from\":" + DEPTH + ",\"size\":5,\"query\":" + query + "}");
-        assertEquals(Map.of("value", DOCS, "relation", "eq"), getTotalHits(tailFilled));
-        assertEquals(5, ids(tailFilled).size());
-        assertTrue("past the window every hit is a Tail match at score 0", scores(tailFilled).stream().allMatch(score -> score == 0.0));
-        Set<String> window = new HashSet<>(ranks(DOCS, DOCS - DEPTH + 1));
-        assertTrue("no ranked document repeats past the window", ids(tailFilled).stream().noneMatch(window::contains));
+        // Collapsed and profiled pages end at the ranked documents the same way.
+        String collapsed = "{\"collapse\":{\"field\":\""
+            + RANK_FIELD
+            + "\"},\"from\":"
+            + (DEPTH - 2)
+            + ",\"size\":5,\"query\":"
+            + query
+            + "}";
+        assertEquals(ranks(DOCS - DEPTH + 2, DOCS - DEPTH + 1), ids(search("", collapsed)));
+        assertTrue(ids(search("", "{\"profile\":true,\"from\":" + DEPTH + ",\"size\":5,\"query\":" + query + "}")).isEmpty());
+
+        // search_after with a _score-led sort: the page after the last ranked document is empty too.
+        String sorted = "\"sort\":[\"_score\",{\"" + RANK_FIELD + "\":\"asc\"}],";
+        List<Map<String, Object>> rankedPage = getNestedHits(search("", "{" + sorted + "\"size\":" + DEPTH + ",\"query\":" + query + "}"));
+        assertEquals(DEPTH, rankedPage.size());
+        List<Object> lastSortValues = (List<Object>) rankedPage.get(DEPTH - 1).get("sort");
+        String cursor = lastSortValues.stream().map(String::valueOf).collect(Collectors.joining(",", "[", "]"));
+        assertTrue(ids(search("", "{" + sorted + "\"search_after\":" + cursor + ",\"size\":5,\"query\":" + query + "}")).isEmpty());
+
+        // Not only with pagination_depth: a window_size-only or default-window page past the ranked documents is empty too,
+        // which is what lets fusion.window_size: max(depth, 100) reproduce a pagination_depth request exactly.
+        String windowOnly = hybrid("\"fusion\":{\"window_size\":" + DEPTH + ",\"normalization\":{\"technique\":\"min_max\"}},");
+        assertEquals(
+            ids(search("", "{\"from\":" + (DEPTH - 2) + ",\"size\":5,\"query\":" + query + "}")),
+            ids(search("", "{\"from\":" + (DEPTH - 2) + ",\"size\":5,\"query\":" + windowOnly + "}"))
+        );
+        assertTrue(ids(search("", "{\"from\":" + DEPTH + ",\"size\":5,\"query\":" + windowOnly + "}")).isEmpty());
+        String defaultWindow = hybrid("\"fusion\":" + INLINE_FUSION + ",");
+        assertTrue(ids(search("", "{\"from\":" + DEFAULT_WINDOW + ",\"size\":5,\"query\":" + defaultWindow + "}")).isEmpty());
     }
 
     /**
-     * The depth gets the window's bounds when it is the window, and classic's bound when {@code window_size} overrides it;
-     * a non-positive depth fails at parse, since a fused query never reaches the shard where classic checks it.
+     * The depth gets the window's bounds when it sizes the window, and classic's bound when {@code window_size} overrides
+     * it; a non-positive depth fails at parse, since a fused query never reaches the shard where classic checks it.
      */
     public void testPaginationDepth_whenOutOfBounds_thenBadRequestNamingTheDepth() {
         ensureIndex();
-        String aboveClauseCeiling = searchExpectingBadRequest(
-            "{\"query\":" + hybrid("\"pagination_depth\":1024,\"fusion\":" + INLINE_FUSION + ",") + "}"
-        );
+        String aboveClauseCeiling = searchExpectingBadRequest("{\"query\":" + fusedWithDepth(1024) + "}");
         assertTrue(aboveClauseCeiling, aboveClauseCeiling.contains("[hybrid] query [pagination_depth] (1024) must be less than"));
         assertTrue(aboveClauseCeiling, aboveClauseCeiling.contains("indices.query.bool.max_clause_count"));
 
-        String aboveMaxResultWindow = searchExpectingBadRequest(
-            "{\"query\":" + hybrid("\"pagination_depth\":10001,\"fusion\":" + INLINE_FUSION + ",") + "}"
-        );
+        String aboveMaxResultWindow = searchExpectingBadRequest("{\"query\":" + fusedWithDepth(10001) + "}");
         assertTrue(
             aboveMaxResultWindow,
             aboveMaxResultWindow.contains(
@@ -207,7 +252,7 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
         );
         assertTrue(overriddenAboveMaxResultWindow, overriddenAboveMaxResultWindow.contains("[hybrid] query [pagination_depth] (20000)"));
 
-        String zero = searchExpectingBadRequest("{\"query\":" + hybrid("\"pagination_depth\":0,\"fusion\":" + INLINE_FUSION + ",") + "}");
+        String zero = searchExpectingBadRequest("{\"query\":" + fusedWithDepth(0) + "}");
         assertTrue(zero, zero.contains("[hybrid] query [pagination_depth] must be greater than 0"));
     }
 }

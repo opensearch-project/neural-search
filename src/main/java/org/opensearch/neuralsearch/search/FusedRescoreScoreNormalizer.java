@@ -30,7 +30,13 @@ import org.opensearch.search.aggregations.metrics.TopHits;
  * all. That is exactly {@code 0.0} for an unranked document, which matches only the non-scoring Tail, and
  * {@code RANKED_FLOOR_NORMALIZED} for a saturated ranked one, which is the floor every fused score already sits at or
  * above. Decoding only the unranked half would leave a ranked hit printing {@code -3.4028233E38} while the unranked hits
- * it outranks print {@code 0.0} — right order, and a page whose scores descend into nonsense.
+ * it outranks print {@code 0.0} — right order, and scores that descend into nonsense.
+ *
+ * <p>Unranked hits seldom reach this decoder on the response's own page. That page is in fused-score order — core refuses
+ * any sort but {@code _score} descending beside a rescore — and {@code FusedRankedPageTrimmer} has already cut it at the
+ * last ranked document before this runs, so on the page it is normally only a saturated ranked hit that needs decoding.
+ * An unranked one is still shown there only where round 2's page is returned as it is — a Tail that a search request
+ * processor turned on after the filter had declined to trim — and routinely in {@code top_hits} buckets, below.
  *
  * <p>Scores are mutated in place, the way {@code FusedExplanationMerger} mutates explanations: {@code SearchHit} has a
  * public score setter and both the response and {@code InternalTopHits} pass their {@code SearchHits} through by

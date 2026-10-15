@@ -13,7 +13,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [SemanticHighlighter] Support lists and scalars for semantic highlighting with per-element fragments, matching built-in highlighters ([#1813](https://github.com/opensearch-project/neural-search/issues/1813))
 * [Hybrid Query] Add opt-in index setting `index.neural_search.hybrid_collapse_distinct_groups_enabled` to make collapse return top-`size` distinct groups instead of deduplicated top-`size` documents ([#1947](https://github.com/opensearch-project/neural-search/issues/1947))
 * [Hybrid Query] Allow `sort: [_score, <field>]` with `collapse`, using the field to break exact `_score` ties so the collapsed group head is deterministic ([#1984](https://github.com/opensearch-project/neural-search/issues/1984))
-* [Hybrid Query] Accept `pagination_depth` in a hybrid query with `fusion`, where it sets the fusion window when `fusion.window_size` is not set ([#TBD](https://github.com/opensearch-project/neural-search/pull/TBD))
+* [Hybrid Query] Accept `pagination_depth` in a hybrid query with `fusion`, where it sets the fusion window when `fusion.window_size` is not set, never below the default ([#TBD](https://github.com/opensearch-project/neural-search/pull/TBD))
+* [Hybrid Query] End a score-ordered page of a hybrid query with `fusion` at its last ranked result instead of filling it with unranked matches; `hits.total` and aggregations still count every match ([#TBD](https://github.com/opensearch-project/neural-search/pull/TBD))
 
 ### Bug Fixes
 * [Neural Sparse Query] Expose embedded filters to query builder and Lucene query visitor traversal, and reject unsupported filters on `rank_features` fields instead of silently ignoring them ([#2044](https://github.com/opensearch-project/neural-search/pull/2044))
@@ -25,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Fix hybrid query failing with a `ClassCastException` when a point in time `slice` or an alias filter excludes a shard ([#2045](https://github.com/opensearch-project/neural-search/pull/2045))
 * [Ingest Processors] Fix `field_map` entries sharing the same first dotted path segment (e.g. `author.name` and `author.bio`) overwriting each other, which silently dropped embeddings for all but the last field ([#2052](https://github.com/opensearch-project/neural-search/pull/2052))
 * [Hybrid Query] Reject a hybrid query without `fusion` nested in a hybrid query with `fusion`, and the other way around ([#2051](https://github.com/opensearch-project/neural-search/pull/2051))
+* [Hybrid Query] Reject `stored_fields: _none_` in a hybrid query with `fusion`, which identifies documents by `_index` and `_id` and could merge every document of an index into one ([#TBD](https://github.com/opensearch-project/neural-search/pull/TBD))
 * [Ingest Processors] Deep-merge `field_map` target maps so sibling keys that diverge below the first path segment (e.g. `author.name.first` and `author.name.last`) are no longer dropped ([#2054](https://github.com/opensearch-project/neural-search/pull/2054))
 * [Semantic Field] Stop logging the full ingest document on chunking or model-info failure; log only the document `_id` and `_index` so customer content is no longer written to service logs ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
 

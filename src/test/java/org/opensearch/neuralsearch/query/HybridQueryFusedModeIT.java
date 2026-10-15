@@ -304,8 +304,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
      *       document to the BOTTOM of a leg, which would hide the defect entirely).</li>
      *   <li>{@code window_size} is bound to the existing document count, so a document that should be invisible can only
      *       enter the window by evicting a real one.</li>
-     *   <li>The query is Top-only ({@code track_total_hits:false}); with the Tail present the legs would be re-matched
-     *       directly and return the real documents regardless of what the Top holds, masking the defect.</li>
+     *   <li>The query is Top-only ({@code track_total_hits:false}), so round 2 matches nothing but the Top. With the Tail
+     *       present the legs would be re-matched directly and match the real documents regardless of what the Top holds;
+     *       only {@code FusedRankedPageTrimmer}, which drops every document fusion did not rank from the page, would then
+     *       keep the defect visible, and Top-only keeps the probe independent of it.</li>
      * </ul>
      * Top-only, the returned hits ARE the fused window: if the legs ignored the PIT they would rank the new document in,
      * round-2 would read the PIT, fail to match that id, and the request would return FEWER hits than the window holds.
@@ -464,7 +466,9 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
      * <p>Two details keep it honest: {@code window_size} is asserted to be below the corpus size, since a window that
      * covered everything would make an unsliced leg indistinguishable from a sliced one; and the query is Top-only
      * ({@code track_total_hits:false}), because with the Tail present round 2 re-matches the legs directly under the
-     * shard's slice filter and returns the whole slice regardless of what the Top holds.
+     * shard's slice filter and matches the whole slice regardless of what the Top holds — only {@code FusedRankedPageTrimmer},
+     * dropping the documents fusion did not rank from the page, would then keep the shortfall visible, and Top-only keeps
+     * the probe independent of it.
      */
     @SneakyThrows
     public void testFusedMode_whenSlicedOverPointInTime_thenEachSliceReturnsItsOwnDocuments() {
@@ -529,6 +533,33 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         String body = EntityUtils.toString(exception.getResponse().getEntity());
         assertTrue("the error must name the unsupported parameter, not a shard-level symptom: " + body, body.contains("[scroll]"));
         assertTrue("the error must point at the shape that does work: " + body, body.contains("point_in_time"));
+    }
+
+    /**
+     * {@code stored_fields: "_none_"} builds hits without an {@code _id}, and fused mode identifies and addresses every
+     * document by {@code _index} plus {@code _id}, so it is refused before the fan-out; an empty list, which keeps
+     * {@code _id}, is the shape that works.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenStoredFieldsNone_thenRejectedAndAnEmptyListWorks() {
+        ensureSliceDataset();
+        Request request = new Request("POST", "/" + INDEX_FOR_SLICE + "/_search");
+        request.setJsonEntity("{\"_source\":false,\"stored_fields\":\"_none_\",\"query\":" + rankedFusedQuery(SLICE_DOCS) + "}");
+
+        ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(request));
+
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
+        String body = EntityUtils.toString(exception.getResponse().getEntity());
+        assertTrue(body, body.contains("[stored_fields: _none_]"));
+        assertTrue(body, body.contains("[stored_fields: []]"));
+
+        Map<String, Object> response = searchRaw(
+            "/" + INDEX_FOR_SLICE + "/_search",
+            "{\"stored_fields\":[],\"query\":" + rankedFusedQuery(SLICE_DOCS) + "}"
+        );
+        List<Map<String, Object>> hits = getNestedHits(response);
+        assertFalse(hits.isEmpty());
+        assertTrue("an empty list keeps _id on every hit", hits.stream().allMatch(hit -> Objects.nonNull(hit.get("_id"))));
     }
 
     /** A PIT-scoped search body for one slice. The index never appears in the path: a PIT already pins its own indices. */
@@ -897,9 +928,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
      * shard count has no bearing on the scores at all. What matters is that both paths see the same <b>candidate set</b>:
      * classic collects {@code size} per shard per leg, the resolver collects a global {@code window_size} per leg, and with
      * {@code window_size} at or above the number of matching documents those two sets coincide. Measured on this fixture:
-     * at {@code window_size} 16 the two agree on all 10 returned documents and every score; at 8 they agree on 7 of 10; at
-     * 4, on 4 of 10, the remainder being Tail backfill at {@code 0.0}. So the window, not the sharding, is the variable —
-     * and it is pinned here rather than left to chance.
+     * at {@code window_size} 16 the two agree on all 10 returned documents and every score. At 8 and at 4 the fused page
+     * ends at the window — 8 and 4 documents against classic's 10 — so at most that many can agree (the 7 of 10 and 4 of
+     * 10 measured earlier counted a page filled out to 10 from the Tail at {@code 0.0}, before a fused page ended at the
+     * ranked documents). So the window, not the sharding, is the variable — and it is pinned here rather than left to chance.
      *
      * <p>{@code z_score} is absent deliberately — the classic compatibility matrix does not allow it with either mean, and
      * fused mode defers to that matrix rather than having its own opinion.
@@ -1009,8 +1041,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     /**
      * The window is what decides whether the two paths see the same candidates, so this pins the boundary the parity test
      * above depends on: at a window covering the corpus they agree exactly, and below it the resolver legitimately
-     * diverges — fewer documents carry a fused score and the rest arrive as Tail backfill at {@code 0.0}. Without this, a
-     * future change that quietly shrank the effective window would turn the parity test into a coincidence.
+     * diverges — the fused page holds only the window's documents, where classic's goes on to the full page. At half the
+     * corpus that is 8 documents against 10, so the divergence asserted below no longer turns on any rank: it can fail
+     * only if the fused page reaches 10 again, as it does when the window is not applied. Without this, a future change
+     * that quietly shrank the effective window would turn the parity test into a coincidence.
      */
     @SneakyThrows
     public void testFusedMode_whenWindowIsBelowTheCorpus_thenItDivergesFromClassicByDesign() {

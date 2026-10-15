@@ -188,7 +188,14 @@ public class HybridQueryFusedModeMultiIndexIT extends BaseNeuralSearchIT {
     public void testFusedMultiIndex_whenWindowSpansOneIndex_thenSiblingIndexDoesNotInheritScores() {
         ensureDataset();
         // index-a's scores (99/98/97) beat index-b's (49/48/47) for every id, so a window of 3 is entirely index-a.
-        String body = "{\"query\":" + fusedHybrid(COLLIDING_IDS) + "}";
+        String query = fusedHybrid(COLLIDING_IDS);
+        // In fused-score order the page ends at the window, so it holds index-a alone.
+        for (Map<String, Object> hit : hits(searchRaw("{\"query\":" + query + "}", 20))) {
+            assertEquals("the page ends at the window", INDEX_A, hit.get("_index"));
+        }
+        // Sorted by something else the page is the whole match set, with round 2's own scores — which is where a sibling
+        // that inherited a fused score would show.
+        String body = "{\"query\":" + query + ",\"sort\":[{\"" + SCORE_FIELD + "\":\"desc\"}],\"track_scores\":true}";
 
         Map<String, Double> scoreByIndexAndId = new LinkedHashMap<>();
         for (Map<String, Object> hit : hits(searchRaw(body, 20))) {

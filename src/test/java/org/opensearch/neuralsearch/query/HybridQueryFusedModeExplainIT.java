@@ -312,12 +312,15 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
 
     /**
      * The shard marks the first pass of every hit the rescore explains, so that the coordinator can find it again — and a
-     * rescored response must not carry that mark anywhere: not on a hit fusion did not rank (the Tail surfaces those
-     * beyond the window), and not in a {@code top_hits} bucket that asks for {@code explain} itself, both of which fold the
-     * same rescorers but have no fused breakdown to put in its place.
+     * rescored response must not carry that mark anywhere: not on the window's hits, where the merge replaces it, and not
+     * in a {@code top_hits} bucket that asks for {@code explain} itself, which folds the same rescorers — over documents
+     * fusion never ranked as well — and has no fused breakdown to put in the mark's place. The page holds no document
+     * fusion did not rank: a rescored page is ordered by score, since core refuses a field sort beside a rescore, so it
+     * ends at the window ({@code FusedRankedPageTrimmer}), and the bucket is the only place those documents reach the
+     * response.
      */
     @SneakyThrows
-    public void testExplainedRescoredFusedHybrid_whenUnrankedHitsAndTopHitsAreExplained_thenNoFirstPassMarkerReachesTheResponse() {
+    public void testExplainedRescoredFusedHybrid_whenTopHitsAreExplained_thenNoFirstPassMarkerReachesTheResponse() {
         ensureDataset();
 
         String body = rescoredWith(
@@ -328,7 +331,9 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
         Map<String, Object> response = search(body);
         List<Map<String, Object>> hits = hits(response);
 
-        assertEquals("the Tail surfaces the whole match set", TOTAL_DOCS, hits.size());
+        // A rescored page is ordered by score — core refuses a field sort beside a rescore — so it ends at the window's two
+        // documents; the Tail's documents still reach the response, through the top_hits bucket.
+        assertEquals("the page ends at the window", 2, hits.size());
         assertEquals("no first-pass marker anywhere in the response", 0, countDescription(response, FusedFirstPassMarker.DESCRIPTION));
         int ranked = 0;
         for (Map<String, Object> hit : hits) {
@@ -339,7 +344,7 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
                 ranked++;
             }
         }
-        assertEquals("the window's two documents carry the fused breakdown, the Tail's do not", 2, ranked);
+        assertEquals("the window's two documents carry the fused breakdown", 2, ranked);
         assertTrue(
             "every top_hits bucket hit went through the rescorers, so each had a marker to strip",
             countDescription(response.get("aggregations"), "primaryWeight") >= TOTAL_DOCS
@@ -433,15 +438,26 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
      * A document round 2 returned that fusion never ranked — one the Tail surfaced beyond the window. There is no fused
      * breakdown to put there, and round 2's own explanation is truthful: the document matched a non-scoring clause. So it is
      * left alone, which is also what makes "explained" a property of the window rather than of the response.
+     *
+     * <p>A page ordered by the fused score ends at the ranked documents, so only a page sorted by something else can hold
+     * one: here {@code _doc} with {@code track_scores}. The page in fused-score order is checked first.
      */
     @SneakyThrows
     public void testExplainedFusedHybrid_whenTheTailSurfacesADocumentBeyondTheWindow_thenItKeepsItsOwnExplanation() {
         ensureDataset();
+        String query = fusedHybridWithWindow(2, knnLeg(WINDOW_SIZE), termLeg());
 
-        Map<String, Object> response = search(explained(fusedHybridWithWindow(2, knnLeg(WINDOW_SIZE), termLeg())));
+        List<Map<String, Object>> rankedPage = hits(search(explained(query)));
+        assertEquals("in fused-score order the page ends at the window", 2, rankedPage.size());
+        for (Map<String, Object> hit : rankedPage) {
+            assertEquals(COMBINATION_DESCRIPTION, description(explanationOf(hit)));
+        }
+
+        String sortedByDoc = explained(query).replaceFirst("\\}$", ",\"sort\":[\"_doc\"],\"track_scores\":true}");
+        Map<String, Object> response = search(sortedByDoc);
         List<Map<String, Object>> hits = hits(response);
 
-        assertEquals("the Tail surfaces the whole match set", TOTAL_DOCS, hits.size());
+        assertEquals("sorted by _doc, the Tail surfaces the whole match set", TOTAL_DOCS, hits.size());
         List<String> fused = new ArrayList<>();
         List<String> untouched = new ArrayList<>();
         for (Map<String, Object> hit : hits) {

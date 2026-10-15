@@ -62,6 +62,9 @@ import org.opensearch.index.query.WrapperQueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.search.SearchService;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.sort.ScoreSortBuilder;
+import org.opensearch.search.sort.SortBuilder;
+import org.opensearch.search.sort.SortOrder;
 
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -76,6 +79,7 @@ import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationT
 import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.search.FusedLegTimeoutMerger;
 import org.opensearch.neuralsearch.search.FusedHitsMerger;
+import org.opensearch.neuralsearch.search.FusedRankedPageTrimmer;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.explain.FusedExplanationMerger;
@@ -205,6 +209,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * from {@link #doEquals}/{@link #doHashCode}.
      */
     private FusedHitsMerger.HitsConsumer fusedHitsConsumer;
+
+    /**
+     * Where to hand the ranked window so the page can be kept to it — a fused page ends where the ranked documents end
+     * rather than being filled with Tail-only documents at score {@code 0} (see {@code FusedRankedPageTrimmer}). Attached
+     * by {@code HybridQuerySearchRequestFilter} only when this hybrid is the request's own query, the request pages the
+     * fused ranking ({@link #requestPagesTheFusedRanking}) and its round 2 may carry the Tail
+     * ({@link #requestShapeMayKeepTheTail}) — a Top-only page holds ranked documents alone. A fused hybrid that is a
+     * direct leg of an enclosing one is the query of its own leg sub-search and is gated the same way there, so the
+     * enclosing fusion is handed the nested ranking alone. {@code null} leaves the page as round 2 returns it. Never
+     * parsed, never serialized, absent from {@link #doEquals}/{@link #doHashCode}.
+     */
+    private FusedRankedPageTrimmer.RankedDocsConsumer fusedRankedPageConsumer;
 
     /**
      * Set by {@code HybridQuerySearchRequestFilter} on a <b>profiled</b> request when this fused hybrid is the request's
@@ -559,6 +575,37 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return Objects.isNull(HybridFusionOrchestrator.requestShapeFastPathRefusal(source, true));
     }
 
+    /**
+     * Whether a request of this shape pages through the fused ranking itself: no sort, or one led by {@code _score}
+     * descending. Only then does every ranked document come before every Tail-only one in round 2's order, so keeping the
+     * ranked documents leaves each page a contiguous slice of the ranking. Ranked documents come first because each Top
+     * clause carries its document's fused score floored at {@code HybridFusionOrchestrator#MIN_RANKED_SCORE}, above the
+     * {@code 0} a Tail-only document scores; under a {@code rescore}, whose own weights can take a ranked document to
+     * {@code 0} or below, {@code FusedWindowGuardRescorer} keeps every ranked document in a band above every unranked one.
+     * For {@code HybridQuerySearchRequestFilter}, which is in another package.
+     */
+    public static boolean requestPagesTheFusedRanking(final SearchSourceBuilder source) {
+        if (Objects.isNull(source)) {
+            return false;
+        }
+        if (Objects.isNull(source.sorts()) || source.sorts().isEmpty()) {
+            return true;
+        }
+        SortBuilder<?> first = source.sorts().get(0);
+        return first instanceof ScoreSortBuilder && first.order() == SortOrder.DESC;
+    }
+
+    /**
+     * Whether round 2 of a request of this shape may carry the Tail — the only way a Tail-only document reaches a page.
+     * Asked before the legs have run, so it answers for the fewest ranked documents there could be: an integer
+     * {@code track_total_hits} counts as wanting totals beyond the window. A Top-only shape (totals off, and no
+     * aggregations, highlighting, field sort or collapse expansion) never carries it. For
+     * {@code HybridQuerySearchRequestFilter}, which is in another package.
+     */
+    public static boolean requestShapeMayKeepTheTail(final SearchSourceBuilder source) {
+        return HybridFusionOrchestrator.needsTail(source, 0);
+    }
+
     protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
         // Resolver (fused) mode self-erases at the coordinator into a standard query (see doRewriteFused). Classic mode
         // keeps the existing per-sub-query rewrite below.
@@ -742,8 +789,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
 
         // Every consumer below was attached by HybridQuerySearchRequestFilter against the request as submitted, and the
-        // filter attached the explain, totals and hits consumers only where this hybrid was the request's own query. Core
-        // runs the search pipeline's request processors between that filter and this rewrite (TransportSearchAction:
+        // filter attached the explain, totals, hits and ranked-page consumers only where this hybrid was the request's own
+        // query. Core runs the search pipeline's request processors between that filter and this rewrite (TransportSearchAction:
         // transformRequest, then rewriteAndFetch in its callback), and a processor may have wrapped this very instance —
         // core's filter_query does exactly that (bool{must:[<this>], filter:[…]}) — or changed the request's shape. The
         // consumer then stays attached to a hybrid that is no longer the query, so its presence proves nothing about
@@ -754,6 +801,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // The totals consumer a processor-nested hybrid hands on is null, exactly as a user-nested hybrid's is: whatever the
         // legs happen to count, no total is derived for a query that is not the request's.
         final FusedTotalHitsMerger.TotalHitsConsumer totalHitsConsumerForThisQuery = isRequestQuery ? fusedTotalHitsConsumer : null;
+        // The page, likewise: it ends at the ranked documents, which only holds as a contiguous slice while this hybrid is
+        // the request's query and the request still orders by the score it produces. So a hybrid a request processor has
+        // wrapped — core's filter_query — keeps round 2's page, Tail-only documents at score 0 included, as one the user
+        // wrote inside a container does: that bool's filter never reached the legs, so round 2 drops the ranked documents
+        // it rejects, and cutting the page at the ranked documents could leave it all but empty (the hybrid's own `filter`
+        // is what filters every leg before fusion ranks). Whether round 2 may keep the Tail is not re-read: where the filter
+        // attached nothing because round 2 was going to be Top-only, a processor that has since turned the Tail on leaves
+        // the page untrimmed too (see HybridQuerySearchRequestFilter#mayKeepThePageToTheRanking). And unlike the count and
+        // the fast path below, the trim is not refused for a pipeline with response processors: they run before it, on
+        // round 2's page as it is (see FusedRankedPageTrimmer).
+        final FusedRankedPageTrimmer.RankedDocsConsumer rankedPageConsumerForThisQuery = isRequestQuery
+            && requestPagesTheFusedRanking(searchRequest.source()) ? fusedRankedPageConsumer : null;
 
         // Same contract for explain: with a consumer attached the request asked to be explained, so the legs explain their
         // hits and the fused breakdown replaces round 2's own explanation of the substituted query — but only while this
@@ -771,7 +830,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // response, and would read round 2's window-sized total instead) all leave the legs as they were. The request's
         // shape is re-read here rather than trusted from the consumer's presence: the filter decided it before the search
         // pipeline's request processors ran, and one that adds an aggregation between the two would otherwise have the legs
-        // count for a Tail this rewrite is about to keep anyway.
+        // count for a Tail this rewrite is about to keep anyway. The page bound is conservative now wherever the page is kept
+        // to the ranking (rankedPageConsumerForThisQuery above): FusedRankedPageTrimmer ends a page reaching past the window
+        // at the ranked documents, so the Tail onlyTotalsNeedTheTail keeps for it contributes the count alone — a Top-only
+        // round 2 with the legs' count would return the same page — and lifting the bound for that case, here and in
+        // onlyTotalsNeedTheTail, is a follow-up optimization.
         if (Objects.nonNull(totalHitsConsumerForThisQuery)) {
             Integer legTotalHitsThreshold = HybridFusionOrchestrator.legTotalHitsThreshold(searchRequest.source(), window);
             if (Objects.nonNull(legTotalHitsThreshold)
@@ -861,6 +924,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     // swaps it in before anything else annotates the response's hits.
                     if (Objects.nonNull(fusedHitsConsumer)) {
                         fusedHitsConsumer.accept(result.assembledHits());
+                    }
+                    // Only round 2 can fill a page with Tail-only documents. An assembled page holds the ranked window
+                    // alone, and with nothing ranked round 2 is a match_none that returns no hits.
+                    if (Objects.nonNull(rankedPageConsumerForThisQuery) && fusedQuery instanceof HybridFusionQueryBuilder) {
+                        HybridFusionQueryBuilder rankedWindow = (HybridFusionQueryBuilder) fusedQuery;
+                        rankedPageConsumerForThisQuery.accept(rankedWindow.rankedIndices(), rankedWindow.rankedIds());
                     }
                     // Hand the now-known window to the placeholders installed above. Mutates nothing the request holds:
                     // the placeholders are already in it, and core rewrites them into the window on its next pass.
@@ -1759,28 +1828,37 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * Fused-mode candidate window (top docs per leg): {@code fusion.window_size} when set, else {@code pagination_depth},
-     * else the default. {@code pagination_depth} is classic hybrid's name for how deep the candidates reach, so a classic
-     * query that adds {@code fusion} keeps paging as deep as it asked to; an explicit {@code window_size} is the
-     * fused-mode setting for the same thing, and wins over it.
+     * Fused-mode candidate window (top docs per leg): {@code fusion.window_size} when set, else {@code pagination_depth}
+     * but never below the default, else the default. {@code pagination_depth} is classic hybrid's name for how deep the
+     * candidates reach, so a classic query that adds {@code fusion} keeps paging as deep as it asked to; an explicit
+     * {@code window_size} is the fused-mode setting for the same thing, and wins over it.
      *
-     * <p>The depth is taken as is, although classic's is per shard and this window is global per leg. Scaling it by the
-     * number of shards searched would not stay bounded: every leg already asks every shard for the whole window, so a
-     * shard-scaled window grows the request's work with the square of the shard count.
+     * <p>The depth raises the window but never lowers it below what the same query gets without it. Classic's depth is per
+     * shard, so a small one still collects many candidates across shards; used as is here, the documentation's own
+     * {@code pagination_depth: 10} would fuse a tenth of what the query fuses without the parameter. An explicit
+     * {@code window_size} still goes lower.
+     *
+     * <p>The depth is otherwise taken as is, although classic's is per shard and this window is global per leg. Scaling
+     * it by the number of shards searched would not stay bounded: every leg already asks every shard for the whole window,
+     * so a shard-scaled window grows the request's work with the square of the shard count.
      */
     private int effectiveWindowSize() {
         if (hasExplicitWindowSize()) {
             return ((Number) fusion.get(FUSION_KEY_WINDOW_SIZE)).intValue();
         }
         if (Objects.nonNull(paginationDepth)) {
-            return paginationDepth;
+            return Math.max(paginationDepth, DEFAULT_FUSION_WINDOW_SIZE);
         }
         return DEFAULT_FUSION_WINDOW_SIZE;
     }
 
-    /** The request field {@link #effectiveWindowSize} reads, for the errors that bound the window to name. */
+    /**
+     * The request field to name in the errors that bound the window: {@code pagination_depth} when it sized the window,
+     * else {@code fusion.window_size} — explicit, or the default that a depth below it does not lower, which only an
+     * explicit {@code window_size} can.
+     */
     private String effectiveWindowSizeField() {
-        if (hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth)) {
+        if (hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth) && paginationDepth >= DEFAULT_FUSION_WINDOW_SIZE) {
             return PAGINATION_DEPTH_FIELD.getPreferredName();
         }
         return FUSION_FIELD.getPreferredName() + "." + FUSION_KEY_WINDOW_SIZE;
@@ -1927,8 +2005,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      *       {@code "combination": "rrf"} an easy thing to write);</li>
      *   <li>{@code window_size} non-positive → 400 (upper bound vs {@code index.max_result_window} is shard-side);</li>
      *   <li>{@code pagination_depth} non-positive → 400. A positive one is accepted, so a classic hybrid query keeps its
-     *       syntax when {@code fusion} is added, and is the window when {@code window_size} is unset (see
-     *       {@link #effectiveWindowSize}); its upper bounds are checked at rewrite, alongside the window's.</li>
+     *       syntax when {@code fusion} is added, and, when {@code window_size} is unset, sizes the window — never below
+     *       the default (see {@link #effectiveWindowSize}); its upper bounds are checked at rewrite, alongside the
+     *       window's.</li>
      * </ul>
      */
     private static void validateFusion(final Map<String, Object> fusion, final Integer paginationDepth, final XContentParser parser) {

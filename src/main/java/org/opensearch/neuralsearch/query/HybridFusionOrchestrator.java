@@ -341,6 +341,13 @@ final class HybridFusionOrchestrator {
         // dropping anything else — so it is available here from the responses alone, with no fusion and none of its timing
         // or explanation side effects. Checked last because it reads every leg's hits, which the loop above has just
         // established are there.
+        //
+        // The two later bounds are conservative since FusedRankedPageTrimmer: on the two-round path a page past the ranked
+        // documents now ends at the last of them too (see decideFastPathAfterLegs), so what they keep round 2 and the Tail
+        // for is the page the legs alone could have assembled. Lifting them is a follow-up optimization, and this test
+        // belongs to the same rule — as does the page bound on the rewrite's leg-count arming, its before-the-legs form —
+        // so they move together: kept while they are lifted, this test denies those pages the count that would settle
+        // them; lifted alone, it pays for a count buildSubstitute is never handed.
         int rankedCount = rankedCountFromLegs(items, windowSize);
         // Nothing fused: round 2 is a match_none either way and buildSubstitute returns before it reads a count, so issuing
         // one would be a distributed round for nothing. Reachable without the page test catching it, because a size: 0
@@ -582,9 +589,12 @@ final class HybridFusionOrchestrator {
     }
 
     /**
-     * Assert the property everything downstream relies on: every leg hit carries its {@code _index}. Fusion keys documents
-     * by {@code _index} + {@code _id} and round 2 addresses them the same way, so a hit without an index can neither be
-     * kept apart from a same-{@code _id} document in a sibling index nor addressed without also matching it.
+     * Assert the property everything downstream relies on: every leg hit carries its {@code _index} and its {@code _id}.
+     * Fusion keys documents by {@code _index} + {@code _id} and round 2 addresses them the same way, so a hit without an
+     * index can neither be kept apart from a same-{@code _id} document in a sibling index nor addressed without also
+     * matching it, and hits without an {@code _id} would all share one key. {@code CandidateScope} refuses
+     * {@code stored_fields: "_none_"}, the one request shape that builds such hits, so this guards the invariant rather than
+     * a reachable case.
      *
      * <p>An {@link IllegalStateException} rather than a fallback, on both counts: a coordinator sets a hit's index from its
      * shard target, so a hit missing one means the leg response was not produced the way a search response is; and the only
@@ -593,14 +603,16 @@ final class HybridFusionOrchestrator {
      */
     private static SearchHit[] requireHitsCarryTheirIndex(final SearchHit[] hits, final int leg) {
         for (SearchHit hit : hits) {
-            if (Objects.isNull(hit.getIndex())) {
+            if (Objects.isNull(hit.getIndex()) || Objects.isNull(hit.getId())) {
                 throw new IllegalStateException(
                     String.format(
                         Locale.ROOT,
-                        "[hybrid] fused-mode sub-query %d returned a hit [_id: %s] with no [_index]; fused documents are "
+                        "[hybrid] fused-mode sub-query %d returned a hit [_index: %s, _id: %s] with no %s; fused documents are "
                             + "identified and addressed by [_index] plus [_id], so this hit cannot be fused",
                         leg,
-                        hit.getId()
+                        hit.getIndex(),
+                        hit.getId(),
+                        Objects.isNull(hit.getIndex()) ? "[_index]" : "[_id]"
                     )
                 );
             }
@@ -863,9 +875,11 @@ final class HybridFusionOrchestrator {
      * outside the window matches only the non-scoring {@code filter}, so it scores {@code 0.0} and sorts below the window.
      * A ranked document whose fused score is exactly {@code 0.0} collapses that distinction: it ties with the Tail-only
      * documents it is supposed to outrank, and the tie is then broken by Lucene doc id, so a document fusion deliberately
-     * did not rank can come back ahead of one it did. {@code rescore} does not cause this but sharpens it — core rescores
-     * the shard's top {@code window_size} documents <i>by score</i>, so a tied ranked document can be left out of a rescore
-     * window that a Tail-only document is admitted to, and then lifted past it.
+     * did not rank can come back ahead of one it did. Where {@code FusedRankedPageTrimmer} keeps the page to the ranking,
+     * that document is dropped from the page instead, but only after taking the slot: the page comes back short while
+     * ranked documents remain, which a client reads as the end of the results. {@code rescore} does not cause this but
+     * sharpens it — core rescores the shard's top {@code window_size} documents <i>by score</i>, so a tied ranked document
+     * can be left out of a rescore window that a Tail-only document is admitted to, and then lifted past it.
      *
      * <p>Exactly {@code 0.0} is reachable, not hypothetical, and two independent paths produce it:
      * <ul>
@@ -1132,8 +1146,14 @@ final class HybridFusionOrchestrator {
      *       forms are carried for registration alone instead (see {@link #buildFusedQuery} and
      *       {@code HybridFusionQueryBuilder#registerNamedOnlyQueries}), which keeps a Top-only query Top-only.</li>
      * </ul>
+     *
+     * <p>Also asked before the legs run, by {@code HybridQueryBuilder#requestShapeMayKeepTheTail}, with
+     * {@code numRankedDocs} {@code 0} — the fewest ranked documents there could be. Only the count depends on the
+     * ranking, and it can only stop wanting the Tail as the ranking grows, so {@code false} there is {@code false} for
+     * every ranking: such a request's round 2 is Top-only, its page holds ranked documents alone, and
+     * {@code HybridQuerySearchRequestFilter} attaches no {@code FusedRankedPageTrimmer} to it.
      */
-    private static boolean needsTail(SearchSourceBuilder source, int numRankedDocs) {
+    static boolean needsTail(SearchSourceBuilder source, int numRankedDocs) {
         if (Objects.nonNull(source) && (Objects.nonNull(source.aggregations()) || Objects.nonNull(source.highlighter()))) {
             return true;
         }
@@ -1193,12 +1213,17 @@ final class HybridFusionOrchestrator {
      * Whether the request's <i>shape</i> leaves the Tail nothing to do but count — the source-only half of
      * {@link #onlyTotalsNeedTheTail}, decidable before the legs run and therefore also the condition under which asking
      * the legs to count is worth anything at all ({@code HybridQuerySearchRequestFilter} and the fused rewrite consult it
-     * before arming the count; see finding 1 of the review on this change). Everything that makes the Tail's
-     * <i>documents</i> matter fails it: the features {@link #needsTail} names, plus the shapes where Tail-only documents
-     * (score {@code 0}) are what fills the result — a {@code search_after} cursor, a {@code collapse} whose groups the
-     * window may not fill, a {@code min_score} (core's count is of the documents that pass it, not of the union), and any
-     * sort other than {@code _score} descending: {@code _score} <i>ascending</i> puts the score-0 Tail documents first, so
-     * with them absent the page changes. The page bound itself needs the ranked count and is checked separately.
+     * before arming the count). Everything that makes the Tail's <i>documents</i> matter fails it: the features
+     * {@link #needsTail} names, a {@code min_score} (core's count is of the documents that pass it, not of the union), and
+     * any sort other than {@code _score} descending: {@code _score} <i>ascending</i> puts the score-0 Tail documents first,
+     * and a page in that order is not kept to the ranking, so with them absent the page changes.
+     *
+     * <p>A {@code search_after} cursor and a {@code collapse} without {@code inner_hits} (with them it is one of
+     * {@link #needsTail}'s features) fail it too, but only conservatively: the rule predates
+     * {@code FusedRankedPageTrimmer}, which keeps Tail-only documents off a page in fused-score order, so for either shape
+     * the page no longer depends on the Tail — it ends at the last ranked document whether or not the Tail runs, with the
+     * exception {@link #onlyTotalsNeedTheTail} names. Admitting them is a follow-up optimization, as is lifting the page
+     * bound, which needs the ranked count and is checked separately.
      */
     static boolean requestShapeAllowsDerivedTotalHits(SearchSourceBuilder source) {
         if (Objects.isNull(source)) {
@@ -1230,8 +1255,18 @@ final class HybridFusionOrchestrator {
     /**
      * Whether the Tail, if {@link #needsTail} asked for it, is there for {@code hits.total} and nothing else — the one case
      * where a count derived from the legs can replace it: the request's shape allows it
-     * ({@link #requestShapeAllowsDerivedTotalHits}) and the page fits inside the ranked window, so no Tail-only document
-     * would have filled a slot. Each excluded shape stays exactly as it is today.
+     * ({@link #requestShapeAllowsDerivedTotalHits}) and the page fits inside the ranked window. Each excluded shape stays
+     * exactly as it is today.
+     *
+     * <p>The page bound is conservative. It dates from when a page reaching past the ranked documents was filled with
+     * Tail-only ones. Every request it decides for — a shape that passes, with the Tail asked for — pages the fused ranking
+     * and may keep the Tail, which is what {@code HybridQuerySearchRequestFilter} attaches {@code FusedRankedPageTrimmer}
+     * for, so such a page now ends at the last ranked document whether or not the Tail runs: keeping the Tail for it costs
+     * round 2 a re-match of the legs and adds no document. The exception is where the trimmer stands aside: a search
+     * request processor that changed the request's shape after the filter read it, whose page is left as round 2
+     * returns it. Lifting the bound is a follow-up
+     * optimization, together with the page bounds in {@link #unionCountRequest}, {@link #decideFastPathAfterLegs} and the
+     * rewrite's leg-count arming.
      */
     private static boolean onlyTotalsNeedTheTail(SearchSourceBuilder source, int numRankedDocs) {
         return requestShapeAllowsDerivedTotalHits(source) && requestedPageEnd(source) <= numRankedDocs;
@@ -1367,15 +1402,17 @@ final class HybridFusionOrchestrator {
      *   <li><b>shard-side phases that need the fused docs or the match set on the shard</b> — {@code aggregations},
      *       {@code highlight}, any {@code sort} (a {@code _score} sort's {@code sort} values are produced shard-side too),
      *       {@code collapse}, {@code search_after}, {@code min_score}, {@code rescore} ({@code RescorePhase} rescores the
-     *       shard's own query-phase top docs, which the fast path never produces), a page reaching past the window
-     *       (Tail-only documents fill it), exact totals ({@code track_total_hits: true} needs the Tail's count);</li>
+     *       shard's own query-phase top docs, which the fast path never produces), exact totals
+     *       ({@code track_total_hits: true} needs the Tail's count);</li>
      *   <li><b>fetch-phase features the legs can serve only for the leg that returned the document</b> —
      *       {@code script_fields} (a script may read {@code _score}, on a leg the raw score); {@code inner_hits} and leg
      *       {@code _name}s are checked against the legs by {@link #decideFastPathBeforeLegs};</li>
      *   <li><b>coordinator-side processing after the search</b> — {@code profile} (round 2's tree is part of what it
      *       reports) here; search-pipeline response processors at the rewrite, where the pipeline is resolvable.</li>
      * </ul>
-     * Source-only and O(fields), so the filter can consult it on every search before deciding to attach anything.
+     * Whether the page fits inside the ranked window is not part of the shape: it needs the ranked count, so it is decided
+     * after the legs run ({@link #decideFastPathAfterLegs}). Source-only and O(fields), so the filter can consult it on
+     * every search before deciding to attach anything.
      */
     static boolean requestShapeAllowsFastPath(SearchSourceBuilder source) {
         return Objects.isNull(requestShapeFastPathRefusal(source, false));
@@ -1529,6 +1566,14 @@ final class HybridFusionOrchestrator {
      * on the armed path, where it decides the fallback, and on the two-round path of a profiled request, where it
      * completes the report; a decision already refused before the legs is left as it is. {@code countedUnion} is the union
      * a lazy count-only round established, or {@code null} when none ran.
+     *
+     * <p>The page bound ({@link FastPathDecision#PAGE_BEYOND_WINDOW}) is conservative. It dates from when the two-round
+     * page past the ranked documents was filled with Tail-only ones. A shape the fast path admits carries the Tail, when it
+     * does, for its count alone, and pages the fused ranking, so {@code FusedRankedPageTrimmer} now ends that page at the
+     * last ranked document, exactly where {@link #assemblePage} ends it, and a Top-only round 2 has nothing else to
+     * return. The refusal therefore costs a round, not a different page — save where the trimmer stands aside: a search
+     * request processor that changed the request's shape after {@code HybridQuerySearchRequestFilter} read it. Lifting it is a follow-up optimization, and has to move
+     * together with the page bound in {@link #unionCountRequest}.
      */
     static void decideFastPathAfterLegs(
         FastPathDecision decision,
@@ -1644,9 +1689,10 @@ final class HybridFusionOrchestrator {
      *
      * <p>{@code fastPathArmed} says the rewrite judged the request eligible before the legs ran (shape, legs, pipeline) and
      * made the legs fetch the user's fields. Two things are only knowable now, and either sends the request down the
-     * two-round path with the legs' results reused as they are: the page must fit inside the ranked window (past it,
-     * Tail-only documents fill the slots — the same rule the Tail keeps), and a request that wants a count beyond the
-     * window must have a leg that proves it (see {@link #totalHitsFromLegs}); totals disabled need no count at all.
+     * two-round path with the legs' results reused as they are: the page must fit inside the ranked window (a conservative
+     * bound — past it the two-round page now ends at the last ranked document too, where {@link #assemblePage} would end
+     * it; see {@link #decideFastPathAfterLegs}), and a request that wants a count beyond the window must have a leg that
+     * proves it (see {@link #totalHitsFromLegs}); totals disabled need no count at all.
      * Both paths report through the same consumers, so a caller cannot tell them apart from the hits except by latency
      * and by the order of documents with bit-identical fused scores inside one shard — which, at a page edge, is which
      * of the tied documents the page shows (see {@link #roundTwoOrder}). What tells them apart on purpose: the

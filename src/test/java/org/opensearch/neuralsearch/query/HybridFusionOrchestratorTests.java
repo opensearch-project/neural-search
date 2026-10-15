@@ -543,8 +543,35 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 10
             )
         );
-        assertTrue("names the offending leg and hit: " + e.getMessage(), e.getMessage().contains("sub-query 1 returned a hit [_id: 1]"));
-        assertTrue(e.getMessage().contains("no [_index]"));
+        assertTrue(
+            "names the offending leg and hit: " + e.getMessage(),
+            e.getMessage().contains("sub-query 1 returned a hit [_index: null, _id: 1] with no [_index]")
+        );
+    }
+
+    /**
+     * A hit with no {@code _id} — what core builds for {@code stored_fields: _none_}, which {@code CandidateScope} refuses —
+     * fails the same way: every such hit of an index would share one key, so the window would hold one document per index.
+     */
+    public void testBuildFusedQuery_whenAnyHitCarriesNoId_thenFailsRatherThanMergingDocuments() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
+        SearchHit shardSource = hitFrom(0, "idx-a", "1", 0.9f);
+        SearchHit[] hits = { new SearchHit(1, null, Map.of(), Map.of()) };
+        hits[0].score(0.7f);
+        hits[0].shard(shardSource.getShard());
+        MultiSearchResponse ms = multiSearch(legItemFromIndex("idx-a", Map.of("2", 0.8f)), successfulItem(hits));
+
+        IllegalStateException e = expectThrows(
+            IllegalStateException.class,
+            () -> HybridFusionOrchestrator.buildFusedQuery(
+                new SearchSourceBuilder().trackTotalHits(false),
+                ms,
+                legs,
+                minMaxArithmetic(),
+                10
+            )
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("sub-query 1 returned a hit [_index: idx-a, _id: null] with no [_id]"));
     }
 
     // ---- inner_hits are registered without executing the legs ----
@@ -1298,8 +1325,9 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     /**
      * The tie this closes. The Top scores and the Tail does not, which is the whole mechanism separating the fused window
      * from everything else; a ranked document at exactly {@code 0.0} ties with the Tail-only documents it is meant to
-     * outrank, and Lucene then breaks that tie by ascending doc id — so a document fusion did not rank can be returned
-     * ahead of one it did, and with {@code size == window_size} the ranked one is dropped outright.
+     * outrank, and Lucene then breaks that tie by ascending doc id — so round 2 can order a document fusion did not rank
+     * ahead of one it did, and with {@code size == window_size} the ranked one is dropped outright. Ending the page at the
+     * ranked documents ({@code FusedRankedPageTrimmer}) removes the intruder but cannot bring the ranked one back.
      *
      * <p>{@code l2} is one of the two ways to reach exactly {@code 0.0}: a leg whose raw scores are all {@code 0.0} has a
      * zero norm, and {@code L2ScoreNormalizer.MIN_SCORE} is {@code 0.0f} — unlike min_max's and z_score's {@code 0.001f}.
@@ -1860,15 +1888,17 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     public void testBuildFusedQuery_whenThePageReachesPastTheRankedWindow_thenTheTailIsKept() {
-        // Two ranked documents, size 10: today the Tail's score-0 documents fill the remaining slots. Dropping it would
-        // silently shorten the page, so the leg count is not allowed to stand in for the Tail here.
+        // Two ranked documents, size 10: the page reaches past the ranked window, so the leg count is not allowed to stand
+        // in for the Tail (the page bound in onlyTotalsNeedTheTail). The bound is conservative — FusedRankedPageTrimmer drops
+        // the Tail's score-0 documents from that page, so it is the same either way — and this pins the bound, not a page
+        // difference. Lifting it is a follow-up optimization that flips this test.
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
         MultiSearchResponse ms = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
         TotalHits[] derived = new TotalHits[] { eq(42) };
 
         BoolQueryBuilder self = selfErased(new SearchSourceBuilder().size(10), ms, legs, 10, derived);
 
-        assertEquals("size past the ranked window → Tail documents are part of the answer", 1, self.filter().size());
+        assertEquals("size past the ranked window → the page bound keeps the Tail", 1, self.filter().size());
         assertNull(derived[0]);
     }
 
@@ -1884,7 +1914,9 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     public void testBuildFusedQuery_whenCollapseSearchAfterOrMinScoreIsPresent_thenTheTailIsKept() {
-        // Shapes where Tail-only documents, or core's own counting rule, are part of the answer: kept exactly as today.
+        // min_score is core's own counting rule: it counts the documents that pass it, not the union. collapse and
+        // search_after are kept conservatively: on a page in fused-score order FusedRankedPageTrimmer drops their Tail-only
+        // documents, so that page is the same whether or not the Tail ran. All three stay exactly as today.
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
         List<SearchSourceBuilder> sources = List.of(
             new SearchSourceBuilder().size(1).collapse(new CollapseBuilder("grp")),
@@ -2178,7 +2210,11 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             new TotalHits[1]
         );
 
-        assertFalse("2 ranked docs, size 10: Tail-only documents would fill the page on the two-round path", result.tookFastPath());
+        assertFalse(
+            "2 ranked docs, size 10: the page reaches past the ranked window, so the fast path refuses (conservatively — the "
+                + "two-round page ends at the same 2 documents)",
+            result.tookFastPath()
+        );
         assertTrue(result.substitute() instanceof HybridFusionQueryBuilder);
     }
 
@@ -3251,7 +3287,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         );
         SearchSourceBuilder pastTheWindow = new SearchSourceBuilder().from(90).size(100).trackTotalHitsUpTo(10_000);
         assertNull(
-            "the page cannot be served from the window, so the request falls back whatever the count says",
+            "the page reaches past the ranked documents, so the request falls back whatever the count says (conservatively: "
+                + "two rounds end that page at the ranked documents too)",
             HybridFusionOrchestrator.unionCountRequest(
                 armedScope(pastTheWindow),
                 pastTheWindow,

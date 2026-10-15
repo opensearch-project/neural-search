@@ -224,7 +224,7 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Shapes that need round 2 take it: the page reaching past the ranked window (Tail documents fill it), a threshold no
+     * Shapes that need round 2 take it: the page reaching past the ranked window, a threshold no
      * leg proves (the Tail counts the union), rescore, a sort, a named leg. Each answers exactly as before; that these
      * shapes refuse the fast path is pinned at unit level, and here their answers stay correct end to end.
      */
@@ -243,11 +243,11 @@ public class HybridQueryFusedModeFastPathIT extends BaseNeuralSearchIT {
         for (String extra : twoRoundShapes) {
             assertNotNull(extra, hits(search(body(extra))).get("hits"));
         }
-        // page past the window: identical to the two-round path for the same request (with default totals the Tail fills
-        // every slot; with totals off the Top-only round is short of the window either way — pre-existing behaviour)
+        // page past the window: identical to the two-round path for the same request, and either way it ends at the ranked
+        // window — the Tail runs for the count, but a fused page holds ranked documents only
         String pastWindow = "\"size\":" + (WINDOW + 3) + ",\"track_total_hits\":" + THRESHOLD;
         assertClientVisibleIdentical(search(body(pastWindow)), twoRoundControl(pastWindow));
-        assertEquals(WINDOW + 3, ((List<?>) hits(search(body(pastWindow))).get("hits")).size());
+        assertEquals(WINDOW, ((List<?>) hits(search(body(pastWindow))).get("hits")).size());
         // a named leg: matched_queries keeps its exact two-round answer
         String named = "{\"size\":3,\"track_total_hits\":false,\"query\":{\"hybrid\":{\"fusion\":{\"window_size\":"
             + WINDOW
