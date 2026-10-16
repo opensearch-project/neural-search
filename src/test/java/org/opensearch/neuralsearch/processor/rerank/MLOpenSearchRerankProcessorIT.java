@@ -69,6 +69,46 @@ public class MLOpenSearchRerankProcessorIT extends BaseNeuralSearchIT {
         disableStats();
     }
 
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    public void testCrossEncoderRerankProcessor_whenInnerHits_thenSortsChunksAndScoresParentByBestChunk() {
+        String modelId = uploadTextSimilarityModel();
+        loadModel(modelId);
+        createSearchPipelineViaConfig(modelId, PIPELINE_NAME, "processor/RerankMLOpenSearchInnerHitsPipelineConfiguration.json");
+        createIndexWithConfiguration(
+            INDEX_NAME,
+            "{\"mappings\": {\"properties\": {\"chunks\": {\"type\": \"nested\", \"properties\": {\"text\": {\"type\": \"text\"}}}}}}",
+            PIPELINE_NAME
+        );
+        // The unrelated parent is indexed first, so it leads the unreranked order
+        ingestDocument(INDEX_NAME, "{\"chunks\": [{\"text\": \"The weather is sunny today\"}]}");
+        ingestDocument(INDEX_NAME, String.format(LOCALE, "{\"chunks\": [{\"text\": \"%s\"}, {\"text\": \"%s\"}]}", TEXT_REP_1, TEXT_REP_2));
+
+        String query = "{\"query\":{\"nested\":{\"path\":\"chunks\",\"query\":{\"match_all\":{}},\"inner_hits\":{}}},"
+            + "\"ext\":{\"rerank\":{\"query_context\":{\"query_text\":\"What do fish eat?\"}}}}";
+        Request request = new Request("POST", "/" + INDEX_NAME + "/_search");
+        request.addParameter("search_pipeline", PIPELINE_NAME);
+        request.setJsonEntity(query);
+        Map<String, Object> response = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(client().performRequest(request).getEntity()),
+            false
+        );
+
+        List<Map<String, Object>> hits = (List<Map<String, Object>>) ((Map<String, Object>) response.get("hits")).get("hits");
+        Map<String, Object> fishParent = hits.get(0);
+        Map<String, Object> innerHits = (Map<String, Object>) ((Map<String, Object>) ((Map<String, Object>) fishParent.get("inner_hits"))
+            .get("chunks")).get("hits");
+        List<Map<String, Object>> chunks = (List<Map<String, Object>>) innerHits.get("hits");
+        assertEquals(TEXT_REP_2, ((Map<String, Object>) chunks.get(0).get("_source")).get("text"));
+        assertEquals(TEXT_REP_1, ((Map<String, Object>) chunks.get(1).get("_source")).get("text"));
+        double bestChunkScore = ((Number) chunks.get(0).get("_score")).doubleValue();
+        assertTrue(bestChunkScore > ((Number) chunks.get(1).get("_score")).doubleValue());
+        assertEquals(bestChunkScore, ((Number) fishParent.get("_score")).doubleValue(), 0.0);
+        assertEquals(bestChunkScore, ((Number) innerHits.get("max_score")).doubleValue(), 0.0);
+        assertTrue(bestChunkScore > ((Number) hits.get(1).get("_score")).doubleValue());
+    }
+
     private String uploadTextSimilarityModel() throws Exception {
         String requestBody = Files.readString(
             Path.of(classLoader.getResource("processor/UploadTextSimilarityModelRequestBody.json").toURI())
