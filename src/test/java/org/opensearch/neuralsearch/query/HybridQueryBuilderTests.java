@@ -2366,6 +2366,64 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
+    public void testDoRewriteFused_whenBelowDefaultPaginationDepthExceedsMaxResultWindow_thenFailsNamingTheDepth() {
+        // A depth below the default does not size the window, but classic bounds the depth itself, so fused does too: on an
+        // index whose max_result_window is under the default, the depth is reported as the depth the user wrote — not as
+        // the default window it did not lower, which would also exceed the ceiling.
+        initClusterUtilWithMaxResultWindow(50);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>());
+        builder.paginationDepth(60);
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(
+            e.getMessage(),
+            containsString("[hybrid] query [pagination_depth] (60) must be less than or equal to [index.max_result_window] (50)")
+        );
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenDefaultWindowExceedsMaxResultWindow_thenTheErrorNamesTheDefaultAndTheDepth() {
+        // The depth itself fits, the default window it does not lower does not: the error names the default as the default
+        // and the depth beside it, so the request is not told about a window_size it never set.
+        initClusterUtilWithMaxResultWindow(50);
+        HybridQueryBuilder withDepth = fusedBuilder(new HashMap<>());
+        withDepth.paginationDepth(40);
+        QueryCoordinatorContext ctx = coordinatorContextFor(withDepth);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> withDepth.doRewrite(ctx));
+        assertThat(
+            e.getMessage(),
+            containsString(
+                "[hybrid] query the default [fusion.window_size] (100), which [pagination_depth] (40) does not lower, "
+                    + "must be less than or equal to [index.max_result_window] (50)"
+            )
+        );
+
+        // Without a depth the default is named as the default alone.
+        HybridQueryBuilder noDepth = fusedBuilder(new HashMap<>());
+        QueryCoordinatorContext noDepthCtx = coordinatorContextFor(noDepth);
+        doAnswer(invocation -> null).when(noDepthCtx).registerAsyncAction(any());
+        IllegalArgumentException noDepthError = expectThrows(IllegalArgumentException.class, () -> noDepth.doRewrite(noDepthCtx));
+        assertThat(
+            noDepthError.getMessage(),
+            containsString(
+                "[hybrid] query the default [fusion.window_size] (100) must be less than or equal to [index.max_result_window] (50)"
+            )
+        );
+
+        // An explicit window_size is named as what the user set.
+        HybridQueryBuilder explicit = fusedBuilder(new HashMap<>(Map.of("window_size", 70)));
+        QueryCoordinatorContext explicitCtx = coordinatorContextFor(explicit);
+        doAnswer(invocation -> null).when(explicitCtx).registerAsyncAction(any());
+        IllegalArgumentException explicitError = expectThrows(IllegalArgumentException.class, () -> explicit.doRewrite(explicitCtx));
+        assertThat(
+            explicitError.getMessage(),
+            containsString("[hybrid] query [fusion.window_size] (70) must be less than or equal to [index.max_result_window] (50)")
+        );
+    }
+
+    @SneakyThrows
     public void testDoRewriteFused_whenPaginationDepthExceedsMaxClauseCount_thenFailsNamingTheDepth() {
         initClusterUtilWithMaxResultWindow(10000);
         int savedMaxClauseCount = IndexSearcher.getMaxClauseCount();
@@ -2379,7 +2437,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             assertThat(e.getMessage(), containsString("[hybrid] query [pagination_depth] (200) must be less than"));
             assertThat(e.getMessage(), containsString("indices.query.bool.max_clause_count"));
 
-            // A depth below the default does not size the window, so the error names the setting that can lower it.
+            // A depth below the default does not size the window, so the error names the default as the default, with the
+            // depth that did not lower it, rather than a window_size the request never set.
             HybridQueryBuilder belowDefault = fusedBuilder(new HashMap<>());
             belowDefault.paginationDepth(10);
             IndexSearcher.setMaxClauseCount(50);
@@ -2389,7 +2448,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 IllegalArgumentException.class,
                 () -> belowDefault.doRewrite(belowDefaultCtx)
             );
-            assertThat(belowDefaultError.getMessage(), containsString("[hybrid] query [fusion.window_size] (100) must be less than"));
+            assertThat(
+                belowDefaultError.getMessage(),
+                containsString(
+                    "[hybrid] query the default [fusion.window_size] (100), which [pagination_depth] (10) does not lower, "
+                        + "must be less than [indices.query.bool.max_clause_count] (50)"
+                )
+            );
         } finally {
             IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
         }

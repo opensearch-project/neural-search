@@ -736,20 +736,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         requireSupportedTechniques(fusionSpec);
 
         int window = effectiveWindowSize();
-        String windowField = effectiveWindowSizeField();
+        String windowSubject = windowSubject(window);
+        // Classic hybrid bounds pagination_depth by index.max_result_window on the shard, which a fused query never
+        // reaches, so the depth gets the same ceiling here — whether it sizes the window, is overridden by window_size, or
+        // sits below the default. Checked first, so a depth over the ceiling is reported as the depth the user wrote.
+        if (Objects.nonNull(paginationDepth)) {
+            validateAgainstMaxResultWindow(searchRequest, paginationDepth, paginationDepthSubject());
+        }
         // Each leg fires size=window per shard, so an unbounded window is a per-shard memory/CPU amplifier. Cap it at
         // index.max_result_window (resolved coordinator-side from the targeted indices), mirroring classic hybrid's
         // pagination_depth ceiling.
-        validateWindowSizeAgainstMaxResultWindow(searchRequest, window, windowField);
-        // A pagination_depth that window_size overrides sizes nothing, but it still gets classic's ceiling: a depth one
-        // mode accepts, the other accepts too.
-        if (hasExplicitWindowSize() && Objects.nonNull(paginationDepth)) {
-            validateWindowSizeAgainstMaxResultWindow(searchRequest, paginationDepth, PAGINATION_DEPTH_FIELD.getPreferredName());
-        }
+        validateAgainstMaxResultWindow(searchRequest, window, windowSubject);
         // The self-erased query holds one bool clause per ranked doc, so the window is also bounded by Lucene's clause
         // ceiling — a different (and much lower) limit than max_result_window, and the only one that would otherwise be
         // discovered at query time on every shard.
-        validateWindowSizeAgainstMaxClauseCount(window, windowField);
+        validateAgainstMaxClauseCount(window, windowSubject);
         List<QueryBuilder> legs = queries;
         // Validate weights (range, sum, count) before the leg fan-out — a bad weights array otherwise burns a full
         // MultiSearch before the combiner is built in the async callback.
@@ -1853,15 +1854,33 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * The request field to name in the errors that bound the window: {@code pagination_depth} when it sized the window,
-     * else {@code fusion.window_size} — explicit, or the default that a depth below it does not lower, which only an
-     * explicit {@code window_size} can.
+     * The subject of an error that bounds the window — the field and value the user can act on, in the form
+     * {@code [field] (value)}: {@code pagination_depth} when it sized the window, {@code fusion.window_size} when set,
+     * else the default — named as the default, together with the depth that did not lower it, so that a request carrying
+     * only {@code pagination_depth: 10} is not told about a {@code window_size} it never set.
      */
-    private String effectiveWindowSizeField() {
-        if (hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth) && paginationDepth >= DEFAULT_FUSION_WINDOW_SIZE) {
-            return PAGINATION_DEPTH_FIELD.getPreferredName();
+    private String windowSubject(final int window) {
+        if (hasExplicitWindowSize()) {
+            return String.format(Locale.ROOT, "[%s.%s] (%d)", FUSION_FIELD.getPreferredName(), FUSION_KEY_WINDOW_SIZE, window);
         }
-        return FUSION_FIELD.getPreferredName() + "." + FUSION_KEY_WINDOW_SIZE;
+        if (Objects.nonNull(paginationDepth) && paginationDepth >= DEFAULT_FUSION_WINDOW_SIZE) {
+            return paginationDepthSubject();
+        }
+        String subject = String.format(
+            Locale.ROOT,
+            "the default [%s.%s] (%d)",
+            FUSION_FIELD.getPreferredName(),
+            FUSION_KEY_WINDOW_SIZE,
+            window
+        );
+        if (Objects.nonNull(paginationDepth)) {
+            subject += String.format(Locale.ROOT, ", which %s does not lower,", paginationDepthSubject());
+        }
+        return subject;
+    }
+
+    private String paginationDepthSubject() {
+        return String.format(Locale.ROOT, "[%s] (%d)", PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth);
     }
 
     /** Whether the request names a window itself. Fused-only: every caller runs under {@link #doRewriteFused}. */
@@ -1870,25 +1889,25 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * Reject a {@code window_size} above {@code index.max_result_window} for any targeted index — each leg fires
-     * {@code size=window} per shard, so an unbounded window amplifies per-shard memory/CPU. Resolved coordinator-side
-     * from the request's concrete indices (there is no shard {@link QueryShardContext} at rewrite), mirroring the
-     * ceiling classic hybrid enforces on {@code pagination_depth}. A no-window (default) request is always within bounds.
+     * Reject a window (or a {@code pagination_depth}) above {@code index.max_result_window} for any targeted index — each
+     * leg fires {@code size=window} per shard, so an unbounded window amplifies per-shard memory/CPU. Resolved
+     * coordinator-side from the request's concrete indices (there is no shard {@link QueryShardContext} at rewrite),
+     * mirroring the ceiling classic hybrid enforces on {@code pagination_depth}. {@code subject} is the
+     * {@code [field] (value)} phrase the error names, see {@link #windowSubject}.
      */
-    private static void validateWindowSizeAgainstMaxResultWindow(final SearchRequest searchRequest, final int window, final String field) {
+    private static void validateAgainstMaxResultWindow(final SearchRequest searchRequest, final int value, final String subject) {
         for (IndexMetadata indexMetadata : NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest)) {
             if (Objects.isNull(indexMetadata)) {
                 continue;
             }
             int maxResultWindow = IndexSettings.MAX_RESULT_WINDOW_SETTING.get(indexMetadata.getSettings());
-            if (window > maxResultWindow) {
+            if (value > maxResultWindow) {
                 throw new IllegalArgumentException(
                     String.format(
                         Locale.ROOT,
-                        "[%s] query [%s] (%d) must be less than or equal to [%s] (%d) for index [%s]",
+                        "[%s] query %s must be less than or equal to [%s] (%d) for index [%s]",
                         NAME,
-                        field,
-                        window,
+                        subject,
                         IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey(),
                         maxResultWindow,
                         indexMetadata.getIndex().getName()
@@ -1914,7 +1933,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * filter is a MatchAll that {@code BooleanQuery.rewrite} removes, collapsing the clause back to
      * {@code constant_score(ids)}.
      */
-    private static void validateWindowSizeAgainstMaxClauseCount(final int window, final String field) {
+    private static void validateAgainstMaxClauseCount(final int window, final String subject) {
         int maxClauseCount = IndexSearcher.getMaxClauseCount();
         // Reserve the one clause the Tail filter occupies in the same bool. Whether a request needs the Tail is only known
         // once the legs have answered, so the window has to fit either way.
@@ -1922,11 +1941,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
-                    "[%s] query [%s] (%d) must be less than [%s] (%d): the fused query holds one clause per ranked "
+                    "[%s] query %s must be less than [%s] (%d): the fused query holds one clause per ranked "
                         + "document plus one for the tail",
                     NAME,
-                    field,
-                    window,
+                    subject,
                     SearchService.INDICES_MAX_CLAUSE_COUNT_SETTING.getKey(),
                     maxClauseCount
                 )
