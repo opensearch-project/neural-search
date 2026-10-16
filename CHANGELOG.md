@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Allow `sort: [_score, <field>]` with `collapse`, using the field to break exact `_score` ties so the collapsed group head is deterministic ([#1984](https://github.com/opensearch-project/neural-search/issues/1984))
 * [Hybrid Query] Accept `pagination_depth` in fused hybrid query ([#2058](https://github.com/opensearch-project/neural-search/pull/2058))
 * [Hybrid Query] Accept top-level `weights` in classic and fused hybrid query modes ([#2065](https://github.com/opensearch-project/neural-search/pull/2065))
-* [Text Chunking] Allow `icu_tokenizer`, `kuromoji_tokenizer` and `smartcn_tokenizer` in the `fixed_token_length` algorithm for Chinese and Japanese text, counting each token position once ([#PR](https://github.com/opensearch-project/neural-search/pull/PR))
+* [Text Chunking] Allow `icu_tokenizer`, `kuromoji_tokenizer` and `smartcn_tokenizer` in the `fixed_token_length` algorithm for Chinese and Japanese text, counting each token position once ([#2064](https://github.com/opensearch-project/neural-search/pull/2064))
 
 ### Bug Fixes
 * [Hybrid Query] Reject non-numeric score-combination `weights` with a `400` validation error instead of failing with a `ClassCastException` that surfaced as an internal `500` error ([#2067](https://github.com/opensearch-project/neural-search/pull/2067))
