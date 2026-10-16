@@ -2152,6 +2152,15 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     /** Initialize NeuralSearchClusterUtil so getIndexMetadataList returns one index with the given max_result_window. */
     private void initClusterUtilWithMaxResultWindow(int maxResultWindow) {
+        initClusterUtilWithMaxResultWindow(maxResultWindow, false);
+    }
+
+    /**
+     * As above; with {@code plusAVanishedIndex} the request also resolves to a second concrete index whose metadata is no
+     * longer in the cluster state — the shape {@code getIndexMetadataList} hands back when an index is deleted between its
+     * two reads of the state.
+     */
+    private void initClusterUtilWithMaxResultWindow(int maxResultWindow, boolean plusAVanishedIndex) {
         org.opensearch.cluster.metadata.Metadata metadata = mock(org.opensearch.cluster.metadata.Metadata.class);
         org.opensearch.cluster.ClusterState clusterState = mock(org.opensearch.cluster.ClusterState.class);
         org.opensearch.cluster.service.ClusterService clusterService = mock(org.opensearch.cluster.service.ClusterService.class);
@@ -2177,11 +2186,16 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             )
         );
         org.opensearch.core.index.Index index = new org.opensearch.core.index.Index("test-index", "uuid-1");
+        org.opensearch.core.index.Index vanished = new org.opensearch.core.index.Index("vanished-index", "uuid-2");
         org.opensearch.cluster.metadata.IndexNameExpressionResolver resolver = mock(
             org.opensearch.cluster.metadata.IndexNameExpressionResolver.class
         );
         when(resolver.concreteIndices(any(org.opensearch.cluster.ClusterState.class), any(org.opensearch.action.IndicesRequest.class)))
-            .thenReturn(new org.opensearch.core.index.Index[] { index });
+            .thenReturn(
+                plusAVanishedIndex
+                    ? new org.opensearch.core.index.Index[] { vanished, index }
+                    : new org.opensearch.core.index.Index[] { index }
+            );
         Settings settings = Settings.builder()
             .put("index.number_of_shards", 1)
             .put("index.number_of_replicas", 0)
@@ -2189,6 +2203,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             .put("index.max_result_window", maxResultWindow)
             .build();
         when(metadata.index(index)).thenReturn(IndexMetadata.builder("test-index").settings(settings).build());
+        when(metadata.index(vanished)).thenReturn(null);
         org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.stubFusedModeEnabled(clusterService);
         org.opensearch.neuralsearch.util.NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
     }
@@ -2383,36 +2398,24 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testDoRewriteFused_whenDefaultWindowExceedsMaxResultWindow_thenTheErrorNamesTheDefaultAndTheDepth() {
-        // The depth itself fits, the default window it does not lower does not: the error names the default as the default
-        // and the depth beside it, so the request is not told about a window_size it never set.
+    public void testDoRewriteFused_whenTheDefaultWindowExceedsMaxResultWindow_thenTheDefaultBendsToTheCeiling() {
+        // The default, and the floor a smaller depth is raised to, are values the user never wrote: on an index whose
+        // max_result_window is below them they become that ceiling, so a classic body with a small depth keeps working when
+        // it adds fusion, instead of failing about a window_size it never set.
         initClusterUtilWithMaxResultWindow(50);
         HybridQueryBuilder withDepth = fusedBuilder(new HashMap<>());
         withDepth.paginationDepth(40);
-        QueryCoordinatorContext ctx = coordinatorContextFor(withDepth);
-        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
-        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> withDepth.doRewrite(ctx));
-        assertThat(
-            e.getMessage(),
-            containsString(
-                "[hybrid] query the default [fusion.window_size] (100), which [pagination_depth] (40) does not lower, "
-                    + "must be less than or equal to [index.max_result_window] (50)"
-            )
-        );
+        assertEquals("the floor bends to the ceiling", 50, legWindowOf(withDepth));
 
-        // Without a depth the default is named as the default alone.
         HybridQueryBuilder noDepth = fusedBuilder(new HashMap<>());
-        QueryCoordinatorContext noDepthCtx = coordinatorContextFor(noDepth);
-        doAnswer(invocation -> null).when(noDepthCtx).registerAsyncAction(any());
-        IllegalArgumentException noDepthError = expectThrows(IllegalArgumentException.class, () -> noDepth.doRewrite(noDepthCtx));
-        assertThat(
-            noDepthError.getMessage(),
-            containsString(
-                "[hybrid] query the default [fusion.window_size] (100) must be less than or equal to [index.max_result_window] (50)"
-            )
-        );
+        assertEquals("so does the plain default", 50, legWindowOf(noDepth));
 
-        // An explicit window_size is named as what the user set.
+        // The depth itself still wins over the clamped floor when it is the larger of the two.
+        HybridQueryBuilder depthAboveClampedFloor = fusedBuilder(new HashMap<>());
+        depthAboveClampedFloor.paginationDepth(45);
+        assertEquals(50, legWindowOf(depthAboveClampedFloor));
+
+        // What the user wrote is not bent: an explicit window_size over the ceiling is refused, naming it.
         HybridQueryBuilder explicit = fusedBuilder(new HashMap<>(Map.of("window_size", 70)));
         QueryCoordinatorContext explicitCtx = coordinatorContextFor(explicit);
         doAnswer(invocation -> null).when(explicitCtx).registerAsyncAction(any());
@@ -2421,6 +2424,52 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             explicitError.getMessage(),
             containsString("[hybrid] query [fusion.window_size] (70) must be less than or equal to [index.max_result_window] (50)")
         );
+    }
+
+    public void testDoRewriteFused_whenATargetedIndexVanishedFromTheClusterState_thenTheOthersStillSetTheCeiling() {
+        // An index deleted between getIndexMetadataList's two reads of the state has no metadata to read a ceiling from; the
+        // search fails on it in its own right, so it is skipped here and the remaining indices decide the ceiling.
+        initClusterUtilWithMaxResultWindow(50, true);
+        HybridQueryBuilder clamped = fusedBuilder(new HashMap<>());
+        assertEquals("the surviving index's ceiling bends the default", 50, legWindowOf(clamped));
+
+        HybridQueryBuilder overTheCeiling = fusedBuilder(new HashMap<>(Map.of("window_size", 70)));
+        QueryCoordinatorContext ctx = coordinatorContextFor(overTheCeiling);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> overTheCeiling.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("[index.max_result_window] (50) for index [test-index]"));
+    }
+
+    public void testDoRewriteFused_whenTheClauseCeilingIsDegenerate_thenTheDefaultIsNamedAsTheDefault() {
+        // A clause ceiling below one leaves no window at all: the default cannot bend below 1 and is reported as the
+        // default, with the depth that did not lower it, rather than as a window_size the request never set.
+        initClusterUtilWithMaxResultWindow(10000);
+        int savedMaxClauseCount = IndexSearcher.getMaxClauseCount();
+        IndexSearcher.setMaxClauseCount(1);
+        try {
+            HybridQueryBuilder withDepth = fusedBuilder(new HashMap<>());
+            withDepth.paginationDepth(1);
+            QueryCoordinatorContext ctx = coordinatorContextFor(withDepth);
+            doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> withDepth.doRewrite(ctx));
+            assertThat(
+                e.getMessage(),
+                containsString("[hybrid] query [pagination_depth] (1) must be less than [indices.query.bool.max_clause_count] (1)")
+            );
+
+            HybridQueryBuilder noDepth = fusedBuilder(new HashMap<>());
+            QueryCoordinatorContext noDepthCtx = coordinatorContextFor(noDepth);
+            doAnswer(invocation -> null).when(noDepthCtx).registerAsyncAction(any());
+            IllegalArgumentException noDepthError = expectThrows(IllegalArgumentException.class, () -> noDepth.doRewrite(noDepthCtx));
+            assertThat(
+                noDepthError.getMessage(),
+                containsString(
+                    "[hybrid] query the default [fusion.window_size] (1) must be less than [indices.query.bool.max_clause_count] (1)"
+                )
+            );
+        } finally {
+            IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
+        }
     }
 
     @SneakyThrows
@@ -2437,24 +2486,12 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             assertThat(e.getMessage(), containsString("[hybrid] query [pagination_depth] (200) must be less than"));
             assertThat(e.getMessage(), containsString("indices.query.bool.max_clause_count"));
 
-            // A depth below the default does not size the window, so the error names the default as the default, with the
-            // depth that did not lower it, rather than a window_size the request never set.
+            // A depth below the default does not size the window, and the default bends to the clause ceiling rather than
+            // failing the request: 49 is the most the self-erased bool can hold beside the Tail's clause.
             HybridQueryBuilder belowDefault = fusedBuilder(new HashMap<>());
             belowDefault.paginationDepth(10);
             IndexSearcher.setMaxClauseCount(50);
-            QueryCoordinatorContext belowDefaultCtx = coordinatorContextFor(belowDefault);
-            doAnswer(invocation -> null).when(belowDefaultCtx).registerAsyncAction(any());
-            IllegalArgumentException belowDefaultError = expectThrows(
-                IllegalArgumentException.class,
-                () -> belowDefault.doRewrite(belowDefaultCtx)
-            );
-            assertThat(
-                belowDefaultError.getMessage(),
-                containsString(
-                    "[hybrid] query the default [fusion.window_size] (100), which [pagination_depth] (10) does not lower, "
-                        + "must be less than [indices.query.bool.max_clause_count] (50)"
-                )
-            );
+            assertEquals("the floor bends to the clause ceiling", 49, legWindowOf(belowDefault));
         } finally {
             IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
         }

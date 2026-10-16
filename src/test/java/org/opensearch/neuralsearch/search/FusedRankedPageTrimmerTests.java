@@ -129,6 +129,7 @@ public class FusedRankedPageTrimmerTests extends OpenSearchTestCase {
 
         assertEquals(0, trimmed.getHits().getHits().length);
         assertEquals(UNION, trimmed.getHits().getTotalHits());
+        assertTrue("an emptied page reports no max_score, as core does for an empty page", Float.isNaN(trimmed.getHits().getMaxScore()));
         assertNull(trimmed.getHits().getCollapseValues());
     }
 

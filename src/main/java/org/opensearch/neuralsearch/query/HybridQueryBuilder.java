@@ -735,28 +735,27 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // that, and z_score x {geometric, harmonic} is the pairing it refuses.
         requireSupportedTechniques(fusionSpec);
 
-        int window = effectiveWindowSize();
-        // Whether pagination_depth is the window: no window_size, and the depth at or above the default it would otherwise
-        // be raised to. Decides which field the window's ceiling errors name, and spares the window a second
-        // max_result_window pass over the same number.
-        boolean depthIsTheWindow = hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth) && window == paginationDepth;
-        String windowSubject = windowSubject(window, depthIsTheWindow);
+        // Both ceilings a window has to fit under, resolved once: each leg fires size=window per shard, so a window above
+        // index.max_result_window would fail in the legs (mirroring classic hybrid's pagination_depth ceiling), and the
+        // self-erased query holds one bool clause per ranked document, so a window above the clause ceiling would fail on
+        // every shard in round 2 — a different and much lower limit, and the only one otherwise discovered at query time.
+        WindowCeilings ceilings = WindowCeilings.resolve(searchRequest);
         // Classic hybrid bounds pagination_depth by index.max_result_window on the shard, which a fused query never
         // reaches, so the depth gets the same ceiling here — whether it sizes the window, is overridden by window_size, or
         // sits below the default. Checked first, so a depth over the ceiling is reported as the depth the user wrote.
         if (Objects.nonNull(paginationDepth)) {
-            validateAgainstMaxResultWindow(searchRequest, paginationDepth, paginationDepthSubject());
+            ceilings.requireWithinMaxResultWindow(paginationDepth, depthSubject(paginationDepth));
         }
-        // Each leg fires size=window per shard, so an unbounded window is a per-shard memory/CPU amplifier. Cap it at
-        // index.max_result_window (resolved coordinator-side from the targeted indices), mirroring classic hybrid's
-        // pagination_depth ceiling. Already done above when the depth is the window.
+        int window = effectiveWindowSize(ceilings);
+        // What the window's ceiling errors name: the value the user wrote, when one did size the window. The default, and
+        // the floor a smaller depth is raised to, are clamped to the ceilings by effectiveWindowSize and cannot exceed them
+        // except in a degenerate configuration (a clause ceiling below one), which is reported as the default.
+        boolean depthIsTheWindow = hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth) && window == paginationDepth;
+        String windowSubject = windowSubject(window, depthIsTheWindow);
         if (depthIsTheWindow == false) {
-            validateAgainstMaxResultWindow(searchRequest, window, windowSubject);
+            ceilings.requireWithinMaxResultWindow(window, windowSubject);
         }
-        // The self-erased query holds one bool clause per ranked doc, so the window is also bounded by Lucene's clause
-        // ceiling — a different (and much lower) limit than max_result_window, and the only one that would otherwise be
-        // discovered at query time on every shard.
-        validateAgainstMaxClauseCount(window, windowSubject);
+        ceilings.requireWithinClauseCeiling(window, windowSubject);
         List<QueryBuilder> legs = queries;
         // Validate weights (range, sum, count) before the leg fan-out — a bad weights array otherwise burns a full
         // MultiSearch before the combiner is built in the async callback.
@@ -1843,48 +1842,46 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * {@code pagination_depth: 10} would fuse a tenth of what the query fuses without the parameter. An explicit
      * {@code window_size} still goes lower.
      *
+     * <p>The default, and the floor a smaller depth is raised to, are values the user never wrote, so they bend to the
+     * ceilings rather than fail the request: on an index whose {@code index.max_result_window} is 50, or a node whose
+     * clause ceiling is lower than the default, the default window is that ceiling (never below 1), and a classic body
+     * with {@code pagination_depth: 10} that adds {@code fusion} keeps working as it did without it. What the user wrote —
+     * an explicit {@code window_size}, or a depth that is itself over a ceiling — is still refused, naming that value.
+     *
      * <p>The depth is otherwise taken as is, although classic's is per shard and this window is global per leg. Scaling
      * it by the number of shards searched would not stay bounded: every leg already asks every shard for the whole window,
      * so a shard-scaled window grows the request's work with the square of the shard count.
      */
-    private int effectiveWindowSize() {
+    private int effectiveWindowSize(final WindowCeilings ceilings) {
         if (hasExplicitWindowSize()) {
             return ((Number) fusion.get(FUSION_KEY_WINDOW_SIZE)).intValue();
         }
+        int defaultWindow = Math.max(1, Math.min(DEFAULT_FUSION_WINDOW_SIZE, ceilings.lowest()));
         if (Objects.nonNull(paginationDepth)) {
-            return Math.max(paginationDepth, DEFAULT_FUSION_WINDOW_SIZE);
+            return Math.max(paginationDepth, defaultWindow);
         }
-        return DEFAULT_FUSION_WINDOW_SIZE;
+        return defaultWindow;
     }
 
     /**
      * The subject of an error that bounds the window — the field and value the user can act on, in the form
-     * {@code [field] (value)}: {@code pagination_depth} when it is the window, {@code fusion.window_size} when set, else
-     * the default — named as the default, together with the depth that did not lower it, so that a request carrying only
-     * {@code pagination_depth: 10} is not told about a {@code window_size} it never set.
+     * {@code [field] (value)}: {@code pagination_depth} when it is the window, {@code fusion.window_size} when set. The
+     * default is clamped to the ceilings and can only exceed one in a degenerate configuration (a clause ceiling below
+     * one); it is then named as the default rather than as a {@code window_size} the request never set. A depth beside it
+     * is then the window itself (a positive depth is never below a default of 1), so it is named as the depth.
      */
     private String windowSubject(final int window, final boolean depthIsTheWindow) {
         if (depthIsTheWindow) {
-            return paginationDepthSubject();
+            return depthSubject(paginationDepth);
         }
         if (hasExplicitWindowSize()) {
             return String.format(Locale.ROOT, "[%s.%s] (%d)", FUSION_FIELD.getPreferredName(), FUSION_KEY_WINDOW_SIZE, window);
         }
-        String subject = String.format(
-            Locale.ROOT,
-            "the default [%s.%s] (%d)",
-            FUSION_FIELD.getPreferredName(),
-            FUSION_KEY_WINDOW_SIZE,
-            window
-        );
-        if (Objects.nonNull(paginationDepth)) {
-            subject += String.format(Locale.ROOT, ", which %s does not lower,", paginationDepthSubject());
-        }
-        return subject;
+        return String.format(Locale.ROOT, "the default [%s.%s] (%d)", FUSION_FIELD.getPreferredName(), FUSION_KEY_WINDOW_SIZE, window);
     }
 
-    private String paginationDepthSubject() {
-        return String.format(Locale.ROOT, "[%s] (%d)", PAGINATION_DEPTH_FIELD.getPreferredName(), paginationDepth);
+    private static String depthSubject(final int depth) {
+        return String.format(Locale.ROOT, "[%s] (%d)", PAGINATION_DEPTH_FIELD.getPreferredName(), depth);
     }
 
     /** Whether the request names a window itself. Fused-only: every caller runs under {@link #doRewriteFused}. */
@@ -1893,18 +1890,64 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * Reject a window (or a {@code pagination_depth}) above {@code index.max_result_window} for any targeted index — each
-     * leg fires {@code size=window} per shard, so an unbounded window amplifies per-shard memory/CPU. Resolved
-     * coordinator-side from the request's concrete indices (there is no shard {@link QueryShardContext} at rewrite),
-     * mirroring the ceiling classic hybrid enforces on {@code pagination_depth}. {@code subject} is the
-     * {@code [field] (value)} phrase the error names, see {@link #windowSubject}.
+     * The two ceilings a fused window has to fit under, resolved once per rewrite.
+     *
+     * <p><b>{@code index.max_result_window}</b>, the lowest over the request's concrete indices (resolved coordinator-side:
+     * there is no shard {@link QueryShardContext} at rewrite). Each leg fires {@code size=window} per shard, so a window
+     * above it would fail in the legs; classic hybrid enforces the same ceiling on {@code pagination_depth}. An index whose
+     * metadata is missing from the cluster state is skipped: it was deleted between the two reads inside
+     * {@code getIndexMetadataList}, and the search itself fails on it with {@code index_not_found_exception}.
+     *
+     * <p><b>The clause ceiling</b>, {@code indices.query.bool.max_clause_count} less the one clause the Tail filter
+     * occupies in the same bool. The self-erased query's Top is one {@code should} clause per ranked document in a single
+     * {@code bool}, and {@code BooleanQuery.Builder#add} throws {@code TooManyClauses} as soon as one bool exceeds the
+     * setting — which defaults to 1024 and is unrelated to {@code index.max_result_window} (default 10000), so without this
+     * a {@code window_size} in the thousands parses, fans out, fuses, and only then fails on every shard. Whether a request
+     * needs the Tail is only known once the legs have answered, so the window has to fit either way. The setting is a
+     * dynamic node setting that {@code SearchService} keeps in sync with Lucene's static, so reading the static here
+     * reflects the live value on this coordinator. Necessary, not sufficient: the Tail's own clauses are the user's legs
+     * and cannot be counted at rewrite, so a request within this bound can still exceed the ceiling through an enormous
+     * leg query. The {@code _index} qualification on each Top clause costs nothing against this bound — on the shard's own
+     * index the {@code _index} filter is a MatchAll that {@code BooleanQuery.rewrite} removes, collapsing the clause back
+     * to {@code constant_score(ids)}.
      */
-    private static void validateAgainstMaxResultWindow(final SearchRequest searchRequest, final int value, final String subject) {
-        for (IndexMetadata indexMetadata : NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest)) {
-            if (Objects.isNull(indexMetadata)) {
-                continue;
+    private static final class WindowCeilings {
+        private final int maxResultWindow;
+        private final String maxResultWindowIndex;
+        private final int maxClauseCount;
+
+        private WindowCeilings(final int maxResultWindow, final String maxResultWindowIndex, final int maxClauseCount) {
+            this.maxResultWindow = maxResultWindow;
+            this.maxResultWindowIndex = maxResultWindowIndex;
+            this.maxClauseCount = maxClauseCount;
+        }
+
+        static WindowCeilings resolve(final SearchRequest searchRequest) {
+            int lowestMaxResultWindow = Integer.MAX_VALUE;
+            String lowestIndex = null;
+            for (IndexMetadata indexMetadata : NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest)) {
+                if (Objects.isNull(indexMetadata)) {
+                    continue;
+                }
+                int maxResultWindow = IndexSettings.MAX_RESULT_WINDOW_SETTING.get(indexMetadata.getSettings());
+                if (maxResultWindow < lowestMaxResultWindow) {
+                    lowestMaxResultWindow = maxResultWindow;
+                    lowestIndex = indexMetadata.getIndex().getName();
+                }
             }
-            int maxResultWindow = IndexSettings.MAX_RESULT_WINDOW_SETTING.get(indexMetadata.getSettings());
+            return new WindowCeilings(lowestMaxResultWindow, lowestIndex, IndexSearcher.getMaxClauseCount());
+        }
+
+        int clauseCeiling() {
+            return maxClauseCount - TAIL_CLAUSE_RESERVE;
+        }
+
+        /** The tighter of the two, for the default window to bend to. */
+        int lowest() {
+            return Math.min(maxResultWindow, clauseCeiling());
+        }
+
+        void requireWithinMaxResultWindow(final int value, final String subject) {
             if (value > maxResultWindow) {
                 throw new IllegalArgumentException(
                     String.format(
@@ -1914,45 +1957,26 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         subject,
                         IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey(),
                         maxResultWindow,
-                        indexMetadata.getIndex().getName()
+                        maxResultWindowIndex
                     )
                 );
             }
         }
-    }
 
-    /**
-     * Reject a {@code window_size} the self-erased query could not be assembled from. Its Top is one {@code should}
-     * clause per ranked document in a single {@code bool}, plus one {@code filter} clause when the Tail is present, and
-     * {@code BooleanQuery.Builder#add} throws {@code TooManyClauses} as soon as one bool exceeds
-     * {@code indices.query.bool.max_clause_count}. That ceiling defaults to 1024 and is unrelated to
-     * {@code index.max_result_window} (default 10000) — the only bound the other window check applies — so without this a
-     * {@code window_size} in the thousands parses, fans out, fuses, and only then fails on every shard. The setting is a
-     * dynamic node setting that {@code SearchService} keeps in sync with Lucene's static, so reading the static here
-     * reflects the live value on this coordinator.
-     *
-     * <p>Necessary, not sufficient: the Tail's own clauses are the user's legs and cannot be counted at rewrite, so a
-     * request within this bound can still exceed the ceiling through an enormous leg query. The {@code _index}
-     * qualification on each Top clause costs nothing against this bound — on the shard's own index the {@code _index}
-     * filter is a MatchAll that {@code BooleanQuery.rewrite} removes, collapsing the clause back to
-     * {@code constant_score(ids)}.
-     */
-    private static void validateAgainstMaxClauseCount(final int window, final String subject) {
-        int maxClauseCount = IndexSearcher.getMaxClauseCount();
-        // Reserve the one clause the Tail filter occupies in the same bool. Whether a request needs the Tail is only known
-        // once the legs have answered, so the window has to fit either way.
-        if (window > maxClauseCount - TAIL_CLAUSE_RESERVE) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "[%s] query %s must be less than [%s] (%d): the fused query holds one clause per ranked "
-                        + "document plus one for the tail",
-                    NAME,
-                    subject,
-                    SearchService.INDICES_MAX_CLAUSE_COUNT_SETTING.getKey(),
-                    maxClauseCount
-                )
-            );
+        void requireWithinClauseCeiling(final int window, final String subject) {
+            if (window > clauseCeiling()) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "[%s] query %s must be less than [%s] (%d): the fused query holds one clause per ranked "
+                            + "document plus one for the tail",
+                        NAME,
+                        subject,
+                        SearchService.INDICES_MAX_CLAUSE_COUNT_SETTING.getKey(),
+                        maxClauseCount
+                    )
+                );
+            }
         }
     }
 
