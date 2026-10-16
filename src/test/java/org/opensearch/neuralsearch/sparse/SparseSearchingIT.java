@@ -589,6 +589,52 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertTrue(getHitCount(searchResults2) > 0);
     }
 
+    /** Below the approximate threshold, so nsparse scores from its unquantized inverted index. */
+    public void testSearchFoldedTokenIdsMatchEachOther_exactPath() throws Exception {
+        assertFoldedTokenIdsMatchEachOther(100);
+    }
+
+    /** At the corpus size, so the segment is clustered and scored through seismic postings. */
+    public void testSearchFoldedTokenIdsMatchEachOther_approximatePath() throws Exception {
+        assertFoldedTokenIdsMatchEachOther(4);
+    }
+
+    /**
+     * Token ids fold modulo 32768 on both the document and the query side (#2048), so 0, 32768 and
+     * 65536 are one term: a query for any of them has to reach all three documents, and nothing else.
+     * Before the native writer folded, 32768 was indexed raw and never matched, and 65536 failed the
+     * segment flush outright.
+     */
+    @SuppressWarnings("unchecked")
+    private void assertFoldedTokenIdsMatchEachOther(int approximateThreshold) throws Exception {
+        assumeNativeEngine("the Lucene engine indexes raw token ids as terms, so a folded query misses ids >= 32768");
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, approximateThreshold);
+        ingestDocumentsAndForceMergeForSingleShard(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            List.of(Map.of("0", 0.25f), Map.of("32768", 0.5f), Map.of("65536", 0.75f), Map.of("1000", 1.0f))
+        );
+
+        for (String queryToken : List.of("0", "32768", "65536")) {
+            NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+                TEST_SPARSE_FIELD_NAME,
+                1,
+                1.0f,
+                10,
+                Map.of(queryToken, 1.0f)
+            );
+
+            Map<String, Object> searchResults = searchWithExplain(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+            assertEquals("query token " + queryToken, Set.of("1", "2", "3"), new HashSet<>(getDocIDs(searchResults)));
+            assertEquals("query token " + queryToken, 3, getHitCount(searchResults));
+            Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
+            for (Map<String, Object> hit : (List<Map<String, Object>>) hitsMap.get("hits")) {
+                assertExplanationScoreMatchesHit(hit);
+            }
+        }
+    }
+
     @SneakyThrows
     public void testSearchWithCustomizedQuantizationCeil() {
         assumeLuceneEngine(QUANTIZATION_IS_LUCENE_ONLY);

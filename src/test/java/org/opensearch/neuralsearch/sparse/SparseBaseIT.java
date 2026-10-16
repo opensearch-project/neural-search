@@ -90,6 +90,13 @@ public abstract class SparseBaseIT extends BaseNeuralSearchIT {
         assumeTrue(reason, SparseEngine.LUCENE == engine);
     }
 
+    /**
+     * Skips the running test unless the engine under test is native.
+     */
+    protected void assumeNativeEngine(String reason) {
+        assumeTrue(reason, SparseEngine.NATIVE == engine);
+    }
+
     @Before
     @Override
     public void setUp() throws Exception {
