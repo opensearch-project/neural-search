@@ -744,14 +744,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // reaches, so the depth gets the same ceiling here — whether it sizes the window, is overridden by window_size, or
         // sits below the default. Checked first, so a depth over the ceiling is reported as the depth the user wrote.
         if (Objects.nonNull(paginationDepth)) {
-            ceilings.requireWithinMaxResultWindow(paginationDepth, depthSubject(paginationDepth));
+            final int depth = paginationDepth;
+            ceilings.requireWithinMaxResultWindow(depth, () -> depthSubject(depth));
         }
         int window = effectiveWindowSize(ceilings);
         // What the window's ceiling errors name: the value the user wrote, when one did size the window. The default, and
         // the floor a smaller depth is raised to, are clamped to the ceilings by effectiveWindowSize and cannot exceed them
-        // except in a degenerate configuration (a clause ceiling below one), which is reported as the default.
+        // except in a degenerate configuration (a clause ceiling below one), which is reported as the default. Built only
+        // when a check fails: this runs on every fused request.
         boolean depthIsTheWindow = hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth) && window == paginationDepth;
-        String windowSubject = windowSubject(window, depthIsTheWindow);
+        Supplier<String> windowSubject = () -> windowSubject(window, depthIsTheWindow);
         if (depthIsTheWindow == false) {
             ceilings.requireWithinMaxResultWindow(window, windowSubject);
         }
@@ -1947,14 +1949,15 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             return Math.min(maxResultWindow, clauseCeiling());
         }
 
-        void requireWithinMaxResultWindow(final int value, final String subject) {
+        /** {@code subject} is the {@code [field] (value)} phrase the error names (see {@code windowSubject}), built only on failure. */
+        void requireWithinMaxResultWindow(final int value, final Supplier<String> subject) {
             if (value > maxResultWindow) {
                 throw new IllegalArgumentException(
                     String.format(
                         Locale.ROOT,
                         "[%s] query %s must be less than or equal to [%s] (%d) for index [%s]",
                         NAME,
-                        subject,
+                        subject.get(),
                         IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey(),
                         maxResultWindow,
                         maxResultWindowIndex
@@ -1963,7 +1966,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }
 
-        void requireWithinClauseCeiling(final int window, final String subject) {
+        void requireWithinClauseCeiling(final int window, final Supplier<String> subject) {
             if (window > clauseCeiling()) {
                 throw new IllegalArgumentException(
                     String.format(
@@ -1971,7 +1974,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         "[%s] query %s must be less than [%s] (%d): the fused query holds one clause per ranked "
                             + "document plus one for the tail",
                         NAME,
-                        subject,
+                        subject.get(),
                         SearchService.INDICES_MAX_CLAUSE_COUNT_SETTING.getKey(),
                         maxClauseCount
                     )

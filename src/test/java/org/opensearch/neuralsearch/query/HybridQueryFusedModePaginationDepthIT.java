@@ -84,7 +84,12 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private Map<String, Object> search(String params, String body) {
-        Request request = new Request("POST", "/" + INDEX + "/_search" + params);
+        return search(INDEX, params, body);
+    }
+
+    @SneakyThrows
+    private Map<String, Object> search(String index, String params, String body) {
+        Request request = new Request("POST", "/" + index + "/_search" + params);
         request.setJsonEntity(body);
         Response response = client().performRequest(request);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
@@ -93,7 +98,12 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private String searchExpectingBadRequest(String body) {
-        Request request = new Request("POST", "/" + INDEX + "/_search");
+        return searchExpectingBadRequest(INDEX, body);
+    }
+
+    @SneakyThrows
+    private String searchExpectingBadRequest(String index, String body) {
+        Request request = new Request("POST", "/" + index + "/_search");
         request.setJsonEntity(body);
         ResponseException exception = expectThrows(ResponseException.class, () -> client().performRequest(request));
         assertEquals(RestStatus.BAD_REQUEST.getStatus(), exception.getResponse().getStatusLine().getStatusCode());
@@ -254,5 +264,71 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
 
         String zero = searchExpectingBadRequest("{\"query\":" + fusedWithDepth(0) + "}");
         assertTrue(zero, zero.contains("[hybrid] query [pagination_depth] must be greater than 0"));
+    }
+
+    /**
+     * On an index whose {@code index.max_result_window} is below the default window, the default — and the floor a smaller
+     * depth is raised to — bends to that ceiling instead of failing the request: the classic body with
+     * {@code pagination_depth: 10} keeps working when it adds {@code fusion}, exactly as it works without it, and so does a
+     * fused request with no depth. What the user wrote is still refused by name. End to end, because the ceiling is also
+     * core's own {@code from + size} limit on the legs, which the clamped window has to satisfy on every shard.
+     */
+    @SneakyThrows
+    public void testPaginationDepth_whenTheIndexCeilingIsBelowTheDefaultWindow_thenTheDefaultBendsToIt() {
+        String smallWindowIndex = INDEX + "-max-result-window-50";
+        if (indexExists(smallWindowIndex) == false) {
+            createIndex(
+                smallWindowIndex,
+                "{\"settings\":{\"number_of_shards\":"
+                    + SHARDS
+                    + ",\"number_of_replicas\":0,\"index.max_result_window\":50},\"mappings\":{\"properties\":{\""
+                    + RANK_FIELD
+                    + "\":{\"type\":\"integer\"}}}}"
+            );
+            StringBuilder bulk = new StringBuilder();
+            for (int id = 1; id <= 60; id++) {
+                bulk.append("{\"index\":{\"_id\":\"").append(id).append("\"}}\n");
+                bulk.append("{\"").append(RANK_FIELD).append("\":").append(id).append("}\n");
+            }
+            Request request = new Request("POST", "/" + smallWindowIndex + "/_bulk?refresh=true");
+            request.setJsonEntity(bulk.toString());
+            assertEquals(RestStatus.OK, RestStatus.fromCode(client().performRequest(request).getStatusLine().getStatusCode()));
+        }
+        String topOnlyWholeIndex = "{\"track_total_hits\":false,\"size\":50,\"query\":";
+
+        // classic, the documentation's pagination_depth: 10 — works on this index
+        createSearchPipeline(PIPELINE, "min_max", "arithmetic_mean", Map.of());
+        List<String> classic = ids(
+            search(smallWindowIndex, "?search_pipeline=" + PIPELINE, "{\"size\":5,\"query\":" + hybrid("\"pagination_depth\":10,") + "}")
+        );
+        assertEquals(ranks(60, 56), classic);
+
+        // the same body with fusion: the floor bends to 50 instead of failing about a window_size the request never set
+        Map<String, Object> fused = search(smallWindowIndex, "", topOnlyWholeIndex + fusedWithDepth(10) + "}");
+        assertEquals("the floor bends to the ceiling: 50 ranked documents, not a 400", ranks(60, 11), ids(fused));
+        assertEquals(classic, ids(search(smallWindowIndex, "", "{\"size\":5,\"query\":" + fusedWithDepth(10) + "}")));
+
+        // and so does the plain default
+        assertEquals(
+            ranks(60, 11),
+            ids(search(smallWindowIndex, "", topOnlyWholeIndex + hybrid("\"fusion\":" + INLINE_FUSION + ",") + "}"))
+        );
+
+        // what the user wrote is still refused, naming it
+        String depthOverCeiling = searchExpectingBadRequest(smallWindowIndex, "{\"query\":" + fusedWithDepth(60) + "}");
+        assertTrue(
+            depthOverCeiling,
+            depthOverCeiling.contains("[hybrid] query [pagination_depth] (60) must be less than or equal to [index.max_result_window] (50)")
+        );
+        String windowOverCeiling = searchExpectingBadRequest(
+            smallWindowIndex,
+            "{\"query\":" + hybrid("\"fusion\":{\"window_size\":70,\"normalization\":{\"technique\":\"min_max\"}},") + "}"
+        );
+        assertTrue(
+            windowOverCeiling,
+            windowOverCeiling.contains(
+                "[hybrid] query [fusion.window_size] (70) must be less than or equal to [index.max_result_window] (50)"
+            )
+        );
     }
 }
