@@ -736,7 +736,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         requireSupportedTechniques(fusionSpec);
 
         int window = effectiveWindowSize();
-        String windowSubject = windowSubject(window);
+        // Whether pagination_depth is the window: no window_size, and the depth at or above the default it would otherwise
+        // be raised to. Decides which field the window's ceiling errors name, and spares the window a second
+        // max_result_window pass over the same number.
+        boolean depthIsTheWindow = hasExplicitWindowSize() == false && Objects.nonNull(paginationDepth) && window == paginationDepth;
+        String windowSubject = windowSubject(window, depthIsTheWindow);
         // Classic hybrid bounds pagination_depth by index.max_result_window on the shard, which a fused query never
         // reaches, so the depth gets the same ceiling here — whether it sizes the window, is overridden by window_size, or
         // sits below the default. Checked first, so a depth over the ceiling is reported as the depth the user wrote.
@@ -745,8 +749,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         // Each leg fires size=window per shard, so an unbounded window is a per-shard memory/CPU amplifier. Cap it at
         // index.max_result_window (resolved coordinator-side from the targeted indices), mirroring classic hybrid's
-        // pagination_depth ceiling.
-        validateAgainstMaxResultWindow(searchRequest, window, windowSubject);
+        // pagination_depth ceiling. Already done above when the depth is the window.
+        if (depthIsTheWindow == false) {
+            validateAgainstMaxResultWindow(searchRequest, window, windowSubject);
+        }
         // The self-erased query holds one bool clause per ranked doc, so the window is also bounded by Lucene's clause
         // ceiling — a different (and much lower) limit than max_result_window, and the only one that would otherwise be
         // discovered at query time on every shard.
@@ -831,11 +837,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // response, and would read round 2's window-sized total instead) all leave the legs as they were. The request's
         // shape is re-read here rather than trusted from the consumer's presence: the filter decided it before the search
         // pipeline's request processors ran, and one that adds an aggregation between the two would otherwise have the legs
-        // count for a Tail this rewrite is about to keep anyway. The page bound is conservative now wherever the page is kept
-        // to the ranking (rankedPageConsumerForThisQuery above): FusedRankedPageTrimmer ends a page reaching past the window
-        // at the ranked documents, so the Tail onlyTotalsNeedTheTail keeps for it contributes the count alone — a Top-only
-        // round 2 with the legs' count would return the same page — and lifting the bound for that case, here and in
-        // onlyTotalsNeedTheTail, is a follow-up optimization.
+        // count for a Tail this rewrite is about to keep anyway. The page bound is conservative since FusedRankedPageTrimmer
+        // (rankedPageConsumerForThisQuery above); HybridFusionOrchestrator.decideFastPathAfterLegs says why, and names
+        // this arming as one of the sites that move together when it is lifted.
         if (Objects.nonNull(totalHitsConsumerForThisQuery)) {
             Integer legTotalHitsThreshold = HybridFusionOrchestrator.legTotalHitsThreshold(searchRequest.source(), window);
             if (Objects.nonNull(legTotalHitsThreshold)
@@ -1855,16 +1859,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
     /**
      * The subject of an error that bounds the window — the field and value the user can act on, in the form
-     * {@code [field] (value)}: {@code pagination_depth} when it sized the window, {@code fusion.window_size} when set,
-     * else the default — named as the default, together with the depth that did not lower it, so that a request carrying
-     * only {@code pagination_depth: 10} is not told about a {@code window_size} it never set.
+     * {@code [field] (value)}: {@code pagination_depth} when it is the window, {@code fusion.window_size} when set, else
+     * the default — named as the default, together with the depth that did not lower it, so that a request carrying only
+     * {@code pagination_depth: 10} is not told about a {@code window_size} it never set.
      */
-    private String windowSubject(final int window) {
+    private String windowSubject(final int window, final boolean depthIsTheWindow) {
+        if (depthIsTheWindow) {
+            return paginationDepthSubject();
+        }
         if (hasExplicitWindowSize()) {
             return String.format(Locale.ROOT, "[%s.%s] (%d)", FUSION_FIELD.getPreferredName(), FUSION_KEY_WINDOW_SIZE, window);
-        }
-        if (Objects.nonNull(paginationDepth) && paginationDepth >= DEFAULT_FUSION_WINDOW_SIZE) {
-            return paginationDepthSubject();
         }
         String subject = String.format(
             Locale.ROOT,
@@ -2021,7 +2025,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      *       through every {@code instanceof Map} gate in {@link FusionSpec} to the min_max + arithmetic_mean defaults, and
      *       fuse by a technique the user did not ask for — the shorthand {@code "fusion": "pipeline"} one level up makes
      *       {@code "combination": "rrf"} an easy thing to write);</li>
-     *   <li>{@code window_size} non-positive → 400 (upper bound vs {@code index.max_result_window} is shard-side);</li>
+     *   <li>{@code window_size} non-positive → 400 (the upper bounds — {@code index.max_result_window} and the bool clause
+     *       ceiling — are checked at rewrite on the coordinator, see {@link #doRewriteFused});</li>
      *   <li>{@code pagination_depth} non-positive → 400. A positive one is accepted, so a classic hybrid query keeps its
      *       syntax when {@code fusion} is added, and, when {@code window_size} is unset, sizes the window — never below
      *       the default (see {@link #effectiveWindowSize}); its upper bounds are checked at rewrite, alongside the

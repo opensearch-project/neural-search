@@ -509,11 +509,13 @@ final class CandidateScope {
     }
 
     /**
-     * True when the request ranks by something other than {@code _score}. The fused scores then only pick the candidate
-     * set while the user's sort decides the order, so the candidate set has to be the whole leg union rather than the
-     * window — see {@link Disposition#FORCES_TAIL}. Any non-{@code _score} key counts, including one that only breaks the
-     * ties of a leading {@code _score} descending; a page of the request's own fused hybrid in that order is still the
-     * fused ranking, and {@code FusedRankedPageTrimmer} ends it at the last ranked document.
+     * True when any sort key is not {@code _score}. The Tail is then needed: under a sort that leads with another field
+     * the fused scores only pick the candidate set while the user's order decides the page, so the candidate set has to be
+     * the whole leg union rather than the window — see {@link Disposition#FORCES_TAIL}. A sort led by {@code _score}
+     * descending with a field tie-breaker counts too, for the ties: the breaker orders documents of equal fused score, so
+     * the Tail's documents (all at score 0) have to be present to be ordered among themselves. On such a page of the
+     * request's own fused hybrid the ranked documents still come first, and {@code FusedRankedPageTrimmer} ends it at
+     * the last of them — the Tail runs for the ties and the totals, not for the page.
      */
     static boolean sortDiscardsFusedRanking(final SearchSourceBuilder source) {
         if (Objects.isNull(source) || Objects.isNull(source.sorts())) {

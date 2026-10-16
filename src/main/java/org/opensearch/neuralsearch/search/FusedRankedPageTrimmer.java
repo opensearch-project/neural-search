@@ -41,7 +41,9 @@ import org.opensearch.search.SearchHits;
  * window filled with Tail-only documents. A chain that reorders and then truncates (an oversampling request processor
  * with a {@code rerank} and {@code truncate_hits} response) can therefore keep Tail-only documents in place of ranked
  * ones and come back short after the trim. A window that covers the oversampled page — {@code fusion.window_size} of at
- * least {@code from + size × sample_factor} — leaves no Tail-only document for such a chain to see.
+ * least {@code from + size × sample_factor} — leaves no Tail-only document for such a chain to see. A processor that
+ * returns its own {@link SearchResponse} subclass (ml-commons' RAG processor, whose response carries the generated
+ * answer) is left alone entirely: the trim rebuilds a plain response, which would drop the subclass's fields.
  *
  * <p>Request-scoped, like {@code FusedHitsMerger}: created by {@link HybridQuerySearchRequestFilter}, handed to the
  * fused hybrid as a consumer, and read once when the response passes back through the filter. Nothing published —
@@ -69,13 +71,16 @@ public final class FusedRankedPageTrimmer {
 
     /**
      * The response with every hit fusion did not rank removed — same total, {@code max_score}, sort fields and collapse
-     * field — or the response itself when nothing was published, every hit is ranked, or a hit carries no {@code _index}
-     * or {@code _id} to decide membership by.
+     * field — or the response itself when nothing was published, every hit is ranked, a hit carries no {@code _index}
+     * or {@code _id} to decide membership by, or the response is a {@link SearchResponse} subclass: a search-pipeline
+     * response processor built it (ml-commons' RAG processor returns one carrying the generated answer), and rebuilding
+     * it as a plain response would drop what the subclass holds, so the page stays as that processor left it — see
+     * {@link FusedResponseRebuilder#carriesOnlyCoreFields}.
      */
     public SearchResponse getMergedResponse(final SearchResponse response) {
         Map<String, Set<String>> ranked = rankedIdsByIndex;
         SearchHits hits = response.getHits();
-        if (Objects.isNull(ranked) || Objects.isNull(hits)) {
+        if (Objects.isNull(ranked) || Objects.isNull(hits) || FusedResponseRebuilder.carriesOnlyCoreFields(response) == false) {
             return response;
         }
         SearchHit[] page = hits.getHits();

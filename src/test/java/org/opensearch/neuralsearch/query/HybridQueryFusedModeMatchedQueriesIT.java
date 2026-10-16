@@ -199,6 +199,25 @@ public class HybridQueryFusedModeMatchedQueriesIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * The Tail-only documents are still returned under a sort the page cut does not apply to — a field sort lists the
+     * whole match set, ranked and unranked alike — and each of them reports the leg that matched it. The window here is
+     * partial on purpose: the documents past it reach the page through the Tail alone, so their names can only come from
+     * the Tail's own registration of the legs.
+     */
+    @SneakyThrows
+    public void testFusedHybrid_whenAFieldSortReturnsTheTail_thenUnrankedHitsReportTheirLeg() {
+        ensureDataset();
+        String sortedByScoreField = ",\"sort\":[{\"" + SCORE_FIELD + "\":\"desc\"}]";
+
+        Map<String, Object> response = searchRaw(withSuffix(body(fusedHybrid(PARTIAL_WINDOW, null), "true"), sortedByScoreField), 10);
+        Map<String, Set<String>> namesById = matchedQueriesById(response);
+
+        assertEquals("under a field sort the page is the whole match set", TOTAL_DOCS, namesById.size());
+        assertTrue("the page reaches past the window, so it holds Tail-only documents", namesById.size() > PARTIAL_WINDOW);
+        assertLegNamesPerColor(namesById);
+    }
+
+    /**
      * The other Tail trigger, exercised because it is independent of the totals one: an aggregation builds the Tail even
      * with {@code track_total_hits:false}, so the legs are executed and register their own names. Both lists are never
      * populated at once, and this is the configuration that would break if the coordinator started carrying them anyway.

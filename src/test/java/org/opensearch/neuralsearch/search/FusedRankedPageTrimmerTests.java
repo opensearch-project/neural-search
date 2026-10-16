@@ -131,4 +131,23 @@ public class FusedRankedPageTrimmerTests extends OpenSearchTestCase {
         assertEquals(UNION, trimmed.getHits().getTotalHits());
         assertNull(trimmed.getHits().getCollapseValues());
     }
+
+    /**
+     * A search-pipeline response processor may hand back its own {@link SearchResponse} subclass (ml-commons' RAG processor
+     * returns one that carries the generated answer in fields of its own). Trimming rebuilds a plain response, which would
+     * drop those fields, so such a response is left exactly as it came — Tail-only documents and all.
+     */
+    public void testGetMergedResponse_whenTheResponseIsASubclass_thenItIsReturnedAsIs() {
+        FusedRankedPageTrimmer trimmer = new FusedRankedPageTrimmer();
+        trimmer.consumer().accept(new String[] { "idx" }, new String[] { "a" });
+        SearchHits searchHits = new SearchHits(new SearchHit[] { hit("idx", "a", 0.9f), hit("idx", "x", 0.0f) }, UNION, 0.9f);
+        SearchResponseSections sections = new SearchResponseSections(searchHits, null, null, false, false, null, 1);
+        SearchResponse generated = new SearchResponse(sections, null, 3, 3, 0, 10, ShardSearchFailure.EMPTY_ARRAY, null) {
+            // Stands in for a processor's subclass, e.g. GenerativeSearchResponse with its answer field.
+        };
+
+        assertFalse(FusedResponseRebuilder.carriesOnlyCoreFields(generated));
+        assertSame("a subclass is never flattened into a plain response", generated, trimmer.getMergedResponse(generated));
+        assertEquals("its page is untouched", 2, generated.getHits().getHits().length);
+    }
 }

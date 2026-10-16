@@ -8,6 +8,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -538,7 +539,12 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
             Map<String, Object> response = searchForHits(INDEX_ONE_SHARD, body);
 
             collectMismatches(mismatches, rescorer.getKey(), List.of("1", "2", "3", "4", "5", "26"), response);
-            if (hitScores(response).get(5) <= 0.0) {
+            // A floored document that drops to 0.0 sorts into the Tail, and the trimmer then removes it from the page, so a
+            // regression here shows first as a short page — checked before the score it would otherwise index past.
+            List<Double> scores = hitScores(response);
+            if (scores.size() < 6) {
+                mismatches.add(rescorer.getKey() + ": the page lost ranked documents, ids " + hitIds(response));
+            } else if (scores.get(5) <= 0.0) {
                 mismatches.add(rescorer.getKey() + ": the attenuated floor must stay above the Tail, but the last ranked hit scored 0.0");
             }
         }
@@ -676,16 +682,12 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
                     + "}}}"
             );
             List<String> ids = hitIds(response);
-            // The page ends at the ranked documents (FusedRankedPageTrimmer), so this membership check can only fire if the
-            // page cut stops running. An unranked document lifted into round 2's page is dropped from the response and shows
-            // as the ranked document it evicted missing instead — which the document-26 check below is what catches.
-            for (String id : ids) {
-                if (window.contains(id) == false) {
-                    mismatches.add(shape.getKey() + ": returned unranked document " + id + " (page " + ids + ")");
-                }
-            }
-            if (ids.contains("26") == false) {
-                mismatches.add(shape.getKey() + ": ranked document 26 lost its slot (page " + ids + ")");
+            // The page ends at the ranked documents (FusedRankedPageTrimmer), so an unranked document the guard failed to
+            // hold back would not show up here — it would be dropped after taking a ranked document's slot. The check that
+            // survives the trim is that the page is exactly the window: any ranked document missing means something else
+            // took its slot, and any extra one means the trim stopped running.
+            if (new HashSet<>(ids).equals(new HashSet<>(window)) == false) {
+                mismatches.add(shape.getKey() + ": the page must be exactly the ranked window " + window + ", was " + ids);
             }
             if (totalHits(response) != TOTAL_DOCS) {
                 mismatches.add(shape.getKey() + ": total_hits must still count the whole leg union, was " + totalHits(response));

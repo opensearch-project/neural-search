@@ -165,6 +165,34 @@ public class FusedResponseRebuilderTests extends OpenSearchTestCase {
     }
 
     /**
+     * {@code rebuild} constructs a plain {@link SearchResponse}, so only a plain one can be reproduced in full; a subclass
+     * — what a search-pipeline response processor such as ml-commons' RAG processor hands back — carries fields a rebuild
+     * would drop, and the predicate is how an optional rewrite knows to stand aside.
+     */
+    public void testCarriesOnlyCoreFields_whenPlainOrSubclass() {
+        SearchResponse plain = responseWithEverything(null, "pit-id");
+        assertTrue(FusedResponseRebuilder.carriesOnlyCoreFields(plain));
+        assertTrue(
+            "a rebuilt response is plain again",
+            FusedResponseRebuilder.carriesOnlyCoreFields(FusedResponseRebuilder.rebuild(plain, null, true))
+        );
+
+        SearchResponse subclass = new SearchResponse(
+            plain.getInternalResponse(),
+            null,
+            plain.getTotalShards(),
+            plain.getSuccessfulShards(),
+            plain.getSkippedShards(),
+            plain.getTook().millis(),
+            plain.getShardFailures(),
+            plain.getClusters()
+        ) {
+            // Stands in for a processor's own response type carrying fields of its own.
+        };
+        assertFalse(FusedResponseRebuilder.carriesOnlyCoreFields(subclass));
+    }
+
+    /**
      * A rebuild driven by {@code timed_out} alone substitutes no profile section, so it has to hand back the one the
      * response already had — the profile section is {@code protected} in core, so it is reconstructed from
      * {@code profile()} rather than passed through, and this is what pins that round trip.
