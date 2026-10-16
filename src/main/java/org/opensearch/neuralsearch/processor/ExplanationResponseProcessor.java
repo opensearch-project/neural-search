@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import org.opensearch.neuralsearch.fusion.math.FusionProcessorTypes;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
@@ -38,7 +39,7 @@ import static org.opensearch.neuralsearch.processor.explain.ExplanationPayload.P
 @Log4j2
 public class ExplanationResponseProcessor implements SearchResponseProcessor {
 
-    public static final String TYPE = "hybrid_score_explanation";
+    public static final String TYPE = FusionProcessorTypes.HYBRID_SCORE_EXPLANATION_PROCESSOR;
 
     // Description emitted by HybridQueryWeight#explain for the hybrid "combined score of:" node, which has
     // exactly one child per sub-query. Used to locate the hybrid explanation when OpenSearch core wraps the

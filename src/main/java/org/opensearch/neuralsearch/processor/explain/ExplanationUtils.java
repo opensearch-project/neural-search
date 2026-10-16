@@ -9,10 +9,9 @@ import org.apache.commons.lang3.tuple.Pair;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueDescriptions;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
 
 /**
  * Utility class for explain functionality
@@ -49,12 +48,6 @@ public class ExplanationUtils {
      * @return a string describing the combination technique and its parameters
      */
     public static String describeCombinationTechnique(final String techniqueName, final List<Float> weights) {
-        if (Objects.isNull(techniqueName)) {
-            throw new IllegalArgumentException("combination technique name cannot be null");
-        }
-        return Optional.ofNullable(weights)
-            .filter(w -> !w.isEmpty())
-            .map(w -> String.format(Locale.ROOT, "%s, weights %s", techniqueName, weights))
-            .orElse(String.format(Locale.ROOT, "%s", techniqueName));
+        return FusionTechniqueDescriptions.describeCombination(techniqueName, weights);
     }
 }

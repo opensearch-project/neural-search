@@ -75,9 +75,8 @@ import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
-import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
-import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
+import org.opensearch.neuralsearch.fusion.math.FusionTechniquePairing;
 import org.opensearch.neuralsearch.search.FusedLegTimeoutMerger;
 import org.opensearch.neuralsearch.search.FusedHitsMerger;
 import org.opensearch.neuralsearch.search.FusedRankedPageTrimmer;
@@ -96,8 +95,6 @@ import static org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSI
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.isVersionOnOrAfterMinReqVersionForFusedModeInHybridQuery;
-import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
 
 /**
  * Class abstract creation of a Query type "hybrid". Hybrid query will allow execution of multiple sub-queries and
@@ -1775,8 +1772,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private static final Set<String> FUSED_COMBINATION_TECHNIQUES = Set.of(
         FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
         FusionSpec.TECHNIQUE_RRF,
-        GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
-        HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME
+        FusionTechniqueNames.GEOMETRIC_MEAN,
+        FusionTechniqueNames.HARMONIC_MEAN
     );
 
     /**
@@ -1836,7 +1833,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // above used to reject those combiners outright, which made this branch unreachable, and admitting them is what made
         // it load-bearing. A test asserts the refusal carries THIS message rather than the scope check's, so narrowing the
         // scope set again cannot silently take the case back over.
-        final Set<String> classicPairings = ScoreNormalizationFactory.supportedCombinationTechniques(normalization);
+        final Set<String> classicPairings = FusionTechniquePairing.combinationTechniquesFor(normalization);
         if (classicPairings.contains(combination) == false) {
             throw new IllegalArgumentException(
                 String.format(
@@ -2299,12 +2296,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     static void updateFusionTechniqueStats(final FusionSpec fusionSpec) {
         switch (fusionSpec.normalizationTechnique()) {
             case FusionSpec.NORMALIZATION_MIN_MAX -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS);
-            case ZScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
-                EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS
-            );
-            case L2ScoreNormalizationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
-                EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS
-            );
+            case FusionTechniqueNames.Z_SCORE -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS);
+            case FusionTechniqueNames.L2 -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS);
             case FusionSpec.NORMALIZATION_RRF -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS);
             default -> {
             }
@@ -2314,10 +2307,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 EventStatName.HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS
             );
             case FusionSpec.TECHNIQUE_RRF -> EventStatsManager.increment(EventStatName.HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS);
-            case GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+            case FusionTechniqueNames.GEOMETRIC_MEAN -> EventStatsManager.increment(
                 EventStatName.HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS
             );
-            case HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME -> EventStatsManager.increment(
+            case FusionTechniqueNames.HARMONIC_MEAN -> EventStatsManager.increment(
                 EventStatName.HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS
             );
             default -> {

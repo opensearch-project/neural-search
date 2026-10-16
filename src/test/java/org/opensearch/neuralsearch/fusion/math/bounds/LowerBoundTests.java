@@ -2,7 +2,9 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor.normalization.bounds;
+package org.opensearch.neuralsearch.fusion.math.bounds;
+
+import java.util.Map;
 
 import org.opensearch.test.OpenSearchTestCase;
 
@@ -14,6 +16,13 @@ public class LowerBoundTests extends OpenSearchTestCase {
         LowerBound lowerBound = new LowerBound();
         assertFalse(lowerBound.enabled);
         assertEquals(BoundMode.DEFAULT, lowerBound.mode);
+        assertEquals(LowerBound.DEFAULT_LOWER_BOUND_SCORE, lowerBound.boundScore, DELTA_FOR_SCORE_ASSERTION);
+    }
+
+    public void testConstructor_whenMapOmitsScore_thenUsesDefaultScore() {
+        LowerBound lowerBound = new LowerBound(Map.of("mode", "clip"));
+        assertTrue(lowerBound.enabled);
+        assertEquals(BoundMode.CLIP, lowerBound.mode);
         assertEquals(LowerBound.DEFAULT_LOWER_BOUND_SCORE, lowerBound.boundScore, DELTA_FOR_SCORE_ASSERTION);
     }
 

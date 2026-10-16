@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
+import org.opensearch.neuralsearch.fusion.math.MinMaxScoreNormalizer;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -28,13 +30,13 @@ import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
-import org.opensearch.neuralsearch.processor.normalization.bounds.BoundMode;
-import org.opensearch.neuralsearch.processor.normalization.bounds.LowerBound;
-import org.opensearch.neuralsearch.processor.normalization.bounds.UpperBound;
+import org.opensearch.neuralsearch.fusion.math.bounds.BoundMode;
+import org.opensearch.neuralsearch.fusion.math.bounds.LowerBound;
+import org.opensearch.neuralsearch.fusion.math.bounds.UpperBound;
 
 import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.getDocIdAtQueryForNormalization;
-import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MAX_BOUND_SCORE;
-import static org.opensearch.neuralsearch.processor.normalization.bounds.ScoreBound.MIN_BOUND_SCORE;
+import static org.opensearch.neuralsearch.fusion.math.bounds.ScoreBound.MAX_BOUND_SCORE;
+import static org.opensearch.neuralsearch.fusion.math.bounds.ScoreBound.MIN_BOUND_SCORE;
 import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOfSubqueries;
 import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF_SUB_QUERIES;
 
@@ -44,7 +46,7 @@ import static org.opensearch.neuralsearch.query.HybridQueryBuilder.MAX_NUMBER_OF
 @ToString(onlyExplicitlyIncluded = true)
 public class MinMaxScoreNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
-    public static final String TECHNIQUE_NAME = "min_max";
+    public static final String TECHNIQUE_NAME = FusionTechniqueNames.MIN_MAX;
     // Kept for the classic explain path and referenced by tests; sourced from the shared normalizer so there is one
     // definition of the clipping bounds.
     protected static final float MIN_SCORE = MinMaxScoreNormalizer.MIN_SCORE;

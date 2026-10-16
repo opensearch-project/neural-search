@@ -4,11 +4,11 @@
  */
 package org.opensearch.neuralsearch.fusion;
 
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.ZScoreNormalizer;
 
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
@@ -51,6 +51,6 @@ public final class ZScoreScalarNormalizer implements ScalarNormalizer {
 
     @Override
     public String techniqueName() {
-        return ZScoreNormalizationTechnique.TECHNIQUE_NAME;
+        return FusionTechniqueNames.Z_SCORE;
     }
 }

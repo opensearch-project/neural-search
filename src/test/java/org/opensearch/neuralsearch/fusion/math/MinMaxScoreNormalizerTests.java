@@ -2,11 +2,11 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor.normalization;
+package org.opensearch.neuralsearch.fusion.math;
 
-import org.opensearch.neuralsearch.processor.normalization.bounds.BoundMode;
-import org.opensearch.neuralsearch.processor.normalization.bounds.LowerBound;
-import org.opensearch.neuralsearch.processor.normalization.bounds.UpperBound;
+import org.opensearch.neuralsearch.fusion.math.bounds.BoundMode;
+import org.opensearch.neuralsearch.fusion.math.bounds.LowerBound;
+import org.opensearch.neuralsearch.fusion.math.bounds.UpperBound;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class MinMaxScoreNormalizerTests extends OpenSearchTestCase {
@@ -21,6 +21,11 @@ public class MinMaxScoreNormalizerTests extends OpenSearchTestCase {
     public void testNormalizeSingleScore_singleScoreEdgeCase_returnsOne() {
         // min == max == score → single-result edge case returns 1.0.
         assertEquals(1.0f, MinMaxScoreNormalizer.normalizeSingleScore(0.7f, 0.7f, 0.7f), DELTA);
+    }
+
+    public void testNormalizeSingleScore_equalMinAndMaxButDifferentScore_usesTheNormalFormula() {
+        // This is not the single-result shortcut because the score differs from the equal min/max values.
+        assertEquals(1.0f, MinMaxScoreNormalizer.normalizeSingleScore(0.5f, 0.7f, 0.7f), DELTA);
     }
 
     public void testNormalizeSingleScore_zeroResultFloorsToMinScore() {

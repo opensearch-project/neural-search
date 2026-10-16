@@ -27,7 +27,7 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 
 import lombok.SneakyThrows;
 

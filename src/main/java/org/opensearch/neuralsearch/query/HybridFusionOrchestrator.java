@@ -40,11 +40,10 @@ import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.fusion.CoordinatorScoreFusion;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil;
-import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
+import org.opensearch.neuralsearch.fusion.math.CombinationWeights;
+import org.opensearch.neuralsearch.fusion.math.ScoreCombinationCore;
+import org.opensearch.neuralsearch.fusion.math.ScoreCombinationCores;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.FusedTotalHitsMerger;
 import org.opensearch.neuralsearch.search.profile.FastPathDecision;
@@ -82,7 +81,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 final class HybridFusionOrchestrator {
 
-    private static final ScoreCombinationFactory SCORE_COMBINATION_FACTORY = new ScoreCombinationFactory();
     /** The {@code _name} key as it appears in a rendered query — see {@link #anyLegNamed}. */
     private static final String QUERY_NAME_KEY = String.format(Locale.ROOT, "\"%s\":", AbstractQueryBuilder.NAME_FIELD.getPreferredName());
 
@@ -681,9 +679,9 @@ final class HybridFusionOrchestrator {
             legRawScores.add(byKey);
             legExplanations.add(explanationByKey);
         }
-        ScoreCombinationTechnique combination = SCORE_COMBINATION_FACTORY.createCombination(
+        ScoreCombinationCore combination = ScoreCombinationCores.forTechnique(
             fusion.combinationTechnique(),
-            weightsParams(fusion.weights())
+            CombinationWeights.of(fusion.weights())
         );
         // Normalization is resolved by name, so widening technique support is a new ScalarNormalizer plus one entry in
         // ScalarNormalizers — no change here, rank-based rrf included. The caller already rejected out-of-scope
@@ -705,7 +703,7 @@ final class HybridFusionOrchestrator {
      * to.
      *
      * <p>The descriptions are taken from the same two sources classic hybrid renders from — the combination technique's own
-     * {@link ExplainableTechnique#describe()} and the normalizer's {@link ScalarNormalizer#describe()} — so an identical hit
+     * {@link ScoreCombinationCore#describe()} and the normalizer's {@link ScalarNormalizer#describe()} — so an identical hit
      * set produces identical wording on both paths, {@code rrf}'s trailing rank constant included. The normalization half
      * read {@code techniqueName()} at first, which is right only for a technique that carries no parameter and was quietly
      * dropping that rank constant; it is {@code describe()} for the same reason the combination half always was. Classic's
@@ -723,7 +721,7 @@ final class HybridFusionOrchestrator {
         final RankedDocs ranked,
         final CoordinatorScoreFusion.FusionResult fused,
         final List<Map<String, Explanation>> legExplanations,
-        final ScoreCombinationTechnique combination,
+        final ScoreCombinationCore combination,
         final ScalarNormalizer normalizer
     ) {
         if (legExplanations.stream().allMatch(Map::isEmpty)) {
@@ -776,7 +774,7 @@ final class HybridFusionOrchestrator {
 
     /**
      * Fail fast on a malformed {@code weights} array BEFORE the leg fan-out fires — otherwise a bad weights array (out
-     * of range, not summing to 1.0, or the wrong count) wastes a full N-leg MultiSearch before {@link ScoreCombinationUtil}
+     * of range, not summing to 1.0, or the wrong count) wastes a full N-leg MultiSearch before {@code CombinationWeights}
      * errors in the async callback. Constructing the combination technique here reuses core's existing
      * {@code validateParams}/{@code validateWeights} range-and-sum checks with no duplication; the count-vs-legs check
      * (only enforced later, in {@code combine()}) is added explicitly so a mismatch also fails before the fan-out.
@@ -785,8 +783,8 @@ final class HybridFusionOrchestrator {
      * @param legCount number of sub-query legs (weights, when supplied, must match this)
      */
     static void validateFusionParams(final FusionSpec fusion, final int legCount) {
-        // Triggers ScoreCombinationUtil.validateParams + getWeights -> validateWeights (range 0.0..1.0 and sum == 1.0).
-        SCORE_COMBINATION_FACTORY.createCombination(fusion.combinationTechnique(), weightsParams(fusion.weights()));
+        // CombinationWeights.of runs the classic range (0.0..1.0) and sum (== 1.0) checks with the classic messages.
+        ScoreCombinationCores.forTechnique(fusion.combinationTechnique(), CombinationWeights.of(fusion.weights()));
         float[] weights = fusion.weights();
         if (weights.length != 0 && weights.length != legCount) {
             throw new IllegalArgumentException(
@@ -808,17 +806,6 @@ final class HybridFusionOrchestrator {
      */
     private static Map<String, Object> normalizerParams(FusionSpec fusion) {
         return Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, fusion.rankConstant());
-    }
-
-    private static Map<String, Object> weightsParams(float[] weights) {
-        if (Objects.isNull(weights) || weights.length == 0) {
-            return Map.of();
-        }
-        List<Double> weightsList = new ArrayList<>(weights.length);
-        for (float weight : weights) {
-            weightsList.add((double) weight);
-        }
-        return Map.of(ScoreCombinationUtil.PARAM_NAME_WEIGHTS, weightsList);
     }
 
     /**
@@ -882,15 +869,15 @@ final class HybridFusionOrchestrator {
      *   <li>a {@code weights} entry of {@code 0.0} for a document that matched only that leg — the numerator is its
      *       normalized score times zero and every other leg contributes zero, for any normalization technique;</li>
      *   <li>{@code l2} over a leg whose raw scores are all {@code 0.0}, whose norm is then zero, so
-     *       {@link org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizer#normalizeSingleScore} returns
-     *       {@link org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizer#MIN_SCORE} — which, unlike
+     *       {@link org.opensearch.neuralsearch.fusion.math.L2ScoreNormalizer#normalizeSingleScore} returns
+     *       {@link org.opensearch.neuralsearch.fusion.math.L2ScoreNormalizer#MIN_SCORE} — which, unlike
      *       min_max's and z_score's {@code 0.001f}, is {@code 0.0f}.</li>
      * </ul>
      *
      * <p>A <i>negative</i> fused score is not reachable: Lucene scores are non-negative, every normalizer's output is
      * non-negative (min_max maps a zero-range leg to {@code 1.0} and a zero result to {@code 0.001}, z_score clamps a
      * non-positive result to {@code 0.001}, l2 divides a non-negative score by a non-negative norm),
-     * {@link ScoreCombinationUtil} confines every weight to {@code [0.0, 1.0]} and their sum to {@code 1.0} — so the
+     * {@code CombinationWeights} confines every weight to {@code [0.0, 1.0]} and their sum to {@code 1.0} — so the
      * combined score is a non-negative sum over a denominator of {@code 1.0}, never negative and never a division by zero.
      * A negative here would mean that invariant broke, so it is refused rather than floored: flooring it would quietly
      * hide an internal-invariant break, which is the opposite of what this method is for.
@@ -899,7 +886,7 @@ final class HybridFusionOrchestrator {
      * leg score is laundered to {@code 0.0} by min_max (its {@code Inf/Inf} ratio is {@code NaN}, which arithmetic_mean's
      * {@code score >= 0.0} rule drops) and by l2 (the leg's norm is {@code +Infinity} too, so the ratio is again
      * {@code NaN}); but z_score's equal-to-mean edge case returns the leg {@code maxScore} unchanged
-     * ({@link org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizer#normalizeSingleScore}), so a
+     * ({@link org.opensearch.neuralsearch.fusion.math.ZScoreNormalizer#normalizeSingleScore}), so a
      * {@code +Infinity} hit normalizes to {@code +Infinity}, which arithmetic_mean keeps. It is floored to
      * {@link #MIN_RANKED_SCORE}, exactly as min_max already floors the same input — a degenerate score ranks a document
      * last rather than failing an otherwise legal request with a server error.

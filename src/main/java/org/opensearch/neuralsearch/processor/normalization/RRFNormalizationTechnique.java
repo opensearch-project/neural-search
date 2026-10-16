@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -40,7 +42,7 @@ import static org.opensearch.neuralsearch.processor.explain.ExplanationUtils.get
 @Log4j2
 public class RRFNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
-    public static final String TECHNIQUE_NAME = "rrf";
+    public static final String TECHNIQUE_NAME = FusionTechniqueNames.RRF;
     public static final int DEFAULT_RANK_CONSTANT = RRFScoreNormalizer.DEFAULT_RANK_CONSTANT;
     public static final String PARAM_NAME_RANK_CONSTANT = RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT;
     private static final Set<String> SUPPORTED_PARAMS = Set.of(PARAM_NAME_RANK_CONSTANT);

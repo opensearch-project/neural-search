@@ -14,13 +14,9 @@ import java.util.TreeSet;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.experimental.Accessors;
-import org.opensearch.neuralsearch.processor.NormalizationProcessor;
-import org.opensearch.neuralsearch.processor.RRFProcessor;
-import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.combination.RRFScoreCombinationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.MinMaxScoreNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.RRFNormalizationTechnique;
-import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
+import org.opensearch.neuralsearch.fusion.math.FusionProcessorTypes;
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 
 /**
  * Immutable, resolved fusion configuration for the {@code hybrid} query resolver (fused) mode — the normalization +
@@ -71,11 +67,11 @@ public final class FusionSpec {
     }
 
     // Combination techniques
-    static final String TECHNIQUE_RRF = RRFScoreCombinationTechnique.TECHNIQUE_NAME;
-    static final String TECHNIQUE_ARITHMETIC_MEAN = ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME;
+    static final String TECHNIQUE_RRF = FusionTechniqueNames.RRF_COMBINATION;
+    static final String TECHNIQUE_ARITHMETIC_MEAN = FusionTechniqueNames.ARITHMETIC_MEAN;
     // Normalization techniques
-    static final String NORMALIZATION_MIN_MAX = MinMaxScoreNormalizationTechnique.TECHNIQUE_NAME;
-    static final String NORMALIZATION_RRF = RRFNormalizationTechnique.TECHNIQUE_NAME;
+    static final String NORMALIZATION_MIN_MAX = FusionTechniqueNames.MIN_MAX;
+    static final String NORMALIZATION_RRF = FusionTechniqueNames.RRF;
 
     // Sourced from the shared normalizer rather than redeclared, so fused mode and classic cannot drift apart.
     static final int DEFAULT_RANK_CONSTANT = RRFScoreNormalizer.DEFAULT_RANK_CONSTANT;
@@ -137,11 +133,11 @@ public final class FusionSpec {
                 continue;
             }
             Map<String, Object> processorMap = (Map<String, Object>) processorEntry;
-            if (processorMap.get(NormalizationProcessor.TYPE) instanceof Map) {
-                return fromNormalizationProcessor((Map<String, Object>) processorMap.get(NormalizationProcessor.TYPE));
+            if (processorMap.get(FusionProcessorTypes.NORMALIZATION_PROCESSOR) instanceof Map) {
+                return fromNormalizationProcessor((Map<String, Object>) processorMap.get(FusionProcessorTypes.NORMALIZATION_PROCESSOR));
             }
-            if (processorMap.get(RRFProcessor.TYPE) instanceof Map) {
-                return fromScoreRankerProcessor((Map<String, Object>) processorMap.get(RRFProcessor.TYPE));
+            if (processorMap.get(FusionProcessorTypes.SCORE_RANKER_PROCESSOR) instanceof Map) {
+                return fromScoreRankerProcessor((Map<String, Object>) processorMap.get(FusionProcessorTypes.SCORE_RANKER_PROCESSOR));
             }
         }
         return null;

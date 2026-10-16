@@ -2,7 +2,7 @@
  * Copyright OpenSearch Contributors
  * SPDX-License-Identifier: Apache-2.0
  */
-package org.opensearch.neuralsearch.processor.normalization.bounds;
+package org.opensearch.neuralsearch.fusion.math.bounds;
 
 import org.opensearch.test.OpenSearchTestCase;
 

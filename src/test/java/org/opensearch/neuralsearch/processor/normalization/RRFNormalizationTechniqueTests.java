@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import org.opensearch.neuralsearch.fusion.math.RRFScoreNormalizer;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;

@@ -4,6 +4,8 @@
  */
 package org.opensearch.neuralsearch.processor.normalization;
 
+import org.opensearch.neuralsearch.fusion.math.FusionTechniqueNames;
+import org.opensearch.neuralsearch.fusion.math.ZScoreNormalizer;
 import lombok.ToString;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
@@ -30,7 +32,7 @@ import static org.opensearch.neuralsearch.processor.util.ProcessorUtils.getNumOf
 @ToString(onlyExplicitlyIncluded = true)
 public class ZScoreNormalizationTechnique implements ScoreNormalizationTechnique, ExplainableTechnique {
     @ToString.Include
-    public static final String TECHNIQUE_NAME = "z_score";
+    public static final String TECHNIQUE_NAME = FusionTechniqueNames.Z_SCORE;
 
     /**
      * Z-score normalization transforms the data based on its mean and standard deviation, making it more robust to outliers.

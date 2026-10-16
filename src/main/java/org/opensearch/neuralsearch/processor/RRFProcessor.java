@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.processor;
 
+import org.opensearch.neuralsearch.fusion.math.FusionProcessorTypes;
 import java.util.Map;
 import java.util.Optional;
 
@@ -28,7 +29,7 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 @AllArgsConstructor
 public class RRFProcessor extends AbstractScoreHybridizationProcessor {
-    public static final String TYPE = "score-ranker-processor";
+    public static final String TYPE = FusionProcessorTypes.SCORE_RANKER_PROCESSOR;
 
     @Getter
     private final String tag;

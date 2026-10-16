@@ -24,7 +24,7 @@ import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
 import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
-import org.opensearch.neuralsearch.processor.normalization.bounds.BoundMode;
+import org.opensearch.neuralsearch.fusion.math.bounds.BoundMode;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.search.SearchShardTarget;
 
