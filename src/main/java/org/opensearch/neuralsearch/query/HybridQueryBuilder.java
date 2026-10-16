@@ -252,6 +252,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private static final String FUSION_KEY_NORMALIZATION = "normalization";
     private static final String FUSION_KEY_COMBINATION = "combination";
     private static final String FUSION_KEY_WINDOW_SIZE = "window_size";
+    /**
+     * Request-level combination weights, {@code fusion.weights}. Shorthand for {@code fusion.combination.parameters.weights}
+     * when the block names its techniques; the only way to say "the pipeline's techniques, these weights" when it reads
+     * them from the pipeline ({@code source: "pipeline"}), where the long form is a contradiction. A hybrid query states
+     * its weights in at most one of the two places: both present is a 400 at parse, with no precedence between them —
+     * two carriers of the same quantity with a precedence rule would make the effective weights depend on which one a
+     * reader notices. Layered over whatever the block or the pipeline resolved by {@link #overlayRequestWeights}; never
+     * handed down to a nested fused leg, whose weights are its own (see {@link #projectResolvedConfigOntoLegs}).
+     */
+    private static final String FUSION_KEY_WEIGHTS = "weights";
+    /** {@code combination.parameters}, the clause the long-form weights live under. */
+    private static final String FUSION_KEY_PARAMETERS = "parameters";
     private static final String FUSION_SOURCE_PIPELINE = "pipeline";
 
     // Error message templates for reuse across REST and gRPC paths
@@ -515,7 +527,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
 
         if (Objects.nonNull(fusion)) {
-            validateFusion(fusion, paginationDepth, parser);
+            validateFusion(fusion, paginationDepth, queries.size(), parser);
         }
 
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
@@ -711,8 +723,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // class's explanation of why fused mode refuses cross-cluster search at all.
         CandidateScope candidateScope = CandidateScope.from(searchRequest);
 
-        FusionSpec fusionSpec = resolveFusionSpec(searchRequest);
-        if (Objects.isNull(fusionSpec)) {
+        FusionSpec baseFusionSpec = resolveFusionSpec(searchRequest);
+        if (Objects.isNull(baseFusionSpec)) {
             throw new IllegalArgumentException(
                 String.format(
                     Locale.ROOT,
@@ -734,7 +746,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // Scope: the whole score-normalization family (min_max, z_score, l2) combined by any of the three means, plus
         // rank-based rrf. Which pairings are legal is NOT this set's business -- the classic compatibility matrix decides
         // that, and z_score x {geometric, harmonic} is the pairing it refuses.
-        requireSupportedTechniques(fusionSpec);
+        requireSupportedTechniques(baseFusionSpec);
+        // Request weights (`fusion.weights`) go over whatever the block or the pipeline resolved — the techniques stay the
+        // base's. Everything below that fuses, validates or reports reads this spec; the one exception is the projection
+        // onto nested legs, which hands down the base (see projectResolvedConfigOntoLegs below).
+        FusionSpec fusionSpec = overlayRequestWeights(baseFusionSpec, fusion);
 
         // Both ceilings a window has to fit under, resolved once: each leg fires size=window per shard, so a window above
         // index.max_result_window would fail in the legs (mirroring classic hybrid's pagination_depth ceiling), and the
@@ -798,8 +814,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         updateFusionTechniqueStats(fusionSpec);
 
         // The Tail keeps the original legs (it is rewritten against the user's request, which still carries the
-        // pipeline), but the fanned-out legs run with the pipeline disabled — so hand the resolved config down.
-        List<QueryBuilder> fanOutLegs = projectResolvedConfigOntoLegs(legs, fusionSpec);
+        // pipeline), but the fanned-out legs run with the pipeline disabled — so hand the resolved config down. The BASE
+        // config, not the one carrying this query's request weights: a nested fused leg has its own number of sub-queries,
+        // so this query's weights are either the wrong count for it (a 400 in the leg's own rewrite) or, worse, the right
+        // count and the wrong values. Weights are per hybrid; a nested leg states its own, the same way it keeps its own
+        // pagination_depth.
+        List<QueryBuilder> fanOutLegs = projectResolvedConfigOntoLegs(legs, baseFusionSpec);
 
         // Last, and the only write-back to the request source: rescore is never propagated to a leg, so it runs on the shard
         // against the query this self-erases into — where the Tail's non-scoring matches are rescore candidates too, and a
@@ -1692,6 +1712,51 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
+     * The spec this query fuses by: the resolved base with the request's {@code fusion.weights} laid over it, or the base
+     * itself when the block carries none. Field-level, deliberately: everything else in the block is block-level (an
+     * inline technique replaces the pipeline's whole clause, and naming one next to {@code source: "pipeline"} is a
+     * contradiction), but weights are the one setting a caller tunes per request against techniques it configured once,
+     * so {@code source: "pipeline"} + {@code weights} is the form this key exists for.
+     *
+     * <p>Reads the raw block rather than {@link FusionSpec}, because the readers there know only the long form
+     * ({@code combination.parameters.weights}) and ignore any other top-level key — which is what lets the two coexist
+     * without a parser change: the long form is read into the base, this key over it. Both present is refused here as
+     * well as at parse, for a builder constructed in code rather than from a request body.
+     */
+    static FusionSpec overlayRequestWeights(final FusionSpec base, final Map<String, Object> fusion) {
+        if (Objects.isNull(fusion) || Objects.isNull(fusion.get(FUSION_KEY_WEIGHTS))) {
+            return base;
+        }
+        if (hasLongFormWeights(fusion)) {
+            throw new IllegalArgumentException(weightsCarrierConflictMessage());
+        }
+        return base.withWeights(FusionSpec.weightsFromList(fusion.get(FUSION_KEY_WEIGHTS)));
+    }
+
+    /** Whether the block carries {@code combination.parameters.weights} — the long form the shorthand must not meet. */
+    @SuppressWarnings("unchecked")
+    private static boolean hasLongFormWeights(final Map<String, Object> fusion) {
+        if ((fusion.get(FUSION_KEY_COMBINATION) instanceof Map) == false) {
+            return false;
+        }
+        Object parameters = ((Map<String, Object>) fusion.get(FUSION_KEY_COMBINATION)).get(FUSION_KEY_PARAMETERS);
+        return parameters instanceof Map && ((Map<String, Object>) parameters).containsKey(FUSION_KEY_WEIGHTS);
+    }
+
+    private static String weightsCarrierConflictMessage() {
+        return String.format(
+            Locale.ROOT,
+            "[%s] query [%s] cannot combine [%s] with [%s.%s.%s]: state the weights once",
+            NAME,
+            FUSION_FIELD.getPreferredName(),
+            FUSION_KEY_WEIGHTS,
+            FUSION_KEY_COMBINATION,
+            FUSION_KEY_PARAMETERS,
+            FUSION_KEY_WEIGHTS
+        );
+    }
+
+    /**
      * Hand the already-resolved fusion config down to any leg that is itself a fused hybrid delegating to the pipeline.
      *
      * <p>Legs are fanned out with {@code pipeline=_none} so that per-leg request/response processors do not run
@@ -1752,8 +1817,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * True when the {@code fusion} block configures the fusion itself rather than delegating to the attached pipeline.
      *
      * <p>Keys on the absence of {@code source: pipeline}, not on the presence of a technique key: a block that names
-     * neither a technique nor a source ({@code fusion: {}}, {@code fusion: {"window_size": N}}) is the built-in-defaults
-     * form, and {@link FusionSpec#fromInlineFusion} fills in min_max + arithmetic_mean with equal weights. Reading the
+     * neither a technique nor a source ({@code fusion: {}}, {@code fusion: {"window_size": N}},
+     * {@code fusion: {"weights": [...]}}) is the built-in-defaults form, and {@link FusionSpec#fromInlineFusion} fills in
+     * min_max + arithmetic_mean — with equal weights, unless the block's {@code weights} says otherwise. Reading the
      * pipeline instead would depend on request context the query body does not show — which pipeline the request or the
      * index happens to attach — so it is only ever done when the body asks for it.
      */
@@ -2082,14 +2148,21 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * Parse-time (HTTP 400) structural validation of the {@code fusion} block. The value type (string|object) is already
      * enforced by the parser branches; this checks the object's internal consistency:
      * <ul>
-     *   <li>unknown top-level key (outside {@code source|normalization|combination|window_size}) → 400;</li>
+     *   <li>unknown top-level key (outside {@code source|normalization|combination|window_size|weights}) → 400;</li>
      *   <li>{@code source: "pipeline"} alongside inline {@code normalization}/{@code combination} → 400 (contradiction:
-     *       read-from-pipeline vs inline config);</li>
+     *       read-from-pipeline vs inline config). {@code weights} is NOT in that list: the pipeline's techniques with this
+     *       request's weights is the one combination the shorthand exists for;</li>
      *   <li>{@code source} present but not {@code "pipeline"} → 400;</li>
      *   <li>{@code normalization}/{@code combination} present but not an object → 400 (a bare string would otherwise fall
      *       through every {@code instanceof Map} gate in {@link FusionSpec} to the min_max + arithmetic_mean defaults, and
      *       fuse by a technique the user did not ask for — the shorthand {@code "fusion": "pipeline"} one level up makes
      *       {@code "combination": "rrf"} an easy thing to write);</li>
+     *   <li>{@code weights} next to {@code combination.parameters.weights} → 400 (a hybrid query states its weights once;
+     *       no precedence between the two places, even when they agree);</li>
+     *   <li>{@code weights} not a list of numbers, empty, or not one per sub-query → 400. Checked here because the block
+     *       and the sub-queries are both in hand at parse; the range and sum are checked where the long form's are,
+     *       at rewrite ({@link HybridFusionOrchestrator#validateFusionParams}), so one request reads the same however it
+     *       was refused;</li>
      *   <li>{@code window_size} non-positive → 400 (the upper bounds — {@code index.max_result_window} and the bool clause
      *       ceiling — are checked at rewrite on the coordinator, see {@link #doRewriteFused});</li>
      *   <li>{@code pagination_depth} non-positive → 400. A positive one is accepted, so a classic hybrid query keeps its
@@ -2098,12 +2171,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      *       window's.</li>
      * </ul>
      */
-    private static void validateFusion(final Map<String, Object> fusion, final Integer paginationDepth, final XContentParser parser) {
+    private static void validateFusion(
+        final Map<String, Object> fusion,
+        final Integer paginationDepth,
+        final int legCount,
+        final XContentParser parser
+    ) {
         for (String key : fusion.keySet()) {
             if (FUSION_KEY_SOURCE.equals(key) == false
                 && FUSION_KEY_NORMALIZATION.equals(key) == false
                 && FUSION_KEY_COMBINATION.equals(key) == false
-                && FUSION_KEY_WINDOW_SIZE.equals(key) == false) {
+                && FUSION_KEY_WINDOW_SIZE.equals(key) == false
+                && FUSION_KEY_WEIGHTS.equals(key) == false) {
                 throw new ParsingException(
                     parser.getTokenLocation(),
                     String.format(Locale.ROOT, "[%s] query [%s] contains unknown key [%s]", NAME, FUSION_FIELD.getPreferredName(), key)
@@ -2160,6 +2239,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
         }
 
+        validateFusionWeights(fusion, legCount, parser);
+
         Object windowSize = fusion.get(FUSION_KEY_WINDOW_SIZE);
         if (Objects.nonNull(windowSize)) {
             if ((windowSize instanceof Number) == false) {
@@ -2193,6 +2274,60 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             throw new ParsingException(
                 parser.getTokenLocation(),
                 String.format(Locale.ROOT, "[%s] query [%s] must be greater than 0", NAME, PAGINATION_DEPTH_FIELD.getPreferredName())
+            );
+        }
+    }
+
+    /**
+     * The {@code fusion.weights} shorthand's own checks — see {@link #validateFusion} for where they sit among the block's.
+     * An explicit {@code null} is absent, the way {@code normalization: null} is to {@link FusionSpec}.
+     */
+    private static void validateFusionWeights(final Map<String, Object> fusion, final int legCount, final XContentParser parser) {
+        Object weights = fusion.get(FUSION_KEY_WEIGHTS);
+        if (Objects.isNull(weights)) {
+            return;
+        }
+        // First, because it is the fix that makes the other checks moot: a request carrying both forms has to drop one.
+        if (hasLongFormWeights(fusion)) {
+            throw new ParsingException(parser.getTokenLocation(), weightsCarrierConflictMessage());
+        }
+        if ((weights instanceof List) == false || ((List<?>) weights).stream().anyMatch(w -> (w instanceof Number) == false)) {
+            throw new ParsingException(
+                parser.getTokenLocation(),
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query [%s.%s] must be a collection of numbers",
+                    NAME,
+                    FUSION_FIELD.getPreferredName(),
+                    FUSION_KEY_WEIGHTS
+                )
+            );
+        }
+        int count = ((List<?>) weights).size();
+        if (count == 0) {
+            throw new ParsingException(
+                parser.getTokenLocation(),
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query [%s.%s] must not be empty: omit it to weight every sub-query equally",
+                    NAME,
+                    FUSION_FIELD.getPreferredName(),
+                    FUSION_KEY_WEIGHTS
+                )
+            );
+        }
+        if (count != legCount) {
+            throw new ParsingException(
+                parser.getTokenLocation(),
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query [%s.%s] number of weights [%d] must match number of sub-queries [%d]",
+                    NAME,
+                    FUSION_FIELD.getPreferredName(),
+                    FUSION_KEY_WEIGHTS,
+                    count,
+                    legCount
+                )
             );
         }
     }

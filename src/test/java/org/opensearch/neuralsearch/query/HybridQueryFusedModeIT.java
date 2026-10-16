@@ -1398,6 +1398,183 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * {@code fusion.weights}: the request's combination weights, over whatever techniques the block or the pipeline
+     * resolved. Two legs that disagree on purpose — one ranks by {@code rank}, the other by its reciprocal — so the fused
+     * order is decided by the weights alone and flips with them; symmetric weights would rank like no weights and prove
+     * nothing. On 4 shards, where coordinator-side fusion could plausibly disagree with the single-shard case.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenRequestWeights_thenOrderFollowsThemAndEqualsTheLongForm() {
+        ensureCombinationParityIndex();
+
+        List<Map<String, Object>> rankHeavy = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("{\"weights\":[0.9,0.1]}") + "}"
+            )
+        );
+        List<Map<String, Object>> reciprocalHeavy = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("{\"weights\":[0.1,0.9]}") + "}"
+            )
+        );
+        assertEquals("rank-heavy weights put the highest rank first", String.valueOf(COMBINATION_PARITY_DOCS), rankHeavy.get(0).get("_id"));
+        assertEquals("reciprocal-heavy weights put the lowest rank first", "1", reciprocalHeavy.get(0).get("_id"));
+
+        // The shorthand is the long form with the defaults spelled out: same documents, same scores, to the last digit.
+        List<Map<String, Object>> longForm = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":"
+                    + disagreeingLegsQuery(
+                        "{\"normalization\":{\"technique\":\"min_max\"},"
+                            + "\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.1,0.9]}}}"
+                    )
+                    + "}"
+            )
+        );
+        assertEquals(idsAndScores(longForm), idsAndScores(reciprocalHeavy));
+    }
+
+    /**
+     * {@code source: "pipeline"} + {@code weights}: the techniques are the pipeline's, the weights are this request's, and
+     * the pipeline is not touched. Proven both ways — the request's weights decide the order against the pipeline's own,
+     * and the scores are the pipeline's technique's ({@code l2}), not the defaults' — because a shorthand that silently
+     * fell back to min_max would still pass an order-only check.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenSourcePipelinePlusRequestWeights_thenPipelineTechniquesWithRequestWeights() {
+        ensureCombinationParityIndex();
+        String pipeline = "fused-request-weights-l2";
+        createSearchPipeline(pipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.9, 0.1]"));
+
+        List<Map<String, Object>> pipelineWeights = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("\"pipeline\"") + "}",
+                Map.of("search_pipeline", pipeline)
+            )
+        );
+        List<Map<String, Object>> requestWeights = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("{\"source\":\"pipeline\",\"weights\":[0.1,0.9]}") + "}",
+                Map.of("search_pipeline", pipeline)
+            )
+        );
+        assertEquals(
+            "control: the pipeline's rank-heavy weights",
+            String.valueOf(COMBINATION_PARITY_DOCS),
+            pipelineWeights.get(0).get("_id")
+        );
+        assertEquals("the request's reciprocal-heavy weights win", "1", requestWeights.get(0).get("_id"));
+
+        List<Map<String, Object>> inlineL2 = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":"
+                    + disagreeingLegsQuery(
+                        "{\"normalization\":{\"technique\":\"l2\"},"
+                            + "\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.1,0.9]}}}"
+                    )
+                    + "}"
+            )
+        );
+        assertEquals(
+            "pipeline techniques + request weights == the same spelled out inline",
+            idsAndScores(inlineL2),
+            idsAndScores(requestWeights)
+        );
+        List<Map<String, Object>> inlineMinMax = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("{\"weights\":[0.1,0.9]}") + "}"
+            )
+        );
+        assertNotEquals(
+            "the normalization came from the pipeline, not from the defaults",
+            idsAndScores(inlineMinMax),
+            idsAndScores(requestWeights)
+        );
+
+        // The pipeline itself still fuses by its own weights for a request that does not override them.
+        List<Map<String, Object>> pipelineAgain = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("\"pipeline\"") + "}",
+                Map.of("search_pipeline", pipeline)
+            )
+        );
+        assertEquals(idsAndScores(pipelineWeights), idsAndScores(pipelineAgain));
+    }
+
+    /** The shorthand's refusals, at HTTP 400 with the reason, through the REST layer. */
+    @SneakyThrows
+    public void testFusedMode_whenRequestWeightsMalformed_thenBadRequest() {
+        ensureCombinationParityIndex();
+        Map<String, String> refusals = Map.of(
+            // one place for the weights, even when the two agree
+            "{\"weights\":[0.5,0.5],\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.5,0.5]}}}",
+            "cannot combine [weights] with [combination.parameters.weights]",
+            "{\"weights\":[]}",
+            "[fusion.weights] must not be empty",
+            "{\"source\":\"pipeline\",\"weights\":[0.2,0.3,0.5]}",
+            "number of weights [3] must match number of sub-queries [2]",
+            "{\"weights\":\"0.5,0.5\"}",
+            "[fusion.weights] must be a collection of numbers",
+            "{\"weights\":[0.7,0.7]}",
+            "sum of weights",
+            // the long form's empty list is refused too, the way the normalization-processor refuses it
+            "{\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[]}}}",
+            "parameter [weights] must not be empty"
+        );
+        for (Map.Entry<String, String> refusal : refusals.entrySet()) {
+            ResponseException e = expectThrows(
+                ResponseException.class,
+                () -> searchRaw(
+                    "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                    "{\"query\":" + disagreeingLegsQuery(refusal.getKey()) + "}"
+                )
+            );
+            assertEquals(refusal.getKey(), RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
+            assertTrue(refusal.getKey() + " -> " + e.getMessage(), e.getMessage().contains(refusal.getValue()));
+        }
+    }
+
+    @SneakyThrows
+    private void ensureCombinationParityIndex() {
+        if (indexExists(INDEX_FOR_COMBINATION_PARITY) == false) {
+            createIndex(INDEX_FOR_COMBINATION_PARITY, indexConfigWithRankField(COMBINATION_PARITY_SHARDS));
+            for (int id = 1; id <= COMBINATION_PARITY_DOCS; id++) {
+                indexRankedDoc(INDEX_FOR_COMBINATION_PARITY, id, id * 10);
+            }
+        }
+    }
+
+    /**
+     * A hybrid whose two legs rank the fixture in opposite orders — by {@code rank} and by its reciprocal — under the given
+     * {@code fusion} value (an object or the {@code "pipeline"} string, as JSON).
+     */
+    private String disagreeingLegsQuery(String fusionJson) {
+        String byRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"none\",\"missing\":1}}}";
+        String byReciprocalRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"reciprocal\",\"missing\":1}}}";
+        return "{\"hybrid\":{\"fusion\":" + fusionJson + ",\"queries\":[" + byRank + "," + byReciprocalRank + "]}}";
+    }
+
+    private List<String> idsAndScores(List<Map<String, Object>> hits) {
+        List<String> pairs = new ArrayList<>();
+        for (Map<String, Object> hit : hits) {
+            pairs.add(hit.get("_id") + "=" + hit.get("_score"));
+        }
+        return pairs;
+    }
+
+    /**
      * A {@code weights} list whose <em>elements</em> are not numbers. The type check one level up only sees whether the
      * value is a list, so this reaches the element read — where an unchecked cast would answer a malformed request with an
      * HTTP 500 instead of a validation error. Asserted on the status code, not only the message, because that is the whole
