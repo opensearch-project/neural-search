@@ -2415,6 +2415,18 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         depthAboveClampedFloor.paginationDepth(45);
         assertEquals(50, legWindowOf(depthAboveClampedFloor));
 
+        // Each bent default is reported once, in a Warning header, naming the ceiling and the knob; the shallower ranking
+        // is otherwise invisible in a normal 200. (OpenSearchTestCase fails the test on any unasserted warning.)
+        assertWarnings(
+            "[hybrid] query [fusion] window lowered from 100 to 50 by [index.max_result_window] (50) of index [test-index]; "
+                + "set [fusion.window_size] to choose it"
+        );
+
+        // A depth that is the window is what the user asked for: no warning, even though it equals the bent default.
+        HybridQueryBuilder depthAtTheCeiling = fusedBuilder(new HashMap<>());
+        depthAtTheCeiling.paginationDepth(50);
+        assertEquals(50, legWindowOf(depthAtTheCeiling));
+
         // What the user wrote is not bent: an explicit window_size over the ceiling is refused, naming it.
         HybridQueryBuilder explicit = fusedBuilder(new HashMap<>(Map.of("window_size", 70)));
         QueryCoordinatorContext explicitCtx = coordinatorContextFor(explicit);
@@ -2432,6 +2444,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         initClusterUtilWithMaxResultWindow(50, true);
         HybridQueryBuilder clamped = fusedBuilder(new HashMap<>());
         assertEquals("the surviving index's ceiling bends the default", 50, legWindowOf(clamped));
+        assertWarnings(
+            "[hybrid] query [fusion] window lowered from 100 to 50 by [index.max_result_window] (50) of index [test-index]; "
+                + "set [fusion.window_size] to choose it"
+        );
 
         HybridQueryBuilder overTheCeiling = fusedBuilder(new HashMap<>(Map.of("window_size", 70)));
         QueryCoordinatorContext ctx = coordinatorContextFor(overTheCeiling);
@@ -2492,6 +2508,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             belowDefault.paginationDepth(10);
             IndexSearcher.setMaxClauseCount(50);
             assertEquals("the floor bends to the clause ceiling", 49, legWindowOf(belowDefault));
+            assertWarnings(
+                "[hybrid] query [fusion] window lowered from 100 to 49 by [indices.query.bool.max_clause_count] (50); "
+                    + "set [fusion.window_size] to choose it"
+            );
         } finally {
             IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
         }

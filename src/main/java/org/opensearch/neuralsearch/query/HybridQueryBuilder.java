@@ -39,6 +39,7 @@ import org.opensearch.common.SetOnce;
 import org.opensearch.common.lucene.search.Queries;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
+import org.opensearch.common.logging.HeaderWarning;
 import org.opensearch.core.ParseField;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
@@ -758,6 +759,25 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             ceilings.requireWithinMaxResultWindow(window, windowSubject);
         }
         ceilings.requireWithinClauseCeiling(window, windowSubject);
+        // The default bent to a ceiling (effectiveWindowSize) and is the window: nothing the user wrote sized it, and the
+        // ranking is shallower than the default — silently, since every leg and round 2 succeed. A request over `logs-*`
+        // where one index sets index.max_result_window: 10 fuses a window of 10 for all of them; before the clamp that was
+        // a 400. Say so in a Warning header, the way a partial leg result is reported, and only on this path.
+        if (hasExplicitWindowSize() == false && depthIsTheWindow == false && window < DEFAULT_FUSION_WINDOW_SIZE) {
+            HeaderWarning.addWarning(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query [%s] window lowered from %d to %d by %s; set [%s.%s] to choose it",
+                    NAME,
+                    FUSION_FIELD.getPreferredName(),
+                    DEFAULT_FUSION_WINDOW_SIZE,
+                    window,
+                    ceilings.describeLowest(),
+                    FUSION_FIELD.getPreferredName(),
+                    FUSION_KEY_WINDOW_SIZE
+                )
+            );
+        }
         List<QueryBuilder> legs = queries;
         // Validate weights (range, sum, count) before the leg fan-out — a bad weights array otherwise burns a full
         // MultiSearch before the combiner is built in the async callback.
@@ -1848,7 +1868,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * ceilings rather than fail the request: on an index whose {@code index.max_result_window} is 50, or a node whose
      * clause ceiling is lower than the default, the default window is that ceiling (never below 1), and a classic body
      * with {@code pagination_depth: 10} that adds {@code fusion} keeps working as it did without it. What the user wrote —
-     * an explicit {@code window_size}, or a depth that is itself over a ceiling — is still refused, naming that value.
+     * an explicit {@code window_size}, or a depth that is itself over a ceiling — is still refused, naming that value. A
+     * default that bent is reported in a {@code Warning} header by {@link #doRewriteFused}, since the shallower ranking is
+     * otherwise invisible in a normal 200.
      *
      * <p>The depth is otherwise taken as is, although classic's is per shard and this window is global per leg. Scaling
      * it by the number of shards searched would not stay bounded: every leg already asks every shard for the whole window,
@@ -1949,6 +1971,20 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         /** The tighter of the two, for the default window to bend to. */
         int lowest() {
             return Math.min(maxResultWindow, clauseCeiling());
+        }
+
+        /** The ceiling {@link #lowest} is, named for a warning: the setting, its value, and the index when it is an index's. */
+        String describeLowest() {
+            if (maxResultWindow <= clauseCeiling()) {
+                return String.format(
+                    Locale.ROOT,
+                    "[%s] (%d) of index [%s]",
+                    IndexSettings.MAX_RESULT_WINDOW_SETTING.getKey(),
+                    maxResultWindow,
+                    maxResultWindowIndex
+                );
+            }
+            return String.format(Locale.ROOT, "[%s] (%d)", SearchService.INDICES_MAX_CLAUSE_COUNT_SETTING.getKey(), maxClauseCount);
         }
 
         /** {@code subject} is the {@code [field] (value)} phrase the error names (see {@code windowSubject}), built only on failure. */

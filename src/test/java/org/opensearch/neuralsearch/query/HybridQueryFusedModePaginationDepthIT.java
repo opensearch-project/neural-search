@@ -14,8 +14,10 @@ import java.util.stream.Collectors;
 
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.opensearch.client.Request;
+import org.opensearch.client.RequestOptions;
 import org.opensearch.client.Response;
 import org.opensearch.client.ResponseException;
+import org.opensearch.client.WarningsHandler;
 import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.rest.RestStatus;
@@ -89,10 +91,27 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     private Map<String, Object> search(String index, String params, String body) {
+        return body(searchResponse(index, params, body));
+    }
+
+    /**
+     * A bent default window is reported in a {@code Warning} header. The REST test client fails a request on any warning
+     * by default, so a request expected to carry one is sent permissive and its warnings handed back for assertion.
+     */
+    @SneakyThrows
+    private Response searchResponse(String index, String params, String body) {
         Request request = new Request("POST", "/" + index + "/_search" + params);
         request.setJsonEntity(body);
+        RequestOptions.Builder options = RequestOptions.DEFAULT.toBuilder();
+        options.setWarningsHandler(WarningsHandler.PERMISSIVE);
+        request.setOptions(options.build());
         Response response = client().performRequest(request);
         assertEquals(RestStatus.OK, RestStatus.fromCode(response.getStatusLine().getStatusCode()));
+        return response;
+    }
+
+    @SneakyThrows
+    private static Map<String, Object> body(Response response) {
         return XContentHelper.convertToMap(XContentType.JSON.xContent(), EntityUtils.toString(response.getEntity()), false);
     }
 
@@ -307,15 +326,38 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
         );
         assertEquals(ranks(60, 56), classic);
 
-        // the same body with fusion: the floor bends to 50 instead of failing about a window_size the request never set
-        Map<String, Object> fused = search(smallWindowIndex, "", topOnlyWholeIndex + fusedWithDepth(10) + "}");
-        assertEquals("the floor bends to the ceiling: 50 ranked documents, not a 400", ranks(60, 11), ids(fused));
+        // the same body with fusion: the floor bends to 50 instead of failing about a window_size the request never set, and
+        // says so in a Warning header, naming the ceiling and the knob — the shallower ranking is otherwise a normal 200
+        Response bent = searchResponse(smallWindowIndex, "", topOnlyWholeIndex + fusedWithDepth(10) + "}");
+        assertEquals("the floor bends to the ceiling: 50 ranked documents, not a 400", ranks(60, 11), ids(body(bent)));
+        assertEquals(
+            List.of(
+                "[hybrid] query [fusion] window lowered from 100 to 50 by [index.max_result_window] (50) of index ["
+                    + smallWindowIndex
+                    + "]; set [fusion.window_size] to choose it"
+            ),
+            bent.getWarnings()
+        );
         assertEquals(classic, ids(search(smallWindowIndex, "", "{\"size\":5,\"query\":" + fusedWithDepth(10) + "}")));
 
         // and so does the plain default
         assertEquals(
             ranks(60, 11),
             ids(search(smallWindowIndex, "", topOnlyWholeIndex + hybrid("\"fusion\":" + INLINE_FUSION + ",") + "}"))
+        );
+
+        // a window the user chose — window_size, or a depth at the ceiling — is not a bent default: no warning
+        Response chosen = searchResponse(
+            smallWindowIndex,
+            "",
+            topOnlyWholeIndex + hybrid("\"fusion\":{\"window_size\":50,\"normalization\":{\"technique\":\"min_max\"}},") + "}"
+        );
+        assertEquals(ranks(60, 11), ids(body(chosen)));
+        assertEquals("an explicit window_size is the user's choice", List.of(), chosen.getWarnings());
+        assertEquals(
+            "so is a depth at the ceiling",
+            List.of(),
+            searchResponse(smallWindowIndex, "", topOnlyWholeIndex + fusedWithDepth(50) + "}").getWarnings()
         );
 
         // what the user wrote is still refused, naming it
