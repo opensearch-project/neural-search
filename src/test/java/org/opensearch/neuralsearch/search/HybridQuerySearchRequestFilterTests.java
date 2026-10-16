@@ -1123,6 +1123,82 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         return captor.getValue();
     }
 
+    // ---- a fused page ends at the ranked documents ----
+
+    /** The ranked hit of {@link #responseWithRankedHit} plus one Tail-only document at score 0 behind it. */
+    private static SearchResponse responseWithRankedHitAndTailFiller() {
+        SearchResponse ranked = responseWithRankedHit();
+        SearchHit filler = new SearchHit(1, "tail-only", null, null);
+        filler.shard(new SearchShardTarget("node", new ShardId("test_index", "test_index-uuid", 0), null, OriginalIndices.NONE));
+        filler.score(0.0f);
+        SearchHits hits = new SearchHits(
+            new SearchHit[] { ranked.getHits().getHits()[0], filler },
+            new TotalHits(40, TotalHits.Relation.EQUAL_TO),
+            0.75f
+        );
+        InternalSearchResponse sections = new InternalSearchResponse(
+            hits,
+            InternalAggregations.EMPTY,
+            null,
+            new SearchProfileShardResults(Map.of()),
+            false,
+            null,
+            1
+        );
+        return new SearchResponse(sections, null, 1, 1, 0, 3L, ShardSearchFailure.EMPTY_ARRAY, SearchResponse.Clusters.EMPTY);
+    }
+
+    @SuppressWarnings("unchecked")
+    public void testWrappedListener_whenTheRankedWindowWasPublished_thenThePageKeepsOnlyTheRankedHits() {
+        HybridQueryBuilder hybridQuery = fusedHybrid();
+        SearchRequest searchRequest = new SearchRequest("test_index").source(new SearchSourceBuilder().query(hybridQuery));
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
+        assertNotNull(hybridQuery.fusedRankedPageConsumer());
+        hybridQuery.fusedRankedPageConsumer().accept(new String[] { "test_index" }, new String[] { "1" });
+
+        SearchResponse merged = merge(proceeded, listener, responseWithRankedHitAndTailFiller());
+
+        assertEquals(1, merged.getHits().getHits().length);
+        assertEquals("1", merged.getHits().getHits()[0].getId());
+        assertEquals("the total still counts the whole match set", 40L, merged.getHits().getTotalHits().value());
+    }
+
+    public void testApply_whenThePageIsTheFusedRankingAndMayHoldTheTail_thenTheRankedPageConsumerAttaches() {
+        for (SearchSourceBuilder source : List.of(
+            new SearchSourceBuilder(),
+            new SearchSourceBuilder().trackTotalHits(true),
+            new SearchSourceBuilder().trackTotalHits(false)
+                .aggregation(org.opensearch.search.aggregations.AggregationBuilders.terms("t").field("f")),
+            new SearchSourceBuilder().sort("_score").sort("price")
+        )) {
+            HybridQueryBuilder hybridQuery = fusedHybrid();
+            ActionListener<ActionResponse> listener = mock(ActionListener.class);
+            ActionListener<ActionResponse> proceeded = proceedListener(
+                new SearchRequest("test_index").source(source.query(hybridQuery)),
+                listener
+            );
+            assertNotNull(source.toString(), hybridQuery.fusedRankedPageConsumer());
+            assertNotSame(source.toString(), listener, proceeded);
+        }
+    }
+
+    public void testApply_whenThePageCannotHoldTailOnlyDocuments_thenNoRankedPageConsumerAttaches() {
+        // A field sort is not the fused ranking, a nested hybrid's hits are scored by the enclosing query, and a Top-only
+        // shape (totals off, nothing else that keeps the Tail) has no Tail-only document to drop.
+        for (SearchSourceBuilder source : List.of(
+            new SearchSourceBuilder().query(fusedHybrid()).sort("rank"),
+            new SearchSourceBuilder().query(new BoolQueryBuilder().must(fusedHybrid())),
+            new SearchSourceBuilder().query(fusedHybrid()).trackTotalHits(false)
+        )) {
+            HybridQueryBuilder hybridQuery = source.query() instanceof HybridQueryBuilder
+                ? (HybridQueryBuilder) source.query()
+                : (HybridQueryBuilder) ((BoolQueryBuilder) source.query()).must().get(0);
+            proceedListener(new SearchRequest("test_index").source(source), mock(ActionListener.class));
+            assertNull(source.toString(), hybridQuery.fusedRankedPageConsumer());
+        }
+    }
+
     // ---- hits.total derived from the legs ----
 
     public void testApply_whenTheRequestQueryIsAFusedHybridWantingTotalsBeyondTheWindow_thenTheTotalsConsumerAttaches() {
@@ -1151,7 +1227,9 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
             ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
             assertNull(source.toString(), hybridQuery.fusedTotalHitsConsumer());
             if (source.trackTotalHitsUpTo() == SearchContext.TRACK_TOTAL_HITS_ACCURATE) {
-                assertSame("exact totals rule out the fast path too, so nothing wraps the listener", listener, proceeded);
+                // Exact totals rule out the fast path too, but they keep the Tail, so the page has to be kept to the ranking.
+                assertNotNull(hybridQuery.fusedRankedPageConsumer());
+                assertNotSame(listener, proceeded);
             } else {
                 assertNotNull(
                     "totals off is the fast path's own shape: the hits consumer attaches instead",
@@ -1260,7 +1338,15 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
             ActionListener<ActionResponse> listener = mock(ActionListener.class);
             ActionListener<ActionResponse> proceeded = proceedListener(searchRequest, listener);
             assertNull(shape.toString(), hybridQuery.fusedTotalHitsConsumer());
-            assertSame(shape.toString(), listener, proceeded);
+            // The Tail stays, so a shape that pages the fused ranking still gets its page kept to it; one that does not
+            // (a field sort, _score ascending) has nothing attached at all.
+            if (HybridQueryBuilder.requestPagesTheFusedRanking(shape)) {
+                assertNotNull(shape.toString(), hybridQuery.fusedRankedPageConsumer());
+                assertNotSame(shape.toString(), listener, proceeded);
+            } else {
+                assertNull(shape.toString(), hybridQuery.fusedRankedPageConsumer());
+                assertSame(shape.toString(), listener, proceeded);
+            }
         }
     }
 

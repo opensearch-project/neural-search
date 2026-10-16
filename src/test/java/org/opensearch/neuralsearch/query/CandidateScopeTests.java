@@ -451,6 +451,26 @@ public class CandidateScopeTests extends OpenSearchTestCase {
         assertThat(e.getMessage(), containsString("counts every match in docid order"));
     }
 
+    public void testRejectsStoredFieldsNone() {
+        // _none_ builds hits without an _id, and fused mode identifies every document by _index plus _id.
+        SearchRequest request = new SearchRequest(INDEX).source(
+            new SearchSourceBuilder().fetchSource(false).storedField(org.opensearch.search.fetch.StoredFieldsContext._NONE_)
+        );
+
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> CandidateScope.from(request));
+
+        assertThat(e.getMessage(), containsString("[hybrid] query [fusion] does not support [stored_fields: _none_]"));
+        assertThat(e.getMessage(), containsString("use [stored_fields: []]"));
+    }
+
+    public void testAcceptsStoredFieldsList() {
+        // A list keeps _id on every hit, empty or not.
+        for (List<String> fields : List.of(List.<String>of(), List.of("title"))) {
+            SearchRequest request = new SearchRequest(INDEX).source(new SearchSourceBuilder().storedFields(fields));
+            assertNotNull(fields.toString(), CandidateScope.from(request));
+        }
+    }
+
     public void testRejectsIndicesBoost() {
         SearchRequest request = new SearchRequest(INDEX).source(new SearchSourceBuilder().indexBoost(INDEX, 2.0f));
 

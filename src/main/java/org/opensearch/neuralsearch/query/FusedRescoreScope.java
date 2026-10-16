@@ -47,10 +47,13 @@ import org.opensearch.search.rescore.RescorerBuilder;
  * layer down, on the shard, by {@link FusedWindowGuardRescorer}: it reads which documents fusion ranked from the pristine
  * pool, lets the request's own rescorers run over that pool untouched, and then <b>demotes</b> the unranked ones into a
  * score band strictly below every ranked document — so no arithmetic the request chose can order one above the window.
- * {@code FusedRescoreScoreNormalizer} maps that band's sentinel back to {@code 0.0} on the coordinator, the score those
- * documents already carry without a rescore, so the band never reaches the response. This class therefore bounds what the
- * rescore query can <b>match</b> and the guard bounds what it can <b>promote</b>; together they make the guarantee hold
- * for any weights.
+ * On the coordinator {@code FusedRankedPageTrimmer} then cuts the demoted documents from the page, which it can do
+ * without leaving a gap in the ranking only because the guard has put every one of them below every ranked document,
+ * and {@code FusedRescoreScoreNormalizer} maps the band's sentinel back to {@code 0.0} wherever a demoted document is
+ * still shown — a {@code top_hits} bucket, or a page the trimmer leaves as round 2 returned it — the score those
+ * documents already carry without a rescore, so the band never reaches the response. This class therefore bounds what
+ * the rescore query can <b>match</b> and the guard bounds what it can <b>promote</b>; together they make the guarantee
+ * hold for any weights.
  *
  * <p>The guard demotes rather than removes, and that is not a preference: core's {@code RescoreProcessor} reads
  * {@code scoreDocs[0].score} on the rescorer's <i>output</i> with no length check, so a rescorer that returned an

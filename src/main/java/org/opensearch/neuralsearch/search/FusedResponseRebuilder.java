@@ -102,6 +102,16 @@ public final class FusedResponseRebuilder {
     }
 
     /**
+     * Whether {@link #rebuild} can reproduce this response in full. It constructs a plain {@link SearchResponse}, so a
+     * subclass loses whatever it carries in its own fields and renders in its own {@code toXContent} — a search-pipeline
+     * response processor may return one (ml-commons' {@code GenerativeSearchResponse} holds the RAG answer that way).
+     * A caller whose rewrite is optional should leave such a response as it came rather than flatten it.
+     */
+    public static boolean carriesOnlyCoreFields(final SearchResponse response) {
+        return response.getClass() == SearchResponse.class;
+    }
+
+    /**
      * The response's existing profile section, for a rebuild that is not replacing it.
      *
      * <p>Reconstructed from {@link SearchResponseSections#profile()} because the section itself is {@code protected} in

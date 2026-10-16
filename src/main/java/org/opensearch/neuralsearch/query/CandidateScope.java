@@ -16,6 +16,7 @@ import org.opensearch.common.unit.TimeValue;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.search.builder.PointInTimeBuilder;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.search.fetch.StoredFieldsContext;
 import org.opensearch.search.fetch.subphase.FieldAndFormat;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.SearchPipelineService;
@@ -31,10 +32,13 @@ import org.opensearch.search.sort.SortBuilder;
  * <p>Fused mode answers one user request with two searches: round 1 fans the legs out as a {@code MultiSearch} to pick
  * the candidate window, and round 2 runs the self-erased {@code bool{Top + Tail}} over the user's original request. The
  * two rounds must agree on the candidate set, and when they disagree the failure is silent and always shaped alike:
- * round 1 selects documents round 2 cannot return, round 2 backfills the shortfall from the Tail, and the user gets
- * correctly-ranked hits followed by arbitrary documents at {@code _score: 0.0} instead of an error. Building the leg
- * request field by field from scratch is what allows that: every request field nobody thought about defaults to "not
- * propagated", which is the wrong default for anything selection-relevant.
+ * round 1 selects documents round 2 cannot return, and the user gets correctly-ranked hits, fewer of them than fusion
+ * ranked, instead of an error. On a page in fused-score order (no sort, or one led by {@code _score} descending) the
+ * ranking ends early: round 2 backfills the shortfall from the Tail when it carries one, and
+ * {@code FusedRankedPageTrimmer} cuts that backfill from the page. Under any other order, or for a fused hybrid inside a
+ * container query (a {@code bool}, say), the backfill still reaches the page, as arbitrary documents at {@code _score: 0.0}. Building the
+ * leg request field by field from scratch is what allows that: every request field nobody thought about defaults to
+ * "not propagated", which is the wrong default for anything selection-relevant.
  *
  * <p>This class inverts the default. Every declared field of {@link SearchRequest} and {@link SearchSourceBuilder}
  * carries an explicit {@link Disposition} in {@link #CLASSIFICATION}, {@code CandidateScopeTests} fails the build when a
@@ -176,9 +180,12 @@ final class CandidateScope {
             "postQueryBuilder",
             Disposition.PROPAGATED,
             "round 2 applies post_filter above the top-docs collector, so its window is post-filtered; an unfiltered leg "
-                + "window would be decimated in round 2 and backfilled with score-0 Tail documents. This also matches classic "
-                + "hybrid, where core wraps the shard's hybrid collector in a FilteredCollector for post_filter, so normalization "
-                + "there likewise runs over post-filtered candidates: post_filter shapes the normalization range on both paths"
+                + "window would be decimated in round 2, leaving fewer ranked documents to return than fusion ranked: a page "
+                + "in fused-score order would end where they run out (FusedRankedPageTrimmer cuts round 2's score-0 Tail "
+                + "backfill from it), and a page in any other order would be backfilled with score-0 Tail documents. This "
+                + "also matches classic hybrid, where core wraps the shard's hybrid collector in a FilteredCollector for "
+                + "post_filter, so normalization there likewise runs over post-filtered candidates: post_filter shapes the "
+                + "normalization range on both paths"
         );
         put(table, SEARCH_SOURCE, "size", Disposition.OVERRIDDEN, "a leg returns exactly the candidate window");
         put(table, SEARCH_SOURCE, "from", Disposition.OVERRIDDEN, "a leg always starts at 0; paging is a round-2 concern");
@@ -257,7 +264,10 @@ final class CandidateScope {
             Disposition.FORCES_TAIL,
             "a non-_score sort ranks by the sort key instead of the fused score, so sorting only the window would sort "
                 + "an arbitrary subset of the matches; the Tail widens round 2 to the full leg union, over which the "
-                + "user's sort is the plain-search answer"
+                + "user's sort is the plain-search answer. Any non-_score key forces the Tail, including one that only breaks "
+                + "the ties of a leading _score descending; a page of the request's own fused hybrid in that order is still "
+                + "the fused ranking, so it ends at the last ranked document (FusedRankedPageTrimmer) and the Tail's score-0 "
+                + "documents do not reach it"
         );
         put(
             table,
@@ -271,7 +281,10 @@ final class CandidateScope {
             SEARCH_SOURCE,
             "searchAfterBuilder",
             Disposition.NOT_PROPAGATED,
-            "round-2 paging over Top then Tail, the same way a size beyond the window already pages"
+            "round-2 paging, in round 2's own order. Under a sort led by _score descending a page of the request's own "
+                + "fused hybrid ends at the last ranked document (FusedRankedPageTrimmer), so the page after it is empty, as "
+                + "a from/size page past the ranked documents is; under any other sort the cursor pages everything round 2 "
+                + "matches, the Tail's score-0 documents included whenever round 2 carries the Tail"
         );
         put(
             table,
@@ -472,6 +485,17 @@ final class CandidateScope {
             || (Objects.nonNull(source.getDerivedFields()) && source.getDerivedFields().isEmpty() == false)) {
             throw unsupported("derived", reasonFor(SEARCH_SOURCE, "derivedFieldsObject"));
         }
+        // Not a REJECTED field: stored_fields with a list is answered as usual. Only "_none_" is refused, because core then
+        // builds every hit without an _id — legs that fetch the user's fields (the fast path) would fuse every document of
+        // an index into one key, and round 2's page could not be kept to the ranked window.
+        if (Objects.nonNull(source.storedFields()) && source.storedFields().fetchFields() == false) {
+            throw unsupported(
+                "stored_fields: " + StoredFieldsContext._NONE_,
+                "fused documents are identified and addressed by [_index] plus [_id], and ["
+                    + StoredFieldsContext._NONE_
+                    + "] leaves [_id] off every hit; use [stored_fields: []] to omit the stored fields and keep [_id]"
+            );
+        }
     }
 
     private static IllegalArgumentException unsupported(final String what, final String why) {
@@ -485,9 +509,13 @@ final class CandidateScope {
     }
 
     /**
-     * True when the request ranks by something other than {@code _score}. The fused scores then only pick the candidate
-     * set while the user's sort decides the order, so the candidate set has to be the whole leg union rather than the
-     * window — see {@link Disposition#FORCES_TAIL}.
+     * True when any sort key is not {@code _score}. The Tail is then needed: under a sort that leads with another field
+     * the fused scores only pick the candidate set while the user's order decides the page, so the candidate set has to be
+     * the whole leg union rather than the window — see {@link Disposition#FORCES_TAIL}. A sort led by {@code _score}
+     * descending with a field tie-breaker counts too, for the ties: the breaker orders documents of equal fused score, so
+     * the Tail's documents (all at score 0) have to be present to be ordered among themselves. On such a page of the
+     * request's own fused hybrid the ranked documents still come first, and {@code FusedRankedPageTrimmer} ends it at
+     * the last of them — the Tail runs for the ties and the totals, not for the page.
      */
     static boolean sortDiscardsFusedRanking(final SearchSourceBuilder source) {
         if (Objects.isNull(source) || Objects.isNull(source.sorts())) {

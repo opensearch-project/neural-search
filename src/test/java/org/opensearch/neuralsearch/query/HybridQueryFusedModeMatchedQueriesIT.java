@@ -57,7 +57,7 @@ public class HybridQueryFusedModeMatchedQueriesIT extends BaseNeuralSearchIT {
     private static final int BLUE_DOCS = 3;
     /** The whole match set fits in the window, so classic and fused return the same hits and can be compared directly. */
     private static final int FULL_WINDOW = 6;
-    /** Smaller than the match set, so Top-only and Top+Tail return visibly different hit counts. */
+    /** Smaller than the match set, so Top-only and Top+Tail report visibly different totals — both pages end at the window. */
     private static final int PARTIAL_WINDOW = 4;
 
     private String indexConfig() {
@@ -174,21 +174,47 @@ public class HybridQueryFusedModeMatchedQueriesIT extends BaseNeuralSearchIT {
     /**
      * The boundary made explicit: one more than the window builds the Tail, exactly the window does not. Both sides must
      * report the same names — which side of an unrelated totals threshold a request lands on is not a statement about
-     * named queries. The hit counts differ (Top-only returns the window; the Tail adds the rest of the match set at
-     * score 0), which is what proves the two requests really did take the two different paths.
+     * named queries. Both pages hold the window (a fused page ends at the ranked documents); the totals differ (Top-only
+     * counts the window, the Tail counts past it), which is what proves the two requests really did take the two paths.
      */
     @SneakyThrows
+    @SuppressWarnings("unchecked")
     public void testFusedHybrid_reportsNamesOnBothSidesOfTheTotalsCliff() {
         ensureDataset();
         String fused = fusedHybrid(PARTIAL_WINDOW, null);
 
-        Map<String, Set<String>> topOnly = matchedQueriesById(searchRaw(body(fused, Integer.toString(PARTIAL_WINDOW)), 10));
-        Map<String, Set<String>> withTail = matchedQueriesById(searchRaw(body(fused, Integer.toString(PARTIAL_WINDOW + 1)), 10));
+        Map<String, Object> topOnlyResponse = searchRaw(body(fused, Integer.toString(PARTIAL_WINDOW)), 10);
+        Map<String, Object> withTailResponse = searchRaw(body(fused, Integer.toString(PARTIAL_WINDOW + 1)), 10);
+        Map<String, Set<String>> topOnly = matchedQueriesById(topOnlyResponse);
+        Map<String, Set<String>> withTail = matchedQueriesById(withTailResponse);
 
         assertEquals("track_total_hits at the window is Top-only: only the window comes back", PARTIAL_WINDOW, topOnly.size());
-        assertEquals("one above the window builds the Tail: the whole match set comes back", TOTAL_DOCS, withTail.size());
+        assertEquals("one above the window builds the Tail, and the page still ends at the window", PARTIAL_WINDOW, withTail.size());
+        Map<String, Object> topOnlyTotal = (Map<String, Object>) ((Map<String, Object>) topOnlyResponse.get("hits")).get("total");
+        Map<String, Object> withTailTotal = (Map<String, Object>) ((Map<String, Object>) withTailResponse.get("hits")).get("total");
+        assertEquals("Top-only counts the window", PARTIAL_WINDOW, ((Number) topOnlyTotal.get("value")).intValue());
+        assertEquals("the Tail counts past it", PARTIAL_WINDOW + 1, ((Number) withTailTotal.get("value")).intValue());
         assertLegNamesPerColor(topOnly);
         assertLegNamesPerColor(withTail);
+    }
+
+    /**
+     * The Tail-only documents are still returned under a sort the page cut does not apply to — a field sort lists the
+     * whole match set, ranked and unranked alike — and each of them reports the leg that matched it. The window here is
+     * partial on purpose: the documents past it reach the page through the Tail alone, so their names can only come from
+     * the Tail's own registration of the legs.
+     */
+    @SneakyThrows
+    public void testFusedHybrid_whenAFieldSortReturnsTheTail_thenUnrankedHitsReportTheirLeg() {
+        ensureDataset();
+        String sortedByScoreField = ",\"sort\":[{\"" + SCORE_FIELD + "\":\"desc\"}]";
+
+        Map<String, Object> response = searchRaw(withSuffix(body(fusedHybrid(PARTIAL_WINDOW, null), "true"), sortedByScoreField), 10);
+        Map<String, Set<String>> namesById = matchedQueriesById(response);
+
+        assertEquals("under a field sort the page is the whole match set", TOTAL_DOCS, namesById.size());
+        assertTrue("the page reaches past the window, so it holds Tail-only documents", namesById.size() > PARTIAL_WINDOW);
+        assertLegNamesPerColor(namesById);
     }
 
     /**

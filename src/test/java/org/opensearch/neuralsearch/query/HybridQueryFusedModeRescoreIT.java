@@ -8,6 +8,7 @@ import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -91,8 +92,16 @@ import lombok.SneakyThrows;
  * </ol>
  *
  * <p>{@link #testFusedRankedDocumentAtZero_stillOutranksTheTail} is a different defect with the same symptom and no rescore
- * involved at all, and {@link #testQueryWeightZero_collapsesTheScaleButStillCannotLiftAnUnrankedDocument} pins the one request
- * shape confinement cannot fully repair.
+ * involved at all, and {@link #testFlatteningWeightsCannotAdmitAnUnrankedDocument} pins the one request shape confinement
+ * cannot fully repair.
+ *
+ * <p>Every measurement recorded in this class predates {@code FusedRankedPageTrimmer}. A top-level fused page now ends at
+ * the last document fusion ranked, so an unranked document no longer reaches it: a defect that lifts one into round 2's
+ * page shows as the ranked document it evicted missing from a short page, not as the intruder. Each page assertion here
+ * compares the whole page — or, in the flattening grid, checks that document 26 kept its slot — so it fails either way.
+ * A {@code top_hits} bucket is not trimmed and still shows unranked documents, at {@code 0.0}; neither is the
+ * {@code bool}-wrapped request of {@link #testTheRankedFloorSurvivesAnEnclosingBoost}, whose fused hybrid is not the
+ * request's query.
  *
  * <p>Run: {@code ./gradlew integTest --tests "*HybridQueryFusedModeRescoreIT*"}.
  */
@@ -316,7 +325,9 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
      * report {@code _score: -3.4028235E38} for documents 6-10.
      *
      * <p>What it must report instead is {@code 0.0}, the score those documents have in the same request with no rescore
-     * at all — the same contract as the page, one level down.
+     * at all. A bucket is the one place such a request still shows them: the rescored page of a top-level fused hybrid —
+     * in fused-score order, since core refuses a sort beside a rescore — ends at the last ranked document
+     * ({@code FusedRankedPageTrimmer}).
      */
     @SneakyThrows
     public void testTopHitsBucketsWiderThanTheFusedWindow_reportTheUnrankedScoreAndNotTheBand() {
@@ -356,7 +367,9 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
      * and the Tail does not, which is the entire mechanism separating the fused window from everything else — and a ranked
      * document at {@code 0.0} ties every Tail-only document instead of outranking it. Lucene breaks that tie by ascending
      * doc id, and with {@code size} equal to the window the ranked document is not merely reordered but dropped: on unfixed
-     * code this returns document 6, which fusion never ranked, in place of document 26, which it did.
+     * code round 2 ranks document 6, which fusion never ranked, in place of document 26, which it did. Ending the page at
+     * the ranked documents ({@code FusedRankedPageTrimmer}) removes document 6 but cannot bring document 26 back, so the
+     * page comes back one short.
      *
      * <p>Exactly {@code 0.0} is reachable from ordinary config, and this is one of the two ways: a {@code weights} entry of
      * {@code 0.0} zeroes its leg's contribution, so a document that matched only that leg fuses to {@code 0.0}. (The other
@@ -365,8 +378,8 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
      * nothing, since every other positive score is already at or above that floor.
      *
      * <p>Single-shard on purpose: the eviction is a tie-break inside one collector, so it is only deterministic when one
-     * collector sees all 30 documents. Measured 2026-08-27 with only the floor disabled, this returned
-     * {@code [1, 2, 3, 4, 5, 6]}.
+     * collector sees all 30 documents. Measured 2026-08-27 with only the floor disabled, before the page ended at the
+     * ranked documents, this returned {@code [1, 2, 3, 4, 5, 6]}.
      */
     @SneakyThrows
     public void testFusedRankedDocumentAtZero_stillOutranksTheTail() {
@@ -483,8 +496,8 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
      * <ul>
      *   <li>{@code query_weight} at {@code 0.5} and at {@code 0.001}, with the rescore query pointed at document 6 — a document
      *       <i>outside</i> the fused window, so the confinement reduces it to matching nothing and this is pure attenuation.
-     *       That isolates the floor from the rescore's own contribution. Document 6 staying off the page is asserted too, since
-     *       the same request would show it with no confinement;</li>
+     *       That isolates the floor from the rescore's own contribution. Document 6 staying off the page is asserted too — the
+     *       whole page is compared — since before the confinement the same request showed it;</li>
      *   <li>{@code score_mode: multiply} with a rescore contribution of {@code 0.5}, pointed at document 26 — the floored
      *       document itself, which <i>is</i> in the window. Multiplying is the other route to a sub-1 factor, and it reaches
      *       documents the rescore query matched rather than the ones it missed.</li>
@@ -526,7 +539,12 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
             Map<String, Object> response = searchForHits(INDEX_ONE_SHARD, body);
 
             collectMismatches(mismatches, rescorer.getKey(), List.of("1", "2", "3", "4", "5", "26"), response);
-            if (hitScores(response).get(5) <= 0.0) {
+            // A floored document that drops to 0.0 sorts into the Tail, and the trimmer then removes it from the page, so a
+            // regression here shows first as a short page — checked before the score it would otherwise index past.
+            List<Double> scores = hitScores(response);
+            if (scores.size() < 6) {
+                mismatches.add(rescorer.getKey() + ": the page lost ranked documents, ids " + hitIds(response));
+            } else if (scores.get(5) <= 0.0) {
                 mismatches.add(rescorer.getKey() + ": the attenuated floor must stay above the Tail, but the last ranked hit scored 0.0");
             }
         }
@@ -559,8 +577,8 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
 
     /**
      * {@code query_weight: 0} and a negative {@code query_weight} — the two shapes that multiply the ranked/Tail
-     * separation away — now return only documents fusion ranked, because the rescore pool is limited to them before the
-     * rescore runs.
+     * separation away — now return only documents fusion ranked: the guard below keeps every ranked document above every
+     * unranked one, and the page ends at the last ranked document ({@code FusedRankedPageTrimmer}).
      *
      * <p>History, because this test has asserted three different things and the reason matters. Limiting the rescore
      * <i>query</i> makes a Tail-only document unmatchable, which was originally taken to mean a rescore could not return
@@ -580,9 +598,11 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
      *
      * <p>It demotes rather than prunes because core's {@code RescoreProcessor} reads {@code scoreDocs[0].score} on the
      * rescorer's output with no length check, so returning a shorter array is an {@code ArrayIndexOutOfBoundsException}
-     * shard failure. The demoted band's sentinel is mapped back to {@code 0.0} on the coordinator by
-     * {@code FusedRescoreScoreNormalizer} — the score those documents carry without a rescore — so the scores asserted
-     * below are the ones a user sees, not the internal band.
+     * shard failure. The pruning happens on the coordinator instead: the page — in fused-score order, since core refuses
+     * a sort beside a rescore — ends at the last ranked document ({@code FusedRankedPageTrimmer}), so a demoted document
+     * never reaches it. Where one is still shown, in a {@code top_hits} bucket, the demoted band's sentinel is mapped back
+     * to {@code 0.0} by {@code FusedRescoreScoreNormalizer} — the score those documents carry without a rescore — so no
+     * score a user sees is the internal band.
      *
      * <p><b>Both weight parameters are covered, and neither is validated by core.</b> {@code query_weight} and
      * {@code rescore_query_weight} are each parsed with a bare {@code declareFloat} and set by bare assignment — the only
@@ -662,13 +682,12 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
                     + "}}}"
             );
             List<String> ids = hitIds(response);
-            for (String id : ids) {
-                if (window.contains(id) == false) {
-                    mismatches.add(shape.getKey() + ": returned unranked document " + id + " (page " + ids + ")");
-                }
-            }
-            if (ids.contains("26") == false) {
-                mismatches.add(shape.getKey() + ": ranked document 26 lost its slot (page " + ids + ")");
+            // The page ends at the ranked documents (FusedRankedPageTrimmer), so an unranked document the guard failed to
+            // hold back would not show up here — it would be dropped after taking a ranked document's slot. The check that
+            // survives the trim is that the page is exactly the window: any ranked document missing means something else
+            // took its slot, and any extra one means the trim stopped running.
+            if (new HashSet<>(ids).equals(new HashSet<>(window)) == false) {
+                mismatches.add(shape.getKey() + ": the page must be exactly the ranked window " + window + ", was " + ids);
             }
             if (totalHits(response) != TOTAL_DOCS) {
                 mismatches.add(shape.getKey() + ": total_hits must still count the whole leg union, was " + totalHits(response));
@@ -708,7 +727,9 @@ public class HybridQueryFusedModeRescoreIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * {@code size} is the fused window: an unranked document can only appear here by evicting a ranked one.
+     * {@code size} is the fused window: an unranked document can only reach round 2's page by evicting a ranked one, and
+     * since the page ends at the ranked documents ({@code FusedRankedPageTrimmer}) the response then shows a short page
+     * with that ranked document missing.
      *
      * @param rescoreWindow {@code null} leaves {@code window_size} out of the request entirely, which is core's default and
      *                      the shape a user writes first

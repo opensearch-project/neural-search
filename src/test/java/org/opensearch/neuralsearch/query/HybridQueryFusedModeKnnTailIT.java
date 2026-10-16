@@ -26,8 +26,10 @@ import lombok.SneakyThrows;
  * <p>An ANN leg the window did not truncate has returned its whole Lucene match set, so re-running it in the Tail would only
  * re-walk the HNSW graph to recount what the fan-out already retrieved. The coordinator therefore replaces such a leg with a
  * direct address of its returned hits — and because the Tail is a {@code filter}, that address decides the match set that
- * {@code total_hits}, every aggregation, and the score-0 region of the hit list are computed from. A leg that <i>filled</i>
- * the window may have matched documents it never returned, so it is kept as the real query and counted for real instead.
+ * {@code total_hits} and every aggregation are computed from, and that a page not in fused-score order is drawn from,
+ * Tail-only documents at score 0 included (a page in fused-score order ends at the ranked documents). A leg that
+ * <i>filled</i> the window may have matched documents it never returned, so it is kept as the real query and counted for
+ * real instead.
  *
  * <p>Addressed by {@code _id} alone, that set silently grew: on a multi-index search every same-{@code _id} document in a
  * sibling index passed the filter, so the numbers the Tail exists to make correct were the ones it inflated. This is not
@@ -161,10 +163,24 @@ public class HybridQueryFusedModeKnnTailIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * The same request sorted by {@code s} instead of by the fused score, with {@code track_scores} so every hit keeps its
+     * score. A page in fused-score order ends at the ranked documents ({@code FusedRankedPageTrimmer}), so a document only
+     * the Tail let in never reaches it; sorted by a field, the page lists the match set round 2 computed — Tail-only
+     * documents at score 0 included — which is where a Tail that matches too much shows up as hits.
+     */
+    private String sortedByField(String body) {
+        return body.substring(0, body.lastIndexOf('}')) + ",\"sort\":[{\"" + SCORE_FIELD + "\":\"desc\"}],\"track_scores\":true}";
+    }
+
+    /**
      * The regression this class exists for. Both legs match index-a's three documents and nothing else, so the fused
      * match set is those three. While the materialized ANN leg was addressed by {@code _id} alone, index-b's three
      * same-{@code _id} documents also passed the Tail filter: {@code total_hits} read 6 instead of 3, the {@code owner}
      * aggregation reported a bucket for an index no leg had matched, and the user got three score-0 hits from it.
+     *
+     * <p>The hits are checked on the same request sorted by {@code s} ({@code sortedByField}): in fused-score order the page
+     * ends at the ranked documents, so the twins would be trimmed off it even with the bug back, and only the counts would
+     * show it.
      */
     @SneakyThrows
     public void testFusedKnnTail_whenIdsCollideAcrossIndices_thenSiblingDocsStayOutOfTheMatchSet() {
@@ -177,22 +193,26 @@ public class HybridQueryFusedModeKnnTailIT extends BaseNeuralSearchIT {
 
         Map<String, Object> response = searchRaw(body, 20);
 
-        assertEquals("only the documents the legs matched are hits", COLLIDING_IDS, hits(response).size());
+        assertEquals("in fused-score order the page is the window: index-a's three documents", COLLIDING_IDS, hits(response).size());
         assertEquals("total_hits counts the legs' match set, not their _id twins", (long) COLLIDING_IDS, totalHits(response));
-        for (Map<String, Object> hit : hits(response)) {
-            assertEquals("a hit from an index no leg matched means the Tail was addressed by _id alone", INDEX_A, hit.get("_index"));
-        }
         Map<String, Integer> buckets = ownerBuckets(response);
         assertEquals("the aggregation covers index-a's documents", Integer.valueOf(COLLIDING_IDS), buckets.getOrDefault(OWNER_A, 0));
         assertEquals("and counts nothing from index-b", Integer.valueOf(0), buckets.getOrDefault(OWNER_B, 0));
+
+        List<Map<String, Object>> matchSet = hits(searchRaw(sortedByField(body), 20));
+        assertEquals("sorted by s, the page is the match set: only the documents the legs matched", COLLIDING_IDS, matchSet.size());
+        for (Map<String, Object> hit : matchSet) {
+            assertEquals("a hit from an index no leg matched means the Tail was addressed by _id alone", INDEX_A, hit.get("_index"));
+        }
     }
 
     /**
      * An ANN leg that matched nothing must keep matching nothing. Its Tail clause is an explicit {@code match_none}: a leg
      * rendered as an empty {@code bool{should: []}} would compile to {@code MatchAllDocsQuery} and make the Tail match
      * every document in both indices — so {@code total_hits} and the aggregation would report the whole corpus instead of
-     * the one leg that actually matched. The {@code filter} on the kNN leg matches no owner, so the leg returns zero hits
-     * while the second leg still fuses normally.
+     * the one leg that actually matched, and so would a page sorted by {@code s}, which is where the hits are counted (in
+     * fused-score order the page ends at the ranked documents whatever the Tail matches). The {@code filter} on the kNN leg
+     * matches no owner, so the leg returns zero hits while the second leg still fuses normally.
      */
     @SneakyThrows
     public void testFusedKnnTail_whenAnnLegMatchesNothing_thenTailDoesNotFallBackToMatchAll() {
@@ -206,11 +226,17 @@ public class HybridQueryFusedModeKnnTailIT extends BaseNeuralSearchIT {
 
         Map<String, Object> response = searchRaw(body, 20);
 
-        assertEquals("an empty ANN leg contributes nothing, it does not open the Tail up", COLLIDING_IDS, hits(response).size());
+        assertEquals("in fused-score order the page is the surviving leg's window", COLLIDING_IDS, hits(response).size());
         assertEquals("total_hits stays the surviving leg's match set", (long) COLLIDING_IDS, totalHits(response));
         Map<String, Integer> buckets = ownerBuckets(response);
         assertEquals(Integer.valueOf(COLLIDING_IDS), buckets.getOrDefault(OWNER_A, 0));
         assertEquals("an empty ANN leg must not turn into match_all", Integer.valueOf(0), buckets.getOrDefault(OWNER_B, 0));
+
+        List<Map<String, Object>> matchSet = hits(searchRaw(sortedByField(body), 20));
+        assertEquals("an empty ANN leg contributes nothing, it does not open the Tail up", COLLIDING_IDS, matchSet.size());
+        for (Map<String, Object> hit : matchSet) {
+            assertEquals("a Tail opened up to match_all lets index-b's documents onto a page sorted by s", INDEX_A, hit.get("_index"));
+        }
     }
 
     /**
@@ -344,9 +370,9 @@ public class HybridQueryFusedModeKnnTailIT extends BaseNeuralSearchIT {
         Map<String, List<String>> truncated = matchedQueriesById(annK, truncatingWindow);
         Map<String, List<String>> exact = matchedQueriesById(annK, WINDOW_SIZE);
 
-        // Precondition: doc 3 has to come back from both runs, or the comparison below is about nothing. Note that a returned
-        // document is not the same as a ranked one — the Tail is a filter, so the response is the legs' union and can exceed
-        // window_size; the ranked window bounds the scored Top, not the hit count.
+        // Precondition: doc 3 has to come back from both runs, or the comparison below is about nothing. A page in fused-score
+        // order holds the fused window only (FusedRankedPageTrimmer), so "returned" means "ranked" here; at window_size 2 the
+        // window is docs 1 and 3.
         assertTrue(
             "doc 3 must be returned by both runs, got " + truncated + " and " + exact,
             truncated.containsKey("3") && exact.containsKey("3")

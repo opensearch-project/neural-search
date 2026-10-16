@@ -138,11 +138,45 @@ public class HybridQueryFusedModeNestedIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Top-level baseline, for contrast with the nested cases: with {@code size <= window_size} the request returns
-     * exactly the fused window; with {@code size > window_size} the Tail also exposes union docs (score 0) below it.
+     * A fused hybrid that is a leg of an enclosing fused hybrid hands the enclosing fusion its ranking only. Its leg
+     * sub-search asks for the enclosing window (10), past its own (5); the documents beyond its ranking used to come back
+     * as Tail-only hits at score 0 whenever that leg kept its Tail, which with default totals it did and with totals off
+     * it did not — so the enclosing ranking depended on an unrelated totals setting. Both shapes now rank identically.
      */
     @SneakyThrows
-    public void testFused_topLevel_windowThenTail() {
+    public void testFused_nestedLegWindowBelowTheEnclosingWindow_thenTheEnclosingRankingIgnoresTotals() {
+        ensureDataset();
+        String enclosing = "{\"hybrid\":{\"fusion\":{\"window_size\":10,\"normalization\":{\"technique\":\"min_max\"},"
+            + "\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.5,0.5]}}},"
+            + "\"queries\":["
+            + fusedHybrid(WINDOW_SIZE)
+            + ","
+            + leg()
+            + "]}}";
+
+        List<String> defaultTotals = idsAndScores(searchRaw("{\"query\":" + enclosing + "}", 10));
+        List<String> totalsOff = idsAndScores(searchRaw("{\"track_total_hits\":false,\"query\":" + enclosing + "}", 10));
+
+        assertEquals(10, defaultTotals.size());
+        assertEquals(totalsOff, defaultTotals);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> idsAndScores(Map<String, Object> resp) {
+        List<String> pairs = new ArrayList<>();
+        for (Map<String, Object> hit : (List<Map<String, Object>>) ((Map<String, Object>) resp.get("hits")).get("hits")) {
+            pairs.add(hit.get("_id") + "=" + hit.get("_score"));
+        }
+        return pairs;
+    }
+
+    /**
+     * Top-level baseline, for contrast with the nested cases: with {@code size <= window_size} the request returns
+     * exactly the fused window, and with {@code size > window_size} too — a fused page ends at the ranked documents, while
+     * the Tail still counts the whole union.
+     */
+    @SneakyThrows
+    public void testFused_topLevel_pageEndsAtTheWindow() {
         ensureDataset();
         String body = "{\"query\":" + fusedHybrid() + "}";
 
@@ -151,11 +185,7 @@ public class HybridQueryFusedModeNestedIT extends BaseNeuralSearchIT {
         assertTrue("window is grp A (ids 1..5)", windowIds.stream().allMatch(id -> Integer.parseInt(id) <= WINDOW_LAST_ID));
 
         List<String> allIds = hitIds(searchRaw(body, 20));
-        assertEquals("size>window: the Tail exposes union docs beyond the window", 20, allIds.size());
-        assertTrue(
-            "the fused window (grp A) still ranks first",
-            allIds.subList(0, WINDOW_SIZE).stream().allMatch(id -> Integer.parseInt(id) <= WINDOW_LAST_ID)
-        );
+        assertEquals("size>window: the page still ends at the fused window", windowIds, allIds);
     }
 
     /**

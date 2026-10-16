@@ -84,7 +84,10 @@ public final class FastPathDecision {
     public static final String FETCH_BUDGET = "fetch_budget";
     /** The legs returned nothing to fuse; round 2 is a {@code match_none} either way. */
     public static final String NO_CANDIDATES = "no_candidates";
-    /** The requested page reaches past the ranked window, where only the Tail has documents. */
+    /**
+     * The requested page reaches past the ranked window. A conservative refusal since {@code FusedRankedPageTrimmer}: it
+     * costs a round rather than changing the page — {@code HybridFusionOrchestrator#decideFastPathAfterLegs} says why.
+     */
     public static final String PAGE_BEYOND_WINDOW = "page_beyond_window";
     /** The request wants a count beyond the window and no leg proved it. */
     public static final String COUNT_NOT_SETTLED = "count_not_settled";

@@ -34,7 +34,7 @@ import org.opensearch.index.query.TermQueryBuilder;
  * Internal query produced by {@link HybridQueryBuilder} when the resolver (fused) mode is enabled via the {@code fusion}
  * parameter, after coordinator-level fusion. It realizes the "Top + Tail" pattern using standard OpenSearch query
  * builders, so all downstream search features (sort, collapse, aggregations, pagination, highlight, min_score) operate
- * on a plain query with no hybrid-specific special-casing:
+ * on a plain query with no hybrid-specific special-casing in the query phase:
  *
  * <ul>
  *   <li><b>Top</b> — one {@code constant_score(...)^fusedScore} clause per ranked document. These are the scoring
@@ -46,7 +46,15 @@ import org.opensearch.index.query.TermQueryBuilder;
  *       they mean to give that up. Top-only is the opt-out — {@code track_total_hits} at or below the window, with no
  *       aggregations, highlighting, collapse expansion or non-{@code _score} sort. So the default cost of fused mode is
  *       the legs in round 1 plus the legs re-matched (not re-ranked) inside round 2's filter; see
- *       {@code HybridFusionOrchestrator#needsTail} for the exact trigger set.</li>
+ *       {@code HybridFusionOrchestrator#needsTail} for the exact trigger set. The Tail does not extend the ranking,
+ *       though. A Tail-only document scores {@code 0} and sorts after every ranked one in score order, and when the
+ *       {@code hybrid} this query replaced is the request's own query and the request pages its ranking (no sort, or one
+ *       led by {@code _score} descending), {@code FusedRankedPageTrimmer} cuts every such document from the page on the
+ *       coordinator — the one hybrid-specific pagination step — so a page past the ranked documents comes back short or
+ *       empty. The page keeps round 2's Tail-only documents at {@code 0.0} under any other sort, for a hybrid inside
+ *       a container query such as a {@code bool} (a direct leg of an enclosing fused hybrid is trimmed in its own leg
+ *       sub-search), and when a search request processor changes the request's shape after
+ *       {@code HybridQuerySearchRequestFilter} has decided.</li>
  * </ul>
  *
  * <p><b>Document identity.</b> Addressing is defined once, in {@link #addressDocuments}, and used by both halves: the Top
@@ -74,7 +82,10 @@ import org.opensearch.index.query.TermQueryBuilder;
  * filter on the group key. A group's members are whatever shares the representative's collapse key, which has nothing to
  * do with the fused window, so the expansion is only as wide as what this query matches — which is why declaring
  * {@code collapse.inner_hits} forces the Tail on ({@code CandidateScope.Disposition#FORCES_TAIL}). With the Tail, every
- * member of the group comes back, matching classic's recall. Member <i>scores</i> then split by window membership:
+ * member of the group comes back, matching classic's recall — the expansion is a search of its own, and
+ * {@code FusedRankedPageTrimmer} leaves it alone. The trimmer works on the page of groups instead: in fused-score order
+ * a group no ranked document belongs to is led by a Tail-only document at {@code 0.0}, and is cut with it. Member
+ * <i>scores</i> then split by window membership:
  * <ul>
  *   <li>a member inside the fused window has its own Top clause, so it carries <b>its own fused score</b> — on the same
  *       scale as the group representative, and equal to the score it would receive in the ungrouped fused search;</li>
@@ -187,6 +198,16 @@ public class HybridFusionQueryBuilder extends AbstractQueryBuilder<HybridFusionQ
      */
     public HybridQueryBuilder originalQuery() {
         return originalQuery;
+    }
+
+    /** The ranked window's {@code _id}s in rank order, parallel to {@link #rankedIndices()}. Not a copy. */
+    String[] rankedIds() {
+        return ids;
+    }
+
+    /** The {@code _index} each ranked document was found in, parallel to {@link #rankedIds()}. Not a copy. */
+    String[] rankedIndices() {
+        return indices;
     }
 
     /** Convenience for a query with no name-only registrations — the Tail, where present, registers its own. */
@@ -407,12 +428,17 @@ public class HybridFusionQueryBuilder extends AbstractQueryBuilder<HybridFusionQ
         // Tail: all leg matches as a non-scoring filter -> total hits and aggregations cover the full match set, and
         // highlighting has the sub-queries' terms available. A doc outside the window matches no Top clause — including
         // a doc in another index that shares a window doc's _id, which is why the Top is _index-qualified — so it scores
-        // 0 and sorts below the window, so a request with size <= window_size returns exactly the fused window. A doc
-        // matching only the Tail is therefore in the MATCH set but not the RANKED set, which makes fused mode the one
-        // query here whose match set is wider than what it ranks — the Tail is load-bearing for total_hits,
-        // aggregations and highlighting, so it cannot be narrowed. For a rescore that asymmetry is closed downstream
-        // by FusedWindowGuardRescorer, which demotes the Tail-only documents below every ranked one after the request's
-        // own rescorers have run, rather than by removing them from the pool.
+        // 0 and sorts below the window: in score order every ranked doc comes before every Tail-only one. A doc matching
+        // only the Tail is therefore in the MATCH set but not the RANKED set, which makes fused mode the one query here
+        // whose match set is wider than what it ranks — the Tail is load-bearing for total_hits, aggregations and
+        // highlighting, so it cannot be narrowed. On the page that asymmetry is closed downstream, on the coordinator:
+        // when the hybrid this replaced is the request's own query and the request pages its ranking (no sort, or one
+        // led by _score descending), FusedRankedPageTrimmer drops every hit fusion did not rank. Given the order above,
+        // that ends the page at the last ranked doc, so a page that reaches past the ranked docs comes back short or
+        // empty. Under a rescore FusedWindowGuardRescorer keeps that order, demoting the Tail-only documents below every
+        // ranked one after the request's own rescorers have run rather than removing them from the pool. Under any other
+        // sort, or for a hybrid inside a container query, the page still lists Tail-only docs at score 0 (the class
+        // javadoc lists the remaining cases the trimmer leaves alone).
         if (tailQueries.isEmpty() == false) {
             BoolQueryBuilder tail = new BoolQueryBuilder();
             for (QueryBuilder q : tailQueries) {

@@ -496,15 +496,42 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testFromXContent_whenFusionWithPaginationDepth_then400() {
+    public void testFromXContent_whenFusionWithPaginationDepth_thenAccepted() {
+        // A classic hybrid query keeps its syntax when fusion is added: pagination_depth parses beside every fusion form.
         setUpClusterService();
-        XContentBuilder xContentBuilder = hybridWithOneTermQuery().field("pagination_depth", 10)
+        XContentBuilder withWindowSize = hybridWithOneTermQuery().field("pagination_depth", 10)
             .startObject("fusion")
             .field("window_size", 50)
             .endObject()
             .endObject();
-        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
-        assertThat(e.getMessage(), containsString("pagination_depth"));
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(withWindowSize));
+        assertEquals(10, builder.paginationDepth().intValue());
+        assertEquals(50, builder.fusion().get("window_size"));
+
+        XContentBuilder withDefaults = hybridWithOneTermQuery().field("pagination_depth", 10).startObject("fusion").endObject().endObject();
+        assertEquals(10, HybridQueryBuilder.fromXContent(fusionTestParser(withDefaults)).paginationDepth().intValue());
+
+        XContentBuilder withPipeline = hybridWithOneTermQuery().field("pagination_depth", 10).field("fusion", "pipeline").endObject();
+        HybridQueryBuilder fromPipeline = HybridQueryBuilder.fromXContent(fusionTestParser(withPipeline));
+        assertEquals(10, fromPipeline.paginationDepth().intValue());
+        assertEquals("pipeline", fromPipeline.fusion().get("source"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionWithNonPositivePaginationDepth_then400() {
+        // Classic hybrid rejects these on the shard, which a fused query never reaches, so fused mode rejects them at parse.
+        setUpClusterService();
+        for (int depth : new int[] { 0, -1 }) {
+            XContentBuilder xContentBuilder = hybridWithOneTermQuery().field("pagination_depth", depth)
+                .startObject("fusion")
+                .endObject()
+                .endObject();
+            ParsingException e = expectThrows(
+                ParsingException.class,
+                () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder))
+            );
+            assertThat(e.getMessage(), containsString("[hybrid] query [pagination_depth] must be greater than 0"));
+        }
     }
 
     @SneakyThrows
@@ -554,6 +581,28 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         HybridQueryBuilder copy = new HybridQueryBuilder(in);
         assertNotNull("fusion must survive the wire as non-null", copy.fusion());
         assertTrue(copy.fusion().isEmpty());
+        assertEquals(original, copy);
+    }
+
+    @SneakyThrows
+    public void testSerialization_whenFusionWithPaginationDepth_thenBothSurvive() {
+        setUpClusterService(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
+        HybridQueryBuilder original = new HybridQueryBuilder();
+        original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        original.paginationDepth(30);
+        original.fusion(new HashMap<>());
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        original.writeTo(streamOutput);
+        FilterStreamInput in = new NamedWriteableAwareStreamInput(
+            streamOutput.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
+            )
+        );
+        HybridQueryBuilder copy = new HybridQueryBuilder(in);
+        assertEquals(30, copy.paginationDepth().intValue());
+        assertNotNull(copy.fusion());
         assertEquals(original, copy);
     }
 
@@ -2103,6 +2152,15 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     /** Initialize NeuralSearchClusterUtil so getIndexMetadataList returns one index with the given max_result_window. */
     private void initClusterUtilWithMaxResultWindow(int maxResultWindow) {
+        initClusterUtilWithMaxResultWindow(maxResultWindow, false);
+    }
+
+    /**
+     * As above; with {@code plusAVanishedIndex} the request also resolves to a second concrete index whose metadata is no
+     * longer in the cluster state — the shape {@code getIndexMetadataList} hands back when an index is deleted between its
+     * two reads of the state.
+     */
+    private void initClusterUtilWithMaxResultWindow(int maxResultWindow, boolean plusAVanishedIndex) {
         org.opensearch.cluster.metadata.Metadata metadata = mock(org.opensearch.cluster.metadata.Metadata.class);
         org.opensearch.cluster.ClusterState clusterState = mock(org.opensearch.cluster.ClusterState.class);
         org.opensearch.cluster.service.ClusterService clusterService = mock(org.opensearch.cluster.service.ClusterService.class);
@@ -2128,11 +2186,16 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             )
         );
         org.opensearch.core.index.Index index = new org.opensearch.core.index.Index("test-index", "uuid-1");
+        org.opensearch.core.index.Index vanished = new org.opensearch.core.index.Index("vanished-index", "uuid-2");
         org.opensearch.cluster.metadata.IndexNameExpressionResolver resolver = mock(
             org.opensearch.cluster.metadata.IndexNameExpressionResolver.class
         );
         when(resolver.concreteIndices(any(org.opensearch.cluster.ClusterState.class), any(org.opensearch.action.IndicesRequest.class)))
-            .thenReturn(new org.opensearch.core.index.Index[] { index });
+            .thenReturn(
+                plusAVanishedIndex
+                    ? new org.opensearch.core.index.Index[] { vanished, index }
+                    : new org.opensearch.core.index.Index[] { index }
+            );
         Settings settings = Settings.builder()
             .put("index.number_of_shards", 1)
             .put("index.number_of_replicas", 0)
@@ -2140,6 +2203,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             .put("index.max_result_window", maxResultWindow)
             .build();
         when(metadata.index(index)).thenReturn(IndexMetadata.builder("test-index").settings(settings).build());
+        when(metadata.index(vanished)).thenReturn(null);
         org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.stubFusedModeEnabled(clusterService);
         org.opensearch.neuralsearch.util.NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
     }
@@ -2218,6 +2282,362 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         } finally {
             IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
         }
+    }
+
+    /**
+     * Runs the round-1 fused rewrite and returns the {@code size} every leg sub-search was fanned out with, i.e. the
+     * effective window. The legs are captured, not answered, so nothing past the fan-out runs.
+     */
+    @SneakyThrows
+    private int legWindowOf(HybridQueryBuilder builder) {
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(any());
+        QueryBuilder marker = builder.doRewrite(ctx);
+        assertEquals("the round-1 marker keeps the depth", builder.paginationDepth(), ((HybridQueryBuilder) marker).paginationDepth());
+
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> legSearches =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        doAnswer(invocation -> {
+            legSearches.set(invocation.getArgument(0));
+            return null;
+        }).when(client).multiSearch(any(), any());
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> {}, e -> fail(e.getMessage())));
+
+        Set<Integer> sizes = legSearches.get().requests().stream().map(r -> r.source().size()).collect(Collectors.toSet());
+        assertEquals("every leg is fanned out with the same window", 1, sizes.size());
+        return sizes.iterator().next();
+    }
+
+    public void testDoRewriteFused_whenPaginationDepthWithoutWindowSize_thenDepthIsTheWindow() {
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"))));
+        builder.paginationDepth(370);
+        assertEquals(370, legWindowOf(builder));
+
+        HybridQueryBuilder defaults = fusedBuilder(new HashMap<>());
+        defaults.paginationDepth(370);
+        assertEquals("the defaults form (fusion: {}) reads the depth too", 370, legWindowOf(defaults));
+    }
+
+    public void testDoRewriteFused_whenPaginationDepthBelowTheDefaultWindow_thenTheDefaultStands() {
+        // A depth raises the window but never lowers it below what the query fuses without the parameter.
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>());
+        builder.paginationDepth(10);
+        assertEquals(100, legWindowOf(builder));
+
+        HybridQueryBuilder explicit = fusedBuilder(new HashMap<>(Map.of("window_size", 10)));
+        explicit.paginationDepth(10);
+        assertEquals("an explicit window_size still goes below the default", 10, legWindowOf(explicit));
+    }
+
+    public void testDoRewriteFused_whenWindowSizeAndPaginationDepth_thenWindowSizeWins() {
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder smallerWindow = fusedBuilder(new HashMap<>(Map.of("window_size", 20)));
+        smallerWindow.paginationDepth(37);
+        assertEquals(20, legWindowOf(smallerWindow));
+
+        HybridQueryBuilder largerWindow = fusedBuilder(new HashMap<>(Map.of("window_size", 300)));
+        largerWindow.paginationDepth(37);
+        assertEquals(300, legWindowOf(largerWindow));
+    }
+
+    public void testDoRewriteFused_whenNeitherWindowSizeNorPaginationDepth_thenDefaultWindow() {
+        initClusterUtilWithMaxResultWindow(10000);
+        assertEquals(100, legWindowOf(fusedBuilder(new HashMap<>())));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenPaginationDepthExceedsMaxResultWindow_thenFailsNamingTheDepth() {
+        initClusterUtilWithMaxResultWindow(100);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>());
+        builder.paginationDepth(500);
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(
+            e.getMessage(),
+            containsString("[hybrid] query [pagination_depth] (500) must be less than or equal to [index.max_result_window] (100)")
+        );
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenOverriddenPaginationDepthExceedsMaxResultWindow_thenFails() {
+        // window_size sizes the window, but the depth beside it still gets the ceiling classic hybrid gives it.
+        initClusterUtilWithMaxResultWindow(100);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("window_size", 50)));
+        builder.paginationDepth(500);
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("[hybrid] query [pagination_depth] (500) must be less than or equal to"));
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenBelowDefaultPaginationDepthExceedsMaxResultWindow_thenFailsNamingTheDepth() {
+        // A depth below the default does not size the window, but classic bounds the depth itself, so fused does too: on an
+        // index whose max_result_window is under the default, the depth is reported as the depth the user wrote — not as
+        // the default window it did not lower, which would also exceed the ceiling.
+        initClusterUtilWithMaxResultWindow(50);
+        HybridQueryBuilder builder = fusedBuilder(new HashMap<>());
+        builder.paginationDepth(60);
+        QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+        assertThat(
+            e.getMessage(),
+            containsString("[hybrid] query [pagination_depth] (60) must be less than or equal to [index.max_result_window] (50)")
+        );
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenTheDefaultWindowExceedsMaxResultWindow_thenTheDefaultBendsToTheCeiling() {
+        // The default, and the floor a smaller depth is raised to, are values the user never wrote: on an index whose
+        // max_result_window is below them they become that ceiling, so a classic body with a small depth keeps working when
+        // it adds fusion, instead of failing about a window_size it never set.
+        initClusterUtilWithMaxResultWindow(50);
+        HybridQueryBuilder withDepth = fusedBuilder(new HashMap<>());
+        withDepth.paginationDepth(40);
+        assertEquals("the floor bends to the ceiling", 50, legWindowOf(withDepth));
+
+        HybridQueryBuilder noDepth = fusedBuilder(new HashMap<>());
+        assertEquals("so does the plain default", 50, legWindowOf(noDepth));
+
+        // The depth itself still wins over the clamped floor when it is the larger of the two.
+        HybridQueryBuilder depthAboveClampedFloor = fusedBuilder(new HashMap<>());
+        depthAboveClampedFloor.paginationDepth(45);
+        assertEquals(50, legWindowOf(depthAboveClampedFloor));
+
+        // Each bent default is reported once, in a Warning header, naming the ceiling and the knob; the shallower ranking
+        // is otherwise invisible in a normal 200. (OpenSearchTestCase fails the test on any unasserted warning.)
+        assertWarnings(
+            "[hybrid] query [fusion] window lowered from 100 to 50 by [index.max_result_window] (50) of index [test-index]; "
+                + "set [fusion.window_size] to choose it"
+        );
+
+        // A depth that is the window is what the user asked for: no warning, even though it equals the bent default.
+        HybridQueryBuilder depthAtTheCeiling = fusedBuilder(new HashMap<>());
+        depthAtTheCeiling.paginationDepth(50);
+        assertEquals(50, legWindowOf(depthAtTheCeiling));
+
+        // What the user wrote is not bent: an explicit window_size over the ceiling is refused, naming it.
+        HybridQueryBuilder explicit = fusedBuilder(new HashMap<>(Map.of("window_size", 70)));
+        QueryCoordinatorContext explicitCtx = coordinatorContextFor(explicit);
+        doAnswer(invocation -> null).when(explicitCtx).registerAsyncAction(any());
+        IllegalArgumentException explicitError = expectThrows(IllegalArgumentException.class, () -> explicit.doRewrite(explicitCtx));
+        assertThat(
+            explicitError.getMessage(),
+            containsString("[hybrid] query [fusion.window_size] (70) must be less than or equal to [index.max_result_window] (50)")
+        );
+    }
+
+    public void testDoRewriteFused_whenATargetedIndexVanishedFromTheClusterState_thenTheOthersStillSetTheCeiling() {
+        // An index deleted between getIndexMetadataList's two reads of the state has no metadata to read a ceiling from; the
+        // search fails on it in its own right, so it is skipped here and the remaining indices decide the ceiling.
+        initClusterUtilWithMaxResultWindow(50, true);
+        HybridQueryBuilder clamped = fusedBuilder(new HashMap<>());
+        assertEquals("the surviving index's ceiling bends the default", 50, legWindowOf(clamped));
+        assertWarnings(
+            "[hybrid] query [fusion] window lowered from 100 to 50 by [index.max_result_window] (50) of index [test-index]; "
+                + "set [fusion.window_size] to choose it"
+        );
+
+        HybridQueryBuilder overTheCeiling = fusedBuilder(new HashMap<>(Map.of("window_size", 70)));
+        QueryCoordinatorContext ctx = coordinatorContextFor(overTheCeiling);
+        doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> overTheCeiling.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("[index.max_result_window] (50) for index [test-index]"));
+    }
+
+    public void testDoRewriteFused_whenTheClauseCeilingIsDegenerate_thenTheDefaultIsNamedAsTheDefault() {
+        // A clause ceiling below one leaves no window at all: the default cannot bend below 1 and is reported as the
+        // default, with the depth that did not lower it, rather than as a window_size the request never set.
+        initClusterUtilWithMaxResultWindow(10000);
+        int savedMaxClauseCount = IndexSearcher.getMaxClauseCount();
+        IndexSearcher.setMaxClauseCount(1);
+        try {
+            HybridQueryBuilder withDepth = fusedBuilder(new HashMap<>());
+            withDepth.paginationDepth(1);
+            QueryCoordinatorContext ctx = coordinatorContextFor(withDepth);
+            doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> withDepth.doRewrite(ctx));
+            assertThat(
+                e.getMessage(),
+                containsString("[hybrid] query [pagination_depth] (1) must be less than [indices.query.bool.max_clause_count] (1)")
+            );
+
+            HybridQueryBuilder noDepth = fusedBuilder(new HashMap<>());
+            QueryCoordinatorContext noDepthCtx = coordinatorContextFor(noDepth);
+            doAnswer(invocation -> null).when(noDepthCtx).registerAsyncAction(any());
+            IllegalArgumentException noDepthError = expectThrows(IllegalArgumentException.class, () -> noDepth.doRewrite(noDepthCtx));
+            assertThat(
+                noDepthError.getMessage(),
+                containsString(
+                    "[hybrid] query the default [fusion.window_size] (1) must be less than [indices.query.bool.max_clause_count] (1)"
+                )
+            );
+        } finally {
+            IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
+        }
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenPaginationDepthExceedsMaxClauseCount_thenFailsNamingTheDepth() {
+        initClusterUtilWithMaxResultWindow(10000);
+        int savedMaxClauseCount = IndexSearcher.getMaxClauseCount();
+        IndexSearcher.setMaxClauseCount(150);
+        try {
+            HybridQueryBuilder builder = fusedBuilder(new HashMap<>());
+            builder.paginationDepth(200);
+            QueryCoordinatorContext ctx = coordinatorContextFor(builder);
+            doAnswer(invocation -> null).when(ctx).registerAsyncAction(any());
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(ctx));
+            assertThat(e.getMessage(), containsString("[hybrid] query [pagination_depth] (200) must be less than"));
+            assertThat(e.getMessage(), containsString("indices.query.bool.max_clause_count"));
+
+            // A depth below the default does not size the window, and the default bends to the clause ceiling rather than
+            // failing the request: 49 is the most the self-erased bool can hold beside the Tail's clause.
+            HybridQueryBuilder belowDefault = fusedBuilder(new HashMap<>());
+            belowDefault.paginationDepth(10);
+            IndexSearcher.setMaxClauseCount(50);
+            assertEquals("the floor bends to the clause ceiling", 49, legWindowOf(belowDefault));
+            assertWarnings(
+                "[hybrid] query [fusion] window lowered from 100 to 49 by [indices.query.bool.max_clause_count] (50); "
+                    + "set [fusion.window_size] to choose it"
+            );
+        } finally {
+            IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
+        }
+    }
+
+    public void testDoRewriteFused_whenOverriddenPaginationDepthExceedsMaxClauseCount_thenProceeds() {
+        // The clause ceiling bounds the window the fused query is built from, which the depth does not size here.
+        initClusterUtilWithMaxResultWindow(10000);
+        int savedMaxClauseCount = IndexSearcher.getMaxClauseCount();
+        IndexSearcher.setMaxClauseCount(8);
+        try {
+            HybridQueryBuilder builder = fusedBuilder(new HashMap<>(Map.of("window_size", 7)));
+            builder.paginationDepth(50);
+            assertEquals(7, legWindowOf(builder));
+        } finally {
+            IndexSearcher.setMaxClauseCount(savedMaxClauseCount);
+        }
+    }
+
+    public void testProjectResolvedConfigOntoLegs_whenNestedLegHasPaginationDepth_thenCopyKeepsItsOwn() {
+        FusionSpec resolved = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            60,
+            new float[0]
+        );
+        HybridQueryBuilder outer = outerWithNestedFusedLeg();
+        outer.paginationDepth(40);
+        ((HybridQueryBuilder) outer.queries().get(0)).paginationDepth(7);
+        List<QueryBuilder> projected = HybridQueryBuilder.projectResolvedConfigOntoLegs(outer.queries(), resolved);
+        assertEquals(7, ((HybridQueryBuilder) projected.get(0)).paginationDepth().intValue());
+    }
+
+    /**
+     * Runs a fused request end to end through round 1 — legs answered — with a ranked-page consumer attached, and returns
+     * the {@code _index}/{@code _id} pairs the rewrite handed it, or {@code null} when it handed nothing.
+     */
+    private List<String> rankedWindowPublishedFor(HybridQueryBuilder builder, SearchSourceBuilder source) {
+        return rankedWindowPublishedFor(builder, source, legItem(Map.of("1", 0.9f, "2", 0.5f)), legItem(Map.of("2", 0.8f, "3", 0.4f)));
+    }
+
+    @SneakyThrows
+    private List<String> rankedWindowPublishedFor(
+        HybridQueryBuilder builder,
+        SearchSourceBuilder source,
+        org.opensearch.action.search.MultiSearchResponse.Item... legItems
+    ) {
+        java.util.concurrent.atomic.AtomicReference<List<String>> published = new java.util.concurrent.atomic.AtomicReference<>();
+        builder.fusedRankedPageConsumer((indices, ids) -> {
+            List<String> keys = new ArrayList<>();
+            for (int i = 0; i < ids.length; i++) {
+                keys.add(indices[i] + "/" + ids[i]);
+            }
+            published.set(keys);
+        });
+        SearchRequest searchRequest = new SearchRequest("test-index").source(source);
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(any());
+        builder.doRewrite(ctx);
+
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(legItems, 10L);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
+            l.onResponse(msResponse);
+            return null;
+        }).when(client).multiSearch(any(), any());
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> {}, e -> fail(e.getMessage())));
+        return published.get();
+    }
+
+    public void testDoRewriteFused_whenThePageIsTheFusedRanking_thenTheRankedWindowIsHandedToThePage() {
+        initClusterUtilWithMaxResultWindow(10000);
+        Set<String> rankedWindow = Set.of("test-index/1", "test-index/2", "test-index/3");
+        HybridQueryBuilder withDepth = fusedBuilder(new HashMap<>());
+        withDepth.paginationDepth(10);
+        assertEquals(rankedWindow, new HashSet<>(rankedWindowPublishedFor(withDepth, new SearchSourceBuilder().query(withDepth))));
+
+        // Not only with pagination_depth: every fused page ends at the ranked documents.
+        HybridQueryBuilder windowOnly = fusedBuilder(new HashMap<>(Map.of("window_size", 50)));
+        assertEquals(rankedWindow, new HashSet<>(rankedWindowPublishedFor(windowOnly, new SearchSourceBuilder().query(windowOnly))));
+    }
+
+    public void testDoRewriteFused_whenThePageIsNotTheFusedRanking_thenNothingIsHandedToThePage() {
+        initClusterUtilWithMaxResultWindow(10000);
+        // Ordered by a field: ranked and Tail-only documents interleave, so there is no ranked slice to keep.
+        HybridQueryBuilder sorted = fusedBuilder(new HashMap<>());
+        assertNull(rankedWindowPublishedFor(sorted, new SearchSourceBuilder().query(sorted).sort("rank")));
+
+        // Nothing ranked: round 2 is a match_none that returns no hits, so there is no page to keep to anything.
+        HybridQueryBuilder unmatched = fusedBuilder(new HashMap<>());
+        assertNull(rankedWindowPublishedFor(unmatched, new SearchSourceBuilder().query(unmatched), legItem(Map.of()), legItem(Map.of())));
+
+        // Not the request's query: the hits are scored by the enclosing query, not by this hybrid's ranking.
+        HybridQueryBuilder nested = fusedBuilder(new HashMap<>());
+        assertNull(rankedWindowPublishedFor(nested, new SearchSourceBuilder().query(QueryBuilders.boolQuery().must(nested))));
+    }
+
+    public void testRequestPagesTheFusedRanking() {
+        assertFalse(HybridQueryBuilder.requestPagesTheFusedRanking(null));
+        assertTrue(HybridQueryBuilder.requestPagesTheFusedRanking(new SearchSourceBuilder()));
+        // "sort": [] parses to an empty list rather than none.
+        SearchSourceBuilder emptySort = new SearchSourceBuilder().sort("rank");
+        emptySort.sorts().clear();
+        assertTrue(HybridQueryBuilder.requestPagesTheFusedRanking(emptySort));
+        assertTrue(HybridQueryBuilder.requestPagesTheFusedRanking(new SearchSourceBuilder().sort("_score")));
+        assertTrue(
+            HybridQueryBuilder.requestPagesTheFusedRanking(
+                new SearchSourceBuilder().sort("_score", org.opensearch.search.sort.SortOrder.DESC).sort("rank")
+            )
+        );
+        assertFalse(
+            HybridQueryBuilder.requestPagesTheFusedRanking(
+                new SearchSourceBuilder().sort("_score", org.opensearch.search.sort.SortOrder.ASC)
+            )
+        );
+        assertFalse(HybridQueryBuilder.requestPagesTheFusedRanking(new SearchSourceBuilder().sort("rank").sort("_score")));
     }
 
     /**

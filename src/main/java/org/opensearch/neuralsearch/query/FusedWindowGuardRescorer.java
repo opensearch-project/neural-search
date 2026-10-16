@@ -50,12 +50,20 @@ import org.opensearch.search.rescore.Rescorer;
  * {@code fusion.window_size / rescore window} — would have to return an empty array, and core's
  * {@code RescoreProcessor} length-guards only its INPUT before reading {@code scoreDocs[0].score} on the loop's output,
  * so an empty return is an {@code ArrayIndexOutOfBoundsException} escaping a {@code catch (IOException)} — a shard
- * failure. Demoting preserves the array length, so that path is never taken, and it also never shortens the page.
+ * failure. Demoting preserves the array length, so that path is never taken. Taking the demoted documents off the page
+ * is left to the coordinator, where removing them is safe: core refuses every sort beside a rescore but the default
+ * {@code _score} order, so a rescored page is in score order with every ranked document above every demoted one, and
+ * {@code FusedRankedPageTrimmer} cuts it at the last ranked document. The trimmer never touches a {@code top_hits}
+ * bucket, and it leaves some pages as round 2 returned them (see
+ * {@code HybridQuerySearchRequestFilter#mayKeepThePageToTheRanking}), so a demoted document can still be shown —
+ * with its band value decoded (see below).
  *
  * <p><b>The guarantee this delivers.</b> A rescore may reorder the hybrid's hits; it may not change which documents are
- * eligible to be returned. That is exactly the ordering the same request has with no rescore at all — ranked documents
- * at or above the floor, Tail-only documents at {@code 0.0f} — which is also the contract
- * {@link HybridFusionQueryBuilder#buildSelfErasedQuery} states for {@code size <= window_size}.
+ * eligible to be returned. That is exactly the ordering round 2 has for the same request with no rescore at all —
+ * ranked documents at or above the floor, Tail-only documents at {@code 0.0f} below them, as
+ * {@link HybridFusionQueryBuilder#buildSelfErasedQuery} states — and it is the ordering {@code FusedRankedPageTrimmer}
+ * relies on: ending a page at the last ranked document leaves every page a contiguous slice of the ranking only while no
+ * unranked document sorts above a ranked one.
  *
  * <p><b>Why one guard wraps the whole chain rather than one guard per rescorer.</b> Membership has to be read from the
  * PRISTINE pool, before any of the user's rescorers has touched a score. Wrapping each element separately would read it
@@ -74,7 +82,8 @@ import org.opensearch.search.rescore.Rescorer;
  * floats and breaks ties by (shard, doc id) — sees one consistent band boundary rather than a per-shard one.
  *
  * <p>Both band values are an internal encoding, not scores the user asked for; {@code FusedRescoreScoreNormalizer}
- * decodes them on the coordinator — the unranked sentinel to {@code 0.0f} and the ranked floor to
+ * decodes them on the coordinator, after any trim of the page — the unranked sentinel to {@code 0.0f} wherever a demoted
+ * document is still shown, and the ranked floor to
  * {@link FusedWindowGuardRescorerBuilder#RANKED_FLOOR_NORMALIZED} — so the response reports what the same request
  * without a rescore would return.
  */
