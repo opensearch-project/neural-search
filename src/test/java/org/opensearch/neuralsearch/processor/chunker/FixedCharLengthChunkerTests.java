@@ -161,6 +161,30 @@ public class FixedCharLengthChunkerTests extends OpenSearchTestCase {
         assertEquals(expectedPassages, passages);
     }
 
+    public void testChunk_withSupplementaryCharacters_noOverlap_thenNoSplitSurrogatePairs() {
+        FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 3, OVERLAP_RATE_FIELD, 0.0));
+        String content = "𠮷野家の𠮷田さん"; // 8 code points, 10 UTF-16 chars
+        List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
+        List<String> expectedPassages = List.of("𠮷野家", "の𠮷田", "さん");
+        assertEquals(expectedPassages, passages);
+    }
+
+    public void testChunk_withSupplementaryCharacters_withOverlap_thenNoSplitSurrogatePairs() {
+        // charLimit = 4, overlapRate = 0.5, so each chunk starts 2 code points after the previous one
+        FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 4, OVERLAP_RATE_FIELD, 0.5));
+        String content = "a😀b😀c😀d";
+        List<String> passages = chunker.chunk(content, defaultRuntimeParameters);
+        List<String> expectedPassages = List.of("a😀b😀", "b😀c😀", "c😀d");
+        assertEquals(expectedPassages, passages);
+    }
+
+    public void testChunk_whenExceedMaxChunkLimit_withSupplementaryCharacters_thenNoSplitSurrogatePairs() {
+        FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 1, OVERLAP_RATE_FIELD, 0.0));
+        Map<String, Object> runtimeParameters = Map.of(MAX_CHUNK_LIMIT_FIELD, 2, CHUNK_STRING_COUNT_FIELD, 1);
+        List<String> passages = chunker.chunk("𠮷𠮷𠮷", runtimeParameters);
+        assertEquals(List.of("𠮷", "𠮷𠮷"), passages);
+    }
+
     public void testChunk_withOverlapRateZero_charLimitExactMultiple_thenSucceed() {
         FixedCharLengthChunker chunker = new FixedCharLengthChunker(Map.of(CHAR_LIMIT_FIELD, 5, OVERLAP_RATE_FIELD, 0.0));
         String content = "abcdefghij"; // length 10

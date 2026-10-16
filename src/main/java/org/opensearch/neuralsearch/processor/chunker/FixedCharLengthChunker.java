@@ -99,21 +99,28 @@ public final class FixedCharLengthChunker extends Chunker {
                 break;
             }
 
-            int endPosition;
-            // Check if the current chunk will extend to or past the end of the content
-            if (startCharIndex + this.charLimit >= content.length()) {
-                endPosition = content.length(); // Ensure chunk goes to the very end
-                chunkResult.add(content.substring(startCharIndex, endPosition));
+            // Count in code points so that a chunk boundary never splits a surrogate pair
+            int endPosition = advanceByCodePoints(content, startCharIndex, this.charLimit);
+            chunkResult.add(content.substring(startCharIndex, endPosition));
+            if (endPosition == content.length()) {
                 break;
-            } else {
-                endPosition = startCharIndex + this.charLimit;
-                chunkResult.add(content.substring(startCharIndex, endPosition));
             }
 
-            startCharIndex += chunkInterval;
+            startCharIndex = advanceByCodePoints(content, startCharIndex, chunkInterval);
         }
 
         return chunkResult;
+    }
+
+    /**
+     * Returns the index that is {@code codePoints} code points after {@code index}, or the content length if the content ends first.
+     */
+    private static int advanceByCodePoints(final String content, int index, int codePoints) {
+        while (codePoints > 0 && index < content.length()) {
+            index += Character.charCount(content.codePointAt(index));
+            codePoints--;
+        }
+        return index;
     }
 
     @Override
