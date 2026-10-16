@@ -109,9 +109,9 @@ public final class FusedRankedPageTrimmer {
         SearchHits trimmed = new SearchHits(
             kept.toArray(new SearchHit[0]),
             hits.getTotalHits(),
-            // Core reports no max_score for an empty page; a page the trim emptied held Tail-only documents, whose score
-            // is not a maximum of anything returned.
-            kept.isEmpty() ? Float.NaN : hits.getMaxScore(),
+            // Kept even when the trim empties the page, as core keeps it for a page past the matches: each shard reports the
+            // score of the best document it collected, documents before `from` included, so this is the top ranked score.
+            hits.getMaxScore(),
             hits.getSortFields(),
             hits.getCollapseField(),
             parallelCollapseValues ? keptCollapseValues.toArray() : collapseValues

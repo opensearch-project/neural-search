@@ -1898,7 +1898,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * there is no shard {@link QueryShardContext} at rewrite). Each leg fires {@code size=window} per shard, so a window
      * above it would fail in the legs; classic hybrid enforces the same ceiling on {@code pagination_depth}. An index whose
      * metadata is missing from the cluster state is skipped: it was deleted between the two reads inside
-     * {@code getIndexMetadataList}, and the search itself fails on it with {@code index_not_found_exception}.
+     * {@code getIndexMetadataList}, and core's own index resolution then either fails the search on it (an index named
+     * explicitly) or leaves it out (a wildcard, or {@code ignore_unavailable}), so skipping its ceiling lets nothing
+     * through.
      *
      * <p><b>The clause ceiling</b>, {@code indices.query.bool.max_clause_count} less the one clause the Tail filter
      * occupies in the same bool. The self-erased query's Top is one {@code should} clause per ranked document in a single

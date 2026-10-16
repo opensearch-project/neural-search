@@ -186,11 +186,15 @@ public class HybridQueryFusedModePaginationDepthIT extends BaseNeuralSearchIT {
     public void testPaginationDepth_whenPageReachesPastTheRankedDocuments_thenShortThenEmpty() {
         ensureIndex();
         String query = fusedWithDepth(DEPTH);
+        // An empty page still reports the top ranked score as max_score, as core does for a page past the matches —
+        // whether the trim emptied it (the Tail runs for totals) or round 2 returned nothing past the window (Top-only).
+        Object topScore = getNestedHits(search("", "{\"size\":1,\"query\":" + query + "}")).get(0).get("_score");
         for (String totals : new String[] { "", "\"track_total_hits\":false," }) {
             Map<String, Object> straddling = search("", "{" + totals + "\"from\":" + (DEPTH - 2) + ",\"size\":5,\"query\":" + query + "}");
             assertEquals(totals, ranks(DOCS - DEPTH + 2, DOCS - DEPTH + 1), ids(straddling));
             Map<String, Object> beyond = search("", "{" + totals + "\"from\":" + DEPTH + ",\"size\":5,\"query\":" + query + "}");
             assertTrue(totals, ids(beyond).isEmpty());
+            assertEquals(totals, topScore, ((Map<String, Object>) beyond.get("hits")).get("max_score"));
         }
 
         Map<String, Object> beyondWithAggs = search(
