@@ -727,6 +727,16 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         assertTrue(dotProduct.getDetails()[0].getDescription().contains("token '1'"));
     }
 
+    /** The query arrives folded, so the doc's raw ids have to be folded the same way to line up. */
+    public void testExplain_ExactFloatScore_FoldsDocTokensLikeTheNativeWriter() throws IOException {
+        // 40000 % 32768 = 7232; 32773 % 32768 = 5 collides with the raw 5 and wins on weight.
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(7232, 1.0f, 5, 1.0f));
+
+        Explanation explanation = exactFloatBuilder(encodeVector(Map.of(40000, 2.0f, 5, 0.5f, 32773, 3.0f))).explain();
+
+        assertEquals(5.0f, explanation.getValue().floatValue(), 0.0001f);
+    }
+
     public void testExplain_ExactFloatScore_AppliesBoost() throws IOException {
         when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f));
         BinaryDocValues docValues = encodeVector(Map.of(1, 3.0f));

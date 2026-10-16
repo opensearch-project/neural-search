@@ -24,9 +24,12 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
 
 /**
  * Builder class for constructing detailed explanations of Sparse ANN query scoring.
@@ -41,11 +44,6 @@ import java.util.Map;
  * The score is recomputed from the document's stored vector rather than recorded during search, so
  * it reproduces the scorer's arithmetic: the quantized path matches nsparse's decode_dot_product,
  * which is the same `raw * ceiling_ingest * ceiling_search / 255 / 255` this class applies.
- *
- * Known limit on the quantized path: {@link SparseVector} folds token ids modulo
- * {@code MODULUS_FOR_SHORT} (32768) and merges collisions by max weight, while the native engine
- * indexes raw ids up to 65535. A field using ids at or above 32768 therefore aliases tokens here
- * and can report a score the native scorer did not produce.
  */
 @Log4j2
 @Builder
@@ -156,7 +154,14 @@ public class SparseExplanationBuilder {
                     String.format(Locale.ROOT, "document %d has no sparse vector in field '%s'", docId, query.getFieldName())
                 );
             }
-            docWeights = BinaryVectorUtils.readToMap(bytesRef);
+            // Folded as the native writer folded them, so the keys line up with rawQueryTokens.
+            List<Integer> tokens = new ArrayList<>();
+            List<Float> weights = new ArrayList<>();
+            BinaryVectorUtils.readToList(bytesRef, tokens, weights, MODULUS_FOR_SHORT);
+            docWeights = new HashMap<>();
+            for (int i = 0; i < tokens.size(); i++) {
+                docWeights.put(tokens.get(i), weights.get(i));
+            }
         } catch (IOException e) {
             return Explanation.noMatch(
                 String.format(Locale.ROOT, "error reading document %d in field '%s': %s", docId, query.getFieldName(), e.getMessage())

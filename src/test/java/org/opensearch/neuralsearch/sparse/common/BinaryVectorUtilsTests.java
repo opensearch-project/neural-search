@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
+
 /**
  * {@code readToList} feeds the native writer's CSR buffer, so its order and duplicate handling are
  * part of what the index is built from -- unlike {@code readToMap}, which is free to collapse both.
@@ -42,7 +44,7 @@ public class BinaryVectorUtilsTests extends AbstractSparseTestBase {
 
         // Deliberately not ascending: doc-value tokens are stored in parser order, and the writer
         // derives the index dimension from the maximum rather than from the last element.
-        BinaryVectorUtils.readToList(encode(new int[] { 9, 2, 5 }, new float[] { 0.1f, 0.2f, 0.3f }), tokens, weights);
+        BinaryVectorUtils.readToList(encode(new int[] { 9, 2, 5 }, new float[] { 0.1f, 0.2f, 0.3f }), tokens, weights, MODULUS_FOR_SHORT);
 
         assertEquals(List.of(9, 2, 5), tokens);
         assertEquals(List.of(0.1f, 0.2f, 0.3f), weights);
@@ -53,7 +55,7 @@ public class BinaryVectorUtilsTests extends AbstractSparseTestBase {
         List<Integer> tokens = new ArrayList<>();
         List<Float> weights = new ArrayList<>();
 
-        BinaryVectorUtils.readToList(encode(new int[] { 4, 4 }, new float[] { 0.25f, 0.75f }), tokens, weights);
+        BinaryVectorUtils.readToList(encode(new int[] { 4, 4 }, new float[] { 0.25f, 0.75f }), tokens, weights, MODULUS_FOR_SHORT);
 
         assertEquals(List.of(4, 4), tokens);
         assertEquals(List.of(0.25f, 0.75f), weights);
@@ -64,10 +66,72 @@ public class BinaryVectorUtilsTests extends AbstractSparseTestBase {
         List<Integer> tokens = new ArrayList<>(List.of(1));
         List<Float> weights = new ArrayList<>(List.of(1.0f));
 
-        BinaryVectorUtils.readToList(encode(new int[] { 2 }, new float[] { 2.0f }), tokens, weights);
+        BinaryVectorUtils.readToList(encode(new int[] { 2 }, new float[] { 2.0f }), tokens, weights, MODULUS_FOR_SHORT);
 
         assertEquals(List.of(1, 2), tokens);
         assertEquals(List.of(1.0f, 2.0f), weights);
+    }
+
+    @SneakyThrows
+    public void testReadToListFoldsTokensAtOrAboveUpperBound() {
+        List<Integer> tokens = new ArrayList<>();
+        List<Float> weights = new ArrayList<>();
+
+        BinaryVectorUtils.readToList(
+            encode(new int[] { 40000, 32767, 32768, 3 }, new float[] { 0.1f, 0.2f, 0.3f, 0.4f }),
+            tokens,
+            weights,
+            MODULUS_FOR_SHORT
+        );
+
+        assertEquals(List.of(7232, 32767, 0, 3), tokens);
+        assertEquals(List.of(0.1f, 0.2f, 0.3f, 0.4f), weights);
+    }
+
+    @SneakyThrows
+    public void testReadToListMergesFoldedCollisionsByMaxWeight() {
+        List<Integer> tokens = new ArrayList<>();
+        List<Float> weights = new ArrayList<>();
+
+        // 32773 and 65541 both fold onto 5: the raw token keeps its slot and the largest weight wins,
+        // whichever side of the collision it came from.
+        BinaryVectorUtils.readToList(
+            encode(new int[] { 5, 9, 32773, 65541 }, new float[] { 0.2f, 0.1f, 0.7f, 0.3f }),
+            tokens,
+            weights,
+            MODULUS_FOR_SHORT
+        );
+
+        assertEquals(List.of(5, 9), tokens);
+        assertEquals(List.of(0.7f, 0.1f), weights);
+    }
+
+    @SneakyThrows
+    public void testReadToListKeepsFirstSeenSlotWhenFoldedTokenComesFirst() {
+        List<Integer> tokens = new ArrayList<>();
+        List<Float> weights = new ArrayList<>();
+
+        BinaryVectorUtils.readToList(
+            encode(new int[] { 32773, 1, 5 }, new float[] { 0.1f, 0.2f, 0.4f }),
+            tokens,
+            weights,
+            MODULUS_FOR_SHORT
+        );
+
+        assertEquals(List.of(5, 1), tokens);
+        assertEquals(List.of(0.4f, 0.2f), weights);
+    }
+
+    @SneakyThrows
+    public void testReadToListMergesOnlyTheVectorBeingRead() {
+        List<Integer> tokens = new ArrayList<>(List.of(5));
+        List<Float> weights = new ArrayList<>(List.of(9.0f));
+
+        // The lists already hold another document's row; folding this one must not reach into it.
+        BinaryVectorUtils.readToList(encode(new int[] { 32773, 5 }, new float[] { 0.1f, 0.3f }), tokens, weights, MODULUS_FOR_SHORT);
+
+        assertEquals(List.of(5, 5), tokens);
+        assertEquals(List.of(9.0f, 0.3f), weights);
     }
 
     @SneakyThrows
@@ -79,7 +143,7 @@ public class BinaryVectorUtilsTests extends AbstractSparseTestBase {
 
         List<Integer> tokens = new ArrayList<>();
         List<Float> weights = new ArrayList<>();
-        BinaryVectorUtils.readToList(slice, tokens, weights);
+        BinaryVectorUtils.readToList(slice, tokens, weights, MODULUS_FOR_SHORT);
 
         assertEquals(List.of(6), tokens);
         assertEquals(List.of(1.25f), weights);
@@ -90,7 +154,7 @@ public class BinaryVectorUtilsTests extends AbstractSparseTestBase {
     public void testReadEmptyVector() {
         List<Integer> tokens = new ArrayList<>();
         List<Float> weights = new ArrayList<>();
-        BinaryVectorUtils.readToList(new BytesRef(new byte[0]), tokens, weights);
+        BinaryVectorUtils.readToList(new BytesRef(new byte[0]), tokens, weights, MODULUS_FOR_SHORT);
 
         assertTrue(tokens.isEmpty());
         assertTrue(weights.isEmpty());
