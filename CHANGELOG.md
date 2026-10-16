@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - [SemanticHighlighter] Support lists and scalars for semantic highlighting with per-element fragments, matching built-in highlighters ([#1813](https://github.com/opensearch-project/neural-search/issues/1813))
 * [Hybrid Query] Add opt-in index setting `index.neural_search.hybrid_collapse_distinct_groups_enabled` to make collapse return top-`size` distinct groups instead of deduplicated top-`size` documents ([#1947](https://github.com/opensearch-project/neural-search/issues/1947))
 * [Hybrid Query] Allow `sort: [_score, <field>]` with `collapse`, using the field to break exact `_score` ties so the collapsed group head is deterministic ([#1984](https://github.com/opensearch-project/neural-search/issues/1984))
+* [Text Chunking] Allow `icu_tokenizer`, `kuromoji_tokenizer` and `smartcn_tokenizer` in the `fixed_token_length` algorithm for Chinese and Japanese text, counting each token position once ([#2064](https://github.com/opensearch-project/neural-search/pull/2064))
 
 ### Bug Fixes
 * [Neural Sparse Query] Expose embedded filters to query builder and Lucene query visitor traversal, and reject unsupported filters on `rank_features` fields instead of silently ignoring them ([#2044](https://github.com/opensearch-project/neural-search/pull/2044))

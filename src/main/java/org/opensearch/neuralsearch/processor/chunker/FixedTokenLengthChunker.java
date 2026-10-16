@@ -60,7 +60,11 @@ public final class FixedTokenLengthChunker extends Chunker {
         "whitespace",
         "uax_url_email",
         "classic",
-        "thai"
+        "thai",
+        // provided by the analysis-icu, analysis-kuromoji and analysis-smartcn plugins
+        "icu_tokenizer",
+        "kuromoji_tokenizer",
+        "smartcn_tokenizer"
     );
 
     // parameter value
@@ -161,7 +165,16 @@ public final class FixedTokenLengthChunker extends Chunker {
         analyzeRequest.tokenizer(tokenizer);
         try {
             AnalyzeAction.Response analyzeResponse = analyze(analyzeRequest, analysisRegistry, null, maxTokenCount);
-            return analyzeResponse.getTokens();
+            // Count each position once: kuromoji_tokenizer in search mode also emits compound tokens at the position of their first part
+            List<AnalyzeToken> tokens = new ArrayList<>();
+            int lastPosition = -1;
+            for (AnalyzeToken token : analyzeResponse.getTokens()) {
+                if (token.getPosition() > lastPosition) {
+                    tokens.add(token);
+                    lastPosition = token.getPosition();
+                }
+            }
+            return tokens;
         } catch (Exception e) {
             throw new IllegalStateException(String.format(Locale.ROOT, "analyzer %s throws exception: %s", tokenizer, e.getMessage()), e);
         }
