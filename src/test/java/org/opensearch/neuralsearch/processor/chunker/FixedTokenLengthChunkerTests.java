@@ -5,6 +5,10 @@
 package org.opensearch.neuralsearch.processor.chunker;
 
 import lombok.SneakyThrows;
+import org.apache.lucene.analysis.Tokenizer;
+import org.apache.lucene.analysis.tokenattributes.CharTermAttribute;
+import org.apache.lucene.analysis.tokenattributes.OffsetAttribute;
+import org.apache.lucene.analysis.tokenattributes.PositionIncrementAttribute;
 import org.apache.lucene.tests.analysis.MockTokenizer;
 import org.junit.Before;
 import org.opensearch.common.settings.Settings;
@@ -16,13 +20,16 @@ import org.opensearch.indices.analysis.AnalysisModule;
 import org.opensearch.plugins.AnalysisPlugin;
 import org.opensearch.test.OpenSearchTestCase;
 
+import java.io.IOException;
+import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import static java.util.Collections.singletonList;
-import static java.util.Collections.singletonMap;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.MAX_CHUNK_LIMIT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.Chunker.CHUNK_STRING_COUNT_FIELD;
 import static org.opensearch.neuralsearch.processor.chunker.FixedTokenLengthChunker.ALGORITHM_NAME;
@@ -59,12 +66,15 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
 
             @Override
             public Map<String, AnalysisModule.AnalysisProvider<TokenizerFactory>> getTokenizers() {
-                return singletonMap(
+                return Map.of(
                     "keyword",
                     (indexSettings, environment, name, settings) -> TokenizerFactory.newFactory(
                         name,
                         () -> new MockTokenizer(MockTokenizer.KEYWORD, false)
-                    )
+                    ),
+                    // stands in for kuromoji_tokenizer, which is not on the unit test classpath
+                    "kuromoji_tokenizer",
+                    (indexSettings, environment, name, settings) -> TokenizerFactory.newFactory(name, CompoundWordTokenizer::new)
                 );
             }
         };
@@ -164,6 +174,22 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         );
         assert (illegalArgumentException.getMessage()
             .contains(String.format(Locale.ROOT, "Tokenizer [%s] is not supported for [%s] algorithm.", ngramTokenizer, ALGORITHM_NAME)));
+    }
+
+    public void testParseParameters_whenCjkTokenizer_thenSuccessful() {
+        for (String tokenizer : List.of("icu_tokenizer", "kuromoji_tokenizer", "smartcn_tokenizer")) {
+            fixedTokenLengthChunker.parse(Map.of(TOKENIZER_FIELD, tokenizer));
+        }
+    }
+
+    public void testChunk_whenTokenizerEmitsCompoundTokens_thenCountEachPositionOnce() {
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put(TOKEN_LIMIT_FIELD, 2);
+        parameters.put(TOKENIZER_FIELD, "kuromoji_tokenizer");
+        FixedTokenLengthChunker fixedTokenLengthChunker = createFixedTokenLengthChunker(parameters);
+        // tokens: a(0) b(1) b-c(1) c(2) d(3)
+        List<String> passages = fixedTokenLengthChunker.chunk("a b-c d", runtimeParameters);
+        assertEquals(List.of("a b-", "c d"), passages);
     }
 
     public void testChunk_whenTokenizationException_thenFail() {
@@ -318,5 +344,60 @@ public class FixedTokenLengthChunkerTests extends OpenSearchTestCase {
         );
 
         assertTrue(exception.getMessage().contains("Tokenizer [invalid] is not supported for [fixed_token_length] algorithm."));
+    }
+
+    /**
+     * Splits on whitespace and splits words on '-', emitting the whole word at the position of its first part,
+     * like kuromoji_tokenizer in search mode does for compound words.
+     */
+    private static final class CompoundWordTokenizer extends Tokenizer {
+        private final CharTermAttribute termAttribute = addAttribute(CharTermAttribute.class);
+        private final OffsetAttribute offsetAttribute = addAttribute(OffsetAttribute.class);
+        private final PositionIncrementAttribute positionIncrementAttribute = addAttribute(PositionIncrementAttribute.class);
+        private final List<Object[]> tokens = new ArrayList<>();
+        private int tokenIndex;
+        private int length;
+
+        @Override
+        public void reset() throws IOException {
+            super.reset();
+            StringWriter writer = new StringWriter();
+            input.transferTo(writer);
+            String text = writer.toString();
+            length = text.length();
+            tokens.clear();
+            tokenIndex = 0;
+            Matcher word = Pattern.compile("\\S+").matcher(text);
+            while (word.find()) {
+                Matcher part = Pattern.compile("[^-]+").matcher(word.group());
+                boolean first = true;
+                while (part.find()) {
+                    tokens.add(new Object[] { part.group(), word.start() + part.start(), word.start() + part.end(), 1 });
+                    if (first && word.group().contains("-")) {
+                        tokens.add(new Object[] { word.group(), word.start(), word.end(), 0 });
+                    }
+                    first = false;
+                }
+            }
+        }
+
+        @Override
+        public boolean incrementToken() {
+            if (tokenIndex >= tokens.size()) {
+                return false;
+            }
+            clearAttributes();
+            Object[] token = tokens.get(tokenIndex++);
+            termAttribute.append((String) token[0]);
+            offsetAttribute.setOffset(correctOffset((int) token[1]), correctOffset((int) token[2]));
+            positionIncrementAttribute.setPositionIncrement((int) token[3]);
+            return true;
+        }
+
+        @Override
+        public void end() throws IOException {
+            super.end();
+            offsetAttribute.setOffset(correctOffset(length), correctOffset(length));
+        }
     }
 }
