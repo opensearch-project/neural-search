@@ -7,6 +7,8 @@ package org.opensearch.neuralsearch.sparse.common;
 import lombok.SneakyThrows;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
+import org.opensearch.neuralsearch.sparse.data.SparseVector;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -15,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
 
 /**
  * {@code readToList} feeds the native writer's CSR buffer, so its order and duplicate handling are
@@ -132,6 +135,25 @@ public class BinaryVectorUtilsTests extends AbstractSparseTestBase {
 
         assertEquals(List.of(5, 5), tokens);
         assertEquals(List.of(9.0f, 0.3f), weights);
+    }
+
+    @SneakyThrows
+    public void testReadToListMergeAgreesWithSparseVectorWhenCollidingWeightsQuantizeAlike() {
+        ByteQuantizer quantizer = new ByteQuantizer(DEFAULT_QUANTIZATION_CEILING_INGEST);
+        float lower = 1.0f;
+        float higher = 1.004f;
+        assertEquals("both weights must land in one byte bucket", quantizer.quantize(lower), quantizer.quantize(higher));
+        BytesRef encoded = encode(new int[] { 5, 32773 }, new float[] { lower, higher });
+
+        List<Integer> tokens = new ArrayList<>();
+        List<Float> weights = new ArrayList<>();
+        BinaryVectorUtils.readToList(encoded, tokens, weights, MODULUS_FOR_SHORT);
+
+        // The float merge still keeps the larger weight, though after quantizing it is a tie.
+        assertEquals(List.of(5), tokens);
+        assertEquals(List.of(higher), weights);
+        // SparseVector quantizes before merging; the two orders must reach the same byte.
+        assertEquals(new SparseVector(encoded, quantizer).toDenseVector()[5], quantizer.quantize(weights.getFirst()));
     }
 
     @SneakyThrows
