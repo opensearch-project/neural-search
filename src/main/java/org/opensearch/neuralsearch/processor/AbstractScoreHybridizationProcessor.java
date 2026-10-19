@@ -8,9 +8,12 @@ import org.opensearch.action.search.QueryPhaseResultConsumer;
 import org.opensearch.action.search.SearchPhaseContext;
 import org.opensearch.action.search.SearchPhaseName;
 import org.opensearch.action.search.SearchPhaseResults;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.search.SearchPhaseResult;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -18,6 +21,7 @@ import org.opensearch.search.pipeline.SearchPhaseResultsProcessor;
 import org.opensearch.search.query.QuerySearchResult;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -25,6 +29,7 @@ import java.util.stream.Collectors;
 import com.google.common.annotations.VisibleForTesting;
 import lombok.extern.log4j.Log4j2;
 
+import static org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.isHybridQueryStartStopElement;
 
 /**
@@ -36,6 +41,8 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
  */
 @Log4j2
 public abstract class AbstractScoreHybridizationProcessor implements SearchPhaseResultsProcessor {
+    private static final ScoreCombinationFactory SCORE_COMBINATION_FACTORY = new ScoreCombinationFactory();
+
     /**
      * Method abstracts functional aspect of score normalization and score combination. Exact methods for each processing stage
      * are set as part of class constructor. This method is called when there is no pipeline context
@@ -93,12 +100,37 @@ public abstract class AbstractScoreHybridizationProcessor implements SearchPhase
             .querySearchResults(querySearchResults)
             .fetchSearchResultOptional(fetchSearchResult)
             .normalizationTechnique(getNormalizationTechnique())
-            .combinationTechnique(getCombinationTechnique())
+            .combinationTechnique(resolveCombinationTechnique(searchPhaseContext))
             .explain(explain)
             .pipelineProcessingContext(requestContextOptional.orElse(null))
             .searchPhaseContext(searchPhaseContext)
             .build();
         getNormalizationWorkflow().execute(request);
+    }
+
+    /**
+     * Resolve the combination technique for this request. Pipeline-created processor instances are shared, so request
+     * weights must produce a fresh technique rather than mutating the configured one. Rebuilding by technique name is
+     * lossless for every current combiner because weights are their only combination parameter; RRF's rank constant is
+     * held by the normalization technique. Classic hybrid remains the only consumer here: fused hybrid self-erases at
+     * coordinator rewrite and uses its own {@code FusionSpec}.
+     */
+    @VisibleForTesting
+    ScoreCombinationTechnique resolveCombinationTechnique(final SearchPhaseContext searchPhaseContext) {
+        ScoreCombinationTechnique configured = getCombinationTechnique();
+        if (Objects.isNull(searchPhaseContext) || Objects.isNull(searchPhaseContext.getRequest())) {
+            return configured;
+        }
+        SearchSourceBuilder source = searchPhaseContext.getRequest().source();
+        if (Objects.isNull(source) || (source.query() instanceof HybridQueryBuilder) == false) {
+            return configured;
+        }
+        HybridQueryBuilder hybridQuery = (HybridQueryBuilder) source.query();
+        if (Objects.nonNull(hybridQuery.fusion()) || Objects.isNull(hybridQuery.weights())) {
+            return configured;
+        }
+        List<Double> requestWeights = hybridQuery.weights().stream().map(Float::doubleValue).collect(Collectors.toUnmodifiableList());
+        return SCORE_COMBINATION_FACTORY.createCombination(configured.techniqueName(), Map.of(PARAM_NAME_WEIGHTS, requestWeights));
     }
 
     /**

@@ -1289,6 +1289,20 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
 
         Map<String, String> usePipeline = Map.of("search_pipeline", pipeline);
         List<Map.Entry<String, Double>> classic = idsAndScores(search(index, classicQuery, null, WINDOW, usePipeline, null));
+        if (weights.isEmpty() == false) {
+            String requestOverridePipeline = pipeline + "-request-override-base";
+            createRRFSearchPipeline(requestOverridePipeline, List.of(), rankConstant, false);
+            HybridQueryBuilder classicRequestOverride = withParityLegs(new HybridQueryBuilder()).paginationDepth(WINDOW)
+                .weights(weights.stream().map(Double::floatValue).toList());
+            List<Map.Entry<String, Double>> requestOverride = idsAndScores(
+                search(index, classicRequestOverride, null, WINDOW, Map.of("search_pipeline", requestOverridePipeline), null)
+            );
+            assertEquals(
+                "classic request weights equal the same score-ranker weights configured in the pipeline",
+                classic,
+                requestOverride
+            );
+        }
         String what = "rank_constant=" + rankConstant + ", weights=" + weights;
         for (Map.Entry<String, List<Map.Entry<String, Double>>> fused : Map.of(
             "fused inline config",
@@ -1500,6 +1514,60 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         assertEquals(idsAndScores(pipelineWeights), idsAndScores(pipelineAgain));
     }
 
+    /**
+     * Classic hybrid reads the same top-level request weights in its phase-results processor. The request overrides only
+     * the configured weights: techniques still come from the attached pipeline, and a later request without an override
+     * sees the pipeline's original weights rather than shared mutable state.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenTopLevelRequestWeights_thenOverridePipelineWeightsWithoutMutation() {
+        ensureCombinationParityIndex();
+        String configuredPipeline = "classic-request-weights-l2-configured";
+        String equivalentPipeline = "classic-request-weights-l2-equivalent";
+        createSearchPipeline(configuredPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.9, 0.1]"));
+        createSearchPipeline(equivalentPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.1, 0.9]"));
+
+        Map<String, String> configured = Map.of("search_pipeline", configuredPipeline);
+        List<Map<String, Object>> configuredHits = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null) + "}",
+                configured
+            )
+        );
+        List<Map<String, Object>> requestOverride = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}",
+                configured
+            )
+        );
+        List<Map<String, Object>> configuredEquivalent = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null) + "}",
+                Map.of("search_pipeline", equivalentPipeline)
+            )
+        );
+
+        assertEquals("control: configured rank-heavy weights", String.valueOf(COMBINATION_PARITY_DOCS), configuredHits.get(0).get("_id"));
+        assertEquals("request weights reverse the classic ranking", "1", requestOverride.get(0).get("_id"));
+        assertEquals(
+            "request override equals the same weights configured in a pipeline",
+            idsAndScores(configuredEquivalent),
+            idsAndScores(requestOverride)
+        );
+
+        List<Map<String, Object>> configuredAgain = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null) + "}",
+                configured
+            )
+        );
+        assertEquals("request override must not mutate shared pipeline state", idsAndScores(configuredHits), idsAndScores(configuredAgain));
+    }
+
     /** The top-level shortcut's refusals, at HTTP 400 with the reason, through the REST layer. */
     @SneakyThrows
     public void testFusedMode_whenRequestWeightsMalformed_thenBadRequest() {
@@ -1524,10 +1592,7 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
             "parameter [weights] must not be empty",
             // the former fusion.weights location is not retained as an alias
             disagreeingLegsQuery("{\"weights\":[0.5,0.5]}"),
-            "[fusion] contains unknown key [weights]",
-            // classic support is intentionally deferred: never accept the field and then ignore it
-            disagreeingLegsQuery(null, "[0.5,0.5]"),
-            "[weights] is not supported in classic mode; add the [fusion] parameter to use fused mode"
+            "[fusion] contains unknown key [weights]"
         );
         for (Map.Entry<String, String> refusal : refusals.entrySet()) {
             ResponseException e = expectThrows(

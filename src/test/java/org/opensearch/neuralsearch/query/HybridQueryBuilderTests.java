@@ -514,14 +514,21 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testFromXContent_whenTopLevelWeightsWithoutFusion_then400() {
+    public void testFromXContent_whenTopLevelWeightsWithoutFusion_thenClassicAcceptedAndRoundTrips() {
         setUpClusterService();
         XContentBuilder xContentBuilder = hybridWithTwoTermQueries().array("weights", 0.7, 0.3).endObject();
-        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
-        assertThat(
-            e.getMessage(),
-            containsString("[hybrid] query [weights] is not supported in classic mode; add the [fusion] parameter to use fused mode")
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNull("absence of fusion keeps classic execution", builder.fusion());
+        assertEquals(List.of(0.7f, 0.3f), builder.weights());
+
+        XContentBuilder reserialized = XContentFactory.jsonBuilder();
+        builder.toXContent(reserialized, ToXContent.EMPTY_PARAMS);
+        XContentParser parser = createParser(
+            fusionTestRegistry(),
+            reserialized.contentType().xContent(),
+            BytesReference.bytes(reserialized)
         );
+        assertEquals(builder, AbstractQueryBuilder.parseInnerQueryBuilder(parser));
     }
 
     @SneakyThrows
@@ -657,6 +664,20 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                     "[hybrid] query [weights] number of weights [" + wrongCount.size() + "] must match number of sub-queries [2]"
                 )
             );
+        }
+        // Range and sum are request validation too, for classic as well as fused, not a late phase-results failure.
+        for (Map.Entry<List<Double>, String> invalid : Map.of(
+            List.of(-0.1, 1.1),
+            "all weights must be in range",
+            List.of(0.7, 0.7),
+            "sum of weights for combination must be equal to 1.0"
+        ).entrySet()) {
+            XContentBuilder xContentBuilder = hybridWithTwoTermQueries().field("weights", invalid.getKey()).endObject();
+            IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
+                () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder))
+            );
+            assertThat(e.getMessage(), containsString(invalid.getValue()));
         }
         // Integers are numbers: a list written without decimal points must not be refused.
         XContentBuilder integers = hybridWithTwoTermQueries().field("weights", List.of(1, 0)).startObject("fusion").endObject().endObject();
@@ -844,13 +865,55 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertThat(empty.getMessage(), containsString("parameter [weights] must not be empty"));
     }
 
-    public void testDoRewrite_whenTopLevelWeightsWithoutFusion_thenFailsFast() {
+    @SneakyThrows
+    public void testDoRewrite_whenClassicTopLevelWeightsAndLegRewrites_thenWeightsSurvive() {
+        QueryBuilder originalLeg = mock(QueryBuilder.class);
+        QueryBuilder rewrittenLeg = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
+        QueryRewriteContext context = mock(QueryRewriteContext.class);
+        when(originalLeg.rewrite(context)).thenReturn(rewrittenLeg);
+
         HybridQueryBuilder builder = new HybridQueryBuilder();
-        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        builder.add(originalLeg);
         builder.weights(List.of(1.0f));
+        HybridQueryBuilder rewritten = (HybridQueryBuilder) builder.doRewrite(context);
+
+        assertNotSame(builder, rewritten);
+        assertEquals(List.of(1.0f), rewritten.weights());
+        assertSame(rewrittenLeg, rewritten.queries().get(0));
+        assertNull(rewritten.fusion());
+    }
+
+    public void testDoRewrite_whenProgrammaticWeightsInvalid_thenFailsBeforeExecution() {
+        assertProgrammaticWeightsRejected(List.of(), 1, null, "must not be empty");
+        assertProgrammaticWeightsRejected(java.util.Arrays.asList((Float) null), 1, null, "must be a collection of numbers");
+        assertProgrammaticWeightsRejected(List.of(0.5f, 0.5f), 1, null, "must match number of sub-queries [1]");
+        assertProgrammaticWeightsRejected(List.of(-0.1f, 1.1f), 2, null, "all weights must be in range");
+        assertProgrammaticWeightsRejected(List.of(0.7f, 0.2f), 2, null, "sum of weights for combination must be equal to 1.0");
+        assertProgrammaticWeightsRejected(
+            List.of(0.5f, 0.5f),
+            2,
+            new HashMap<>(
+                Map.of(
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.5, 0.5)))
+                )
+            ),
+            "cannot combine [weights] with [fusion.combination.parameters.weights]"
+        );
+    }
+
+    private void assertProgrammaticWeightsRejected(
+        List<Float> weights,
+        int queryCount,
+        Map<String, Object> fusion,
+        String expectedMessage
+    ) {
+        HybridQueryBuilder builder = new HybridQueryBuilder().weights(weights).fusion(fusion);
+        for (int i = 0; i < queryCount; i++) {
+            builder.add(QueryBuilders.matchAllQuery());
+        }
         IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(mock(QueryRewriteContext.class)));
-        assertThat(e.getMessage(), containsString("[weights] is not supported in classic mode"));
-        assertThat(e.getMessage(), containsString("add the [fusion] parameter to use fused mode"));
+        assertThat(e.getMessage(), containsString(expectedMessage));
     }
 
     @SneakyThrows
