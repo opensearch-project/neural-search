@@ -83,11 +83,9 @@ public class BinaryVectorUtils {
     /**
      * Collapses repeated tokens in {@code keys[start..]} in place, keeping first-seen order.
      *
-     * Must keep the weight {@code SparseVector.processListItems} keeps for the same collision. That
-     * one quantizes first and takes the larger byte; this takes the larger float, which the index
-     * quantizes later. They agree only because quantization is monotonic, so
-     * {@code q(max(a, b)) == max(q(a), q(b))}; a quantizer that is not would weight a folded token
-     * differently in the native index than in a {@code SparseVector} built from the same doc value.
+     * Must keep the weight {@code SparseVector.foldTokens} keeps when it folds the query for the
+     * native engine: the larger float. Both sides are quantized only afterwards, by nsparse, so a
+     * folded id is weighted alike in the index and in the query.
      */
     private static void mergeByMax(List<Integer> keys, List<Float> values, int start) {
         Map<Integer, Integer> slotByKey = new HashMap<>();

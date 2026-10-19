@@ -8,16 +8,16 @@ import lombok.SneakyThrows;
 import org.apache.lucene.util.BytesRef;
 import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
-import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.Seismic.DEFAULT_QUANTIZATION_CEILING_INGEST;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_UNSIGNED_SHORT;
 
 /**
  * {@code readToList} feeds the native writer's CSR buffer, so its order and duplicate handling are
@@ -138,22 +138,22 @@ public class BinaryVectorUtilsTests extends AbstractSparseTestBase {
     }
 
     @SneakyThrows
-    public void testReadToListMergeAgreesWithSparseVectorWhenCollidingWeightsQuantizeAlike() {
-        ByteQuantizer quantizer = new ByteQuantizer(DEFAULT_QUANTIZATION_CEILING_INGEST);
-        float lower = 1.0f;
-        float higher = 1.004f;
-        assertEquals("both weights must land in one byte bucket", quantizer.quantize(lower), quantizer.quantize(higher));
-        BytesRef encoded = encode(new int[] { 5, 32773 }, new float[] { lower, higher });
-
+    public void testReadToListMergeAgreesWithFoldTokens() {
+        // 65541 folds onto 5 at the native modulus: the index and the query must keep the same weight for it.
         List<Integer> tokens = new ArrayList<>();
         List<Float> weights = new ArrayList<>();
-        BinaryVectorUtils.readToList(encoded, tokens, weights, MODULUS_FOR_SHORT);
+        BinaryVectorUtils.readToList(
+            encode(new int[] { 5, 65541, 7 }, new float[] { 1.0f, 1.004f, 0.5f }),
+            tokens,
+            weights,
+            MODULUS_FOR_UNSIGNED_SHORT
+        );
 
-        // The float merge still keeps the larger weight, though after quantizing it is a tie.
-        assertEquals(List.of(5), tokens);
-        assertEquals(List.of(higher), weights);
-        // SparseVector quantizes before merging; the two orders must reach the same byte.
-        assertEquals(new SparseVector(encoded, quantizer).toDenseVector()[5], quantizer.quantize(weights.getFirst()));
+        Map<Integer, Float> docSide = new HashMap<>();
+        for (int i = 0; i < tokens.size(); i++) {
+            docSide.put(tokens.get(i), weights.get(i));
+        }
+        assertEquals(SparseVector.foldTokens(Map.of(5, 1.0f, 65541, 1.004f, 7, 0.5f), MODULUS_FOR_UNSIGNED_SHORT), docSide);
     }
 
     @SneakyThrows

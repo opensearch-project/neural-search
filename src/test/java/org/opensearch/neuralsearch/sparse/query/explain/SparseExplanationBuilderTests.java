@@ -23,6 +23,8 @@ import org.opensearch.neuralsearch.sparse.accessor.SparseVectorReader;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.query.SparseQueryContext;
 import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -73,6 +75,7 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         docVector = createVector(1, 100, 2, 89, 3, 202);
 
         when(mockQuery.getQueryVector()).thenReturn(queryVector);
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f, 2, 1.0f, 3, 1.0f));
 
         // Setup field info with quantization parameters
         Map<String, String> attributes = new HashMap<>();
@@ -170,6 +173,7 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         // Create a larger query vector to simulate pruning
         SparseVector largeQueryVector = createVector(1, 100, 2, 89, 3, 47, 4, 30, 5, 20);
         when(mockQuery.getQueryVector()).thenReturn(largeQueryVector);
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f, 2, 1.0f, 3, 1.0f, 4, 1.0f, 5, 1.0f));
         when(mockQueryContext.getTokens()).thenReturn(List.of("1", "2", "3")); // Only 3 tokens kept
 
         when(mockReader.read(DOC_ID)).thenReturn(docVector);
@@ -727,8 +731,8 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
     }
 
     public void testExplain_ExactFloatScore_FoldsQueryLikeTheNativeScorer() throws IOException {
-        // 32769 folds onto 1 and outweighs it, as in the query nsparse is sent
-        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(32769, 0.5f, 1, 0.25f, 2, 2.0f));
+        // 65537 folds onto 1 and outweighs it, as in the query nsparse is sent
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(65537, 0.5f, 1, 0.25f, 2, 2.0f));
 
         Explanation explanation = exactFloatBuilder(encodeVector(Map.of(1, 4.0f, 2, 1.0f))).explain();
 
@@ -762,12 +766,12 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         assertTrue(dotProduct.getDetails()[0].getDescription().contains("token '1'"));
     }
 
-    /** The query arrives folded, so the doc's raw ids have to be folded the same way to line up. */
+    /** The doc's ids are folded as the native writer folded them, so they line up with the folded query. */
     public void testExplain_ExactFloatScore_FoldsDocTokensLikeTheNativeWriter() throws IOException {
-        // 40000 % 32768 = 7232; 32773 % 32768 = 5 collides with the raw 5 and wins on weight.
-        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(7232, 1.0f, 5, 1.0f));
+        // 40000 is below 65536 and stays itself; 65541 % 65536 = 5 collides with the raw 5 and wins on weight.
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(40000, 1.0f, 5, 1.0f));
 
-        Explanation explanation = exactFloatBuilder(encodeVector(Map.of(40000, 2.0f, 5, 0.5f, 32773, 3.0f))).explain();
+        Explanation explanation = exactFloatBuilder(encodeVector(Map.of(40000, 2.0f, 5, 0.5f, 65541, 3.0f))).explain();
 
         assertEquals(5.0f, explanation.getValue().floatValue(), 0.0001f);
     }
@@ -881,6 +885,52 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
     }
 
     /** A builder for the exact float path: rawDocValues set instead of relying on the reader. */
+    /** The native engine keeps 0 and 32768 apart, which a SparseVector folded at 32768 would not. */
+    public void testExplain_NativeQuantizedScore_KeepsIdsBelow65536Apart() throws IOException {
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(32768, 1.0f));
+        when(mockQueryContext.getTokens()).thenReturn(List.of("32768"));
+
+        Explanation explanation = nativeQuantizedBuilder(encodeVector(Map.of(0, 3.0f, 32768, 1.5f))).explain();
+
+        Explanation rawScore = findDetail(explanation, "raw dot product score (quantized)");
+        assertNotNull("Should explain the quantized dot product", rawScore);
+        assertEquals(nativeCodeProduct(1.0f, 1.5f), rawScore.getValue().intValue());
+        assertEquals(1, rawScore.getDetails().length);
+        assertTrue(rawScore.getDetails()[0].getDescription().contains("token '32768'"));
+    }
+
+    /** Above 65535 the native writer folds and keeps the larger weight, so the explanation has to as well. */
+    public void testExplain_NativeQuantizedScore_FoldsAbove65535LikeTheNativeWriter() throws IOException {
+        // 65541 % 65536 = 5, and it outweighs the raw 5
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(5, 1.0f));
+        when(mockQueryContext.getTokens()).thenReturn(List.of("5"));
+
+        Explanation explanation = nativeQuantizedBuilder(encodeVector(Map.of(5, 0.5f, 65541, 3.0f))).explain();
+
+        assertEquals(nativeCodeProduct(1.0f, 3.0f), findDetail(explanation, "raw dot product score (quantized)").getValue().intValue());
+    }
+
+    /** The product of one query weight and one doc weight, each quantized at the field's ceiling for its side. */
+    private int nativeCodeProduct(float queryWeight, float docWeight) {
+        return ByteQuantizationUtil.multiplyUnsignedByte(
+            new ByteQuantizer(16.0f).quantize(queryWeight),
+            new ByteQuantizer(3.0f).quantize(docWeight)
+        );
+    }
+
+    private SparseExplanationBuilder nativeQuantizedBuilder(BinaryDocValues docValues) {
+        return SparseExplanationBuilder.builder()
+            .context(mockContext)
+            .docId(DOC_ID)
+            .query(mockQuery)
+            .boost(BOOST)
+            .fieldInfo(mockFieldInfo)
+            .reader(mockReader)
+            .nativeEngine(true)
+            .nativeQuantizedDocValues(docValues)
+            .build();
+    }
+
     private SparseExplanationBuilder exactFloatBuilder(BinaryDocValues rawDocValues) {
         return SparseExplanationBuilder.builder()
             .context(mockContext)

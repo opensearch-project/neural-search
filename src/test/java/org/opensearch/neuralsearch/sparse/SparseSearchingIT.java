@@ -95,12 +95,12 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("8", "7", "6", "5"), actualIds);
     }
 
-    private static final String RAW_TOKEN_IDS_ARE_LUCENE_ONLY = "the native engine folds the query and rejects ids above 65535";
     /**
-     * Ids on both sides of each fold boundary. Pairs that fold together: 0/32768/65536, 32767/65535 and
-     * 7574/105878. Doc 4 holds two of them.
+     * Ids on both sides of each fold boundary. At 32768, which the Lucene engine's forward index folds
+     * at, 0/32768/65536, 32767/65535 and 7574/40342/105878 collide; at 65536, which the native engine
+     * folds at, only 0/65536 and 40342/105878 do. Doc 4 holds two of them.
      */
-    private static final List<Map<String, Float>> RAW_TOKEN_ID_CORPUS = List.of(
+    private static final List<Map<String, Float>> FOLD_BOUNDARY_CORPUS = List.of(
         Map.of("0", 0.25f),
         Map.of("32768", 0.5f),
         Map.of("65536", 0.75f),
@@ -109,10 +109,11 @@ public class SparseSearchingIT extends SparseBaseIT {
         Map.of("65535", 0.5f),
         Map.of("7574", 0.5f),
         Map.of("105878", 0.5f),
-        Map.of("1000", 1.0f)
+        Map.of("1000", 1.0f),
+        Map.of("40342", 0.5f)
     );
-    /** A query for any id returns exactly the docs holding that raw id, never one it folds onto. */
-    private static final Map<String, Set<String>> RAW_TOKEN_ID_EXPECTED_DOCS = Map.of(
+    /** The Lucene engine seeks the raw id, so a query only reaches the documents holding exactly it. */
+    private static final Map<String, Set<String>> LUCENE_FOLD_BOUNDARY_HITS = Map.of(
         "0",
         Set.of("1", "4"),
         "32768",
@@ -126,29 +127,48 @@ public class SparseSearchingIT extends SparseBaseIT {
         "7574",
         Set.of("7"),
         "105878",
-        Set.of("8")
+        Set.of("8"),
+        "40342",
+        Set.of("10")
+    );
+    /** The native engine folds both sides at 65536, so only ids above 65535 reach another id's documents. */
+    private static final Map<String, Set<String>> NATIVE_FOLD_BOUNDARY_HITS = Map.of(
+        "0",
+        Set.of("1", "3", "4"),
+        "32768",
+        Set.of("2", "4"),
+        "65536",
+        Set.of("1", "3", "4"),
+        "32767",
+        Set.of("5"),
+        "65535",
+        Set.of("6"),
+        "7574",
+        Set.of("7"),
+        "105878",
+        Set.of("8", "10"),
+        "40342",
+        Set.of("8", "10")
     );
 
-    /** One segment at the approximate threshold, so its clustered postings are built at flush. */
-    public void testSearchRawTokenIds_clusteredAtFlush() throws Exception {
-        assumeLuceneEngine(RAW_TOKEN_IDS_ARE_LUCENE_ONLY);
-        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, RAW_TOKEN_ID_CORPUS.size());
-        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, RAW_TOKEN_ID_CORPUS);
+    /** One segment at the approximate threshold, so its approximate index is built at flush. */
+    public void testSearchTokenIdsAroundFoldBoundaries_builtAtFlush() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, FOLD_BOUNDARY_CORPUS.size());
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, FOLD_BOUNDARY_CORPUS);
 
-        assertRawTokenIdsReachTheirOwnDocuments(true);
+        assertTokenIdsAroundFoldBoundaries(true);
     }
 
-    /** Two segments below the approximate threshold merge across it, so the clustered postings are built at merge. */
-    public void testSearchRawTokenIds_clusteredAtMerge() throws Exception {
-        assumeLuceneEngine(RAW_TOKEN_IDS_ARE_LUCENE_ONLY);
-        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, RAW_TOKEN_ID_CORPUS.size());
-        int half = RAW_TOKEN_ID_CORPUS.size() / 2;
-        ingestDocuments(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, RAW_TOKEN_ID_CORPUS.subList(0, half), null, 1);
+    /** Two segments below the approximate threshold merge across it, so the approximate index is built at merge. */
+    public void testSearchTokenIdsAroundFoldBoundaries_builtAtMerge() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, FOLD_BOUNDARY_CORPUS.size());
+        int half = FOLD_BOUNDARY_CORPUS.size() / 2;
+        ingestDocuments(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, FOLD_BOUNDARY_CORPUS.subList(0, half), null, 1);
         ingestDocuments(
             TEST_INDEX_NAME,
             TEST_TEXT_FIELD_NAME,
             TEST_SPARSE_FIELD_NAME,
-            RAW_TOKEN_ID_CORPUS.subList(half, RAW_TOKEN_ID_CORPUS.size()),
+            FOLD_BOUNDARY_CORPUS.subList(half, FOLD_BOUNDARY_CORPUS.size()),
             null,
             half + 1
         );
@@ -156,26 +176,29 @@ public class SparseSearchingIT extends SparseBaseIT {
         waitForSegmentMerge(TEST_INDEX_NAME);
         assertEquals(1, getSegmentCount(TEST_INDEX_NAME));
 
-        assertRawTokenIdsReachTheirOwnDocuments(true);
-    }
-
-    /** A segment below the approximate threshold is searched by the raw FeatureField fallback. */
-    public void testSearchRawTokenIds_belowApproximateThreshold() throws Exception {
-        assumeLuceneEngine(RAW_TOKEN_IDS_ARE_LUCENE_ONLY);
-        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, RAW_TOKEN_ID_CORPUS.size() + 1);
-        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, RAW_TOKEN_ID_CORPUS);
-
-        assertRawTokenIdsReachTheirOwnDocuments(false);
+        assertTokenIdsAroundFoldBoundaries(true);
     }
 
     /**
-     * The forward index folds token ids modulo 32768, but the clustered postings and the fallback's
-     * FeatureFields keep the raw id, so the query has to seek the raw id: folding 32768 to 0 used to
-     * return the documents of 0 instead.
+     * A segment below the approximate threshold: the Lucene engine searches it with the raw
+     * FeatureField fallback, the native engine with its unquantized inverted index.
+     */
+    public void testSearchTokenIdsAroundFoldBoundaries_belowApproximateThreshold() throws Exception {
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, FOLD_BOUNDARY_CORPUS.size() + 1);
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, FOLD_BOUNDARY_CORPUS);
+
+        assertTokenIdsAroundFoldBoundaries(false);
+    }
+
+    /**
+     * Before #2048, the query folded every id modulo 32768 for both engines: on the Lucene engine a
+     * query for 32768 sought "0" and returned the documents of 0, and on the native engine ids
+     * 32768-65535 were indexed raw and never matched while an id above 65535 failed the shard.
      */
     @SuppressWarnings("unchecked")
-    private void assertRawTokenIdsReachTheirOwnDocuments(boolean approximate) {
-        for (Map.Entry<String, Set<String>> expected : RAW_TOKEN_ID_EXPECTED_DOCS.entrySet()) {
+    private void assertTokenIdsAroundFoldBoundaries(boolean approximate) {
+        Map<String, Set<String>> expectedHits = SparseEngine.NATIVE == engine ? NATIVE_FOLD_BOUNDARY_HITS : LUCENE_FOLD_BOUNDARY_HITS;
+        for (Map.Entry<String, Set<String>> expected : expectedHits.entrySet()) {
             NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
                 TEST_SPARSE_FIELD_NAME,
                 1,
@@ -191,7 +214,7 @@ public class SparseSearchingIT extends SparseBaseIT {
             Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
             for (Map<String, Object> hit : (List<Map<String, Object>>) hitsMap.get("hits")) {
                 Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
-                // Pins the path: the seismic explanation only comes from clustered postings.
+                // Pins the path: only an approximate index is explained as a quantized dot product.
                 assertEquals(approximate, explanation.toString().contains("raw dot product score"));
                 assertExplanationScoreMatchesHit(hit);
             }
@@ -690,52 +713,6 @@ public class SparseSearchingIT extends SparseBaseIT {
         Map<String, Object> searchResults2 = search(TEST_INDEX_NAME, queryBuilder2, 10);
         assertNotNull(searchResults2);
         assertTrue(getHitCount(searchResults2) > 0);
-    }
-
-    /** Below the approximate threshold, so nsparse scores from its unquantized inverted index. */
-    public void testSearchFoldedTokenIdsMatchEachOther_exactPath() throws Exception {
-        assertFoldedTokenIdsMatchEachOther(100);
-    }
-
-    /** At the corpus size, so the segment is clustered and scored through seismic postings. */
-    public void testSearchFoldedTokenIdsMatchEachOther_approximatePath() throws Exception {
-        assertFoldedTokenIdsMatchEachOther(4);
-    }
-
-    /**
-     * Token ids fold modulo 32768 on both the document and the query side (#2048), so 0, 32768 and
-     * 65536 are one term: a query for any of them has to reach all three documents, and nothing else.
-     * Before the native writer folded, 32768 was indexed raw and never matched, and 65536 failed the
-     * segment flush outright.
-     */
-    @SuppressWarnings("unchecked")
-    private void assertFoldedTokenIdsMatchEachOther(int approximateThreshold) throws Exception {
-        assumeNativeEngine("the Lucene engine indexes raw token ids as terms, so a folded query misses ids >= 32768");
-        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, approximateThreshold);
-        ingestDocumentsAndForceMergeForSingleShard(
-            TEST_INDEX_NAME,
-            TEST_TEXT_FIELD_NAME,
-            TEST_SPARSE_FIELD_NAME,
-            List.of(Map.of("0", 0.25f), Map.of("32768", 0.5f), Map.of("65536", 0.75f), Map.of("1000", 1.0f))
-        );
-
-        for (String queryToken : List.of("0", "32768", "65536")) {
-            NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
-                TEST_SPARSE_FIELD_NAME,
-                1,
-                1.0f,
-                10,
-                Map.of(queryToken, 1.0f)
-            );
-
-            Map<String, Object> searchResults = searchWithExplain(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
-            assertEquals("query token " + queryToken, Set.of("1", "2", "3"), new HashSet<>(getDocIDs(searchResults)));
-            assertEquals("query token " + queryToken, 3, getHitCount(searchResults));
-            Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
-            for (Map<String, Object> hit : (List<Map<String, Object>>) hitsMap.get("hits")) {
-                assertExplanationScoreMatchesHit(hit);
-            }
-        }
     }
 
     @SneakyThrows

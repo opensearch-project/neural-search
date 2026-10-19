@@ -25,9 +25,11 @@ public final class SparseConstants {
     // Tokens are stored in a signed short[] to keep the memory footprint low, so they are folded
     // into the non-negative signed-short range [0, Short.MAX_VALUE] via this modulus. Using 32768
     // (not 65536) keeps every folded value <= Short.MAX_VALUE, so it round-trips without being
-    // sign-extended to a negative int on read. The native engine folds at the same modulus even
-    // though its uint16 term_t could hold 65536 ids, so one folded query matches either engine.
+    // sign-extended to a negative int on read.
     public static final int MODULUS_FOR_SHORT = 32768;
+    // The native engine stores token ids as nsparse's uint16 term_t, so it folds at 65536 instead:
+    // every id it can hold keeps its value, and only ids above 65535 collide.
+    public static final int MODULUS_FOR_UNSIGNED_SHORT = 65536;
     public static final String COMPOUND_EXTENSION = "c";
 
     /**

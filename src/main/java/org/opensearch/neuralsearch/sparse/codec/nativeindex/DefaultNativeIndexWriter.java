@@ -25,7 +25,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_UNSIGNED_SHORT;
 
 /**
  * Builds the native engine file for one sparse field of one segment.
@@ -123,7 +123,7 @@ public class DefaultNativeIndexWriter {
         while (docId != DocIdSetIterator.NO_MORE_DOCS) {
             List<Integer> tokens = new ArrayList<>();
             List<Float> weights = new ArrayList<>();
-            BinaryVectorUtils.readToList(binaryDocValues.binaryValue(), tokens, weights, MODULUS_FOR_SHORT);
+            BinaryVectorUtils.readToList(binaryDocValues.binaryValue(), tokens, weights, MODULUS_FOR_UNSIGNED_SHORT);
             result.updateMaxTokenId(tokens);
             result.getDocIds().add(docId);
             buffer.addVector(tokens, weights);
