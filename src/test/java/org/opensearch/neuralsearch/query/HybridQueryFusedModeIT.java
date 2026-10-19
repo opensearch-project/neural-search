@@ -1398,7 +1398,7 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * {@code fusion.weights}: the request's combination weights, over whatever techniques the block or the pipeline
+     * Top-level {@code hybrid.weights}: the request's combination weights, over whatever techniques the block or the pipeline
      * resolved. Two legs that disagree on purpose — one ranks by {@code rank}, the other by its reciprocal — so the fused
      * order is decided by the weights alone and flips with them; symmetric weights would rank like no weights and prove
      * nothing. On 4 shards, where coordinator-side fusion could plausibly disagree with the single-shard case.
@@ -1408,16 +1408,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         ensureCombinationParityIndex();
 
         List<Map<String, Object>> rankHeavy = getNestedHits(
-            searchRaw(
-                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
-                "{\"query\":" + disagreeingLegsQuery("{\"weights\":[0.9,0.1]}") + "}"
-            )
+            searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + disagreeingLegsQuery("{}", "[0.9,0.1]") + "}")
         );
         List<Map<String, Object>> reciprocalHeavy = getNestedHits(
-            searchRaw(
-                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
-                "{\"query\":" + disagreeingLegsQuery("{\"weights\":[0.1,0.9]}") + "}"
-            )
+            searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + disagreeingLegsQuery("{}", "[0.1,0.9]") + "}")
         );
         assertEquals("rank-heavy weights put the highest rank first", String.valueOf(COMBINATION_PARITY_DOCS), rankHeavy.get(0).get("_id"));
         assertEquals("reciprocal-heavy weights put the lowest rank first", "1", reciprocalHeavy.get(0).get("_id"));
@@ -1459,7 +1453,7 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         List<Map<String, Object>> requestWeights = getNestedHits(
             searchRawWithParams(
                 "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
-                "{\"query\":" + disagreeingLegsQuery("{\"source\":\"pipeline\",\"weights\":[0.1,0.9]}") + "}",
+                "{\"query\":" + disagreeingLegsQuery("\"pipeline\"", "[0.1,0.9]") + "}",
                 Map.of("search_pipeline", pipeline)
             )
         );
@@ -1487,10 +1481,7 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
             idsAndScores(requestWeights)
         );
         List<Map<String, Object>> inlineMinMax = getNestedHits(
-            searchRaw(
-                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
-                "{\"query\":" + disagreeingLegsQuery("{\"weights\":[0.1,0.9]}") + "}"
-            )
+            searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + disagreeingLegsQuery("{}", "[0.1,0.9]") + "}")
         );
         assertNotEquals(
             "the normalization came from the pipeline, not from the defaults",
@@ -1509,33 +1500,39 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         assertEquals(idsAndScores(pipelineWeights), idsAndScores(pipelineAgain));
     }
 
-    /** The shorthand's refusals, at HTTP 400 with the reason, through the REST layer. */
+    /** The top-level shortcut's refusals, at HTTP 400 with the reason, through the REST layer. */
     @SneakyThrows
     public void testFusedMode_whenRequestWeightsMalformed_thenBadRequest() {
         ensureCombinationParityIndex();
         Map<String, String> refusals = Map.of(
-            // one place for the weights, even when the two agree
-            "{\"weights\":[0.5,0.5],\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.5,0.5]}}}",
-            "cannot combine [weights] with [combination.parameters.weights]",
-            "{\"weights\":[]}",
-            "[fusion.weights] must not be empty",
-            "{\"source\":\"pipeline\",\"weights\":[0.2,0.3,0.5]}",
+            // one explicit place for the weights, even when the two agree
+            disagreeingLegsQuery(
+                "{\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.5,0.5]}}}",
+                "[0.5,0.5]"
+            ),
+            "cannot combine [weights] with [fusion.combination.parameters.weights]",
+            disagreeingLegsQuery("{}", "[]"),
+            "[weights] must not be empty",
+            disagreeingLegsQuery("\"pipeline\"", "[0.2,0.3,0.5]"),
             "number of weights [3] must match number of sub-queries [2]",
-            "{\"weights\":\"0.5,0.5\"}",
-            "[fusion.weights] must be a collection of numbers",
-            "{\"weights\":[0.7,0.7]}",
+            disagreeingLegsQuery("{}", "\"0.5,0.5\""),
+            "[weights] must be a collection of numbers",
+            disagreeingLegsQuery("{}", "[0.7,0.7]"),
             "sum of weights",
-            // the long form's empty list is refused too, the way the normalization-processor refuses it
-            "{\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[]}}}",
-            "parameter [weights] must not be empty"
+            // the existing long form's empty list is refused too, the way the normalization-processor refuses it
+            disagreeingLegsQuery("{\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[]}}}"),
+            "parameter [weights] must not be empty",
+            // the former fusion.weights location is not retained as an alias
+            disagreeingLegsQuery("{\"weights\":[0.5,0.5]}"),
+            "[fusion] contains unknown key [weights]",
+            // classic support is intentionally deferred: never accept the field and then ignore it
+            disagreeingLegsQuery(null, "[0.5,0.5]"),
+            "[weights] is not supported in classic mode; add the [fusion] parameter to use fused mode"
         );
         for (Map.Entry<String, String> refusal : refusals.entrySet()) {
             ResponseException e = expectThrows(
                 ResponseException.class,
-                () -> searchRaw(
-                    "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
-                    "{\"query\":" + disagreeingLegsQuery(refusal.getKey()) + "}"
-                )
+                () -> searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + refusal.getKey() + "}")
             );
             assertEquals(refusal.getKey(), RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
             assertTrue(refusal.getKey() + " -> " + e.getMessage(), e.getMessage().contains(refusal.getValue()));
@@ -1553,17 +1550,23 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * A hybrid whose two legs rank the fixture in opposite orders — by {@code rank} and by its reciprocal — under the given
-     * {@code fusion} value (an object or the {@code "pipeline"} string, as JSON).
+     * A hybrid whose two legs rank the fixture in opposite orders — by {@code rank} and by its reciprocal — under the
+     * given {@code fusion} value (object/string JSON), and optional top-level weights array JSON.
      */
     private String disagreeingLegsQuery(String fusionJson) {
+        return disagreeingLegsQuery(fusionJson, null);
+    }
+
+    private String disagreeingLegsQuery(String fusionJson, String weightsJson) {
         String byRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
             + RANK_FIELD
             + "\",\"modifier\":\"none\",\"missing\":1}}}";
         String byReciprocalRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
             + RANK_FIELD
             + "\",\"modifier\":\"reciprocal\",\"missing\":1}}}";
-        return "{\"hybrid\":{\"fusion\":" + fusionJson + ",\"queries\":[" + byRank + "," + byReciprocalRank + "]}}";
+        String weights = weightsJson == null ? "" : "\"weights\":" + weightsJson + ",";
+        String fusion = fusionJson == null ? "" : "\"fusion\":" + fusionJson + ",";
+        return "{\"hybrid\":{" + weights + fusion + "\"queries\":[" + byRank + "," + byReciprocalRank + "]}}";
     }
 
     private List<String> idsAndScores(List<Map<String, Object>> hits) {

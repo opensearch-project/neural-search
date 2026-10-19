@@ -428,8 +428,8 @@ public final class FusionSpec {
     }
 
     /**
-     * A {@code weights} value as the request wrote it — the long form's list, or the {@code fusion.weights} shorthand's —
-     * read into the array a spec carries. Anything but a non-empty list of numbers is refused with the reason.
+     * A {@code weights} value as the request wrote it — either the long form's list or top-level
+     * {@code hybrid.weights} — read into the array a spec carries. Anything but a non-empty list of numbers is refused with the reason.
      *
      * <p>Empty is refused too, and that is parity with classic rather than strictness beyond it: the
      * {@code normalization-processor} rejects {@code weights: []} at pipeline creation (an empty list sums to 0, not 1),
@@ -459,8 +459,8 @@ public final class FusionSpec {
     }
 
     /**
-     * This spec with the given per-leg weights in place of its own; every technique setting is kept. How a request's
-     * {@code fusion.weights} is laid over a base read from the block's long form or from the pipeline.
+     * This spec with the given per-leg weights in place of its own; every technique setting is kept. Used to lay
+     * top-level {@code hybrid.weights} over a base read from the fusion block or from the pipeline.
      */
     FusionSpec withWeights(float[] weights) {
         return new FusionSpec(shape, combinationTechnique, normalizationTechnique, rankConstant, weights);
