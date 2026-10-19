@@ -95,6 +95,109 @@ public class SparseSearchingIT extends SparseBaseIT {
         assertEquals(List.of("8", "7", "6", "5"), actualIds);
     }
 
+    private static final String RAW_TOKEN_IDS_ARE_LUCENE_ONLY = "the native engine folds the query and rejects ids above 65535";
+    /**
+     * Ids on both sides of each fold boundary. Pairs that fold together: 0/32768/65536, 32767/65535 and
+     * 7574/105878. Doc 4 holds two of them.
+     */
+    private static final List<Map<String, Float>> RAW_TOKEN_ID_CORPUS = List.of(
+        Map.of("0", 0.25f),
+        Map.of("32768", 0.5f),
+        Map.of("65536", 0.75f),
+        Map.of("0", 0.125f, "32768", 1.0f),
+        Map.of("32767", 0.5f),
+        Map.of("65535", 0.5f),
+        Map.of("7574", 0.5f),
+        Map.of("105878", 0.5f),
+        Map.of("1000", 1.0f)
+    );
+    /** A query for any id returns exactly the docs holding that raw id, never one it folds onto. */
+    private static final Map<String, Set<String>> RAW_TOKEN_ID_EXPECTED_DOCS = Map.of(
+        "0",
+        Set.of("1", "4"),
+        "32768",
+        Set.of("2", "4"),
+        "65536",
+        Set.of("3"),
+        "32767",
+        Set.of("5"),
+        "65535",
+        Set.of("6"),
+        "7574",
+        Set.of("7"),
+        "105878",
+        Set.of("8")
+    );
+
+    /** One segment at the approximate threshold, so its clustered postings are built at flush. */
+    public void testSearchRawTokenIds_clusteredAtFlush() throws Exception {
+        assumeLuceneEngine(RAW_TOKEN_IDS_ARE_LUCENE_ONLY);
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, RAW_TOKEN_ID_CORPUS.size());
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, RAW_TOKEN_ID_CORPUS);
+
+        assertRawTokenIdsReachTheirOwnDocuments(true);
+    }
+
+    /** Two segments below the approximate threshold merge across it, so the clustered postings are built at merge. */
+    public void testSearchRawTokenIds_clusteredAtMerge() throws Exception {
+        assumeLuceneEngine(RAW_TOKEN_IDS_ARE_LUCENE_ONLY);
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, RAW_TOKEN_ID_CORPUS.size());
+        int half = RAW_TOKEN_ID_CORPUS.size() / 2;
+        ingestDocuments(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, RAW_TOKEN_ID_CORPUS.subList(0, half), null, 1);
+        ingestDocuments(
+            TEST_INDEX_NAME,
+            TEST_TEXT_FIELD_NAME,
+            TEST_SPARSE_FIELD_NAME,
+            RAW_TOKEN_ID_CORPUS.subList(half, RAW_TOKEN_ID_CORPUS.size()),
+            null,
+            half + 1
+        );
+        forceMerge(TEST_INDEX_NAME);
+        waitForSegmentMerge(TEST_INDEX_NAME);
+        assertEquals(1, getSegmentCount(TEST_INDEX_NAME));
+
+        assertRawTokenIdsReachTheirOwnDocuments(true);
+    }
+
+    /** A segment below the approximate threshold is searched by the raw FeatureField fallback. */
+    public void testSearchRawTokenIds_belowApproximateThreshold() throws Exception {
+        assumeLuceneEngine(RAW_TOKEN_IDS_ARE_LUCENE_ONLY);
+        createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, RAW_TOKEN_ID_CORPUS.size() + 1);
+        ingestDocumentsAndForceMergeForSingleShard(TEST_INDEX_NAME, TEST_TEXT_FIELD_NAME, TEST_SPARSE_FIELD_NAME, RAW_TOKEN_ID_CORPUS);
+
+        assertRawTokenIdsReachTheirOwnDocuments(false);
+    }
+
+    /**
+     * The forward index folds token ids modulo 32768, but the clustered postings and the fallback's
+     * FeatureFields keep the raw id, so the query has to seek the raw id: folding 32768 to 0 used to
+     * return the documents of 0 instead.
+     */
+    @SuppressWarnings("unchecked")
+    private void assertRawTokenIdsReachTheirOwnDocuments(boolean approximate) {
+        for (Map.Entry<String, Set<String>> expected : RAW_TOKEN_ID_EXPECTED_DOCS.entrySet()) {
+            NeuralSparseQueryBuilder neuralSparseQueryBuilder = getNeuralSparseQueryBuilder(
+                TEST_SPARSE_FIELD_NAME,
+                1,
+                1.0f,
+                10,
+                Map.of(expected.getKey(), 1.0f)
+            );
+
+            Map<String, Object> searchResults = searchWithExplain(TEST_INDEX_NAME, neuralSparseQueryBuilder, 10);
+            List<String> ids = getDocIDs(searchResults);
+            assertEquals("query token " + expected.getKey() + " returned " + ids, expected.getValue().size(), ids.size());
+            assertEquals("query token " + expected.getKey(), expected.getValue(), new HashSet<>(ids));
+            Map<String, Object> hitsMap = (Map<String, Object>) searchResults.get("hits");
+            for (Map<String, Object> hit : (List<Map<String, Object>>) hitsMap.get("hits")) {
+                Map<String, Object> explanation = (Map<String, Object>) hit.get("_explanation");
+                // Pins the path: the seismic explanation only comes from clustered postings.
+                assertEquals(approximate, explanation.toString().contains("raw dot product score"));
+                assertExplanationScoreMatchesHit(hit);
+            }
+        }
+    }
+
     public void testSearchDocumentsMixSeismicWithRankFeatures() throws Exception {
         createSparseIndex(TEST_INDEX_NAME, TEST_SPARSE_FIELD_NAME, 4, 0.4f, 0.5f, 4);
 

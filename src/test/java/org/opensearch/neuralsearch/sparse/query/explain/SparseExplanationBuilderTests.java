@@ -607,6 +607,31 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
         assertTrue("Should have raw score explanation", foundRawScoreExplanation);
     }
 
+    public void testExplain_RawTokenIdsExplainedOncePerFoldedId() throws IOException {
+        // The pruned tokens are raw and heaviest first: 32769 folds to 1, so the later "1" is the same dimension.
+        when(mockQuery.getQueryVector()).thenReturn(createVector(1, 100, 2, 89));
+        when(mockQueryContext.getTokens()).thenReturn(List.of("32769", "1", "2"));
+        when(mockReader.read(DOC_ID)).thenReturn(docVector);
+
+        Explanation explanation = createDefaultBuilder().explain();
+
+        Explanation rawScore = null;
+        for (Explanation detail : explanation.getDetails()) {
+            if (detail.getDescription().contains("raw dot product score")) {
+                rawScore = detail;
+            }
+        }
+        assertNotNull("Should have raw score explanation", rawScore);
+        assertEquals(2, rawScore.getDetails().length);
+        assertTrue(rawScore.getDetails()[0].getDescription().contains("token '32769'"));
+        assertTrue(rawScore.getDetails()[1].getDescription().contains("token '2'"));
+        float sum = 0;
+        for (Explanation tokenDetail : rawScore.getDetails()) {
+            sum += tokenDetail.getValue().floatValue();
+        }
+        assertEquals(rawScore.getValue().floatValue(), sum, DELTA_FOR_ASSERTION);
+    }
+
     public void testExplain_ZeroWeightTokens() throws IOException {
         // Create a query vector where some tokens have zero weight
         SparseVector queryVectorWithZeros = createVector(1, 100, 2, 0, 3, 47, 4, 0);
@@ -699,6 +724,16 @@ public class SparseExplanationBuilderTests extends AbstractSparseTestBase {
             "Should say it scored exactly: " + explanation.getDescription(),
             explanation.getDescription().contains("exact scoring, segment below approximate_threshold")
         );
+    }
+
+    public void testExplain_ExactFloatScore_FoldsQueryLikeTheNativeScorer() throws IOException {
+        // 32769 folds onto 1 and outweighs it, as in the query nsparse is sent
+        when(mockQuery.getRawQueryTokens()).thenReturn(Map.of(32769, 0.5f, 1, 0.25f, 2, 2.0f));
+
+        Explanation explanation = exactFloatBuilder(encodeVector(Map.of(1, 4.0f, 2, 1.0f))).explain();
+
+        // 0.5*4.0 + 2.0*1.0 = 4.0
+        assertEquals(4.0f, explanation.getValue().floatValue(), 0.0001f);
     }
 
     public void testExplain_ExactFloatScore_TokenContributionsSortedByValue() throws IOException {

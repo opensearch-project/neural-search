@@ -121,6 +121,24 @@ public class NativeIndexScorerTests extends AbstractSparseTestBase {
     }
 
     @SneakyThrows
+    public void testQueryTokensAreFoldedBeforeSearching() {
+        // 32775 folds to the 7 every doc carries
+        NativeIndexScorer scorer = new NativeIndexScorer(
+            fieldInfo,
+            new SparseQueryContext(List.of("32775"), 1.0f, 1),
+            Map.of(32775, 1.0f),
+            leafReader,
+            segmentInfo,
+            null,
+            null,
+            1.0f
+        );
+
+        assertEquals(DOC_COUNT - 1, scorer.iterator().nextDoc());
+        assertEquals((float) DOC_COUNT, scorer.score(), 0.001f);
+    }
+
+    @SneakyThrows
     public void testBoostMultipliesTheScore() {
         NativeIndexScorer scorer = scorer(1, null, null, 2.5f);
 

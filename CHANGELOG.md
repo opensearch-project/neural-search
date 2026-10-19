@@ -27,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Ingest Processors] Deep-merge `field_map` target maps so sibling keys that diverge below the first path segment (e.g. `author.name.first` and `author.name.last`) are no longer dropped ([#2054](https://github.com/opensearch-project/neural-search/pull/2054))
 * [Semantic Field] Stop logging the full ingest document on chunking or model-info failure; log only the document `_id` and `_index` so customer content is no longer written to service logs ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
 * [Sparse ANN] Fold token ids in the native engine modulo 32768 as the query does, so documents with ids from 32768 to 65535 can match and an id above 65535 no longer fails the shard ([#2059](https://github.com/opensearch-project/neural-search/pull/2059))
+* [Sparse ANN] Fix approximate search on the Lucene engine returning, for a token id at or above 32768, the documents of that id modulo 32768 (e.g. 0 for 32768) instead of its own ([#2048](https://github.com/opensearch-project/neural-search/issues/2048))
 
 ### Infrastructure
 

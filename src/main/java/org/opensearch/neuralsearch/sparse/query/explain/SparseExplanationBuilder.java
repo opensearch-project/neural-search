@@ -25,9 +25,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
 
@@ -168,9 +170,9 @@ public class SparseExplanationBuilder {
             );
         }
 
-        // The native scorer is handed the raw query weights, so the dot product is over the query as
-        // the user sent it, not the pruned token list -- pruning only picks posting lists to visit.
-        Map<Integer, Float> queryWeights = query.getRawQueryTokens();
+        // The native scorer folds the unpruned query weights and scores all of them -- pruning only picks
+        // posting lists to visit.
+        Map<Integer, Float> queryWeights = SparseVector.foldTokens(query.getRawQueryTokens(), MODULUS_FOR_SHORT);
         List<Explanation> tokenDetails = new ArrayList<>();
         float rawScore = 0.0f;
         List<Map.Entry<Integer, Float>> contributions = new ArrayList<>();
@@ -231,8 +233,11 @@ public class SparseExplanationBuilder {
         List<Explanation> tokenDetails = new ArrayList<>();
         List<String> queryTokens = query.getQueryContext().getTokens();
 
-        // Calculate contribution for each query token
+        // The pruned tokens are raw ids, while both vectors are folded. Tokens come heaviest first, so the
+        // first raw id to reach a folded id is the one whose weight the query vector kept; any later one
+        // would count the same dimension twice.
         List<TokenContribution> contributions = new ArrayList<>();
+        Set<Integer> explainedTokens = new HashSet<>();
         for (String tokenStr : queryTokens) {
             int tokenId;
             try {
@@ -242,11 +247,15 @@ public class SparseExplanationBuilder {
                 continue;
             }
 
-            if (tokenId < 0 || tokenId >= queryDenseVector.length) {
+            if (tokenId < 0) {
+                continue;
+            }
+            int foldedTokenId = SparseVector.prepareTokenForShortType(tokenId);
+            if (foldedTokenId >= queryDenseVector.length || explainedTokens.add(foldedTokenId) == false) {
                 continue;
             }
 
-            byte queryWeight = queryDenseVector[tokenId];
+            byte queryWeight = queryDenseVector[foldedTokenId];
 
             if (queryWeight == 0) {
                 continue;
@@ -256,7 +265,7 @@ public class SparseExplanationBuilder {
             SparseVector.Item item;
             var iterator = docVector.iterator();
             while ((item = iterator.next()) != null) {
-                if (item.getToken() == SparseVector.prepareTokenForShortType(tokenId)) {
+                if (item.getToken() == foldedTokenId) {
                     docWeight = item.getWeight();
                     break;
                 }
