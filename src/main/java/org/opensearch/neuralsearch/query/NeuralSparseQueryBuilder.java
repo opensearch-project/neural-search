@@ -64,6 +64,7 @@ import java.io.IOException;
 import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -97,6 +98,7 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
     static final ParseField ANALYZER_FIELD = new ParseField("analyzer");
     private static MLCommonsClientAccessor ML_CLIENT;
     private static final String DEFAULT_ANALYZER = "bert-uncased";
+    private static final String UNKNOWN_TOKEN = "[UNK]";
     private static final AsymmetricTextEmbeddingParameters TOKEN_ID_PARAMETER = AsymmetricTextEmbeddingParameters.builder()
         .sparseEmbeddingFormat(SparseEmbeddingFormat.TOKEN_ID)
         .build();
@@ -537,6 +539,10 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                 );
             }
             boolean shouldUserQueryTokenId = shouldInferenceWithTokenIdResponse(context);
+            if (shouldUserQueryTokenId) {
+                // Token IDs hide which tokens are [UNK], so check the word tokens first
+                validateNotOnlyUnknownTokens(analyzeToWords(luceneAnalyzer));
+            }
             try (TokenStream stream = luceneAnalyzer.tokenStream(fieldName, queryText)) {
                 stream.reset();
                 if (shouldUserQueryTokenId) {
@@ -555,6 +561,9 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
                     }
                 }
                 stream.end();
+                if (!shouldUserQueryTokenId) {
+                    validateNotOnlyUnknownTokens(queryTokens.keySet());
+                }
 
                 return switch (neuralSparseQueryTwoPhaseInfo.getStatus()) {
                     case NeuralSparseQueryTwoPhaseInfo.TwoPhaseStatus.PHASE_TWO -> PruneUtils.splitSparseVector(
@@ -576,6 +585,37 @@ public class NeuralSparseQueryBuilder extends AbstractNeuralQueryBuilder<NeuralS
             }
         } else {
             throw new IllegalArgumentException("Cannot convert neural sparse query to Lucene query: query tokens must not be null.");
+        }
+    }
+
+    private Set<String> analyzeToWords(Analyzer luceneAnalyzer) {
+        Set<String> words = new HashSet<>();
+        try (TokenStream stream = luceneAnalyzer.tokenStream(fieldName, queryText)) {
+            stream.reset();
+            // The type attribute survives token stream reuse, so set it explicitly
+            stream.addAttribute(TypeAttribute.class).setType(SparseEmbeddingFormat.WORD.toString());
+            CharTermAttribute term = stream.addAttribute(CharTermAttribute.class);
+            while (stream.incrementToken()) {
+                words.add(term.toString());
+            }
+            stream.end();
+        } catch (IOException e) {
+            throw new OpenSearchException("failed to analyze query text. ", e);
+        }
+        return words;
+    }
+
+    private void validateNotOnlyUnknownTokens(Set<String> tokens) {
+        if (!tokens.isEmpty() && tokens.stream().allMatch(UNKNOWN_TOKEN::equals)) {
+            throw new IllegalArgumentException(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] query_text was analyzed into only unknown tokens %s by analyzer [%s]. Use an analyzer that matches the sparse model, for example [mbert-uncased] for multilingual models.",
+                    NAME,
+                    UNKNOWN_TOKEN,
+                    searchAnalyzer
+                )
+            );
         }
     }
 

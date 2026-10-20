@@ -1164,8 +1164,9 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         when(tokenStream.addAttribute(eq(CharTermAttribute.class))).thenReturn(term);
         PayloadAttribute payload = mock(PayloadAttribute.class);
         when(tokenStream.addAttribute(eq(PayloadAttribute.class))).thenReturn(payload);
-        when(tokenStream.incrementToken()).thenReturn(true, true, false);
-        when(term.toString()).thenReturn("1000", "2000");
+        // The first pass reads word tokens to check for [UNK], the second reads token IDs
+        when(tokenStream.incrementToken()).thenReturn(true, true, false, true, true, false);
+        when(term.toString()).thenReturn("hello", "world", "1000", "2000");
 
         when(payload.getPayload()).thenReturn(
             new BytesRef(ByteBuffer.allocate(4).putFloat(1.0f).array()),
@@ -1363,6 +1364,100 @@ public class NeuralSparseQueryBuilderTests extends OpenSearchTestCase {
         assertEquals(2, queryTokens.size());
         assertEquals(1.23f, queryTokens.get("hello"), 0f);
         assertEquals(2.34f, queryTokens.get("world"), 0f);
+    }
+
+    public void testGetQueryTokens_whenAnalyzerOutputsOnlyUnknownTokens_thenThrowException() {
+        QueryShardContext context = mockContextWithBertLikeAnalyzer(null, "[UNK]", "[UNK]");
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText("パソコン")
+            .searchAnalyzer(DEFAULT_ANALYZER);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> queryBuilder.getQueryTokens(context));
+        assertEquals(
+            "[neural_sparse] query_text was analyzed into only unknown tokens [UNK] by analyzer [default]. Use an analyzer that matches the sparse model, for example [mbert-uncased] for multilingual models.",
+            exception.getMessage()
+        );
+    }
+
+    public void testGetQueryTokens_whenAnalyzerOutputsSomeUnknownTokens_thenReturnTokens() {
+        QueryShardContext context = mockContextWithBertLikeAnalyzer(null, "[UNK]", "hello");
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText("パソコン hello")
+            .searchAnalyzer(DEFAULT_ANALYZER);
+
+        assertEquals(Map.of("[UNK]", 1f, "hello", 1f), queryBuilder.getQueryTokens(context));
+    }
+
+    public void testGetQueryTokens_whenSeismicAndAnalyzerOutputsOnlyUnknownTokens_thenThrowException() {
+        QueryShardContext context = mockContextWithBertLikeAnalyzer(SparseVectorFieldMapper.CONTENT_TYPE, "[UNK]", "[UNK]");
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText("パソコン")
+            .searchAnalyzer(DEFAULT_ANALYZER);
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> queryBuilder.getQueryTokens(context));
+        assertTrue(exception.getMessage().contains("only unknown tokens [UNK]"));
+    }
+
+    public void testGetQueryTokens_whenSeismicAndAnalyzerOutputsKnownTokens_thenReturnTokenIds() {
+        QueryShardContext context = mockContextWithBertLikeAnalyzer(SparseVectorFieldMapper.CONTENT_TYPE, "[UNK]", "hello");
+        NeuralSparseQueryBuilder queryBuilder = new NeuralSparseQueryBuilder().fieldName(FIELD_NAME)
+            .queryText("パソコン hello")
+            .searchAnalyzer(DEFAULT_ANALYZER);
+
+        assertEquals(Map.of("100", 1f, "7592", 1f), queryBuilder.getQueryTokens(context));
+    }
+
+    /**
+     * Mocks a shard context whose analyzer, like HFModelTokenizer, emits the given words, or their BERT token IDs when the
+     * type attribute asks for token IDs. As in HFModelTokenizer, the type attribute survives clearAttributes().
+     */
+    private QueryShardContext mockContextWithBertLikeAnalyzer(String fieldTypeName, String... words) {
+        Map<String, Integer> vocab = Map.of("[UNK]", 100, "hello", 7592);
+        Analyzer analyzer = new Analyzer() {
+            @Override
+            protected TokenStreamComponents createComponents(String s) {
+                Tokenizer tokenizer = new Tokenizer() {
+                    private int idx = 0;
+                    private final CharTermAttribute termAtt = addAttribute(CharTermAttribute.class);
+                    private final TypeAttribute typeAtt = addAttribute(TypeAttribute.class);
+
+                    @Override
+                    public boolean incrementToken() {
+                        String type = typeAtt.type();
+                        clearAttributes();
+                        typeAtt.setType(type);
+                        if (idx >= words.length) {
+                            return false;
+                        }
+                        String word = words[idx++];
+                        boolean tokenId = SparseEmbeddingFormat.TOKEN_ID.toString().equalsIgnoreCase(type);
+                        termAtt.append(tokenId ? String.valueOf(vocab.get(word)) : word);
+                        return true;
+                    }
+
+                    @Override
+                    public void reset() throws IOException {
+                        super.reset();
+                        idx = 0;
+                    }
+                };
+                return new TokenStreamComponents(tokenizer, tokenizer);
+            }
+        };
+        QueryShardContext context = mock(QueryShardContext.class);
+        when(context.getIndexAnalyzers()).thenReturn(
+            new IndexAnalyzers(
+                Map.of(DEFAULT_ANALYZER, new NamedAnalyzer(DEFAULT_ANALYZER, AnalyzerScope.INDEX, analyzer)),
+                Collections.emptyMap(),
+                Collections.emptyMap()
+            )
+        );
+        if (fieldTypeName != null) {
+            MappedFieldType fieldType = mock(MappedFieldType.class);
+            when(fieldType.typeName()).thenReturn(fieldTypeName);
+            when(context.fieldMapper(anyString())).thenReturn(fieldType);
+        }
+        return context;
     }
 
     @SneakyThrows
