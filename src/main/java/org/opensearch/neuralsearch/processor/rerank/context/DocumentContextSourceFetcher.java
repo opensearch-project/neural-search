@@ -33,6 +33,7 @@ import lombok.extern.log4j.Log4j2;
 public class DocumentContextSourceFetcher implements ContextSourceFetcher {
 
     public static final String NAME = "document_fields";
+    /** Texts to rerank, one per hit (or chunk). A null entry has no text and gets a NaN score without calling the model. */
     public static final String DOCUMENT_CONTEXT_LIST_FIELD = "document_context_list";
 
     private final List<String> contextFields;

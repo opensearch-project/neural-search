@@ -74,17 +74,16 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
                 String text = chunkText(chunk);
                 if (text == null) {
                     missingFieldCount++;
-                    text = "";
                 }
                 contexts.add(text);
             }
             chunkIdentities.add(new ArrayList<>(chunkByIdentity.keySet()));
         }
         if (missingFieldCount > 0) {
-            log.warn(
+            log.debug(
                 String.format(
                     Locale.ROOT,
-                    "Field [%s] is missing in %d of %d chunks on the nested path [%s], reranking them with an empty string",
+                    "Field [%s] is missing in %d of %d chunks on the nested path [%s], they get no rerank score",
                     field,
                     missingFieldCount,
                     contexts.size(),

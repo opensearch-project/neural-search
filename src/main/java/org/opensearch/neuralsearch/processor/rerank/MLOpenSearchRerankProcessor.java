@@ -6,11 +6,14 @@ package org.opensearch.neuralsearch.processor.rerank;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchResponse;
@@ -92,19 +95,49 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
             }
             scoreListener = innerHitsScoreListener(response, rerankingContext, listener);
         }
+        List<String> texts = contexts.stream().filter(Objects::nonNull).collect(Collectors.toList());
+        if (texts.size() < contexts.size()) {
+            if (texts.isEmpty()) {
+                // No text to rerank anywhere on the page: everything is unscored
+                scoreListener.onResponse(Collections.nCopies(contexts.size(), Float.NaN));
+                return;
+            }
+            scoreListener = missingTextScoreListener(contexts, scoreListener);
+        }
         mlCommonsClientAccessor.inferenceSimilarity(
             SimilarityInferenceRequest.builder()
                 .modelId(modelId)
                 .queryText((String) rerankingContext.get(QueryContextSourceFetcher.QUERY_TEXT_FIELD))
-                .inputTexts(contexts)
+                .inputTexts(texts)
                 .build(),
             scoreListener
         );
     }
 
+    /** Puts the model scores of the present texts back in place and gives each missing (null) text a NaN score. */
+    private static ActionListener<List<Float>> missingTextScoreListener(
+        final List<String> contexts,
+        final ActionListener<List<Float>> listener
+    ) {
+        return ActionListener.wrap(scores -> {
+            long expected = contexts.stream().filter(Objects::nonNull).count();
+            if (scores.size() != expected) {
+                throw new IllegalStateException(
+                    String.format(Locale.ROOT, "Expected %d scores from the rerank model, got %d", expected, scores.size())
+                );
+            }
+            List<Float> allScores = new ArrayList<>(contexts.size());
+            Iterator<Float> modelScores = scores.iterator();
+            for (String context : contexts) {
+                allScores.add(context == null ? Float.NaN : modelScores.next());
+            }
+            listener.onResponse(allScores);
+        }, listener::onFailure);
+    }
+
     /**
      * Spreads the flat chunk scores back over each hit's inner hits lists, re-sorts them and reports the per-hit maximum.
-     * A hit without chunks gets a NaN score, which ranks it after all scored hits.
+     * A hit without scored chunks gets a NaN score, which ranks it after all scored hits.
      */
     @SuppressWarnings("unchecked")
     private ActionListener<List<Float>> innerHitsScoreListener(
@@ -131,7 +164,7 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
                 for (SearchHit.NestedIdentity identity : chunkIdentities.get(i)) {
                     float score = scores.get(cursor++);
                     scoreByIdentity.put(identity, score);
-                    if (Float.isNaN(maxScore) || score > maxScore) {
+                    if (!Float.isNaN(score) && (Float.isNaN(maxScore) || score > maxScore)) {
                         maxScore = score;
                     }
                 }
@@ -165,16 +198,18 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
                 }
                 continue;
             }
-            float listMaxScore = Float.NEGATIVE_INFINITY;
+            float listMaxScore = Float.NaN;
             for (SearchHit chunk : chunks) {
                 float score = scoreByIdentity.get(chunk.getNestedIdentity());
                 chunk.score(score);
-                listMaxScore = Math.max(listMaxScore, score);
+                if (!Float.isNaN(score) && (Float.isNaN(listMaxScore) || score > listMaxScore)) {
+                    listMaxScore = score;
+                }
             }
             // An explicit inner_hits sort wins: chunks get rerank scores but keep the requested order and sort values
             boolean explicitlySorted = chunks[0].getSortValues().length > 0;
             if (!explicitlySorted) {
-                Arrays.sort(chunks, (chunk1, chunk2) -> Float.compare(chunk2.getScore(), chunk1.getScore()));
+                Arrays.sort(chunks, RescoringRerankProcessor.BY_SCORE_DESC_UNSCORED_LAST);
             }
             entry.setValue(
                 new SearchHits(

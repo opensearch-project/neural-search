@@ -547,6 +547,110 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
         assertEquals(2.0f, rerankedHits.getMaxScore(), 0.0f);
     }
 
+    @SneakyThrows
+    public void testRerank_whenChunksMissField_thenTheyAreUnscoredAndRankLast() {
+        SearchHit parent0 = createParentHit(0, "0");
+        parent0.setInnerHits(
+            new LinkedHashMap<>(
+                Map.of("chunks", innerHitsList(createChunk(0, "alpha"), createChunkWithoutText(1), createChunk(2, "gamma")))
+            )
+        );
+        SearchHit parent1 = createParentHit(1, "1");
+        parent1.setInnerHits(new LinkedHashMap<>(Map.of("chunks", innerHitsList(createChunkWithoutText(0)))));
+        SearchHit parent2 = createParentHit(2, "2");
+        parent2.setInnerHits(new LinkedHashMap<>(Map.of("chunks", innerHitsList(createChunk(0, "delta")))));
+        TotalHits totalHits = new TotalHits(3, TotalHits.Relation.EQUAL_TO);
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent0, parent1, parent2 }, totalHits, 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+        doAnswer(invocation -> {
+            ActionListener<List<Float>> inferenceListener = invocation.getArgument(1);
+            inferenceListener.onResponse(List.of(0.2f, 0.6f, 0.9f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(isA(SimilarityInferenceRequest.class), isA(ActionListener.class));
+        Map<String, Object> scoringContext = new HashMap<>(innerHitsContext(response));
+        scoringContext.put(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        ArgumentCaptor<SimilarityInferenceRequest> requestCaptor = ArgumentCaptor.forClass(SimilarityInferenceRequest.class);
+        verify(mlCommonsClientAccessor, times(1)).inferenceSimilarity(requestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(List.of("alpha", "gamma", "delta"), requestCaptor.getValue().getInputTexts());
+
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchHits rerankedHits = argCaptor.getValue().getHits();
+        assertEquals("2", rerankedHits.getAt(0).getId());
+        assertEquals(0.9f, rerankedHits.getAt(0).getScore(), 0.0001f);
+        assertEquals("0", rerankedHits.getAt(1).getId());
+        assertEquals(0.6f, rerankedHits.getAt(1).getScore(), 0.0001f);
+        assertEquals("1", rerankedHits.getAt(2).getId());
+        assertTrue(Float.isNaN(rerankedHits.getAt(2).getScore()));
+
+        SearchHits chunks = rerankedHits.getAt(1).getInnerHits().get("chunks");
+        assertEquals(2, chunks.getAt(0).getNestedIdentity().getOffset());
+        assertEquals(0, chunks.getAt(1).getNestedIdentity().getOffset());
+        assertEquals(1, chunks.getAt(2).getNestedIdentity().getOffset());
+        assertTrue(Float.isNaN(chunks.getAt(2).getScore()));
+        assertEquals(0.6f, chunks.getMaxScore(), 0.0001f);
+        assertTrue(Float.isNaN(rerankedHits.getAt(2).getInnerHits().get("chunks").getMaxScore()));
+    }
+
+    public void testRerank_whenNoChunkHasField_thenAllUnscoredWithoutCallingModel() {
+        SearchHit parent0 = createParentHit(0, "0");
+        parent0.setInnerHits(new LinkedHashMap<>(Map.of("chunks", innerHitsList(createChunkWithoutText(0)))));
+        SearchHit parent1 = createParentHit(1, "1");
+        parent1.setInnerHits(new LinkedHashMap<>(Map.of("chunks", innerHitsList(createChunkWithoutText(0)))));
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent0, parent1 }, new TotalHits(2, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+        Map<String, Object> scoringContext = new HashMap<>(innerHitsContext(response));
+        scoringContext.put(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        verify(mlCommonsClientAccessor, never()).inferenceSimilarity(any(), any());
+        ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
+        verify(listener, times(1)).onResponse(argCaptor.capture());
+        SearchHits rerankedHits = argCaptor.getValue().getHits();
+        assertTrue(Float.isNaN(rerankedHits.getAt(0).getScore()));
+        assertTrue(Float.isNaN(rerankedHits.getAt(1).getScore()));
+        assertTrue(Float.isNaN(rerankedHits.getAt(0).getInnerHits().get("chunks").getAt(0).getScore()));
+    }
+
+    @SneakyThrows
+    public void testRerank_whenModelReturnsWrongNumberOfScoresWithMissingTexts_thenFails() {
+        SearchHit parent = createParentHit(0, "0");
+        parent.setInnerHits(
+            new LinkedHashMap<>(
+                Map.of("chunks", innerHitsList(createChunk(0, "alpha"), createChunkWithoutText(1), createChunk(2, "gamma")))
+            )
+        );
+        SearchHits searchHits = new SearchHits(new SearchHit[] { parent }, new TotalHits(1, TotalHits.Relation.EQUAL_TO), 1.0f);
+        SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
+        response = new SearchResponse(internal, null, 1, 1, 0, 1, new ShardSearchFailure[0], new Clusters(1, 1, 0), null);
+        doAnswer(invocation -> {
+            ActionListener<List<Float>> inferenceListener = invocation.getArgument(1);
+            inferenceListener.onResponse(List.of(0.1f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(isA(SimilarityInferenceRequest.class), isA(ActionListener.class));
+        Map<String, Object> scoringContext = new HashMap<>(innerHitsContext(response));
+        scoringContext.put(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text");
+
+        @SuppressWarnings("unchecked")
+        ActionListener<SearchResponse> listener = mock(ActionListener.class);
+        processor.rerank(response, scoringContext, listener);
+
+        ArgumentCaptor<Exception> argCaptor = ArgumentCaptor.forClass(Exception.class);
+        verify(listener, times(1)).onFailure(argCaptor.capture());
+        assertEquals("Expected 2 scores from the rerank model, got 1", argCaptor.getValue().getMessage());
+        assertEquals(1.0f, parent.getScore(), 0.0f);
+    }
+
     public void testRerank_whenPageIsPastTheEnd_thenReturnsResponseUnchanged() {
         SearchHits searchHits = new SearchHits(new SearchHit[0], new TotalHits(5, TotalHits.Relation.EQUAL_TO), 1.0f);
         SearchResponseSections internal = new SearchResponseSections(searchHits, null, null, false, false, null, 0);
@@ -644,6 +748,18 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
             Map.of()
         );
         chunk.sourceRef(new BytesArray(String.format(Locale.ROOT, "{\"text\": \"%s\"}", text)));
+        return chunk;
+    }
+
+    private SearchHit createChunkWithoutText(int offset) {
+        SearchHit chunk = new SearchHit(
+            offset,
+            "chunk-" + offset,
+            new SearchHit.NestedIdentity("embeddings", offset, null),
+            Map.of(),
+            Map.of()
+        );
+        chunk.sourceRef(new BytesArray("{}"));
         return chunk;
     }
 
