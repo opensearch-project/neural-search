@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -979,6 +980,81 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(notASearch.convertToCoordinatorContext()).thenReturn(notASearch);
         when(notASearch.getSearchRequest()).thenReturn(mock(org.opensearch.action.IndicesRequest.class));
         assertSame(builder, builder.doRewrite(notASearch));
+    }
+
+    /**
+     * Classic weights are read from the request's top-level query and nowhere else, so a weighted classic hybrid anywhere else
+     * in the request — here a post_filter — is refused rather than having its weights silently ignored behind a pipeline that
+     * does carry a processor.
+     */
+    public void testDoRewrite_whenWeightedClassicHybridIsNotTheRequestQuery_thenRefused() throws IOException {
+        HybridQueryBuilder weightedPostFilter = new HybridQueryBuilder().weights(List.of(0.5f, 0.5f));
+        weightedPostFilter.add(QueryBuilders.matchAllQuery());
+        weightedPostFilter.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        SearchRequest request = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().query(QueryBuilders.matchAllQuery()).postFilter(weightedPostFilter)
+        ).pipeline("some-hybrid-pipeline");
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(request);
+
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> weightedPostFilter.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("[hybrid] query [weights] only apply to the request's top-level [hybrid] query"));
+
+        // A request with no source at all has no top-level query for the weights to be on.
+        QueryCoordinatorContext noSource = mock(QueryCoordinatorContext.class);
+        when(noSource.convertToCoordinatorContext()).thenReturn(noSource);
+        SearchRequest requestWithoutSource = new SearchRequest();
+        requestWithoutSource.indices("test-index");
+        assertNull(requestWithoutSource.source());
+        when(noSource.getSearchRequest()).thenReturn(requestWithoutSource);
+        IllegalArgumentException noSourceRefusal = expectThrows(
+            IllegalArgumentException.class,
+            () -> weightedPostFilter.doRewrite(noSource)
+        );
+        assertThat(noSourceRefusal.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+
+        // An equal builder stands in for the request's query: a copy made outside the rewrite is still the top-level query.
+        HybridQueryBuilder equalCopy = new HybridQueryBuilder().weights(List.of(0.5f, 0.5f));
+        equalCopy.add(QueryBuilders.matchAllQuery());
+        equalCopy.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        SearchRequest requestWithEqualQuery = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().query(weightedPostFilter).searchPipelineSource(new HashMap<>())
+        );
+        QueryCoordinatorContext equalCtx = mock(QueryCoordinatorContext.class);
+        when(equalCtx.convertToCoordinatorContext()).thenReturn(equalCtx);
+        when(equalCtx.getSearchRequest()).thenReturn(requestWithEqualQuery);
+        assertNotSame(weightedPostFilter, equalCopy);
+        assertSame(equalCopy, equalCopy.doRewrite(equalCtx));
+    }
+
+    /**
+     * The coordinator check runs on the round that first sees the builder and not on the rounds after: the rebuilt classic
+     * builder carries the acceptance, so the request is neither re-validated nor compared against the request's query it no
+     * longer is by identity.
+     */
+    public void testDoRewrite_whenClassicBuilderRebuilt_thenRequestOptionsNotRecheckedOnTheNextRound() throws IOException {
+        setUpClusterService();
+        QueryBuilder originalLeg = mock(QueryBuilder.class);
+        QueryBuilder rewrittenLeg = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
+        HybridQueryBuilder builder = new HybridQueryBuilder().weights(List.of(1.0f));
+        builder.add(originalLeg);
+        // Round 1: the request holds this very builder, and an inline pipeline body stands for a processor.
+        QueryCoordinatorContext round1 = coordinatorContextFor(builder);
+        ((SearchRequest) round1.getSearchRequest()).source().searchPipelineSource(new HashMap<>());
+        when(originalLeg.rewrite(round1)).thenReturn(rewrittenLeg);
+        HybridQueryBuilder rebuilt = (HybridQueryBuilder) builder.doRewrite(round1);
+        assertNotSame(builder, rebuilt);
+        verify(round1, atLeastOnce()).getSearchRequest();
+
+        // Round 2: core still holds the original query, so an identity or equality check would fail here — the rebuilt copy
+        // is accepted already, and nothing asks the request anything.
+        SearchRequest sameRequest = (SearchRequest) round1.getSearchRequest();
+        QueryCoordinatorContext round2 = mock(QueryCoordinatorContext.class);
+        when(round2.convertToCoordinatorContext()).thenReturn(round2);
+        when(round2.getSearchRequest()).thenReturn(sameRequest);
+        assertSame(rebuilt, rebuilt.doRewrite(round2));
+        verify(round2, never()).getSearchRequest();
     }
 
     /**

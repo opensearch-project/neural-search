@@ -175,6 +175,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private FusedRescoreScope fusedRescoreScope;
 
     /**
+     * Set on a copy once the coordinator has accepted the request-level options of the builder it was made from, so the
+     * rewrite rounds that follow — the rebuilt classic builder, the fused marker — do not repeat
+     * {@link #requireValidRequestOptions}: a classic hybrid with a {@code neural} leg rewrites at least twice, and the
+     * answer cannot change between rounds of one request. Carried by {@link #copyRequestOptionsTo} to those two copies and
+     * cleared on a nested-leg copy, which its own leg request validates. Never parsed, never serialized, absent from
+     * {@link #doEquals}/{@link #doHashCode}, like {@link #fusedSupplier}.
+     */
+    @Getter(AccessLevel.NONE)
+    @Setter(AccessLevel.NONE)
+    private boolean requestOptionsAccepted;
+
+    /**
      * Where to publish this fused hybrid's leg profile trees. The setter is {@code HybridQuerySearchRequestFilter}'s attach
      * point: it runs before the coordinator rewrite and hands over a consumer when the request asks for {@code profile}, so
      * that the leg sub-searches run profiled and their trees reach the response. {@code null} — the normal case — means the
@@ -659,10 +671,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
-        // Where the request is accepted: on the coordinator, once per rewrite round. A shard only receives what a
-        // coordinator accepted, and core rewrites before toQuery, so nothing downstream needs the check again.
+        // Where the request is accepted: on the coordinator, on the round that first sees the builder. A shard only receives
+        // what a coordinator accepted, and core rewrites before toQuery, so nothing downstream needs the check again; the
+        // copies the rounds after run on are marked accepted by copyRequestOptionsTo.
         QueryCoordinatorContext coordinatorContext = queryShardContext.convertToCoordinatorContext();
-        if (Objects.nonNull(coordinatorContext)) {
+        if (Objects.nonNull(coordinatorContext) && requestOptionsAccepted == false) {
             requireValidRequestOptions(coordinatorContext);
         }
         // Resolver (fused) mode self-erases at the coordinator into a standard query (see doRewriteFused). Classic mode
@@ -704,14 +717,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         target.weights(weights);
         target.fusion(fusion);
+        // A copy is only ever made by a coordinator rewrite that has just run, or inherited, the acceptance. The nested-leg
+        // copy clears this (see withResolvedFusionSpec).
+        target.requestOptionsAccepted = true;
     }
 
     /**
      * The request-level options as a builder assembled in code — or read off the wire — carries them, checked where the
      * request is accepted. REST parsing has already refused an ordinary request's malformed {@code fusion} keys and
      * {@code weights} with a {@link ParsingException}; this repeats the same rules for the other constructors and adds
-     * the one check only the coordinator can make: classic {@code weights} must have a phase-results processor to read
-     * them, or they would be silently ignored at HTTP 200.
+     * the two checks only the coordinator can make for classic {@code weights}: they must sit on the request's top-level
+     * query, and a phase-results processor must be there to read them — otherwise they would be silently ignored at
+     * HTTP 200.
      */
     private void requireValidRequestOptions(final QueryCoordinatorContext coordinatorContext) {
         if (Objects.nonNull(fusion)) {
@@ -725,8 +742,39 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         requireValidWeights(weights, queries.size(), fusion);
         if (Objects.isNull(fusion)) {
+            requireRequestTopLevelQuery(coordinatorContext);
             requireScoreHybridizationProcessor(coordinatorContext);
         }
+    }
+
+    /**
+     * Classic weights are read from the request's top-level query and from nowhere else
+     * ({@link HybridQueryUtil#classicRequestWeights}), so a weighted classic hybrid anywhere else in the request — a
+     * {@code post_filter}, an aggregation's filter, a rescore query — would have them silently ignored. Refused instead.
+     * Compared against the request's query by identity (or equality, for a copy): core installs the rewritten source on
+     * the request only after the last round, so on the round that first sees a builder the request still holds the very
+     * object that was parsed, and the rounds after run on a copy already marked accepted.
+     */
+    private void requireRequestTopLevelQuery(final QueryCoordinatorContext coordinatorContext) {
+        if ((coordinatorContext.getSearchRequest() instanceof SearchRequest) == false) {
+            return;
+        }
+        SearchSourceBuilder source = ((SearchRequest) coordinatorContext.getSearchRequest()).source();
+        QueryBuilder requestQuery = Objects.isNull(source) ? null : source.query();
+        if (requestQuery == this || this.equals(requestQuery)) {
+            return;
+        }
+        throw new IllegalArgumentException(
+            String.format(
+                Locale.ROOT,
+                "[%s] query [%s] only apply to the request's top-level [%s] query: a [%s] query carrying them elsewhere in the "
+                    + "request (a post_filter, an aggregation filter, a rescore query) has nothing that reads them",
+                NAME,
+                WEIGHTS_FIELD.getPreferredName(),
+                NAME,
+                NAME
+            )
+        );
     }
 
     /**
@@ -1944,6 +1992,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         }
         // The nested hybrid's own depth, weights and block, never the enclosing one's.
         copyRequestOptionsTo(copy);
+        // This copy becomes the top-level query of a leg sub-search, whose own coordinator rewrite validates it.
+        copy.requestOptionsAccepted = false;
         copy.resolvedFusionSpec = resolved;
         // Neither profiling consumer is copied. This copy is a leg of an enclosing fused hybrid, and a leg sub-search
         // re-enters the ActionFilter, which attaches consumers of its own — carrying these over would publish the same

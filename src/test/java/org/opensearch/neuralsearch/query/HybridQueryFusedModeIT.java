@@ -1612,6 +1612,28 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         );
     }
 
+    /**
+     * Classic weights are read from the request's top-level query and nowhere else, so a weighted classic hybrid placed
+     * anywhere else — here a post_filter, behind a pipeline that does carry the processor — is refused rather than having
+     * its weights silently ignored.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenWeightedHybridIsNotTheRequestQuery_thenBadRequest() {
+        ensureCombinationParityIndex();
+        String pipeline = "classic-request-weights-post-filter";
+        createSearchPipeline(pipeline, "l2", "arithmetic_mean", Map.of());
+        String body = "{\"query\":{\"match_all\":{}},\"post_filter\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}";
+        ResponseException e = expectThrows(
+            ResponseException.class,
+            () -> searchRawWithParams("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", body, Map.of("search_pipeline", pipeline))
+        );
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
+        assertTrue(
+            e.getMessage(),
+            e.getMessage().contains("[hybrid] query [weights] only apply to the request's top-level [hybrid] query")
+        );
+    }
+
     /** The top-level shortcut's refusals, at HTTP 400 with the reason, through the REST layer. */
     @SneakyThrows
     public void testFusedMode_whenRequestWeightsMalformed_thenBadRequest() {
