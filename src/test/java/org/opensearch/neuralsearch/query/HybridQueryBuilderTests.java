@@ -83,7 +83,9 @@ import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.index.query.TemplateQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.WrapperQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.knn.index.SpaceType;
@@ -382,6 +384,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         return new NamedXContentRegistry(
             List.of(
                 new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(WrapperQueryBuilder.NAME),
+                    WrapperQueryBuilder::fromXContent
+                ),
                 new NamedXContentRegistry.Entry(
                     QueryBuilder.class,
                     new ParseField(HybridQueryBuilder.NAME),
@@ -1026,6 +1033,76 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         when(equalCtx.getSearchRequest()).thenReturn(requestWithEqualQuery);
         assertNotSame(weightedPostFilter, equalCopy);
         assertSame(equalCopy, equalCopy.doRewrite(equalCtx));
+    }
+
+    /**
+     * A {@code wrapper} or {@code template} at the top of the request holds the hybrid the request's query becomes once the
+     * holder rewrites — and where the processor then reads the weights — so a weighted hybrid they hold is the request's
+     * top-level query. A wrapper that carries its own boost rewrites into a {@code bool} around the hybrid, which is not; nor
+     * is one whose held query cannot be read.
+     */
+    public void testDoRewrite_whenWeightedClassicHybridIsHeldByWrapperOrTemplate_thenItIsTheRequestQuery() throws IOException {
+        setUpClusterService();
+        HybridQueryBuilder written = new HybridQueryBuilder().weights(List.of(0.5f, 0.5f));
+        written.add(new TermQueryBuilder(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        written.add(new TermQueryBuilder(TEXT_FIELD_NAME, "other"));
+        String hybridJson = written.toString();
+
+        assertSame(written, written.doRewrite(coordinatorContextHolding(new WrapperQueryBuilder(hybridJson))));
+
+        Map<String, Object> templateContent = Map.of(
+            "hybrid",
+            Map.of(
+                "queries",
+                List.of(Map.of("term", Map.of(TEXT_FIELD_NAME, TERM_QUERY_TEXT)), Map.of("term", Map.of(TEXT_FIELD_NAME, "other"))),
+                "weights",
+                List.of(0.5, 0.5)
+            )
+        );
+        assertSame(written, written.doRewrite(coordinatorContextHolding(new TemplateQueryBuilder(templateContent))));
+
+        // The same wrapper with a boost or a name of its own rewrites into bool{must: hybrid}: the hybrid is no longer top-level.
+        for (WrapperQueryBuilder decorated : List.of(
+            new WrapperQueryBuilder(hybridJson).boost(2.0f),
+            new WrapperQueryBuilder(hybridJson).queryName("named")
+        )) {
+            IllegalArgumentException boosted = expectThrows(
+                IllegalArgumentException.class,
+                () -> written.doRewrite(coordinatorContextHolding(decorated))
+            );
+            assertThat(boosted.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+        }
+
+        // Holders are read through only as deep as core itself rewrites; a tower taller than that resolves to a holder.
+        String tower = hybridJson;
+        for (int depth = 0; depth <= org.opensearch.index.query.Rewriteable.MAX_REWRITE_ROUNDS; depth++) {
+            tower = new WrapperQueryBuilder(tower).toString();
+        }
+        String towerJson = tower;
+        IllegalArgumentException tooDeep = expectThrows(
+            IllegalArgumentException.class,
+            () -> written.doRewrite(coordinatorContextHolding(new WrapperQueryBuilder(towerJson)))
+        );
+        assertThat(tooDeep.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+
+        // A wrapper whose source cannot be read resolves to itself; the refusal stands, and the wrapper's own rewrite says why.
+        IllegalArgumentException unreadable = expectThrows(
+            IllegalArgumentException.class,
+            () -> written.doRewrite(coordinatorContextHolding(new WrapperQueryBuilder("{not a query")))
+        );
+        assertThat(unreadable.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+    }
+
+    /** A coordinator context whose request has the given top-level query, an inline pipeline body, and the test registry. */
+    private QueryCoordinatorContext coordinatorContextHolding(QueryBuilder topLevelQuery) {
+        SearchRequest request = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().query(topLevelQuery).searchPipelineSource(new HashMap<>())
+        );
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(request);
+        when(ctx.getXContentRegistry()).thenReturn(fusionTestRegistry());
+        return ctx;
     }
 
     /**

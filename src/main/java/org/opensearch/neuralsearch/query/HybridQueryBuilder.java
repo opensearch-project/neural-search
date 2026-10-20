@@ -58,6 +58,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.Rewriteable;
 import org.opensearch.index.query.QueryShardException;
 import org.opensearch.index.query.TemplateQueryBuilder;
 import org.opensearch.index.query.WrapperQueryBuilder;
@@ -750,31 +751,78 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     /**
      * Classic weights are read from the request's top-level query and from nowhere else
      * ({@link HybridQueryUtil#classicRequestWeights}), so a weighted classic hybrid anywhere else in the request — a
-     * {@code post_filter}, an aggregation's filter, a rescore query — would have them silently ignored. Refused instead.
-     * Compared against the request's query by identity (or equality, for a copy): core installs the rewritten source on
-     * the request only after the last round, so on the round that first sees a builder the request still holds the very
-     * object that was parsed, and the rounds after run on a copy already marked accepted.
+     * {@code post_filter}, an aggregation's filter, a rescore query, a clause of another query — would have them silently
+     * ignored. Refused instead. Compared against the request's query by identity (or equality, for a copy): core installs
+     * the rewritten source on the request only after the last round, so on the round that first sees a builder the request
+     * still holds the very object that was parsed, and the rounds after run on a copy already marked accepted. That parsed
+     * object may be a {@code wrapper} or {@code template} holding the hybrid; those are read through
+     * ({@link #resolveHeldQuery}), because the request's query becomes what they hold.
      */
     private void requireRequestTopLevelQuery(final QueryCoordinatorContext coordinatorContext) {
         if ((coordinatorContext.getSearchRequest() instanceof SearchRequest) == false) {
             return;
         }
         SearchSourceBuilder source = ((SearchRequest) coordinatorContext.getSearchRequest()).source();
-        QueryBuilder requestQuery = Objects.isNull(source) ? null : source.query();
+        QueryBuilder requestQuery = Objects.isNull(source) ? null : resolveHeldQuery(source.query(), coordinatorContext);
         if (requestQuery == this || this.equals(requestQuery)) {
             return;
         }
         throw new IllegalArgumentException(
             String.format(
                 Locale.ROOT,
-                "[%s] query [%s] only apply to the request's top-level [%s] query: a [%s] query carrying them elsewhere in the "
-                    + "request (a post_filter, an aggregation filter, a rescore query) has nothing that reads them",
+                "[%s] query [%s] only apply to the request's top-level [%s] query: a [%s] query carrying them anywhere else — a "
+                    + "post_filter, an aggregation filter, a rescore query, a clause of another query, whether written there or "
+                    + "moved there by a search request processor — has nothing that reads them",
                 NAME,
                 WEIGHTS_FIELD.getPreferredName(),
                 NAME,
                 NAME
             )
         );
+    }
+
+    /**
+     * What the request's top-level query becomes once the holders around it rewrite: a {@code wrapper} is parsed, a
+     * {@code template} is rendered with the request's variables, until something else is reached — the same reading
+     * {@link NestedHybridModeFinder} does. Core installs that result as the request's query, which is where
+     * {@link HybridQueryUtil#classicRequestWeights} reads at phase-results time, so it is what a weighted hybrid is compared
+     * with. A wrapper carrying its own boost or name rewrites into a {@code bool} around what it holds, so it resolves to
+     * itself (the hybrid will not be top-level); so does a holder that cannot be read, whose own rewrite reports why.
+     */
+    private static QueryBuilder resolveHeldQuery(final QueryBuilder query, final QueryRewriteContext context) {
+        QueryBuilder current = query;
+        for (int depth = 0; depth < Rewriteable.MAX_REWRITE_ROUNDS; depth++) {
+            boolean plainWrapper = current instanceof WrapperQueryBuilder
+                && current.boost() == DEFAULT_BOOST
+                && Objects.isNull(current.queryName());
+            if (plainWrapper == false && (current instanceof TemplateQueryBuilder) == false) {
+                return current;
+            }
+            try {
+                current = readHeldQuery(current, context);
+            } catch (IOException | RuntimeException e) {
+                return current;
+            }
+        }
+        return current;
+    }
+
+    /**
+     * The query a {@code wrapper} or {@code template} holds, read without rewriting it: the wrapper's source is parsed, the
+     * template's own rewrite substitutes the request's variables and parses the result.
+     */
+    private static QueryBuilder readHeldQuery(final QueryBuilder holder, final QueryRewriteContext context) throws IOException {
+        if (holder instanceof TemplateQueryBuilder) {
+            return holder.rewrite(context);
+        }
+        byte[] source = ((WrapperQueryBuilder) holder).source();
+        try (
+            XContentParser parser = MediaTypeRegistry.xContent(source)
+                .xContent()
+                .createParser(context.getXContentRegistry(), LoggingDeprecationHandler.INSTANCE, source)
+        ) {
+            return parseInnerQueryBuilder(parser);
+        }
     }
 
     /**
@@ -1819,26 +1867,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         private void acceptHeldQuery(final QueryBuilder holder) {
             QueryBuilder heldQuery;
             try {
-                heldQuery = readHeldQuery(holder);
+                heldQuery = readHeldQuery(holder, rewriteContext);
             } catch (IOException | RuntimeException e) {
                 return;
             }
             accept(heldQuery);
-        }
-
-        private QueryBuilder readHeldQuery(final QueryBuilder holder) throws IOException {
-            if (holder instanceof TemplateQueryBuilder) {
-                // A template's own rewrite substitutes the request's variables and parses the result, without rewriting it.
-                return holder.rewrite(rewriteContext);
-            }
-            byte[] source = ((WrapperQueryBuilder) holder).source();
-            try (
-                XContentParser parser = MediaTypeRegistry.xContent(source)
-                    .xContent()
-                    .createParser(rewriteContext.getXContentRegistry(), LoggingDeprecationHandler.INSTANCE, source)
-            ) {
-                return parseInnerQueryBuilder(parser);
-            }
         }
     }
 

@@ -1634,6 +1634,44 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         );
     }
 
+    /**
+     * A {@code wrapper} or {@code template} query at the top of the request holds the hybrid the request's query becomes, so
+     * a weighted classic hybrid they hold is accepted and its weights are applied — the same ranking as the weights
+     * configured in a pipeline.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenWeightedHybridIsHeldByWrapperOrTemplate_thenWeightsApply() {
+        ensureCombinationParityIndex();
+        String endpoint = "/" + INDEX_FOR_COMBINATION_PARITY + "/_search";
+        String configuredPipeline = "classic-request-weights-held-configured";
+        String equivalentPipeline = "classic-request-weights-held-equivalent";
+        createSearchPipeline(configuredPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.9, 0.1]"));
+        createSearchPipeline(equivalentPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.1, 0.9]"));
+        List<Map<String, Object>> configuredEquivalent = getNestedHits(
+            searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null) + "}", Map.of("search_pipeline", equivalentPipeline))
+        );
+
+        String weightedHybrid = disagreeingLegsQuery(null, "[0.1,0.9]");
+        String wrapped = "{\"query\":{\"wrapper\":{\"query\":\""
+            + java.util.Base64.getEncoder().encodeToString(weightedHybrid.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            + "\"}}}";
+        List<Map<String, Object>> throughWrapper = getNestedHits(
+            searchRawWithParams(endpoint, wrapped, Map.of("search_pipeline", configuredPipeline))
+        );
+        assertEquals("wrapper: request weights reverse the configured ranking", "1", throughWrapper.get(0).get("_id"));
+        assertEquals("wrapper: equals the same weights configured", idsAndScores(configuredEquivalent), idsAndScores(throughWrapper));
+
+        List<Map<String, Object>> throughTemplate = getNestedHits(
+            searchRawWithParams(
+                endpoint,
+                "{\"query\":{\"template\":" + weightedHybrid + "}}",
+                Map.of("search_pipeline", configuredPipeline)
+            )
+        );
+        assertEquals("template: request weights reverse the configured ranking", "1", throughTemplate.get(0).get("_id"));
+        assertEquals("template: equals the same weights configured", idsAndScores(configuredEquivalent), idsAndScores(throughTemplate));
+    }
+
     /** The top-level shortcut's refusals, at HTTP 400 with the reason, through the REST layer. */
     @SneakyThrows
     public void testFusedMode_whenRequestWeightsMalformed_thenBadRequest() {
