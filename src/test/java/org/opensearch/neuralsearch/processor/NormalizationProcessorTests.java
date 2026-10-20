@@ -41,8 +41,12 @@ import org.opensearch.core.common.breaker.NoopCircuitBreaker;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.processor.combination.ArithmeticMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.GeometricMeanScoreCombinationTechnique;
+import org.opensearch.neuralsearch.processor.combination.HarmonicMeanScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.search.SearchHit;
@@ -53,6 +57,8 @@ import org.opensearch.search.aggregations.pipeline.PipelineAggregator;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.fetch.QueryFetchSearchResult;
 import org.opensearch.search.internal.ShardSearchRequest;
+import org.opensearch.index.query.QueryBuilders;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.common.util.concurrent.AtomicArray;
 import org.opensearch.search.SearchPhaseResult;
 import org.opensearch.search.query.QuerySearchResult;
@@ -122,6 +128,40 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
         assertEquals(SearchPhaseName.FETCH, normalizationProcessor.getAfterPhase());
         assertEquals(SearchPhaseName.QUERY, normalizationProcessor.getBeforePhase());
         assertFalse(normalizationProcessor.isIgnoreFailure());
+    }
+
+    public void testResolveCombinationTechnique_whenClassicRequestWeights_thenKeepsConfiguredTechniqueFamily() {
+        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
+        hybridQuery.add(QueryBuilders.matchAllQuery());
+        hybridQuery.add(QueryBuilders.matchAllQuery());
+        hybridQuery.weights(List.of(0.25f, 0.75f));
+        SearchPhaseContext context = mock(SearchPhaseContext.class);
+        when(context.getRequest()).thenReturn(new SearchRequest().source(new SearchSourceBuilder().query(hybridQuery)));
+
+        ScoreCombinationFactory factory = new ScoreCombinationFactory();
+        for (String technique : List.of(
+            ArithmeticMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+            GeometricMeanScoreCombinationTechnique.TECHNIQUE_NAME,
+            HarmonicMeanScoreCombinationTechnique.TECHNIQUE_NAME
+        )) {
+            ScoreCombinationTechnique configured = factory.createCombination(technique);
+            NormalizationProcessor processor = new NormalizationProcessor(
+                PROCESSOR_TAG,
+                DESCRIPTION,
+                new ScoreNormalizationFactory().createNormalization(NORMALIZATION_METHOD),
+                configured,
+                new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner())
+            );
+
+            ScoreCombinationTechnique resolved = processor.resolveCombinationTechnique(context);
+            ScoreCombinationTechnique expected = factory.createCombination(
+                technique,
+                Map.of("weights", List.of(0.25, 0.75))
+            );
+            assertNotSame("request weights must create a per-request " + technique + " technique", configured, resolved);
+            assertEquals(technique, resolved.techniqueName());
+            assertEquals(expected.combine(new float[] { 0.2f, 0.8f }), resolved.combine(new float[] { 0.2f, 0.8f }), 0.00001f);
+        }
     }
 
     /**

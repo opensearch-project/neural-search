@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,6 +73,7 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.InnerHitContextBuilder;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
+import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.action.search.SearchRequest;
@@ -81,7 +83,9 @@ import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.search.builder.SearchSourceBuilder;
+import org.opensearch.index.query.TemplateQueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.index.query.WrapperQueryBuilder;
 import org.opensearch.index.remote.RemoteStoreEnums;
 import org.opensearch.knn.index.KNNSettings;
 import org.opensearch.knn.index.SpaceType;
@@ -376,10 +380,15 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
     // ---- resolver (fused) mode: `fusion` parameter parse / round-trip / validation (PR1, execution inert) ----
 
-    private XContentParser fusionTestParser(XContentBuilder xContentBuilder) throws IOException {
-        NamedXContentRegistry registry = new NamedXContentRegistry(
+    private NamedXContentRegistry fusionTestRegistry() {
+        return new NamedXContentRegistry(
             List.of(
                 new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(TermQueryBuilder.NAME), TermQueryBuilder::fromXContent),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(WrapperQueryBuilder.NAME),
+                    WrapperQueryBuilder::fromXContent
+                ),
                 new NamedXContentRegistry.Entry(
                     QueryBuilder.class,
                     new ParseField(HybridQueryBuilder.NAME),
@@ -387,7 +396,14 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 )
             )
         );
-        XContentParser parser = createParser(registry, xContentBuilder.contentType().xContent(), BytesReference.bytes(xContentBuilder));
+    }
+
+    private XContentParser fusionTestParser(XContentBuilder xContentBuilder) throws IOException {
+        XContentParser parser = createParser(
+            fusionTestRegistry(),
+            xContentBuilder.contentType().xContent(),
+            BytesReference.bytes(xContentBuilder)
+        );
         parser.nextToken();
         return parser;
     }
@@ -460,6 +476,695 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         XContentBuilder xContentBuilder = hybridWithOneTermQuery().startObject("fusion").field("bogus", "x").endObject().endObject();
         ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
         assertThat(e.getMessage(), containsString("unknown key"));
+    }
+
+    // ---- top-level `hybrid.weights`: request-level combination weights ----
+
+    /** Two legs, so a weights list has something to be one-per-sub-query against. */
+    private XContentBuilder hybridWithTwoTermQueries() throws IOException {
+        return XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("queries")
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, TERM_QUERY_TEXT)
+            .endObject()
+            .endObject()
+            .startObject()
+            .startObject(TermQueryBuilder.NAME)
+            .field(TEXT_FIELD_NAME, "other")
+            .endObject()
+            .endObject()
+            .endArray();
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenTopLevelWeightsWithFusion_thenAcceptedAndRoundTrips() {
+        // The weights-only form: defaults for the fused techniques, the request's top-level weights over them.
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithTwoTermQueries().array("weights", 0.7, 0.3)
+            .startObject("fusion")
+            .endObject()
+            .endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertEquals(List.of(0.7f, 0.3f), builder.weights());
+        assertTrue("fusion:{} selects the built-in defaults", builder.fusion().isEmpty());
+
+        // Both fields survive XContent at their public locations: weights on hybrid, fusion as its own block.
+        XContentBuilder reserialized = XContentFactory.jsonBuilder();
+        builder.toXContent(reserialized, ToXContent.EMPTY_PARAMS);
+        XContentParser parser = createParser(
+            fusionTestRegistry(),
+            reserialized.contentType().xContent(),
+            BytesReference.bytes(reserialized)
+        );
+        assertEquals(builder, AbstractQueryBuilder.parseInnerQueryBuilder(parser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenTopLevelWeightsWithoutFusion_thenClassicAcceptedAndRoundTrips() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithTwoTermQueries().array("weights", 0.7, 0.3).endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertNull("absence of fusion keeps classic execution", builder.fusion());
+        assertEquals(List.of(0.7f, 0.3f), builder.weights());
+
+        XContentBuilder reserialized = XContentFactory.jsonBuilder();
+        builder.toXContent(reserialized, ToXContent.EMPTY_PARAMS);
+        XContentParser parser = createParser(
+            fusionTestRegistry(),
+            reserialized.contentType().xContent(),
+            BytesReference.bytes(reserialized)
+        );
+        assertEquals(builder, AbstractQueryBuilder.parseInnerQueryBuilder(parser));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenWeightsRemainInsideFusion_then400() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithTwoTermQueries().startObject("fusion")
+            .array("weights", 0.7, 0.3)
+            .endObject()
+            .endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder)));
+        assertThat(e.getMessage(), containsString("[hybrid] query [fusion] contains unknown key [weights]"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenFusionSourcePipelinePlusTopLevelWeights_thenAccepted() {
+        // The pipeline's techniques, this request's weights. The long form next to `source` is still contradictory.
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithTwoTermQueries().array("weights", 0.7, 0.3)
+            .startObject("fusion")
+            .field("source", "pipeline")
+            .endObject()
+            .endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertEquals("pipeline", builder.fusion().get("source"));
+        assertEquals(List.of(0.7f, 0.3f), builder.weights());
+
+        XContentBuilder longForm = hybridWithTwoTermQueries().startObject("fusion")
+            .field("source", "pipeline")
+            .startObject("combination")
+            .startObject("parameters")
+            .array("weights", 0.7, 0.3)
+            .endObject()
+            .endObject()
+            .endObject()
+            .endObject();
+        ParsingException e = expectThrows(ParsingException.class, () -> HybridQueryBuilder.fromXContent(fusionTestParser(longForm)));
+        assertThat(e.getMessage(), containsString("cannot combine [source: pipeline] with inline [normalization]/[combination]"));
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenTopLevelWeightsBesideInlineFusionTechniques_thenAccepted() {
+        setUpClusterService();
+        XContentBuilder xContentBuilder = hybridWithTwoTermQueries().array("weights", 0.7, 0.3)
+            .startObject("fusion")
+            .startObject("normalization")
+            .field("technique", "l2")
+            .endObject()
+            .startObject("combination")
+            .field("technique", "geometric_mean")
+            .endObject()
+            .endObject()
+            .endObject();
+        HybridQueryBuilder builder = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+        assertEquals(List.of(0.7f, 0.3f), builder.weights());
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenTopLevelAndLongFormWeights_then400() {
+        // One place for the weights. Both present is refused even when they agree: a precedence rule between two carriers
+        // of the same quantity would make the effective weights depend on which one a reader notices.
+        setUpClusterService();
+        for (List<Double> longForm : List.of(List.of(0.3, 0.7), List.of(0.7, 0.3))) {
+            XContentBuilder xContentBuilder = hybridWithTwoTermQueries().array("weights", 0.7, 0.3)
+                .startObject("fusion")
+                .startObject("combination")
+                .field("technique", "arithmetic_mean")
+                .startObject("parameters")
+                .field("weights", longForm)
+                .endObject()
+                .endObject()
+                .endObject()
+                .endObject();
+            ParsingException e = expectThrows(
+                ParsingException.class,
+                () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder))
+            );
+            assertThat(
+                e.getMessage(),
+                containsString(
+                    "[hybrid] query cannot combine [weights] with [fusion.combination.parameters.weights]: state the weights once"
+                )
+            );
+        }
+    }
+
+    @SneakyThrows
+    public void testFromXContent_whenTopLevelWeightsMalformed_then400() {
+        setUpClusterService();
+        // Not a list, and a list with a non-numeric element.
+        for (Object malformed : List.<Object>of("0.7, 0.3", 0.7, List.of("a", 0.3), Map.of("lexical", 0.7))) {
+            XContentBuilder xContentBuilder = hybridWithTwoTermQueries().field("weights", malformed)
+                .startObject("fusion")
+                .endObject()
+                .endObject();
+            ParsingException e = expectThrows(
+                ParsingException.class,
+                () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder))
+            );
+            assertThat("weights " + malformed, e.getMessage(), containsString("[hybrid] query [weights] must be a collection of numbers"));
+        }
+        // Empty is not "equal weights": the way to ask for those is to leave the key out.
+        {
+            XContentBuilder xContentBuilder = hybridWithTwoTermQueries().field("weights", List.of())
+                .startObject("fusion")
+                .endObject()
+                .endObject();
+            ParsingException e = expectThrows(
+                ParsingException.class,
+                () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder))
+            );
+            assertThat(e.getMessage(), containsString("[hybrid] query [weights] must not be empty"));
+        }
+        // An explicit null IS the key left out — what a client that serializes every optional field writes — so it
+        // parses as no request weights, and so does not meet the long form in the conflict check.
+        {
+            XContentBuilder xContentBuilder = hybridWithTwoTermQueries().nullField("weights")
+                .startObject("fusion")
+                .startObject("combination")
+                .field("technique", "arithmetic_mean")
+                .startObject("parameters")
+                .field("weights", List.of(0.5, 0.5))
+                .endObject()
+                .endObject()
+                .endObject()
+                .endObject();
+            HybridQueryBuilder parsed = HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder));
+            assertNull(parsed.weights());
+            assertNotNull(parsed.fusion());
+        }
+        // One per sub-query, counted at parse because both are in hand here.
+        for (List<Double> wrongCount : List.of(List.of(1.0), List.of(0.5, 0.3, 0.2))) {
+            XContentBuilder xContentBuilder = hybridWithTwoTermQueries().field("weights", wrongCount)
+                .startObject("fusion")
+                .endObject()
+                .endObject();
+            ParsingException e = expectThrows(
+                ParsingException.class,
+                () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder))
+            );
+            assertThat(
+                e.getMessage(),
+                containsString(
+                    "[hybrid] query [weights] number of weights [" + wrongCount.size() + "] must match number of sub-queries [2]"
+                )
+            );
+        }
+        // Range and sum are request validation too, for classic as well as fused, not a late phase-results failure — and
+        // they are reported the way every other parse refusal is, as a ParsingException with the location of the field.
+        for (Map.Entry<List<Double>, String> invalid : Map.of(
+            List.of(-0.1, 1.1),
+            "all weights must be in range",
+            List.of(0.7, 0.7),
+            "sum of weights for combination must be equal to 1.0"
+        ).entrySet()) {
+            XContentBuilder xContentBuilder = hybridWithTwoTermQueries().field("weights", invalid.getKey()).endObject();
+            ParsingException e = expectThrows(
+                ParsingException.class,
+                () -> HybridQueryBuilder.fromXContent(fusionTestParser(xContentBuilder))
+            );
+            assertThat(e.getMessage(), containsString(invalid.getValue()));
+            assertTrue("location points into the body", e.getLineNumber() >= 1 && e.getColumnNumber() >= 1);
+        }
+        // Integers are numbers: a list written without decimal points must not be refused.
+        XContentBuilder integers = hybridWithTwoTermQueries().field("weights", List.of(1, 0)).startObject("fusion").endObject().endObject();
+        assertEquals(List.of(1.0f, 0.0f), HybridQueryBuilder.fromXContent(fusionTestParser(integers)).weights());
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenTopLevelWeights_thenRankingFollowsThemAndMatchesTheLongForm() {
+        // Two documents each led by a different leg, so the fused order is decided by the weights alone — and flips with
+        // them. Symmetric weights would rank the same as no weights and prove nothing.
+        initClusterUtilWithMaxResultWindow(10000);
+        org.opensearch.action.search.MultiSearchResponse.Item lexicalLeadsA = legItem(Map.of("A", 1.0f, "B", 0.2f));
+        org.opensearch.action.search.MultiSearchResponse.Item semanticLeadsB = legItem(Map.of("A", 0.2f, "B", 1.0f));
+
+        HybridQueryBuilder lexicalHeavy = fusedBuilder(new HashMap<>()).weights(List.of(0.9f, 0.1f));
+        assertEquals(
+            List.of("test-index/A", "test-index/B"),
+            rankedWindowPublishedFor(lexicalHeavy, new SearchSourceBuilder().query(lexicalHeavy), lexicalLeadsA, semanticLeadsB)
+        );
+        HybridQueryBuilder semanticHeavy = fusedBuilder(new HashMap<>()).weights(List.of(0.1f, 0.9f));
+        assertEquals(
+            List.of("test-index/B", "test-index/A"),
+            rankedWindowPublishedFor(semanticHeavy, new SearchSourceBuilder().query(semanticHeavy), lexicalLeadsA, semanticLeadsB)
+        );
+
+        // The shorthand is the long form: same ranking as `combination.parameters.weights` with the defaults spelled out.
+        HybridQueryBuilder longForm = fusedBuilder(
+            new HashMap<>(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "min_max"),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.1, 0.9)))
+                )
+            )
+        );
+        assertEquals(
+            rankedWindowPublishedFor(longForm, new SearchSourceBuilder().query(longForm), lexicalLeadsA, semanticLeadsB),
+            rankedWindowPublishedFor(semanticHeavy, new SearchSourceBuilder().query(semanticHeavy), lexicalLeadsA, semanticLeadsB)
+        );
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenSourcePipelinePlusWeights_thenRequestWeightsReplaceTheResolvedOnes() {
+        // `source: pipeline` + `weights`: the techniques are the resolved config's, the weights are the request's. The
+        // resolved config is handed in the way an enclosing fused query hands it to a leg, which is also the one way a
+        // unit test reaches the delegating form without cluster-state pipeline metadata.
+        initClusterUtilWithMaxResultWindow(10000);
+        FusionSpec pipelineLexicalHeavy = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            60,
+            new float[] { 0.9f, 0.1f }
+        );
+        org.opensearch.action.search.MultiSearchResponse.Item lexicalLeadsA = legItem(Map.of("A", 1.0f, "B", 0.2f));
+        org.opensearch.action.search.MultiSearchResponse.Item semanticLeadsB = legItem(Map.of("A", 0.2f, "B", 1.0f));
+
+        HybridQueryBuilder delegating = fusedBuilder(new HashMap<>(Map.of("source", "pipeline")));
+        HybridQueryBuilder withPipelineWeights = (HybridQueryBuilder) HybridQueryBuilder.projectResolvedConfigOntoLegs(
+            List.of(delegating),
+            pipelineLexicalHeavy
+        ).get(0);
+        assertEquals(
+            "control: the pipeline's own weights rank the lexical leader first",
+            List.of("test-index/A", "test-index/B"),
+            rankedWindowPublishedFor(
+                withPipelineWeights,
+                new SearchSourceBuilder().query(withPipelineWeights),
+                lexicalLeadsA,
+                semanticLeadsB
+            )
+        );
+
+        HybridQueryBuilder overriding = fusedBuilder(new HashMap<>(Map.of("source", "pipeline"))).weights(List.of(0.1f, 0.9f));
+        HybridQueryBuilder withRequestWeights = (HybridQueryBuilder) HybridQueryBuilder.projectResolvedConfigOntoLegs(
+            List.of(overriding),
+            pipelineLexicalHeavy
+        ).get(0);
+        assertEquals(
+            "the request's weights, over the pipeline's techniques",
+            List.of("test-index/B", "test-index/A"),
+            rankedWindowPublishedFor(withRequestWeights, new SearchSourceBuilder().query(withRequestWeights), lexicalLeadsA, semanticLeadsB)
+        );
+    }
+
+    @SneakyThrows
+    public void testDoRewriteFused_whenTopLevelWeights_thenNestedDelegatingLegInheritsTheBaseConfigNotTheWeights() {
+        // Weights are per hybrid. An enclosing query's two weights projected onto a three-leg nested hybrid would be the
+        // wrong count — or, with a two-leg nested one, silently the wrong values. The nested leg gets the base config and
+        // states its own weights, the way it keeps its own pagination_depth.
+        initClusterUtilWithMaxResultWindow(10000);
+        HybridQueryBuilder nested = new HybridQueryBuilder();
+        nested.add(new MatchQueryBuilder(TEXT_FIELD_NAME, "inner-a"));
+        nested.add(new MatchQueryBuilder(TEXT_FIELD_NAME, "inner-b"));
+        nested.add(new MatchQueryBuilder(TEXT_FIELD_NAME, "inner-c"));
+        nested.fusion(new HashMap<>(Map.of("source", "pipeline")));
+        HybridQueryBuilder outer = new HybridQueryBuilder();
+        outer.add(nested);
+        outer.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        outer.fusion(new HashMap<>(Map.of("source", "pipeline")));
+        outer.weights(List.of(0.3f, 0.7f));
+        FusionSpec base = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            60,
+            new float[0]
+        );
+        HybridQueryBuilder resolvedOuter = (HybridQueryBuilder) HybridQueryBuilder.projectResolvedConfigOntoLegs(List.of(outer), base)
+            .get(0);
+
+        // Round 1 of the outer: capture the leg fan-out it builds.
+        QueryCoordinatorContext ctx = coordinatorContextFor(resolvedOuter);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(any());
+        resolvedOuter.doRewrite(ctx);
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> fannedOut =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        doAnswer(invocation -> {
+            fannedOut.set(invocation.getArgument(0));
+            return null; // the legs never answer: only the fan-out itself is under test
+        }).when(client).multiSearch(any(), any());
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> {}, e -> fail(e.getMessage())));
+        assertEquals("one leg request per outer leg", 2, fannedOut.get().requests().size());
+
+        // The nested leg, rewritten the way its leg sub-search would: it has to fan its three legs out, not fail on a
+        // two-element weights array it never asked for.
+        SearchRequest legRequest = fannedOut.get().requests().get(0);
+        QueryCoordinatorContext legCtx = mock(QueryCoordinatorContext.class);
+        when(legCtx.convertToCoordinatorContext()).thenReturn(legCtx);
+        when(legCtx.getSearchRequest()).thenReturn(legRequest);
+        java.util.concurrent.atomic.AtomicInteger nestedFanOuts = new java.util.concurrent.atomic.AtomicInteger();
+        doAnswer(invocation -> {
+            nestedFanOuts.incrementAndGet();
+            return null;
+        }).when(legCtx).registerAsyncAction(any());
+        QueryBuilder rewritten = legRequest.source().query().rewrite(legCtx);
+        assertTrue(rewritten instanceof HybridQueryBuilder);
+        assertEquals("the nested leg fused with the base config and fanned out its own legs", 1, nestedFanOuts.get());
+    }
+
+    public void testOverlayRequestWeights_whenNoTopLevelWeights_thenTheBaseItself() {
+        FusionSpec base = new FusionSpec(
+            FusionSpec.Shape.NORMALIZATION_PROCESSOR,
+            FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
+            FusionSpec.NORMALIZATION_MIN_MAX,
+            60,
+            new float[] { 0.4f, 0.6f }
+        );
+        assertSame(base, HybridQueryBuilder.overlayRequestWeights(base, null));
+        // The merge alone: weights replaced, every technique setting kept. Validation is requireValidWeights' business.
+        FusionSpec overlaid = HybridQueryBuilder.overlayRequestWeights(base, List.of(1.0f, 0.0f));
+        assertArrayEquals(new float[] { 1.0f, 0.0f }, overlaid.weights(), 0.0f);
+        assertEquals(base.normalizationTechnique(), overlaid.normalizationTechnique());
+        assertEquals(base.combinationTechnique(), overlaid.combinationTechnique());
+        assertEquals(base.rankConstant(), overlaid.rankConstant());
+        assertEquals(base.shape(), overlaid.shape());
+    }
+
+    /**
+     * The one statement of the weights rule, as parse (wrapped in a ParsingException at the field) and the coordinator
+     * rewrite (for a builder assembled in code) both apply it: one message per rule, the reasons shared with the long form.
+     */
+    public void testRequireValidWeights_whenEachRuleBroken_thenRefusedWithItsOwnReason() {
+        Map<String, Object> longForm = new HashMap<>(
+            Map.of("combination", Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.5, 0.5))))
+        );
+        Map<List<?>, String> refusals = new java.util.LinkedHashMap<>();
+        refusals.put(List.of(), "[hybrid] query [weights] must not be empty: omit it to weight every sub-query equally");
+        refusals.put(java.util.Arrays.asList(0.5f, null), "[hybrid] query [weights] must be a collection of numbers");
+        refusals.put(List.of(0.5f, "0.5"), "[hybrid] query [weights] must be a collection of numbers");
+        refusals.put(List.of(1.0f), "[hybrid] query [weights] number of weights [1] must match number of sub-queries [2]");
+        refusals.put(List.of(-0.1f, 1.1f), "all weights must be in range");
+        refusals.put(List.of(0.7f, 0.2f), "sum of weights for combination must be equal to 1.0");
+        for (Map.Entry<List<?>, String> refusal : refusals.entrySet()) {
+            IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
+                () -> HybridQueryBuilder.requireValidWeights(refusal.getKey(), 2, null)
+            );
+            assertThat(String.valueOf(refusal.getKey()), e.getMessage(), containsString(refusal.getValue()));
+        }
+        IllegalArgumentException both = expectThrows(
+            IllegalArgumentException.class,
+            () -> HybridQueryBuilder.requireValidWeights(List.of(0.5f, 0.5f), 2, longForm)
+        );
+        assertThat(both.getMessage(), containsString("cannot combine [weights] with [fusion.combination.parameters.weights]"));
+        // Numbers of any type come back as the floats the builder carries, unmodifiable.
+        List<Float> valid = HybridQueryBuilder.requireValidWeights(List.of(0.25, 0.75f), 2, new HashMap<>(Map.of("source", "pipeline")));
+        assertEquals(List.of(0.25f, 0.75f), valid);
+        expectThrows(UnsupportedOperationException.class, () -> valid.add(1.0f));
+    }
+
+    @SneakyThrows
+    public void testDoRewrite_whenClassicTopLevelWeightsAndLegRewrites_thenWeightsSurvive() {
+        QueryBuilder originalLeg = mock(QueryBuilder.class);
+        QueryBuilder rewrittenLeg = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
+        QueryRewriteContext context = mock(QueryRewriteContext.class);
+        when(originalLeg.rewrite(context)).thenReturn(rewrittenLeg);
+
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(originalLeg);
+        builder.weights(List.of(1.0f));
+        HybridQueryBuilder rewritten = (HybridQueryBuilder) builder.doRewrite(context);
+
+        assertNotSame(builder, rewritten);
+        assertEquals(List.of(1.0f), rewritten.weights());
+        assertSame(rewrittenLeg, rewritten.queries().get(0));
+        assertNull(rewritten.fusion());
+    }
+
+    public void testDoRewrite_whenProgrammaticWeightsInvalid_thenFailsBeforeExecution() {
+        assertProgrammaticWeightsRejected(List.of(), 1, null, "must not be empty");
+        assertProgrammaticWeightsRejected(java.util.Arrays.asList((Float) null), 1, null, "must be a collection of numbers");
+        assertProgrammaticWeightsRejected(List.of(0.5f, 0.5f), 1, null, "must match number of sub-queries [1]");
+        assertProgrammaticWeightsRejected(List.of(-0.1f, 1.1f), 2, null, "all weights must be in range");
+        assertProgrammaticWeightsRejected(List.of(0.7f, 0.2f), 2, null, "sum of weights for combination must be equal to 1.0");
+        assertProgrammaticWeightsRejected(
+            List.of(0.5f, 0.5f),
+            2,
+            new HashMap<>(
+                Map.of("combination", Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.5, 0.5))))
+            ),
+            "cannot combine [weights] with [fusion.combination.parameters.weights]"
+        );
+        // The former fusion.weights location, or any other key the block does not have, is refused for a builder assembled
+        // in code the way parse refuses it for a request body.
+        assertProgrammaticWeightsRejected(
+            List.of(0.5f, 0.5f),
+            2,
+            new HashMap<>(Map.of("weights", List.of(0.5, 0.5))),
+            "[hybrid] query [fusion] contains unknown key [weights]"
+        );
+    }
+
+    /**
+     * The backstop runs where the request is accepted — on the coordinator — and nowhere else: a shard only receives what a
+     * coordinator accepted, and core rewrites before toQuery, so a shard rewrite does not repeat the check.
+     */
+    public void testDoRewrite_whenShardContext_thenRequestOptionsNotRechecked() throws IOException {
+        HybridQueryBuilder builder = new HybridQueryBuilder().weights(List.of(0.7f, 0.2f));
+        builder.add(QueryBuilders.matchAllQuery());
+        builder.add(QueryBuilders.matchAllQuery());
+        QueryRewriteContext shardContext = mock(QueryRewriteContext.class);
+        assertSame(builder, builder.doRewrite(shardContext));
+    }
+
+    /**
+     * Classic weights are read by the attached pipeline's normalization or score-ranker processor and by nothing else, so a
+     * request that resolves to no such processor is refused rather than answered at HTTP 200 with the weights ignored.
+     */
+    public void testDoRewrite_whenClassicWeightsResolveToNoScoreHybridizationProcessor_thenRefused() throws IOException {
+        HybridQueryBuilder builder = new HybridQueryBuilder().weights(List.of(0.5f, 0.5f));
+        builder.add(QueryBuilders.matchAllQuery());
+        builder.add(QueryBuilders.matchAllQuery());
+
+        // search_pipeline=_none: knowable without cluster state, and the clearest way to run a hybrid with no processor.
+        QueryCoordinatorContext none = coordinatorContextFor(builder);
+        ((SearchRequest) none.getSearchRequest()).pipeline("_none");
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(none));
+        assertThat(
+            e.getMessage(),
+            containsString("[hybrid] query [weights] requires a normalization or score-ranker processor: the resolved search pipeline")
+        );
+        assertThat(e.getMessage(), containsString("add [fusion] to fuse without a pipeline"));
+
+        // An inline pipeline body is drained by core before the rewrite and cannot be inspected; it is taken as present.
+        QueryCoordinatorContext inline = coordinatorContextFor(builder);
+        ((SearchRequest) inline.getSearchRequest()).source().searchPipelineSource(new HashMap<>());
+        assertSame(builder, builder.doRewrite(inline));
+
+        // Without weights there is nothing to read, so nothing to refuse.
+        HybridQueryBuilder unweighted = new HybridQueryBuilder();
+        unweighted.add(QueryBuilders.matchAllQuery());
+        QueryCoordinatorContext unweightedNone = coordinatorContextFor(unweighted);
+        ((SearchRequest) unweightedNone.getSearchRequest()).pipeline("_none");
+        assertSame(unweighted, unweighted.doRewrite(unweightedNone));
+
+        // A coordinator context that carries something other than a search request has no pipeline to ask about.
+        QueryCoordinatorContext notASearch = mock(QueryCoordinatorContext.class);
+        when(notASearch.convertToCoordinatorContext()).thenReturn(notASearch);
+        when(notASearch.getSearchRequest()).thenReturn(mock(org.opensearch.action.IndicesRequest.class));
+        assertSame(builder, builder.doRewrite(notASearch));
+    }
+
+    /**
+     * Classic weights are read from the request's top-level query and nowhere else, so a weighted classic hybrid anywhere else
+     * in the request — here a post_filter — is refused rather than having its weights silently ignored behind a pipeline that
+     * does carry a processor.
+     */
+    public void testDoRewrite_whenWeightedClassicHybridIsNotTheRequestQuery_thenRefused() throws IOException {
+        HybridQueryBuilder weightedPostFilter = new HybridQueryBuilder().weights(List.of(0.5f, 0.5f));
+        weightedPostFilter.add(QueryBuilders.matchAllQuery());
+        weightedPostFilter.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        SearchRequest request = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().query(QueryBuilders.matchAllQuery()).postFilter(weightedPostFilter)
+        ).pipeline("some-hybrid-pipeline");
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(request);
+
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> weightedPostFilter.doRewrite(ctx));
+        assertThat(e.getMessage(), containsString("[hybrid] query [weights] only apply to the request's top-level [hybrid] query"));
+
+        // A request with no source at all has no top-level query for the weights to be on.
+        QueryCoordinatorContext noSource = mock(QueryCoordinatorContext.class);
+        when(noSource.convertToCoordinatorContext()).thenReturn(noSource);
+        SearchRequest requestWithoutSource = new SearchRequest();
+        requestWithoutSource.indices("test-index");
+        assertNull(requestWithoutSource.source());
+        when(noSource.getSearchRequest()).thenReturn(requestWithoutSource);
+        IllegalArgumentException noSourceRefusal = expectThrows(
+            IllegalArgumentException.class,
+            () -> weightedPostFilter.doRewrite(noSource)
+        );
+        assertThat(noSourceRefusal.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+
+        // An equal builder stands in for the request's query: a copy made outside the rewrite is still the top-level query.
+        HybridQueryBuilder equalCopy = new HybridQueryBuilder().weights(List.of(0.5f, 0.5f));
+        equalCopy.add(QueryBuilders.matchAllQuery());
+        equalCopy.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        SearchRequest requestWithEqualQuery = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().query(weightedPostFilter).searchPipelineSource(new HashMap<>())
+        );
+        QueryCoordinatorContext equalCtx = mock(QueryCoordinatorContext.class);
+        when(equalCtx.convertToCoordinatorContext()).thenReturn(equalCtx);
+        when(equalCtx.getSearchRequest()).thenReturn(requestWithEqualQuery);
+        assertNotSame(weightedPostFilter, equalCopy);
+        assertSame(equalCopy, equalCopy.doRewrite(equalCtx));
+    }
+
+    /**
+     * A {@code wrapper} or {@code template} at the top of the request holds the hybrid the request's query becomes once the
+     * holder rewrites — and where the processor then reads the weights — so a weighted hybrid they hold is the request's
+     * top-level query. A wrapper that carries its own boost rewrites into a {@code bool} around the hybrid, which is not; nor
+     * is one whose held query cannot be read.
+     */
+    public void testDoRewrite_whenWeightedClassicHybridIsHeldByWrapperOrTemplate_thenItIsTheRequestQuery() throws IOException {
+        setUpClusterService();
+        HybridQueryBuilder written = new HybridQueryBuilder().weights(List.of(0.5f, 0.5f));
+        written.add(new TermQueryBuilder(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        written.add(new TermQueryBuilder(TEXT_FIELD_NAME, "other"));
+        String hybridJson = written.toString();
+
+        assertSame(written, written.doRewrite(coordinatorContextHolding(new WrapperQueryBuilder(hybridJson))));
+
+        Map<String, Object> templateContent = Map.of(
+            "hybrid",
+            Map.of(
+                "queries",
+                List.of(Map.of("term", Map.of(TEXT_FIELD_NAME, TERM_QUERY_TEXT)), Map.of("term", Map.of(TEXT_FIELD_NAME, "other"))),
+                "weights",
+                List.of(0.5, 0.5)
+            )
+        );
+        assertSame(written, written.doRewrite(coordinatorContextHolding(new TemplateQueryBuilder(templateContent))));
+
+        // The same wrapper with a boost or a name of its own rewrites into bool{must: hybrid}: the hybrid is no longer top-level.
+        for (WrapperQueryBuilder decorated : List.of(
+            new WrapperQueryBuilder(hybridJson).boost(2.0f),
+            new WrapperQueryBuilder(hybridJson).queryName("named")
+        )) {
+            IllegalArgumentException boosted = expectThrows(
+                IllegalArgumentException.class,
+                () -> written.doRewrite(coordinatorContextHolding(decorated))
+            );
+            assertThat(boosted.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+        }
+
+        // Holders are read through only as deep as core itself rewrites; a tower taller than that resolves to a holder.
+        String tower = hybridJson;
+        for (int depth = 0; depth <= org.opensearch.index.query.Rewriteable.MAX_REWRITE_ROUNDS; depth++) {
+            tower = new WrapperQueryBuilder(tower).toString();
+        }
+        String towerJson = tower;
+        IllegalArgumentException tooDeep = expectThrows(
+            IllegalArgumentException.class,
+            () -> written.doRewrite(coordinatorContextHolding(new WrapperQueryBuilder(towerJson)))
+        );
+        assertThat(tooDeep.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+
+        // A wrapper whose source cannot be read resolves to itself; the refusal stands, and the wrapper's own rewrite says why.
+        IllegalArgumentException unreadable = expectThrows(
+            IllegalArgumentException.class,
+            () -> written.doRewrite(coordinatorContextHolding(new WrapperQueryBuilder("{not a query")))
+        );
+        assertThat(unreadable.getMessage(), containsString("only apply to the request's top-level [hybrid] query"));
+    }
+
+    /** A coordinator context whose request has the given top-level query, an inline pipeline body, and the test registry. */
+    private QueryCoordinatorContext coordinatorContextHolding(QueryBuilder topLevelQuery) {
+        SearchRequest request = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().query(topLevelQuery).searchPipelineSource(new HashMap<>())
+        );
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(request);
+        when(ctx.getXContentRegistry()).thenReturn(fusionTestRegistry());
+        return ctx;
+    }
+
+    /**
+     * The coordinator check runs on the round that first sees the builder and not on the rounds after: the rebuilt classic
+     * builder carries the acceptance, so the request is neither re-validated nor compared against the request's query it no
+     * longer is by identity.
+     */
+    public void testDoRewrite_whenClassicBuilderRebuilt_thenRequestOptionsNotRecheckedOnTheNextRound() throws IOException {
+        setUpClusterService();
+        QueryBuilder originalLeg = mock(QueryBuilder.class);
+        QueryBuilder rewrittenLeg = QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT);
+        HybridQueryBuilder builder = new HybridQueryBuilder().weights(List.of(1.0f));
+        builder.add(originalLeg);
+        // Round 1: the request holds this very builder, and an inline pipeline body stands for a processor.
+        QueryCoordinatorContext round1 = coordinatorContextFor(builder);
+        ((SearchRequest) round1.getSearchRequest()).source().searchPipelineSource(new HashMap<>());
+        when(originalLeg.rewrite(round1)).thenReturn(rewrittenLeg);
+        HybridQueryBuilder rebuilt = (HybridQueryBuilder) builder.doRewrite(round1);
+        assertNotSame(builder, rebuilt);
+        verify(round1, atLeastOnce()).getSearchRequest();
+
+        // Round 2: core still holds the original query, so an identity or equality check would fail here — the rebuilt copy
+        // is accepted already, and nothing asks the request anything.
+        SearchRequest sameRequest = (SearchRequest) round1.getSearchRequest();
+        QueryCoordinatorContext round2 = mock(QueryCoordinatorContext.class);
+        when(round2.convertToCoordinatorContext()).thenReturn(round2);
+        when(round2.getSearchRequest()).thenReturn(sameRequest);
+        assertSame(rebuilt, rebuilt.doRewrite(round2));
+        verify(round2, never()).getSearchRequest();
+    }
+
+    /**
+     * The one copy helper behind the classic rebuild, the fused marker and the nested-leg copy keeps the pagination depth
+     * off a builder when the cluster still has a node that would not read it from the wire — the same gate parse applies.
+     */
+    public void testDoRewrite_whenClassicRebuildOnClusterBelowPaginationVersion_thenDepthNotCopied() throws IOException {
+        setUpClusterService(Version.V_2_18_0);
+        QueryBuilder originalLeg = mock(QueryBuilder.class);
+        QueryRewriteContext context = mock(QueryRewriteContext.class);
+        when(originalLeg.rewrite(context)).thenReturn(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        HybridQueryBuilder builder = new HybridQueryBuilder().paginationDepth(10).weights(List.of(1.0f));
+        builder.add(originalLeg);
+
+        HybridQueryBuilder rewritten = (HybridQueryBuilder) builder.doRewrite(context);
+
+        assertNotSame(builder, rewritten);
+        assertNull("depth stays behind the version gate", rewritten.paginationDepth());
+        assertEquals("weights travel regardless: they are gated with fusion, by the peer stream", List.of(1.0f), rewritten.weights());
+    }
+
+    private void assertProgrammaticWeightsRejected(
+        List<Float> weights,
+        int queryCount,
+        Map<String, Object> fusion,
+        String expectedMessage
+    ) {
+        HybridQueryBuilder builder = new HybridQueryBuilder().weights(weights).fusion(fusion);
+        for (int i = 0; i < queryCount; i++) {
+            builder.add(QueryBuilders.matchAllQuery());
+        }
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(coordinatorContextFor(builder)));
+        assertThat(e.getMessage(), containsString(expectedMessage));
     }
 
     @SneakyThrows
@@ -562,13 +1267,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     // ---- PR3: wire round-trip + coordinator self-erase lifecycle ----
 
     @SneakyThrows
-    public void testSerialization_whenFusionPresent_thenSurvivesNonNull() {
-        // Wire round-trip on a fused cluster (at the fused-mode minimum version): fusion:{} must survive as a non-null empty map, else the
-        // resolver silently flips off on the receiving node.
+    public void testSerialization_whenFusionAndTopLevelWeightsPresent_thenBothSurvive() {
+        // Wire round-trip at the fused-mode minimum: both mode selection and request weights must survive.
         setUpClusterService(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
         HybridQueryBuilder original = new HybridQueryBuilder();
         original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
         original.fusion(new HashMap<>());
+        original.weights(List.of(1.0f));
 
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         original.writeTo(streamOutput);
@@ -581,6 +1286,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         HybridQueryBuilder copy = new HybridQueryBuilder(in);
         assertNotNull("fusion must survive the wire as non-null", copy.fusion());
         assertTrue(copy.fusion().isEmpty());
+        assertEquals(List.of(1.0f), copy.weights());
         assertEquals(original, copy);
     }
 
@@ -627,15 +1333,14 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testSerialization_whenPeerStreamOnPreFusionVersion_thenFusionGatedByStreamVersion() {
-        // Mixed-version wire safety: even on a fused-capable cluster singleton, a stream
-        // pinned to a pre-fusion peer version must NOT read/write the fusion field — the gate keys off
-        // StreamInput/StreamOutput#getVersion(), not the cluster-min-version singleton. An old peer that mistakenly
-        // wrote the field would corrupt the classic wire form on the receiving node.
+    public void testSerialization_whenPeerStreamOnPreFusionVersion_thenFusionAndWeightsGatedByStreamVersion() {
+        // Mixed-version wire safety: even on a fused-capable cluster singleton, a stream pinned to a pre-fusion peer
+        // must not read/write either fused field; the gate keys off StreamInput/StreamOutput#getVersion().
         setUpClusterService(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
         HybridQueryBuilder original = new HybridQueryBuilder();
         original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
         original.fusion(new HashMap<>());
+        original.weights(List.of(1.0f));
 
         // A peer negotiated below the fused-mode minimum: 3.9.0 is the last release with no fused-mode code.
         Version oldPeer = Version.V_3_9_0;
@@ -653,16 +1358,18 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         HybridQueryBuilder copy = new HybridQueryBuilder(in);
 
         assertNull("fusion must not cross the wire to a pre-fusion peer", copy.fusion());
+        assertNull("weights must not cross the wire to a pre-fusion peer", copy.weights());
     }
 
     @SneakyThrows
-    public void testSerialization_whenPeerStreamOnFusedVersion_thenFusionSurvivesRegardlessOfSingleton() {
-        // Symmetric to the above: a stream pinned to a fused-capable version round-trips fusion even when the cluster
-        // singleton would report an older min version, proving the wire format follows the negotiated stream version.
+    public void testSerialization_whenPeerStreamOnFusedVersion_thenFusionAndWeightsSurviveRegardlessOfSingleton() {
+        // Symmetric to the above: a stream pinned to a fused-capable version round-trips both fields even when the cluster
+        // singleton reports an older minimum version, proving the wire format follows the negotiated stream version.
         setUpClusterService(Version.V_3_0_0);
         HybridQueryBuilder original = new HybridQueryBuilder();
         original.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
         original.fusion(new HashMap<>());
+        original.weights(List.of(1.0f));
 
         BytesStreamOutput streamOutput = new BytesStreamOutput();
         streamOutput.setVersion(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
@@ -679,6 +1386,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         assertNotNull("fusion must survive a fused-version stream", copy.fusion());
         assertTrue(copy.fusion().isEmpty());
+        assertEquals(List.of(1.0f), copy.weights());
     }
 
     @SneakyThrows

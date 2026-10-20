@@ -14,9 +14,12 @@ import org.apache.lucene.search.ConstantScoreQuery;
 import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.join.ToChildBlockJoinQuery;
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchType;
 import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
 
 import java.util.ArrayList;
@@ -25,6 +28,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -36,6 +40,28 @@ import java.util.stream.IntStream;
 public class HybridQueryUtil {
     public static final String HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE =
         "hybrid query does not support search_type [dfs_query_then_fetch]";
+
+    /**
+     * Top-level {@code hybrid.weights} of a classic hybrid request: the request's query is a {@link HybridQueryBuilder}
+     * without a {@code fusion} block and it carries weights. For the phase-results processors, which read the weights
+     * without depending on the builder beyond this one accessor. Empty for every other request — a fused hybrid self-erases
+     * at the coordinator and keeps its weights in its own {@code FusionSpec}, and a wrapped or absent hybrid has none to
+     * read — and for a request without a source.
+     */
+    public static Optional<List<Float>> classicRequestWeights(final SearchRequest searchRequest) {
+        if (Objects.isNull(searchRequest) || Objects.isNull(searchRequest.source())) {
+            return Optional.empty();
+        }
+        SearchSourceBuilder source = searchRequest.source();
+        if ((source.query() instanceof HybridQueryBuilder) == false) {
+            return Optional.empty();
+        }
+        HybridQueryBuilder hybridQuery = (HybridQueryBuilder) source.query();
+        if (Objects.nonNull(hybridQuery.fusion())) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(hybridQuery.weights());
+    }
 
     /**
      * This method validates whether the query object is an instance of hybrid query

@@ -358,6 +358,54 @@ public class FusionSpecTests extends OpenSearchTestCase {
         }
     }
 
+    public void testFromInlineFusion_whenWeightsIsAnEmptyList_thenRejectedLikeClassic() {
+        // The normalization-processor refuses `weights: []` at pipeline creation (an empty list sums to 0, not 1), so a
+        // pipeline carrying one cannot exist; inline was the only way to write it, and it fused unweighted at HTTP 200 as
+        // if the key were absent. Refused for both shapes, with a message that names the fix.
+        for (Map<String, Object> combination : List.of(
+            Map.<String, Object>of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of())),
+            Map.<String, Object>of("technique", "rrf", "parameters", Map.of("weights", List.of()))
+        )) {
+            IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(Map.of("combination", combination))
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("parameter [weights] must not be empty"));
+        }
+        // Absent is still "unweighted": the key, not an empty value, is what asks for equal weights.
+        assertEquals(0, FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "arithmetic_mean"))).weights().length);
+    }
+
+    public void testWithWeights_thenOnlyTheWeightsChange() {
+        FusionSpec base = FusionSpec.fromInlineFusion(
+            Map.of(
+                "normalization",
+                Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 17)),
+                "combination",
+                Map.of("technique", "geometric_mean", "parameters", Map.of("weights", List.of(0.4, 0.6)))
+            )
+        );
+        FusionSpec overlaid = base.withWeights(new float[] { 0.9f, 0.1f });
+        assertNotSame(base, overlaid);
+        assertArrayEquals(new float[] { 0.9f, 0.1f }, overlaid.weights(), 0.0f);
+        assertArrayEquals("the base is untouched", new float[] { 0.4f, 0.6f }, base.weights(), 0.0001f);
+        assertEquals(base.shape(), overlaid.shape());
+        assertEquals(base.normalizationTechnique(), overlaid.normalizationTechnique());
+        assertEquals(base.combinationTechnique(), overlaid.combinationTechnique());
+        assertEquals(17, overlaid.rankConstant());
+    }
+
+    public void testWeightsFromList_readsWhatTheRequestWrote() {
+        assertArrayEquals(new float[] { 1.0f, 0.0f }, FusionSpec.weightsFromList(List.of(1, 0)), 0.0f);
+        assertArrayEquals(new float[] { 0.25f, 0.75f }, FusionSpec.weightsFromList(List.of(0.25, 0.75)), 0.0f);
+        for (Object malformed : List.<Object>of("0.5", 0.5, List.of("a", 0.5), new ArrayList<>(List.of(0.5, "b")))) {
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> FusionSpec.weightsFromList(malformed));
+            assertTrue(e.getMessage(), e.getMessage().contains("parameter [weights] must be a collection of numbers"));
+        }
+        IllegalArgumentException empty = expectThrows(IllegalArgumentException.class, () -> FusionSpec.weightsFromList(List.of()));
+        assertTrue(empty.getMessage(), empty.getMessage().contains("parameter [weights] must not be empty"));
+    }
+
     public void testFromInlineFusion_whenWeights_thenParsedForEveryTechnique() {
         // weights live on the combination clause, which both shapes read the same way, so the normalization technique is
         // irrelevant to whether they parse. Pinned across all four so a future per-technique parameter check cannot start

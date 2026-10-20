@@ -117,7 +117,7 @@ public class ScoreCombinationUtil {
      * - sum of all weights must be equal 1.0
      * @param weightsList
      */
-    private void validateWeights(final List<Float> weightsList) {
+    public void validateWeights(final List<Float> weightsList) {
         boolean isOutOfRange = weightsList.stream().anyMatch(weight -> !Range.of(0.0f, 1.0f).contains(weight));
         if (isOutOfRange) {
             throw new IllegalArgumentException(

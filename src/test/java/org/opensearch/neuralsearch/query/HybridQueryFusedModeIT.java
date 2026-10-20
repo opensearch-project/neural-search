@@ -1289,6 +1289,20 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
 
         Map<String, String> usePipeline = Map.of("search_pipeline", pipeline);
         List<Map.Entry<String, Double>> classic = idsAndScores(search(index, classicQuery, null, WINDOW, usePipeline, null));
+        if (weights.isEmpty() == false) {
+            String requestOverridePipeline = pipeline + "-request-override-base";
+            createRRFSearchPipeline(requestOverridePipeline, List.of(), rankConstant, false);
+            HybridQueryBuilder classicRequestOverride = withParityLegs(new HybridQueryBuilder()).paginationDepth(WINDOW)
+                .weights(weights.stream().map(Double::floatValue).toList());
+            List<Map.Entry<String, Double>> requestOverride = idsAndScores(
+                search(index, classicRequestOverride, null, WINDOW, Map.of("search_pipeline", requestOverridePipeline), null)
+            );
+            assertEquals(
+                "classic request weights equal the same score-ranker weights configured in the pipeline",
+                classic,
+                requestOverride
+            );
+        }
         String what = "rank_constant=" + rankConstant + ", weights=" + weights;
         for (Map.Entry<String, List<Map.Entry<String, Double>>> fused : Map.of(
             "fused inline config",
@@ -1395,6 +1409,341 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         // Rejected by the classic compatibility matrix, not by a fused-mode-specific rule: classic maps min_max to the three
         // means, never to rrf. Only rrf + rrf short circuits ahead of that matrix.
         assertTrue(e.getMessage(), e.getMessage().contains("does not support combination [rrf] with normalization [min_max]"));
+    }
+
+    /**
+     * Top-level {@code hybrid.weights}: the request's combination weights, over whatever techniques the block or the pipeline
+     * resolved. Two legs that disagree on purpose — one ranks by {@code rank}, the other by its reciprocal — so the fused
+     * order is decided by the weights alone and flips with them; symmetric weights would rank like no weights and prove
+     * nothing. On 4 shards, where coordinator-side fusion could plausibly disagree with the single-shard case.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenRequestWeights_thenOrderFollowsThemAndEqualsTheLongForm() {
+        ensureCombinationParityIndex();
+
+        List<Map<String, Object>> rankHeavy = getNestedHits(
+            searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + disagreeingLegsQuery("{}", "[0.9,0.1]") + "}")
+        );
+        List<Map<String, Object>> reciprocalHeavy = getNestedHits(
+            searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + disagreeingLegsQuery("{}", "[0.1,0.9]") + "}")
+        );
+        assertEquals("rank-heavy weights put the highest rank first", String.valueOf(COMBINATION_PARITY_DOCS), rankHeavy.get(0).get("_id"));
+        assertEquals("reciprocal-heavy weights put the lowest rank first", "1", reciprocalHeavy.get(0).get("_id"));
+
+        // The shorthand is the long form with the defaults spelled out: same documents, same scores, to the last digit.
+        List<Map<String, Object>> longForm = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":"
+                    + disagreeingLegsQuery(
+                        "{\"normalization\":{\"technique\":\"min_max\"},"
+                            + "\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.1,0.9]}}}"
+                    )
+                    + "}"
+            )
+        );
+        assertEquals(idsAndScores(longForm), idsAndScores(reciprocalHeavy));
+    }
+
+    /**
+     * {@code source: "pipeline"} + {@code weights}: the techniques are the pipeline's, the weights are this request's, and
+     * the pipeline is not touched. Proven both ways — the request's weights decide the order against the pipeline's own,
+     * and the scores are the pipeline's technique's ({@code l2}), not the defaults' — because a shorthand that silently
+     * fell back to min_max would still pass an order-only check.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenSourcePipelinePlusRequestWeights_thenPipelineTechniquesWithRequestWeights() {
+        ensureCombinationParityIndex();
+        String pipeline = "fused-request-weights-l2";
+        createSearchPipeline(pipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.9, 0.1]"));
+
+        List<Map<String, Object>> pipelineWeights = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("\"pipeline\"") + "}",
+                Map.of("search_pipeline", pipeline)
+            )
+        );
+        List<Map<String, Object>> requestWeights = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("\"pipeline\"", "[0.1,0.9]") + "}",
+                Map.of("search_pipeline", pipeline)
+            )
+        );
+        assertEquals(
+            "control: the pipeline's rank-heavy weights",
+            String.valueOf(COMBINATION_PARITY_DOCS),
+            pipelineWeights.get(0).get("_id")
+        );
+        assertEquals("the request's reciprocal-heavy weights win", "1", requestWeights.get(0).get("_id"));
+
+        List<Map<String, Object>> inlineL2 = getNestedHits(
+            searchRaw(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":"
+                    + disagreeingLegsQuery(
+                        "{\"normalization\":{\"technique\":\"l2\"},"
+                            + "\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.1,0.9]}}}"
+                    )
+                    + "}"
+            )
+        );
+        assertEquals(
+            "pipeline techniques + request weights == the same spelled out inline",
+            idsAndScores(inlineL2),
+            idsAndScores(requestWeights)
+        );
+        List<Map<String, Object>> inlineMinMax = getNestedHits(
+            searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + disagreeingLegsQuery("{}", "[0.1,0.9]") + "}")
+        );
+        assertNotEquals(
+            "the normalization came from the pipeline, not from the defaults",
+            idsAndScores(inlineMinMax),
+            idsAndScores(requestWeights)
+        );
+
+        // The pipeline itself still fuses by its own weights for a request that does not override them.
+        List<Map<String, Object>> pipelineAgain = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery("\"pipeline\"") + "}",
+                Map.of("search_pipeline", pipeline)
+            )
+        );
+        assertEquals(idsAndScores(pipelineWeights), idsAndScores(pipelineAgain));
+    }
+
+    /**
+     * Classic hybrid reads the same top-level request weights in its phase-results processor. The request overrides only
+     * the configured weights: techniques still come from the attached pipeline, and a later request without an override
+     * sees the pipeline's original weights rather than shared mutable state.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenTopLevelRequestWeights_thenOverridePipelineWeightsWithoutMutation() {
+        ensureCombinationParityIndex();
+        String configuredPipeline = "classic-request-weights-l2-configured";
+        String equivalentPipeline = "classic-request-weights-l2-equivalent";
+        createSearchPipeline(configuredPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.9, 0.1]"));
+        createSearchPipeline(equivalentPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.1, 0.9]"));
+
+        Map<String, String> configured = Map.of("search_pipeline", configuredPipeline);
+        List<Map<String, Object>> configuredHits = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null) + "}",
+                configured
+            )
+        );
+        List<Map<String, Object>> requestOverride = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}",
+                configured
+            )
+        );
+        List<Map<String, Object>> configuredEquivalent = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null) + "}",
+                Map.of("search_pipeline", equivalentPipeline)
+            )
+        );
+
+        assertEquals("control: configured rank-heavy weights", String.valueOf(COMBINATION_PARITY_DOCS), configuredHits.get(0).get("_id"));
+        assertEquals("request weights reverse the classic ranking", "1", requestOverride.get(0).get("_id"));
+        assertEquals(
+            "request override equals the same weights configured in a pipeline",
+            idsAndScores(configuredEquivalent),
+            idsAndScores(requestOverride)
+        );
+
+        List<Map<String, Object>> configuredAgain = getNestedHits(
+            searchRawWithParams(
+                "/" + INDEX_FOR_COMBINATION_PARITY + "/_search",
+                "{\"query\":" + disagreeingLegsQuery(null) + "}",
+                configured
+            )
+        );
+        assertEquals("request override must not mutate shared pipeline state", idsAndScores(configuredHits), idsAndScores(configuredAgain));
+    }
+
+    /**
+     * Classic weights are read by the pipeline's normalization or score-ranker processor and by nothing else, so a request
+     * that resolves to no such processor is refused rather than answered at HTTP 200 with the weights ignored. An inline
+     * pipeline body is the one carrier the rewrite cannot see (core drains it first): it is taken as present, and the
+     * processor it declares does read the weights.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenRequestWeightsAndNoPhaseResultsProcessor_thenBadRequest() {
+        ensureCombinationParityIndex();
+        String endpoint = "/" + INDEX_FOR_COMBINATION_PARITY + "/_search";
+        String weighted = "{\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}";
+        for (Map<String, String> params : List.of(Map.<String, String>of(), Map.of("search_pipeline", "_none"))) {
+            ResponseException e = expectThrows(ResponseException.class, () -> searchRawWithParams(endpoint, weighted, params));
+            assertEquals(params.toString(), RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
+            assertTrue(
+                e.getMessage(),
+                e.getMessage().contains("[hybrid] query [weights] requires a normalization or score-ranker processor")
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("add [fusion] to fuse without a pipeline"));
+        }
+        // Control: without weights there is nothing to read, so the request is answered as before (unfused scores).
+        searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null) + "}", Map.of());
+
+        // An inline pipeline body that carries the processor is accepted, and the request weights override its configured
+        // ones exactly as they override a named pipeline's.
+        String inlinePipeline = "\"search_pipeline\":{\"phase_results_processors\":[{\"normalization-processor\":"
+            + "{\"normalization\":{\"technique\":\"l2\"},"
+            + "\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.9,0.1]}}}}]}";
+        List<Map<String, Object>> inlineOverride = getNestedHits(
+            searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "," + inlinePipeline + "}", Map.of())
+        );
+        String equivalentPipeline = "classic-request-weights-inline-equivalent";
+        createSearchPipeline(equivalentPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.1, 0.9]"));
+        List<Map<String, Object>> configuredEquivalent = getNestedHits(
+            searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null) + "}", Map.of("search_pipeline", equivalentPipeline))
+        );
+        assertEquals("request weights reverse the inline pipeline's ranking", "1", inlineOverride.get(0).get("_id"));
+        assertEquals(
+            "inline-body override equals the same weights configured in a pipeline",
+            idsAndScores(configuredEquivalent),
+            idsAndScores(inlineOverride)
+        );
+    }
+
+    /**
+     * Classic weights are read from the request's top-level query and nowhere else, so a weighted classic hybrid placed
+     * anywhere else — here a post_filter, behind a pipeline that does carry the processor — is refused rather than having
+     * its weights silently ignored.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenWeightedHybridIsNotTheRequestQuery_thenBadRequest() {
+        ensureCombinationParityIndex();
+        String pipeline = "classic-request-weights-post-filter";
+        createSearchPipeline(pipeline, "l2", "arithmetic_mean", Map.of());
+        String body = "{\"query\":{\"match_all\":{}},\"post_filter\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}";
+        ResponseException e = expectThrows(
+            ResponseException.class,
+            () -> searchRawWithParams("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", body, Map.of("search_pipeline", pipeline))
+        );
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
+        assertTrue(
+            e.getMessage(),
+            e.getMessage().contains("[hybrid] query [weights] only apply to the request's top-level [hybrid] query")
+        );
+    }
+
+    /**
+     * A {@code wrapper} or {@code template} query at the top of the request holds the hybrid the request's query becomes, so
+     * a weighted classic hybrid they hold is accepted and its weights are applied — the same ranking as the weights
+     * configured in a pipeline.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenWeightedHybridIsHeldByWrapperOrTemplate_thenWeightsApply() {
+        ensureCombinationParityIndex();
+        String endpoint = "/" + INDEX_FOR_COMBINATION_PARITY + "/_search";
+        String configuredPipeline = "classic-request-weights-held-configured";
+        String equivalentPipeline = "classic-request-weights-held-equivalent";
+        createSearchPipeline(configuredPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.9, 0.1]"));
+        createSearchPipeline(equivalentPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.1, 0.9]"));
+        List<Map<String, Object>> configuredEquivalent = getNestedHits(
+            searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null) + "}", Map.of("search_pipeline", equivalentPipeline))
+        );
+
+        String weightedHybrid = disagreeingLegsQuery(null, "[0.1,0.9]");
+        String wrapped = "{\"query\":{\"wrapper\":{\"query\":\""
+            + java.util.Base64.getEncoder().encodeToString(weightedHybrid.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            + "\"}}}";
+        List<Map<String, Object>> throughWrapper = getNestedHits(
+            searchRawWithParams(endpoint, wrapped, Map.of("search_pipeline", configuredPipeline))
+        );
+        assertEquals("wrapper: request weights reverse the configured ranking", "1", throughWrapper.get(0).get("_id"));
+        assertEquals("wrapper: equals the same weights configured", idsAndScores(configuredEquivalent), idsAndScores(throughWrapper));
+
+        List<Map<String, Object>> throughTemplate = getNestedHits(
+            searchRawWithParams(
+                endpoint,
+                "{\"query\":{\"template\":" + weightedHybrid + "}}",
+                Map.of("search_pipeline", configuredPipeline)
+            )
+        );
+        assertEquals("template: request weights reverse the configured ranking", "1", throughTemplate.get(0).get("_id"));
+        assertEquals("template: equals the same weights configured", idsAndScores(configuredEquivalent), idsAndScores(throughTemplate));
+    }
+
+    /** The top-level shortcut's refusals, at HTTP 400 with the reason, through the REST layer. */
+    @SneakyThrows
+    public void testFusedMode_whenRequestWeightsMalformed_thenBadRequest() {
+        ensureCombinationParityIndex();
+        Map<String, String> refusals = Map.of(
+            // one explicit place for the weights, even when the two agree
+            disagreeingLegsQuery(
+                "{\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.5,0.5]}}}",
+                "[0.5,0.5]"
+            ),
+            "cannot combine [weights] with [fusion.combination.parameters.weights]",
+            disagreeingLegsQuery("{}", "[]"),
+            "[weights] must not be empty",
+            disagreeingLegsQuery("\"pipeline\"", "[0.2,0.3,0.5]"),
+            "number of weights [3] must match number of sub-queries [2]",
+            disagreeingLegsQuery("{}", "\"0.5,0.5\""),
+            "[weights] must be a collection of numbers",
+            disagreeingLegsQuery("{}", "[0.7,0.7]"),
+            "sum of weights",
+            // the existing long form's empty list is refused too, the way the normalization-processor refuses it
+            disagreeingLegsQuery("{\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[]}}}"),
+            "parameter [weights] must not be empty",
+            // the former fusion.weights location is not retained as an alias
+            disagreeingLegsQuery("{\"weights\":[0.5,0.5]}"),
+            "[fusion] contains unknown key [weights]"
+        );
+        for (Map.Entry<String, String> refusal : refusals.entrySet()) {
+            ResponseException e = expectThrows(
+                ResponseException.class,
+                () -> searchRaw("/" + INDEX_FOR_COMBINATION_PARITY + "/_search", "{\"query\":" + refusal.getKey() + "}")
+            );
+            assertEquals(refusal.getKey(), RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
+            assertTrue(refusal.getKey() + " -> " + e.getMessage(), e.getMessage().contains(refusal.getValue()));
+        }
+    }
+
+    @SneakyThrows
+    private void ensureCombinationParityIndex() {
+        if (indexExists(INDEX_FOR_COMBINATION_PARITY) == false) {
+            createIndex(INDEX_FOR_COMBINATION_PARITY, indexConfigWithRankField(COMBINATION_PARITY_SHARDS));
+            for (int id = 1; id <= COMBINATION_PARITY_DOCS; id++) {
+                indexRankedDoc(INDEX_FOR_COMBINATION_PARITY, id, id * 10);
+            }
+        }
+    }
+
+    /**
+     * A hybrid whose two legs rank the fixture in opposite orders — by {@code rank} and by its reciprocal — under the
+     * given {@code fusion} value (object/string JSON), and optional top-level weights array JSON.
+     */
+    private String disagreeingLegsQuery(String fusionJson) {
+        return disagreeingLegsQuery(fusionJson, null);
+    }
+
+    private String disagreeingLegsQuery(String fusionJson, String weightsJson) {
+        String byRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"none\",\"missing\":1}}}";
+        String byReciprocalRank = "{\"function_score\":{\"query\":{\"match_all\":{}},\"field_value_factor\":{\"field\":\""
+            + RANK_FIELD
+            + "\",\"modifier\":\"reciprocal\",\"missing\":1}}}";
+        String weights = weightsJson == null ? "" : "\"weights\":" + weightsJson + ",";
+        String fusion = fusionJson == null ? "" : "\"fusion\":" + fusionJson + ",";
+        return "{\"hybrid\":{" + weights + fusion + "\"queries\":[" + byRank + "," + byReciprocalRank + "]}}";
+    }
+
+    private List<String> idsAndScores(List<Map<String, Object>> hits) {
+        List<String> pairs = new ArrayList<>();
+        for (Map<String, Object> hit : hits) {
+            pairs.add(hit.get("_id") + "=" + hit.get("_score"));
+        }
+        return pairs;
     }
 
     /**

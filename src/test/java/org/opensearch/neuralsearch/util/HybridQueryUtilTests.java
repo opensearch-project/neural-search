@@ -15,6 +15,7 @@ import org.apache.lucene.search.TermQuery;
 import org.opensearch.Version;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.common.UUIDs;
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchType;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.IndexSettings;
@@ -29,13 +30,16 @@ import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryContext;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.slice.TermsSliceQuery;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -383,6 +387,46 @@ public class HybridQueryUtilTests extends OpenSearchQueryTestCase {
         SearchContext searchContext = mockSearchContext(null, hybridQuery);
 
         assertSame(hybridQuery, HybridQueryUtil.extractHybridQuery(searchContext, hybridQuery));
+    }
+
+    /**
+     * The phase-results processors read top-level {@code hybrid.weights} through this accessor alone: present only for a
+     * classic (no {@code fusion}) hybrid at the top of the request, empty for a fused one, a wrapped one, or no query.
+     */
+    public void testClassicRequestWeights_whenTopLevelClassicHybrid_thenPresentOtherwiseEmpty() {
+        HybridQueryBuilder classic = new HybridQueryBuilder().weights(List.of(0.3f, 0.7f));
+        classic.add(new TermQueryBuilder(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        classic.add(new TermQueryBuilder(TEXT_FIELD_NAME, "another"));
+        assertEquals(
+            Optional.of(List.of(0.3f, 0.7f)),
+            HybridQueryUtil.classicRequestWeights(new SearchRequest("idx").source(new SearchSourceBuilder().query(classic)))
+        );
+
+        HybridQueryBuilder unweighted = new HybridQueryBuilder();
+        unweighted.add(new TermQueryBuilder(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        assertEquals(
+            Optional.empty(),
+            HybridQueryUtil.classicRequestWeights(new SearchRequest("idx").source(new SearchSourceBuilder().query(unweighted)))
+        );
+
+        HybridQueryBuilder fused = new HybridQueryBuilder().weights(List.of(0.3f, 0.7f)).fusion(new HashMap<>());
+        fused.add(new TermQueryBuilder(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        fused.add(new TermQueryBuilder(TEXT_FIELD_NAME, "another"));
+        assertEquals(
+            "a fused hybrid keeps its weights in its own FusionSpec",
+            Optional.empty(),
+            HybridQueryUtil.classicRequestWeights(new SearchRequest("idx").source(new SearchSourceBuilder().query(fused)))
+        );
+
+        assertEquals(
+            Optional.empty(),
+            HybridQueryUtil.classicRequestWeights(
+                new SearchRequest("idx").source(new SearchSourceBuilder().query(QueryBuilders.boolQuery().must(classic)))
+            )
+        );
+        assertEquals(Optional.empty(), HybridQueryUtil.classicRequestWeights(new SearchRequest("idx").source(new SearchSourceBuilder())));
+        assertEquals(Optional.empty(), HybridQueryUtil.classicRequestWeights(new SearchRequest("idx")));
+        assertEquals(Optional.empty(), HybridQueryUtil.classicRequestWeights(null));
     }
 
     private static HybridQuery createHybridQuery() {

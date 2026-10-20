@@ -81,13 +81,21 @@ public final class FusionSpec {
     static final int DEFAULT_RANK_CONSTANT = RRFScoreNormalizer.DEFAULT_RANK_CONSTANT;
 
     // Config-map keys (shared by the normalization-processor and score-ranker-processor definitions)
-    private static final String PHASE_RESULTS_PROCESSORS_KEY = "phase_results_processors";
+    static final String PHASE_RESULTS_PROCESSORS_KEY = "phase_results_processors";
     private static final String NORMALIZATION_CLAUSE = "normalization";
     private static final String COMBINATION_CLAUSE = "combination";
     private static final String TECHNIQUE_KEY = "technique";
     private static final String PARAMETERS_KEY = "parameters";
     private static final String WEIGHTS_KEY = "weights";
     private static final String RANK_CONSTANT_KEY = RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT;
+
+    /**
+     * The reasons a {@code weights} value is refused, shared by the long form here ({@code parameter [weights] ...}) and
+     * the top-level shorthand in {@code HybridQueryBuilder} ({@code [hybrid] query [weights] ...}), so the two read the
+     * same apart from the subject. Classic's {@code normalization-processor} wording for the first.
+     */
+    static final String WEIGHTS_MUST_BE_NUMBERS = "must be a collection of numbers";
+    static final String WEIGHTS_MUST_NOT_BE_EMPTY = "must not be empty: omit it to weight every sub-query equally";
 
     /**
      * The only {@code normalization.parameters} key fused mode honors, and only where {@code rrf} is the normalization
@@ -410,13 +418,12 @@ public final class FusionSpec {
      * array, so classic's own type check ("must be a collection of numbers") can never see the malformed value and a
      * scalar or string {@code weights} was fusing unweighted at HTTP 200 — the same request classic answers with a 400.
      *
-     * <p>The elements are checked too, and that half is <em>stricter</em> than classic rather than parity with it: the list
-     * check is the only one classic makes either ({@code ScoreCombinationUtil#validateParams}), and it then streams the
-     * elements through {@code Double::floatValue}, so a list holding a non-numeric or null element fails classic and fused
-     * mode alike with a cast failure at HTTP 500. Refused here with the reason instead — a request that cannot be served
-     * should say what to fix.
+     * <p>The elements are checked too ({@link #weightsFromList}), and that half is <em>stricter</em> than classic rather
+     * than parity with it: the list check is the only one classic makes either ({@code ScoreCombinationUtil#validateParams}),
+     * and it then streams the elements through {@code Double::floatValue}, so a list holding a non-numeric or null element
+     * fails classic and fused mode alike with a cast failure at HTTP 500. Refused here with the reason instead — a request
+     * that cannot be served should say what to fix.
      */
-    @SuppressWarnings("unchecked")
     private static float[] readWeights(Map<String, Object> combinationClause) {
         Map<String, Object> parameters = readParameters(combinationClause, COMBINATION_CLAUSE);
         if ((parameters.get(WEIGHTS_KEY) instanceof List) == false) {
@@ -425,7 +432,26 @@ public final class FusionSpec {
             }
             return new float[0];
         }
-        List<Object> raw = (List<Object>) parameters.get(WEIGHTS_KEY);
+        return weightsFromList(parameters.get(WEIGHTS_KEY));
+    }
+
+    /**
+     * A {@code weights} value as the request wrote it — either the long form's list or top-level
+     * {@code hybrid.weights} — read into the array a spec carries. Anything but a non-empty list of numbers is refused with the reason.
+     *
+     * <p>Empty is refused too, and that is parity with classic rather than strictness beyond it: the
+     * {@code normalization-processor} rejects {@code weights: []} at pipeline creation (an empty list sums to 0, not 1),
+     * so a pipeline carrying one cannot exist, and an inline one was the only way to write it — fusing unweighted at
+     * HTTP 200 as if the key were absent, which is not what a list the caller went to the trouble of writing means.
+     */
+    static float[] weightsFromList(Object value) {
+        if ((value instanceof List) == false) {
+            throw weightsMustBeNumbers();
+        }
+        List<?> raw = (List<?>) value;
+        if (raw.isEmpty()) {
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "parameter [%s] %s", WEIGHTS_KEY, WEIGHTS_MUST_NOT_BE_EMPTY));
+        }
         float[] weights = new float[raw.size()];
         for (int i = 0; i < raw.size(); i++) {
             // Checked per element, because the cast is unchecked: a non-numeric or null element would otherwise fail the
@@ -438,8 +464,16 @@ public final class FusionSpec {
         return weights;
     }
 
+    /**
+     * This spec with the given per-leg weights in place of its own; every technique setting is kept. Used to lay
+     * top-level {@code hybrid.weights} over a base read from the fusion block or from the pipeline.
+     */
+    FusionSpec withWeights(float[] weights) {
+        return new FusionSpec(shape, combinationTechnique, normalizationTechnique, rankConstant, weights);
+    }
+
     /** Classic's own wording for a malformed {@code weights}, so one request reads the same however it was refused. */
     private static IllegalArgumentException weightsMustBeNumbers() {
-        return new IllegalArgumentException(String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", WEIGHTS_KEY));
+        return new IllegalArgumentException(String.format(Locale.ROOT, "parameter [%s] %s", WEIGHTS_KEY, WEIGHTS_MUST_BE_NUMBERS));
     }
 }
