@@ -17,11 +17,13 @@ import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchResponse;
 import org.opensearch.common.xcontent.support.XContentMapValues;
 import org.opensearch.core.action.ActionListener;
+import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -49,7 +51,8 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         final SearchResponse searchResponse,
         final ActionListener<Map<String, Object>> listener
     ) {
-        if (!requestsInnerHitsOnPath(searchRequest)) {
+        List<InnerHitBuilder> innerHits = innerHitsOnPath(searchRequest);
+        if (innerHits != null && innerHits.isEmpty()) {
             listener.onFailure(
                 new IllegalArgumentException(
                     String.format(
@@ -59,6 +62,22 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
                         path,
                         NAME,
                         path
+                    )
+                )
+            );
+            return;
+        }
+        if (innerHits != null && innerHits.stream().noneMatch(this::returnsFieldInSource)) {
+            listener.onFailure(
+                new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "The inner hits on the nested path [%s] filter [%s.%s] out of _source, so [%s] cannot rerank chunks. "
+                            + "Include it in the inner hits \"_source\".",
+                        path,
+                        path,
+                        field,
+                        NAME
                     )
                 )
             );
@@ -122,17 +141,19 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
         }
     }
 
-    /** Whether the query has a nested query on the configured path that returns inner hits. A request without a query passes. */
-    private boolean requestsInnerHitsOnPath(final SearchRequest searchRequest) {
+    /**
+     * The inner hits of the nested queries on the configured path, or null when the request has no query to inspect.
+     */
+    private List<InnerHitBuilder> innerHitsOnPath(final SearchRequest searchRequest) {
         if (searchRequest == null || searchRequest.source() == null || searchRequest.source().query() == null) {
-            return true;
+            return null;
         }
-        boolean[] found = { false };
+        List<InnerHitBuilder> innerHits = new ArrayList<>();
         searchRequest.source().query().visit(new QueryBuilderVisitor() {
             @Override
             public void accept(QueryBuilder query) {
                 if (query instanceof NestedQueryBuilder nested && path.equals(nested.path()) && nested.innerHit() != null) {
-                    found[0] = true;
+                    innerHits.add(nested.innerHit());
                 }
             }
 
@@ -141,7 +162,26 @@ public class InnerHitsContextSourceFetcher implements ContextSourceFetcher {
                 return this;
             }
         });
-        return found[0];
+        return innerHits;
+    }
+
+    /** Whether the inner hits' _source filtering keeps the rerank field, checked by filtering a source that holds just that field. */
+    private boolean returnsFieldInSource(final InnerHitBuilder innerHit) {
+        FetchSourceContext sourceContext = innerHit.getFetchSourceContext();
+        if (sourceContext == null) {
+            return true;
+        }
+        if (!sourceContext.fetchSource()) {
+            return false;
+        }
+        // Inner hits filter the root source, so the field is addressed by its full path
+        String fullField = path + "." + field;
+        String[] parts = fullField.split("\\.");
+        Map<String, Object> source = Map.of(parts[parts.length - 1], "probe");
+        for (int i = parts.length - 2; i >= 0; i--) {
+            source = Map.of(parts[i], source);
+        }
+        return XContentMapValues.extractValue(fullField, sourceContext.getFilter().apply(source)) != null;
     }
 
     /** Joins the relative field names of a (possibly multi-level) nested identity into the full nested path. */

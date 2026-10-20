@@ -26,6 +26,7 @@ import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
+import org.opensearch.search.fetch.subphase.FetchSourceContext;
 import org.opensearch.test.OpenSearchTestCase;
 
 import lombok.SneakyThrows;
@@ -197,6 +198,84 @@ public class InnerHitsContextSourceFetcherTests extends OpenSearchTestCase {
         );
 
         assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+    }
+
+    public void testFetchContext_whenInnerHitsDisableSource_thenFail() {
+        assertSourceFilterFailure(nested("embeddings", new FetchSourceContext(false)));
+    }
+
+    public void testFetchContext_whenInnerHitsSourceIncludesOtherField_thenFail() {
+        assertSourceFilterFailure(nested("embeddings", new FetchSourceContext(true, new String[] { "embeddings.other" }, null)));
+    }
+
+    public void testFetchContext_whenInnerHitsSourceExcludesField_thenFail() {
+        assertSourceFilterFailure(nested("embeddings", new FetchSourceContext(true, null, new String[] { "embeddings.te*" })));
+    }
+
+    public void testFetchContext_whenInnerHitsSourceIncludesField_thenSucceeds() {
+        for (String include : List.of("embeddings", "embeddings.*", "embeddings.text", "*")) {
+            QueryBuilder query = nested("embeddings", new FetchSourceContext(true, new String[] { include }, null));
+
+            Map<String, Object> context = fetch(
+                new InnerHitsContextSourceFetcher("embeddings", "text"),
+                requestWithQuery(query),
+                createSearchResponse(createHit("1"))
+            );
+
+            assertEquals(include, List.of(List.of()), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+        }
+    }
+
+    public void testFetchContext_whenOneOfSeveralInnerHitsReturnsField_thenSucceeds() {
+        QueryBuilder query = QueryBuilders.boolQuery()
+            .should(nested("embeddings", new FetchSourceContext(false)))
+            .should(nested("embeddings", new FetchSourceContext(true, new String[] { "embeddings.text" }, null)));
+
+        Map<String, Object> context = fetch(
+            new InnerHitsContextSourceFetcher("embeddings", "text"),
+            requestWithQuery(query),
+            createSearchResponse(createHit("1"))
+        );
+
+        assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+    }
+
+    public void testFetchContext_whenNestedInNestedSourceIncludesDottedField_thenSucceeds() {
+        QueryBuilder query = QueryBuilders.nestedQuery(
+            "sections",
+            nested("sections.chunks", new FetchSourceContext(true, new String[] { "sections.chunks.meta.text" }, null)),
+            ScoreMode.Max
+        );
+
+        Map<String, Object> context = fetch(
+            new InnerHitsContextSourceFetcher("sections.chunks", "meta.text"),
+            requestWithQuery(query),
+            createSearchResponse(createHit("1"))
+        );
+
+        assertEquals(List.of(List.of()), context.get(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD));
+    }
+
+    private void assertSourceFilterFailure(QueryBuilder query) {
+        List<Exception> failures = new ArrayList<>();
+        new InnerHitsContextSourceFetcher("embeddings", "text").fetchContext(
+            requestWithQuery(query),
+            createSearchResponse(createHit("1")),
+            ActionListener.wrap(result -> fail("Should not succeed"), failures::add)
+        );
+
+        assertEquals(1, failures.size());
+        assertTrue(failures.get(0) instanceof IllegalArgumentException);
+        assertEquals(
+            "The inner hits on the nested path [embeddings] filter [embeddings.text] out of _source, so [inner_hits] "
+                + "cannot rerank chunks. Include it in the inner hits \"_source\".",
+            failures.get(0).getMessage()
+        );
+    }
+
+    private static NestedQueryBuilder nested(String path, FetchSourceContext sourceContext) {
+        return QueryBuilders.nestedQuery(path, QueryBuilders.matchAllQuery(), ScoreMode.Max)
+            .innerHit(new InnerHitBuilder().setFetchSourceContext(sourceContext));
     }
 
     private void assertMissingInnerHitsFailure(QueryBuilder query) {
