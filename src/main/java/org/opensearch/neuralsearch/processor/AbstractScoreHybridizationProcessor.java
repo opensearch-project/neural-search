@@ -11,9 +11,8 @@ import org.opensearch.action.search.SearchPhaseResults;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.neuralsearch.processor.combination.ScoreCombinationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationTechnique;
-import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.util.HybridQueryUtil;
 import org.opensearch.search.SearchPhaseResult;
-import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
@@ -118,19 +117,17 @@ public abstract class AbstractScoreHybridizationProcessor implements SearchPhase
     @VisibleForTesting
     ScoreCombinationTechnique resolveCombinationTechnique(final SearchPhaseContext searchPhaseContext) {
         ScoreCombinationTechnique configured = getCombinationTechnique();
-        if (Objects.isNull(searchPhaseContext) || Objects.isNull(searchPhaseContext.getRequest())) {
+        if (Objects.isNull(searchPhaseContext)) {
             return configured;
         }
-        SearchSourceBuilder source = searchPhaseContext.getRequest().source();
-        if (Objects.isNull(source) || (source.query() instanceof HybridQueryBuilder) == false) {
+        Optional<List<Float>> requestWeights = HybridQueryUtil.classicRequestWeights(searchPhaseContext.getRequest());
+        if (requestWeights.isEmpty()) {
             return configured;
         }
-        HybridQueryBuilder hybridQuery = (HybridQueryBuilder) source.query();
-        if (Objects.nonNull(hybridQuery.fusion()) || Objects.isNull(hybridQuery.weights())) {
-            return configured;
-        }
-        List<Double> requestWeights = hybridQuery.weights().stream().map(Float::doubleValue).collect(Collectors.toUnmodifiableList());
-        return SCORE_COMBINATION_FACTORY.createCombination(configured.techniqueName(), Map.of(PARAM_NAME_WEIGHTS, requestWeights));
+        // The factory takes the pipeline definition's shape — a JSON-like map whose weights are doubles — because it is
+        // the one constructor every combiner has; the double round trip is exact for a float.
+        List<Double> weights = requestWeights.get().stream().map(Float::doubleValue).collect(Collectors.toUnmodifiableList());
+        return SCORE_COMBINATION_FACTORY.createCombination(configured.techniqueName(), Map.of(PARAM_NAME_WEIGHTS, weights));
     }
 
     /**

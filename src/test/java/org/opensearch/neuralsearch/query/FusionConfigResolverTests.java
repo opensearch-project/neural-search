@@ -285,4 +285,101 @@ public class FusionConfigResolverTests extends OpenSearchTestCase {
             )
         );
     }
+
+    // ---- resolvedPipelineHasScoreHybridizationProcessor (classic hybrid.weights needs a reader) ----
+
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenNamedOrDefaultPipelineCarriesOne_thenTrue() throws Exception {
+        initClusterUtil(new SearchPipelineMetadata(Map.of("rp", pipelineWithResponseProcessor("rp"), "mm", minMaxPipeline("mm"))), null);
+        assertTrue(
+            "normalization-processor",
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("mm"))
+        );
+        assertFalse(
+            "a pipeline with only response processors reads no weights",
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("rp"))
+        );
+        assertFalse(
+            "_none",
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("_none"))
+        );
+        assertFalse(
+            "no pipeline resolved at all",
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx"))
+        );
+        assertFalse(
+            "unknown id resolves to nothing",
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("missing"))
+        );
+
+        initClusterUtil(new SearchPipelineMetadata(Map.of("mm", minMaxPipeline("mm"))), indexSettingsWithDefaultPipeline("mm"));
+        assertTrue("index default", FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest(INDEX)));
+        initClusterUtil(new SearchPipelineMetadata(Map.of("mm", minMaxPipeline("mm"))), indexSettingsWithDefaultPipeline("_none"));
+        assertFalse(
+            "index default of _none",
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest(INDEX))
+        );
+    }
+
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenScoreRankerProcessor_thenTrue() throws Exception {
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("phase_results_processors")
+            .startObject()
+            .startObject("score-ranker-processor")
+            .startObject("combination")
+            .field("technique", "rrf")
+            .endObject()
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+        PipelineConfiguration rrf = new PipelineConfiguration("rrf", BytesReference.bytes(builder), MediaTypeRegistry.JSON);
+        initClusterUtil(new SearchPipelineMetadata(Map.of("rrf", rrf)), null);
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("rrf")));
+    }
+
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenInlineBody_thenTrueWithoutReadingIt() {
+        // Core drains the inline block before the rewrite, so even an empty one is taken as a pipeline that may read the
+        // weights: refusing it would be a false 400 for a legitimate request shape.
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(requestWithInlinePipeline(Map.of())));
+        assertTrue(
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
+                requestWithInlinePipeline(Map.of("phase_results_processors", List.of()))
+            )
+        );
+        // A source without an inline body is no inline body; _none is then answered before any cluster state is consulted.
+        assertFalse(
+            FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
+                new SearchRequest("idx").source(new SearchSourceBuilder()).pipeline("_none")
+            )
+        );
+    }
+
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenNoClusterState_thenTrue() throws Exception {
+        // Nothing to consult: answer in the direction that keeps today's behaviour rather than refuse on no evidence.
+        NeuralSearchClusterUtil.instance().initialize(null, null);
+        try {
+            assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("mm")));
+            assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx")));
+        } finally {
+            initClusterUtil(new SearchPipelineMetadata(Map.of("mm", minMaxPipeline("mm"))), null);
+        }
+    }
+
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenPhaseResultsProcessorsAreOfOtherKinds_thenFalse() throws Exception {
+        // Entries that are not maps, and processor maps of another type, are walked past; only the two hybridizers count.
+        XContentBuilder builder = XContentFactory.jsonBuilder()
+            .startObject()
+            .startArray("phase_results_processors")
+            .value("not-a-processor-map")
+            .startObject()
+            .startObject("some-other-processor")
+            .endObject()
+            .endObject()
+            .endArray()
+            .endObject();
+        PipelineConfiguration other = new PipelineConfiguration("other", BytesReference.bytes(builder), MediaTypeRegistry.JSON);
+        initClusterUtil(new SearchPipelineMetadata(Map.of("other", other)), null);
+        assertFalse(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("other")));
+    }
 }

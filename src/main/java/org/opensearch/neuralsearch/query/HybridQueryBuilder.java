@@ -47,6 +47,7 @@ import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.core.xcontent.XContentLocation;
 import org.opensearch.core.xcontent.XContentParser;
 import org.opensearch.index.IndexSettings;
 import org.opensearch.index.query.AbstractQueryBuilder;
@@ -391,7 +392,6 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      */
     @Override
     protected Query doToQuery(QueryShardContext queryShardContext) throws IOException {
-        validateRequestWeightsForExecution();
         // Safety net: fused mode self-erases at the coordinator (doRewriteFused) into a standard query, so a fused
         // builder must never reach a shard's doToQuery. If it does, the coordinator rewrite was skipped — fail loudly
         // rather than silently running classic scoring.
@@ -461,8 +461,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
 
         Integer paginationDepth = null;
         Map<String, Object> fusion = null;
-        Object requestWeights = null;
-        boolean requestWeightsSpecified = false;
+        List<?> requestWeights = null;
+        XContentLocation requestWeightsLocation = null;
         final List<QueryBuilder> queries = new ArrayList<>();
         QueryBuilder filter = null;
         String queryName = null;
@@ -480,8 +480,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 } else if (FUSION_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     fusion = parser.map();
                 } else if (WEIGHTS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    requestWeightsSpecified = true;
-                    requestWeights = parser.map();
+                    throw new ParsingException(parser.getTokenLocation(), weightsMessage(FusionSpec.WEIGHTS_MUST_BE_NUMBERS));
                 } else {
                     throwUnsupportedFieldParsingException(parser, currentFieldName);
                 }
@@ -498,7 +497,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                         token = parser.nextToken();
                     }
                 } else if (WEIGHTS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    requestWeightsSpecified = true;
+                    // Checked after the loop, once the sub-query count is known. The location is kept so the refusal
+                    // points at this field rather than at the end of the object.
+                    requestWeightsLocation = parser.getTokenLocation();
                     requestWeights = parser.list();
                 } else if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     throwUnsupportedFilterParsingException(parser);
@@ -538,8 +539,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                     normalized.put(FUSION_KEY_SOURCE, source);
                     fusion = normalized;
                 } else if (WEIGHTS_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
-                    requestWeightsSpecified = true;
-                    requestWeights = token == XContentParser.Token.VALUE_NULL ? null : parser.objectText();
+                    // An explicit null is the key left out — how a client that serializes every optional field writes
+                    // "no request weights". Any other scalar is a malformed list.
+                    if (token != XContentParser.Token.VALUE_NULL) {
+                        throw new ParsingException(parser.getTokenLocation(), weightsMessage(FusionSpec.WEIGHTS_MUST_BE_NUMBERS));
+                    }
                 } else if (FILTER_FIELD.match(currentFieldName, parser.getDeprecationHandler())) {
                     throwUnsupportedFilterParsingException(parser);
                 } else {
@@ -555,10 +559,14 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (Objects.nonNull(fusion)) {
             validateFusion(fusion, paginationDepth, parser);
         }
-        if (requestWeightsSpecified && hasLongFormWeights(fusion)) {
-            throw new ParsingException(parser.getTokenLocation(), weightsCarrierConflictMessage());
+        List<Float> parsedWeights = null;
+        if (Objects.nonNull(requestWeights)) {
+            try {
+                parsedWeights = requireValidWeights(requestWeights, queries.size(), fusion);
+            } catch (IllegalArgumentException e) {
+                throw new ParsingException(requestWeightsLocation, e.getMessage(), e);
+            }
         }
-        List<Float> parsedWeights = requestWeightsSpecified ? validateRequestWeights(requestWeights, queries.size(), parser) : null;
 
         HybridQueryBuilder compoundQueryBuilder = new HybridQueryBuilder();
         compoundQueryBuilder.queryName(queryName);
@@ -651,7 +659,12 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     protected QueryBuilder doRewrite(QueryRewriteContext queryShardContext) throws IOException {
-        validateRequestWeightsForExecution();
+        // Where the request is accepted: on the coordinator, once per rewrite round. A shard only receives what a
+        // coordinator accepted, and core rewrites before toQuery, so nothing downstream needs the check again.
+        QueryCoordinatorContext coordinatorContext = queryShardContext.convertToCoordinatorContext();
+        if (Objects.nonNull(coordinatorContext)) {
+            requireValidRequestOptions(coordinatorContext);
+        }
         // Resolver (fused) mode self-erases at the coordinator into a standard query (see doRewriteFused). Classic mode
         // keeps the existing per-sub-query rewrite below.
         if (Objects.nonNull(fusion)) {
@@ -670,16 +683,78 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             newBuilder.add(result);
         }
         if (changed) {
-            newBuilder.queryName(queryName);
-            newBuilder.boost(boost);
-            newBuilder.weights(weights);
-            if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
-                newBuilder.paginationDepth(paginationDepth);
-            }
+            copyRequestOptionsTo(newBuilder);
             return newBuilder;
         } else {
             return this;
         }
+    }
+
+    /**
+     * Every per-query option a copy of this builder carries, in one place, so that the next one is added here and cannot be
+     * missed at one of the copy sites — the silent-drop class of bug a request-level option has to guard against. The
+     * copies: the classic rebuild in {@link #doRewrite}, the fused marker in {@link #doRewriteFused}, and
+     * {@link #withResolvedFusionSpec}. The sub-queries and the never-serialized round-1 state are each site's own business.
+     */
+    private void copyRequestOptionsTo(final HybridQueryBuilder target) {
+        target.queryName(queryName);
+        target.boost(boost);
+        if (isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery()) {
+            target.paginationDepth(paginationDepth);
+        }
+        target.weights(weights);
+        target.fusion(fusion);
+    }
+
+    /**
+     * The request-level options as a builder assembled in code — or read off the wire — carries them, checked where the
+     * request is accepted. REST parsing has already refused an ordinary request's malformed {@code fusion} keys and
+     * {@code weights} with a {@link ParsingException}; this repeats the same rules for the other constructors and adds
+     * the one check only the coordinator can make: classic {@code weights} must have a phase-results processor to read
+     * them, or they would be silently ignored at HTTP 200.
+     */
+    private void requireValidRequestOptions(final QueryCoordinatorContext coordinatorContext) {
+        if (Objects.nonNull(fusion)) {
+            String unknownKey = firstUnknownFusionKey(fusion);
+            if (Objects.nonNull(unknownKey)) {
+                throw new IllegalArgumentException(unknownFusionKeyMessage(unknownKey));
+            }
+        }
+        if (Objects.isNull(weights)) {
+            return;
+        }
+        requireValidWeights(weights, queries.size(), fusion);
+        if (Objects.isNull(fusion)) {
+            requireScoreHybridizationProcessor(coordinatorContext);
+        }
+    }
+
+    /**
+     * Classic mode combines in the attached pipeline's {@code normalization-processor} or {@code score-ranker-processor},
+     * which is what reads top-level {@code hybrid.weights}; without one the request would return raw, unweighted scores
+     * at HTTP 200 as if the key were absent. Refused the way {@code fusion: "pipeline"} refuses a pipeline it cannot fuse
+     * from. Only the coordinator knows the pipeline, so this runs there; see
+     * {@link FusionConfigResolver#resolvedPipelineHasScoreHybridizationProcessor} for what it can and cannot see.
+     */
+    private static void requireScoreHybridizationProcessor(final QueryCoordinatorContext coordinatorContext) {
+        if ((coordinatorContext.getSearchRequest() instanceof SearchRequest) == false) {
+            return;
+        }
+        SearchRequest searchRequest = (SearchRequest) coordinatorContext.getSearchRequest();
+        if (FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(searchRequest)) {
+            return;
+        }
+        throw new IllegalArgumentException(
+            String.format(
+                Locale.ROOT,
+                "[%s] query [%s] requires a normalization or score-ranker processor: the resolved search pipeline (from "
+                    + "?search_pipeline= or index.search.default_pipeline) has none, so nothing would read the weights. "
+                    + "Attach one, or add [%s] to fuse without a pipeline",
+                NAME,
+                WEIGHTS_FIELD.getPreferredName(),
+                FUSION_FIELD.getPreferredName()
+            )
+        );
     }
 
     /**
@@ -783,7 +858,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // Request weights (`hybrid.weights`) go over whatever the block or the pipeline resolved — the techniques stay the
         // base's. Everything below that fuses, validates or reports reads this spec; the one exception is the projection
         // onto nested legs, which hands down the base (see projectResolvedConfigOntoLegs below).
-        FusionSpec fusionSpec = overlayRequestWeights(baseFusionSpec, weights, fusion);
+        FusionSpec fusionSpec = overlayRequestWeights(baseFusionSpec, weights);
 
         // Both ceilings a window has to fit under, resolved once: each leg fires size=window per shard, so a window above
         // index.max_result_window would fail in the legs (mirroring classic hybrid's pagination_depth ceiling), and the
@@ -1138,11 +1213,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         for (QueryBuilder query : queries) {
             marker.add(query);
         }
-        marker.queryName(queryName);
-        marker.boost(boost);
-        marker.paginationDepth(paginationDepth);
-        marker.weights(weights);
-        marker.fusion(this.fusion);
+        copyRequestOptionsTo(marker);
         marker.resolvedFusionSpec = this.resolvedFusionSpec;
         marker.fusedSupplier = fused::get;
         marker.fusedRescoreScope = rescoreScope;
@@ -1750,22 +1821,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * itself when the query carries none. Field-level, deliberately: everything in the {@code fusion} block remains
      * block-level, while weights are the one setting a caller tunes per request against techniques it configured once.
      *
-     * <p>The long form ({@code fusion.combination.parameters.weights}) is already part of the resolved base. Both forms
-     * present is refused here as well as at parse, for a builder constructed in code rather than from a request body.
+     * <p>The long form ({@code fusion.combination.parameters.weights}) is already part of the resolved base; that both forms
+     * are never present together is {@link #requireValidWeights}' business, at parse and at the coordinator rewrite, so
+     * this is the merge alone.
      */
-    static FusionSpec overlayRequestWeights(final FusionSpec base, final List<Float> weights, final Map<String, Object> fusion) {
-        if (Objects.nonNull(fusion) && fusion.containsKey(WEIGHTS_KEY)) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "[%s] query [%s] contains unknown key [%s]", NAME, FUSION_FIELD.getPreferredName(), WEIGHTS_KEY)
-            );
-        }
+    static FusionSpec overlayRequestWeights(final FusionSpec base, final List<Float> weights) {
         if (Objects.isNull(weights)) {
             return base;
         }
-        if (hasLongFormWeights(fusion)) {
-            throw new IllegalArgumentException(weightsCarrierConflictMessage());
+        float[] perLeg = new float[weights.size()];
+        for (int i = 0; i < perLeg.length; i++) {
+            perLeg[i] = weights.get(i);
         }
-        return base.withWeights(FusionSpec.weightsFromList(weights));
+        return base.withWeights(perLeg);
     }
 
     /** Whether the block carries {@code combination.parameters.weights} — the long form the shorthand must not meet. */
@@ -1791,42 +1859,42 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         );
     }
 
-    /** REST parsing validates ordinary requests; this backstop covers builders assembled in code and wire readers. */
-    private void validateRequestWeightsForExecution() {
-        if (Objects.isNull(weights)) {
-            return;
-        }
-        if (weights.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "[%s] query [%s] must not be empty: omit it to weight every sub-query equally",
-                    NAME,
-                    WEIGHTS_FIELD.getPreferredName()
-                )
-            );
-        }
-        if (weights.stream().anyMatch(Objects::isNull)) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "[%s] query [%s] must be a collection of numbers", NAME, WEIGHTS_FIELD.getPreferredName())
-            );
-        }
-        if (weights.size() != queries.size()) {
-            throw new IllegalArgumentException(
-                String.format(
-                    Locale.ROOT,
-                    "[%s] query [%s] number of weights [%d] must match number of sub-queries [%d]",
-                    NAME,
-                    WEIGHTS_FIELD.getPreferredName(),
-                    weights.size(),
-                    queries.size()
-                )
-            );
-        }
+    /** {@code [hybrid] query [weights] <reason>} — the subject every refusal of the shorthand shares. */
+    private static String weightsMessage(final String reason) {
+        return String.format(Locale.ROOT, "[%s] query [%s] %s", NAME, WEIGHTS_FIELD.getPreferredName(), reason);
+    }
+
+    /**
+     * The one statement of the {@code weights} rule: a non-empty list of numbers, one per sub-query, not alongside the long
+     * form ({@code fusion.combination.parameters.weights}), each in {@code [0, 1]} and summing to {@code 1}. Returns the
+     * weights as the builder carries them. Thrown as {@link IllegalArgumentException}; {@link #fromXContent} wraps that in a
+     * {@link ParsingException} at the field's location, and {@link #doRewrite} lets it stand for a builder assembled in
+     * code. The reasons are shared with {@link FusionSpec#weightsFromList}, so the long form and the shorthand read the
+     * same.
+     */
+    static List<Float> requireValidWeights(final List<?> weights, final int legCount, final Map<String, Object> fusion) {
         if (hasLongFormWeights(fusion)) {
             throw new IllegalArgumentException(weightsCarrierConflictMessage());
         }
-        SCORE_COMBINATION_UTIL.validateWeights(weights);
+        if (weights.stream().anyMatch(weight -> (weight instanceof Number) == false)) {
+            throw new IllegalArgumentException(weightsMessage(FusionSpec.WEIGHTS_MUST_BE_NUMBERS));
+        }
+        if (weights.isEmpty()) {
+            throw new IllegalArgumentException(weightsMessage(FusionSpec.WEIGHTS_MUST_NOT_BE_EMPTY));
+        }
+        if (weights.size() != legCount) {
+            throw new IllegalArgumentException(
+                weightsMessage(
+                    String.format(Locale.ROOT, "number of weights [%d] must match number of sub-queries [%d]", weights.size(), legCount)
+                )
+            );
+        }
+        List<Float> parsed = new ArrayList<>(weights.size());
+        for (Object weight : weights) {
+            parsed.add(((Number) weight).floatValue());
+        }
+        SCORE_COMBINATION_UTIL.validateWeights(parsed);
+        return Collections.unmodifiableList(parsed);
     }
 
     /**
@@ -1874,12 +1942,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         for (QueryBuilder query : queries) {
             copy.add(query);
         }
-        copy.queryName(queryName);
-        copy.boost(boost);
-        // The nested hybrid's own depth and weights, never the enclosing one's.
-        copy.paginationDepth(paginationDepth);
-        copy.weights(weights);
-        copy.fusion(fusion);
+        // The nested hybrid's own depth, weights and block, never the enclosing one's.
+        copyRequestOptionsTo(copy);
         copy.resolvedFusionSpec = resolved;
         // Neither profiling consumer is copied. This copy is a leg of an enclosing fused hybrid, and a leg sub-search
         // re-enters the ActionFilter, which attaches consumers of its own — carrying these over would publish the same
@@ -1893,8 +1957,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * <p>Keys on the absence of {@code source: pipeline}, not on the presence of a technique key: a block that names
      * neither a technique nor a source ({@code fusion: {}} or {@code fusion: {"window_size": N}}) is the
      * built-in-defaults form, and {@link FusionSpec#fromInlineFusion} fills in min_max + arithmetic_mean. Top-level
-     * {@code hybrid.weights}, when present, is overlaid after this base is resolved. Reading the pipeline instead would depend on request context the query body does not show — which pipeline the request or the
-     * index happens to attach — so it is only ever done when the body asks for it.
+     * {@code hybrid.weights}, when present, is overlaid after this base is resolved. Reading the pipeline instead would
+     * depend on request context the query body does not show — which pipeline the request or the index happens to
+     * attach — so it is only ever done when the body asks for it.
      */
     private static boolean hasInlineConfig(final Map<String, Object> fusion) {
         return fusion.containsKey(FUSION_KEY_SOURCE) == false;
@@ -2239,16 +2304,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * </ul>
      */
     private static void validateFusion(final Map<String, Object> fusion, final Integer paginationDepth, final XContentParser parser) {
-        for (String key : fusion.keySet()) {
-            if (FUSION_KEY_SOURCE.equals(key) == false
-                && FUSION_KEY_NORMALIZATION.equals(key) == false
-                && FUSION_KEY_COMBINATION.equals(key) == false
-                && FUSION_KEY_WINDOW_SIZE.equals(key) == false) {
-                throw new ParsingException(
-                    parser.getTokenLocation(),
-                    String.format(Locale.ROOT, "[%s] query [%s] contains unknown key [%s]", NAME, FUSION_FIELD.getPreferredName(), key)
-                );
-            }
+        String unknownKey = firstUnknownFusionKey(fusion);
+        if (Objects.nonNull(unknownKey)) {
+            throw new ParsingException(parser.getTokenLocation(), unknownFusionKeyMessage(unknownKey));
         }
 
         Object source = fusion.get(FUSION_KEY_SOURCE);
@@ -2338,47 +2396,24 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * Parse and validate top-level {@code hybrid.weights}. Structural, range, and sum checks run here so classic and
-     * fused requests fail before shard execution; rewrite repeats the value checks for programmatic builders.
+     * The first key of a {@code fusion} block that is not one of the four it may carry ({@code source},
+     * {@code normalization}, {@code combination}, {@code window_size}), or null. Asked at parse for the request body and
+     * at the coordinator rewrite for a builder assembled in code — one list of keys for both.
      */
-    private static List<Float> validateRequestWeights(final Object weights, final int legCount, final XContentParser parser) {
-        if ((weights instanceof List) == false || ((List<?>) weights).stream().anyMatch(weight -> (weight instanceof Number) == false)) {
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                String.format(Locale.ROOT, "[%s] query [%s] must be a collection of numbers", NAME, WEIGHTS_FIELD.getPreferredName())
-            );
+    private static String firstUnknownFusionKey(final Map<String, Object> fusion) {
+        for (String key : fusion.keySet()) {
+            if (FUSION_KEY_SOURCE.equals(key) == false
+                && FUSION_KEY_NORMALIZATION.equals(key) == false
+                && FUSION_KEY_COMBINATION.equals(key) == false
+                && FUSION_KEY_WINDOW_SIZE.equals(key) == false) {
+                return key;
+            }
         }
-        List<?> rawWeights = (List<?>) weights;
-        if (rawWeights.isEmpty()) {
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                String.format(
-                    Locale.ROOT,
-                    "[%s] query [%s] must not be empty: omit it to weight every sub-query equally",
-                    NAME,
-                    WEIGHTS_FIELD.getPreferredName()
-                )
-            );
-        }
-        if (rawWeights.size() != legCount) {
-            throw new ParsingException(
-                parser.getTokenLocation(),
-                String.format(
-                    Locale.ROOT,
-                    "[%s] query [%s] number of weights [%d] must match number of sub-queries [%d]",
-                    NAME,
-                    WEIGHTS_FIELD.getPreferredName(),
-                    rawWeights.size(),
-                    legCount
-                )
-            );
-        }
-        List<Float> parsed = new ArrayList<>(rawWeights.size());
-        for (Object weight : rawWeights) {
-            parsed.add(((Number) weight).floatValue());
-        }
-        SCORE_COMBINATION_UTIL.validateWeights(parsed);
-        return Collections.unmodifiableList(parsed);
+        return null;
+    }
+
+    private static String unknownFusionKeyMessage(final String key) {
+        return String.format(Locale.ROOT, "[%s] query [%s] contains unknown key [%s]", NAME, FUSION_FIELD.getPreferredName(), key);
     }
 
     private static void validatePaginationDepth(final Integer paginationDepth, final QueryShardContext queryShardContext) {

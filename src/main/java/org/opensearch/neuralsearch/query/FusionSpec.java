@@ -81,13 +81,21 @@ public final class FusionSpec {
     static final int DEFAULT_RANK_CONSTANT = RRFScoreNormalizer.DEFAULT_RANK_CONSTANT;
 
     // Config-map keys (shared by the normalization-processor and score-ranker-processor definitions)
-    private static final String PHASE_RESULTS_PROCESSORS_KEY = "phase_results_processors";
+    static final String PHASE_RESULTS_PROCESSORS_KEY = "phase_results_processors";
     private static final String NORMALIZATION_CLAUSE = "normalization";
     private static final String COMBINATION_CLAUSE = "combination";
     private static final String TECHNIQUE_KEY = "technique";
     private static final String PARAMETERS_KEY = "parameters";
     private static final String WEIGHTS_KEY = "weights";
     private static final String RANK_CONSTANT_KEY = RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT;
+
+    /**
+     * The reasons a {@code weights} value is refused, shared by the long form here ({@code parameter [weights] ...}) and
+     * the top-level shorthand in {@code HybridQueryBuilder} ({@code [hybrid] query [weights] ...}), so the two read the
+     * same apart from the subject. Classic's {@code normalization-processor} wording for the first.
+     */
+    static final String WEIGHTS_MUST_BE_NUMBERS = "must be a collection of numbers";
+    static final String WEIGHTS_MUST_NOT_BE_EMPTY = "must not be empty: omit it to weight every sub-query equally";
 
     /**
      * The only {@code normalization.parameters} key fused mode honors, and only where {@code rrf} is the normalization
@@ -442,9 +450,7 @@ public final class FusionSpec {
         }
         List<?> raw = (List<?>) value;
         if (raw.isEmpty()) {
-            throw new IllegalArgumentException(
-                String.format(Locale.ROOT, "parameter [%s] must not be empty: omit it to weight every sub-query equally", WEIGHTS_KEY)
-            );
+            throw new IllegalArgumentException(String.format(Locale.ROOT, "parameter [%s] %s", WEIGHTS_KEY, WEIGHTS_MUST_NOT_BE_EMPTY));
         }
         float[] weights = new float[raw.size()];
         for (int i = 0; i < raw.size(); i++) {
@@ -468,6 +474,6 @@ public final class FusionSpec {
 
     /** Classic's own wording for a malformed {@code weights}, so one request reads the same however it was refused. */
     private static IllegalArgumentException weightsMustBeNumbers() {
-        return new IllegalArgumentException(String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", WEIGHTS_KEY));
+        return new IllegalArgumentException(String.format(Locale.ROOT, "parameter [%s] %s", WEIGHTS_KEY, WEIGHTS_MUST_BE_NUMBERS));
     }
 }

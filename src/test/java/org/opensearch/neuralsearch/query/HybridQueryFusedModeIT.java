@@ -1568,6 +1568,50 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         assertEquals("request override must not mutate shared pipeline state", idsAndScores(configuredHits), idsAndScores(configuredAgain));
     }
 
+    /**
+     * Classic weights are read by the pipeline's normalization or score-ranker processor and by nothing else, so a request
+     * that resolves to no such processor is refused rather than answered at HTTP 200 with the weights ignored. An inline
+     * pipeline body is the one carrier the rewrite cannot see (core drains it first): it is taken as present, and the
+     * processor it declares does read the weights.
+     */
+    @SneakyThrows
+    public void testClassicMode_whenRequestWeightsAndNoPhaseResultsProcessor_thenBadRequest() {
+        ensureCombinationParityIndex();
+        String endpoint = "/" + INDEX_FOR_COMBINATION_PARITY + "/_search";
+        String weighted = "{\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}";
+        for (Map<String, String> params : List.of(Map.<String, String>of(), Map.of("search_pipeline", "_none"))) {
+            ResponseException e = expectThrows(ResponseException.class, () -> searchRawWithParams(endpoint, weighted, params));
+            assertEquals(params.toString(), RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
+            assertTrue(
+                e.getMessage(),
+                e.getMessage().contains("[hybrid] query [weights] requires a normalization or score-ranker processor")
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("add [fusion] to fuse without a pipeline"));
+        }
+        // Control: without weights there is nothing to read, so the request is answered as before (unfused scores).
+        searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null) + "}", Map.of());
+
+        // An inline pipeline body that carries the processor is accepted, and the request weights override its configured
+        // ones exactly as they override a named pipeline's.
+        String inlinePipeline = "\"search_pipeline\":{\"phase_results_processors\":[{\"normalization-processor\":"
+            + "{\"normalization\":{\"technique\":\"l2\"},"
+            + "\"combination\":{\"technique\":\"arithmetic_mean\",\"parameters\":{\"weights\":[0.9,0.1]}}}}]}";
+        List<Map<String, Object>> inlineOverride = getNestedHits(
+            searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "," + inlinePipeline + "}", Map.of())
+        );
+        String equivalentPipeline = "classic-request-weights-inline-equivalent";
+        createSearchPipeline(equivalentPipeline, "l2", "arithmetic_mean", Map.of("weights", "[0.1, 0.9]"));
+        List<Map<String, Object>> configuredEquivalent = getNestedHits(
+            searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null) + "}", Map.of("search_pipeline", equivalentPipeline))
+        );
+        assertEquals("request weights reverse the inline pipeline's ranking", "1", inlineOverride.get(0).get("_id"));
+        assertEquals(
+            "inline-body override equals the same weights configured in a pipeline",
+            idsAndScores(configuredEquivalent),
+            idsAndScores(inlineOverride)
+        );
+    }
+
     /** The top-level shortcut's refusals, at HTTP 400 with the reason, through the REST layer. */
     @SneakyThrows
     public void testFusedMode_whenRequestWeightsMalformed_thenBadRequest() {

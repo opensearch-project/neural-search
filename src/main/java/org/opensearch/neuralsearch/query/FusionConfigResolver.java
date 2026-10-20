@@ -11,6 +11,8 @@ import java.util.Objects;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.cluster.metadata.IndexMetadata;
 import org.opensearch.cluster.service.ClusterService;
@@ -149,6 +151,59 @@ final class FusionConfigResolver {
         }
         Object responseProcessors = config.get(RESPONSE_PROCESSORS_KEY);
         return responseProcessors instanceof List && ((List<?>) responseProcessors).isEmpty() == false;
+    }
+
+    /**
+     * Classic mode's question for a request carrying top-level {@code hybrid.weights}: will a phase-results processor that
+     * combines hybrid scores run, so that something reads them? True for a named ({@code ?search_pipeline=}) or
+     * index-default pipeline whose config carries a {@code normalization-processor} or {@code score-ranker-processor};
+     * false for {@code _none}, for no pipeline at all, and for a pipeline with neither processor.
+     *
+     * <p>Answers {@code true} when it cannot tell, like {@link #resolvedPipelineHasResponseProcessors}: an inline pipeline
+     * body has been drained by core before rewrite (see {@link #resolve}), and a cluster state that is not available says
+     * nothing about the pipeline. Refusing either would be a false 400 for a request that may well run the processor;
+     * accepting leaves today's behaviour for those shapes. {@code _none} is knowable without cluster state, so it is
+     * answered before that check. Never throws: the conflicting inline-plus-named shape is core's to report.
+     */
+    static boolean resolvedPipelineHasScoreHybridizationProcessor(SearchRequest searchRequest) {
+        SearchSourceBuilder source = searchRequest.source();
+        if (Objects.nonNull(source) && Objects.nonNull(source.searchPipelineSource())) {
+            return true;
+        }
+        String pipelineId = searchRequest.pipeline();
+        if (NONE_PIPELINE_ID.equals(pipelineId)) {
+            return false;
+        }
+        ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
+        if (Objects.isNull(clusterService)) {
+            return true;
+        }
+        if (Objects.isNull(pipelineId)) {
+            pipelineId = resolveIndexDefaultPipelineId(searchRequest);
+        }
+        if (Objects.isNull(pipelineId) || NONE_PIPELINE_ID.equals(pipelineId)) {
+            return false;
+        }
+        return hasScoreHybridizationProcessor(pipelineConfigById(clusterService, pipelineId));
+    }
+
+    /** Whether a pipeline config's {@code phase_results_processors} name a normalization or score-ranker processor. */
+    private static boolean hasScoreHybridizationProcessor(Map<String, Object> pipelineConfig) {
+        if (Objects.isNull(pipelineConfig)) {
+            return false;
+        }
+        Object phaseProcessors = pipelineConfig.get(FusionSpec.PHASE_RESULTS_PROCESSORS_KEY);
+        if ((phaseProcessors instanceof List) == false) {
+            return false;
+        }
+        for (Object processorEntry : (List<?>) phaseProcessors) {
+            if (processorEntry instanceof Map
+                && (((Map<?, ?>) processorEntry).containsKey(NormalizationProcessor.TYPE)
+                    || ((Map<?, ?>) processorEntry).containsKey(RRFProcessor.TYPE))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
