@@ -781,19 +781,27 @@ public class MLOpenSearchRerankProcessorTests extends OpenSearchTestCase {
     public void testProcessResponseAsync() throws IOException {
         NeuralSearchClusterTestUtils.setUpClusterService();
         setupParams(Map.of(QueryContextSourceFetcher.QUERY_TEXT_FIELD, "query text"));
-        setupSimilarityRescoring();
+        doAnswer(invocation -> {
+            ActionListener<List<Float>> inferenceListener = invocation.getArgument(1);
+            inferenceListener.onResponse(List.of(1f, 2f));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSimilarity(isA(SimilarityInferenceRequest.class), isA(ActionListener.class));
         setupSearchResults();
         @SuppressWarnings("unchecked")
         ActionListener<SearchResponse> listener = mock(ActionListener.class);
         processor.processResponseAsync(request, response, ppctx, listener);
+        // The hit without the context field is not sent to the model and ranks last with a NaN score
+        ArgumentCaptor<SimilarityInferenceRequest> requestCaptor = ArgumentCaptor.forClass(SimilarityInferenceRequest.class);
+        verify(mlCommonsClientAccessor, times(1)).inferenceSimilarity(requestCaptor.capture(), isA(ActionListener.class));
+        assertEquals(List.of("field passage", "source passage"), requestCaptor.getValue().getInputTexts());
         ArgumentCaptor<SearchResponse> argCaptor = ArgumentCaptor.forClass(SearchResponse.class);
         verify(listener, times(1)).onResponse(argCaptor.capture());
         SearchResponse rsp = argCaptor.getValue();
-        assert (rsp.getHits().getAt(0).docId() == 2);
-        assert (rsp.getHits().getAt(0).getScore() == 3f);
-        assert (rsp.getHits().getAt(1).docId() == 0);
-        assert (rsp.getHits().getAt(1).getScore() == 2f);
-        assert (rsp.getHits().getAt(2).docId() == 1);
-        assert (rsp.getHits().getAt(2).getScore() == 1f);
+        assertEquals(0, rsp.getHits().getAt(0).docId());
+        assertEquals(2f, rsp.getHits().getAt(0).getScore(), 0.0f);
+        assertEquals(1, rsp.getHits().getAt(1).docId());
+        assertEquals(1f, rsp.getHits().getAt(1).getScore(), 0.0f);
+        assertEquals(2, rsp.getHits().getAt(2).docId());
+        assertTrue(Float.isNaN(rsp.getHits().getAt(2).getScore()));
     }
 }

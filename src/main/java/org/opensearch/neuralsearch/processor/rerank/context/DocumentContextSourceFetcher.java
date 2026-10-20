@@ -55,10 +55,16 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
         List<String> contexts = new ArrayList<>();
         for (SearchHit hit : searchResponse.getHits()) {
             StringBuilder ctx = new StringBuilder();
+            boolean anyFieldFound = false;
             for (String field : this.contextFields) {
-                ctx.append(contextFromSearchHit(hit, field));
+                String value = contextFromSearchHit(hit, field);
+                if (value != null) {
+                    ctx.append(value);
+                    anyFieldFound = true;
+                }
             }
-            contexts.add(ctx.toString());
+            // A hit missing all context fields has no text to rerank and gets a NaN score
+            contexts.add(anyFieldFound ? ctx.toString() : null);
         }
         listener.onResponse(new HashMap<>(Map.of(DOCUMENT_CONTEXT_LIST_FIELD, contexts)));
     }
@@ -78,15 +84,8 @@ public class DocumentContextSourceFetcher implements ContextSourceFetcher {
                 return String.valueOf(val);
             }
         }
-        log.warn(
-            String.format(
-                Locale.ROOT,
-                "Could not find field %s in document %s for reranking! Using the empty string instead.",
-                field,
-                hit.getId()
-            )
-        );
-        return "";
+        log.debug(String.format(Locale.ROOT, "Could not find field %s in document %s for reranking", field, hit.getId()));
+        return null;
     }
 
     @Override
