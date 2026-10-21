@@ -330,6 +330,11 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
         return NAME;
     }
 
+    /**
+     * Keeps token ids unfolded: these are the terms the Lucene engine seeks in its clustered postings,
+     * which are keyed by the raw id, so folding 32768 to 0 would visit the documents of 0 instead.
+     * The query vector folds on its own, matching the folded forward index it scores against.
+     */
     private static Map<String, Float> preprocessQueryTokens(Map<String, Float> tokens) {
         if (MapUtils.isEmpty(tokens)) return Collections.emptyMap();
         Map<Integer, Float> intTokens = new HashMap<>();
@@ -339,13 +344,7 @@ public class SparseAnnQueryBuilder extends AbstractQueryBuilder<SparseAnnQueryBu
                 if (token < 0) {
                     throw new IllegalArgumentException("Query tokens should be non-negative integer!");
                 }
-                float value = entry.getValue();
-                int tokenHash = SparseVector.prepareTokenForShortType(token);
-                if (intTokens.containsKey(tokenHash)) {
-                    intTokens.put(tokenHash, Math.max(intTokens.get(tokenHash), value));
-                } else {
-                    intTokens.put(tokenHash, value);
-                }
+                intTokens.merge(token, entry.getValue(), Math::max);
             }
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException("Query tokens should be valid integer");

@@ -25,6 +25,7 @@ import org.opensearch.neuralsearch.sparse.codec.nativeindex.SegmentNativeIndex;
 import org.opensearch.neuralsearch.sparse.common.PredicateUtils;
 import org.opensearch.neuralsearch.sparse.common.SparseFieldUtils;
 import org.opensearch.neuralsearch.sparse.common.SparseQueryResult;
+import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
 
 import java.io.IOException;
@@ -35,6 +36,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_UNSIGNED_SHORT;
 
 /**
  * Scores one segment against the native engine index.
@@ -107,8 +110,10 @@ public class NativeIndexScorer extends Scorer {
         LeafReader leafReader,
         SegmentInfo segmentInfo
     ) throws IOException {
-        int[] tokens = Ints.toArray(rawQueryVector.keySet());
-        float[] weights = Floats.toArray(rawQueryVector.values());
+        // Folded the way the native writers fold documents, since nsparse's term_t cannot hold an id above 65535.
+        Map<Integer, Float> foldedQueryVector = SparseVector.foldTokens(rawQueryVector, MODULUS_FOR_UNSIGNED_SHORT);
+        int[] tokens = Ints.toArray(foldedQueryVector.keySet());
+        float[] weights = Floats.toArray(foldedQueryVector.values());
         Map<String, Object> searchParameters = buildSearchParameters(sparseQueryContext, segmentInfo, fieldInfo);
 
         StopWatch loadIndexStopWatch = StopWatch.createStarted();

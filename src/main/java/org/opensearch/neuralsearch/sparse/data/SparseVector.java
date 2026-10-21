@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -81,6 +82,17 @@ public class SparseVector implements Accountable {
 
     public static int prepareTokenForShortType(int token) {
         return token % MODULUS_FOR_SHORT;
+    }
+
+    /**
+     * Folds every token id modulo {@code modulus}, keeping the larger weight of ids that collide.
+     */
+    public static Map<Integer, Float> foldTokens(Map<Integer, Float> tokens, int modulus) {
+        Map<Integer, Float> folded = new HashMap<>();
+        for (Map.Entry<Integer, Float> entry : tokens.entrySet()) {
+            folded.merge(entry.getKey() % modulus, entry.getValue(), Math::max);
+        }
+        return folded;
     }
 
     public byte[] toDenseVector() {

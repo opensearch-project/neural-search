@@ -358,6 +358,13 @@ public class SparseVectorTests extends AbstractSparseTestBase {
         Assert.assertNotEquals(vector1, vector3);
     }
 
+    public void testFoldTokens_keepsLargerWeightOfCollidingIds() {
+        Map<Integer, Float> tokens = Map.of(1, 0.25f, 32769, 0.5f, 65537, 0.125f, 40000, 1.0f);
+
+        Assert.assertEquals(Map.of(1, 0.5f, 7232, 1.0f), SparseVector.foldTokens(tokens, 32768));
+        Assert.assertEquals(Map.of(1, 0.25f, 32769, 0.5f, 40000, 1.0f), SparseVector.foldTokens(tokens, 65536));
+    }
+
     private BytesRef serializeMap(Map<Integer, Float> map) throws IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         DataOutputStream dos = new DataOutputStream(baos);

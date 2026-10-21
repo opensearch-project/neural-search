@@ -39,6 +39,7 @@ import org.opensearch.neuralsearch.sparse.codec.SparseBinaryDocValuesPassThrough
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -420,14 +421,22 @@ public class SparseQueryWeightTests extends AbstractSparseTestBase {
      */
     public void testExplain_NativeEngineSeismicSegmentUsesQuantizedBreakdown() throws IOException {
         useNativeEngineField(nativeSeismicAttributes());
-        SparseBinaryDocValuesPassThrough mockDocValues = mock(SparseBinaryDocValuesPassThrough.class);
-        when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(mockDocValues);
+        // One (token int, weight float) pair: token 1, weight 1.0
+        BinaryDocValues docValues = mock(BinaryDocValues.class);
+        when(docValues.advanceExact(anyInt())).thenReturn(true);
+        when(docValues.binaryValue()).thenReturn(new BytesRef(new byte[] { 0, 0, 0, 1, 0x3f, (byte) 0x80, 0, 0 }));
+        when(sparseSegmentReader.getBinaryDocValues(anyString())).thenReturn(docValues);
+        when(sparseVectorQuery.getRawQueryTokens()).thenReturn(Map.of(1, 1.0f));
 
         SparseQueryWeight weight = new SparseQueryWeight(sparseVectorQuery, mockSearcher, ScoreMode.COMPLETE, 1.0f, mockForwardIndexCache);
 
         Explanation explanation = weight.explain(leafReaderContext, 0);
 
-        assertNotNull(explanation);
+        assertTrue("Should match: " + explanation, explanation.isMatch());
+        assertTrue(
+            "Should take the quantized path: " + explanation,
+            Arrays.stream(explanation.getDetails()).anyMatch(d -> d.getDescription().contains("raw dot product score (quantized)"))
+        );
         // Not the fallback: the fallback scores FeatureFields, which a native field never writes
         verify(mockBooleanQueryWeight, never()).explain(any(LeafReaderContext.class), anyInt());
         // Nothing charges the forward index cache for a native segment's mmap'd index

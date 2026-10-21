@@ -105,7 +105,7 @@ public class SparseQueryWeight extends Weight {
             }
             if (isSeismicSegment) {
                 // Scored by a quantized seismic index, so the byte-code breakdown applies.
-                builder.reader(new SparseBinaryDocValuesPassThrough(docValues, info, fieldInfo));
+                builder.reader(SparseVectorReader.NOOP_READER).nativeQuantizedDocValues(docValues);
             } else {
                 // Scored by nsparse's inverted index, which holds unquantized floats and computes an
                 // exact dot product, so quantizing here would explain a score nothing produced.
