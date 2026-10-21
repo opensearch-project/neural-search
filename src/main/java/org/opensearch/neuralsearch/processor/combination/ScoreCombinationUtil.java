@@ -37,9 +37,10 @@ public class ScoreCombinationUtil {
         if (Objects.isNull(params) || params.isEmpty()) {
             return List.of();
         }
-        // get weights, we don't need to check for instance as it's done during validation
-        List<Float> weightsList = ((List<Double>) params.getOrDefault(PARAM_NAME_WEIGHTS, List.of())).stream()
-            .map(Double::floatValue)
+        // element types are validated in validateParams; coerce via Number so any numeric type (e.g. Integer) is
+        // accepted without an unchecked Double cast that could throw a ClassCastException (surfacing as HTTP 500)
+        List<Float> weightsList = ((List<?>) params.getOrDefault(PARAM_NAME_WEIGHTS, List.of())).stream()
+            .map(weight -> ((Number) weight).floatValue())
             .collect(Collectors.toUnmodifiableList());
         validateWeights(weightsList);
         return weightsList;
@@ -71,7 +72,16 @@ public class ScoreCombinationUtil {
 
         // check param types
         if (actualParams.keySet().stream().anyMatch(PARAM_NAME_WEIGHTS::equalsIgnoreCase)) {
-            if (!(actualParams.get(PARAM_NAME_WEIGHTS) instanceof List)) {
+            Object weights = actualParams.get(PARAM_NAME_WEIGHTS);
+            if (!(weights instanceof List)) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", PARAM_NAME_WEIGHTS)
+                );
+            }
+            // every element must be a number; otherwise getWeights' numeric coercion would fail with an
+            // unchecked ClassCastException and surface as an internal error (HTTP 500) instead of a bad request (400)
+            boolean hasNonNumericWeight = ((List<?>) weights).stream().anyMatch(weight -> !(weight instanceof Number));
+            if (hasNonNumericWeight) {
                 throw new IllegalArgumentException(
                     String.format(Locale.ROOT, "parameter [%s] must be a collection of numbers", PARAM_NAME_WEIGHTS)
                 );
