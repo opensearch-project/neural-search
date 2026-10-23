@@ -651,6 +651,17 @@ public class FusionSpecTests extends OpenSearchTestCase {
                 FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", rrf, "rank_constant", 42))).rankConstant()
             );
         }
+        // A clause with no technique defaults to arithmetic_mean, and is checked against that shape's keys.
+        FusionSpec defaulted = FusionSpec.fromInlineFusion(
+            Map.of("combination", Map.of("parameters", Map.of("weights", List.of(0.3, 0.7))))
+        );
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, defaulted.combinationTechnique());
+        assertArrayEquals(new float[] { 0.3f, 0.7f }, defaulted.weights(), 0.0001f);
+        IllegalArgumentException defaultedStray = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("rank_constant", 42)))
+        );
+        assertTrue(defaultedStray.getMessage(), defaultedStray.getMessage().contains("[combination] contains unknown key [rank_constant]"));
         // Several unknown keys are all named, sorted, so one round trip fixes them all.
         IllegalArgumentException several = assertThrows(
             IllegalArgumentException.class,
