@@ -604,6 +604,90 @@ public class FusionSpecTests extends OpenSearchTestCase {
         }
     }
 
+    public void testFromInlineFusion_whenClauseKeyUnknown_thenRejected() {
+        // The readers take the keys they know and leave the rest unread, so a `weights` written one level too high — on the
+        // clause rather than under `parameters` — fused unweighted at HTTP 200, and a `rank_constant` on an arithmetic_mean
+        // clause ranked at the default 60. The same silent mis-ranking as an unknown parameter; refused the same way.
+        IllegalArgumentException weightsOnClause = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "min_max"),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "weights", List.of(0.3, 0.7))
+                )
+            )
+        );
+        assertTrue(weightsOnClause.getMessage(), weightsOnClause.getMessage().contains("[combination] contains unknown key [weights]"));
+        assertTrue(weightsOnClause.getMessage(), weightsOnClause.getMessage().contains("supported keys are [parameters, technique]"));
+
+        IllegalArgumentException boundsOnClause = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("normalization", Map.of("technique", "min_max", "lower_bounds", List.of(Map.of("mode", "apply"))))
+            )
+        );
+        assertTrue(
+            boundsOnClause.getMessage(),
+            boundsOnClause.getMessage().contains("[normalization] contains unknown key [lower_bounds]")
+        );
+
+        // rank_constant belongs on the clause only for the score-ranker shape; beside a score-based combiner there is no
+        // right place for it, so it is unknown there rather than silently unread.
+        IllegalArgumentException strayRankConstant = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "arithmetic_mean", "rank_constant", 42)))
+        );
+        assertTrue(
+            strayRankConstant.getMessage(),
+            strayRankConstant.getMessage().contains("[combination] contains unknown key [rank_constant]")
+        );
+        assertTrue(strayRankConstant.getMessage(), strayRankConstant.getMessage().contains("supported keys are [parameters, technique]"));
+        // ...and on an rrf clause it is a known key, spelled either way the technique name is written.
+        for (String rrf : List.of("rrf", "RRF")) {
+            assertEquals(
+                42,
+                FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", rrf, "rank_constant", 42))).rankConstant()
+            );
+        }
+        // Several unknown keys are all named, sorted, so one round trip fixes them all.
+        IllegalArgumentException several = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("combination", Map.of("technique", "arithmetic_mean", "weights", List.of(0.5, 0.5), "boost", 2))
+            )
+        );
+        assertTrue(several.getMessage(), several.getMessage().contains("unknown key [boost, weights]"));
+    }
+
+    public void testFromPipelineConfig_whenClauseKeyUnknown_thenIgnoredLikeClassic() {
+        // Deliberately asymmetric with the inline block: classic's factories read `technique` and `parameters` and ignore
+        // every other clause key, so a stray one changes nothing in a classic ranking. Dropping it fuses the pipeline
+        // exactly as classic serves it, whereas refusing it would turn `fusion: "pipeline"` into a 400 for a pipeline
+        // classic runs. Pinned so the inline check cannot leak onto this path.
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "min_max", "stray", true),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean", "weights", List.of(0.3, 0.7))
+                    )
+                )
+            )
+        );
+        FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.NORMALIZATION_MIN_MAX, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        // The misplaced weights are unread here, as they are in classic — unweighted on both paths.
+        assertEquals(0, spec.weights().length);
+    }
+
     public void testFromInlineFusion_whenClauseIsNotAnObject_thenRejected() {
         // `"combination": "rrf"` copies the shape of the supported one-level-up shorthand `"fusion": "pipeline"`. Every
         // reader gates on instanceof Map, so without this it resolved to min_max + arithmetic_mean at HTTP 200.

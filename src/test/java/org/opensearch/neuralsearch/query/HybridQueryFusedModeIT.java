@@ -1820,6 +1820,52 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * The other place a {@code weights} lands by mistake: on the {@code combination} clause itself, beside
+     * {@code technique}, rather than under {@code parameters} — the shape the first draft of the fused-mode docs sample
+     * used. The readers took the keys they knew and left this one unread, so the request fused unweighted at HTTP 200.
+     * Refused now, naming the key and the keys the clause does take; the same {@code weights} under {@code parameters}
+     * is served.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenInlineClauseKeyUnknown_thenRejectedWithValidationError() {
+        if (indexExists(INDEX_NO_PIPELINE) == false) {
+            createIndex(INDEX_NO_PIPELINE, indexConfigWithoutPipeline());
+            addFourDocs(INDEX_NO_PIPELINE);
+        }
+        HybridQueryBuilder weightsOnClause = new HybridQueryBuilder().fusion(
+            Map.of(
+                "normalization",
+                Map.of("technique", "min_max"),
+                "combination",
+                Map.of("technique", "arithmetic_mean", "weights", List.of(0.2, 0.8))
+            )
+        );
+        weightsOnClause.add(new MatchQueryBuilder(TEXT_FIELD, "hello"));
+        weightsOnClause.add(new TermQueryBuilder(TEXT_FIELD, "place"));
+
+        ResponseException e = expectThrows(ResponseException.class, () -> search(INDEX_NO_PIPELINE, weightsOnClause, 10));
+        assertEquals(
+            "a key the clause does not take must be refused as a bad request, not left unread",
+            RestStatus.BAD_REQUEST.getStatus(),
+            e.getResponse().getStatusLine().getStatusCode()
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[combination] contains unknown key [weights]"));
+        assertTrue(e.getMessage(), e.getMessage().contains("supported keys are [parameters, technique]"));
+
+        HybridQueryBuilder weightsUnderParameters = new HybridQueryBuilder().fusion(
+            Map.of(
+                "normalization",
+                Map.of("technique", "min_max"),
+                "combination",
+                Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.2, 0.8)))
+            )
+        );
+        weightsUnderParameters.add(new MatchQueryBuilder(TEXT_FIELD, "hello"));
+        weightsUnderParameters.add(new TermQueryBuilder(TEXT_FIELD, "place"));
+        assertEquals(3, getHitCount(search(INDEX_NO_PIPELINE, weightsUnderParameters, 10)));
+    }
+
+    /**
      * The zero-migration path carrying a config fused mode cannot honor. {@code min_max}'s {@code lower_bounds} live under
      * {@code normalization.parameters}, and there is no coordinator-side implementation of them — so fusing this pipeline
      * would answer the request at HTTP 200 with a ranking that differs from what the very same pipeline produces

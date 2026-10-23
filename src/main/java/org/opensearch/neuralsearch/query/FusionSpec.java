@@ -113,6 +113,14 @@ public final class FusionSpec {
      */
     private static final Set<String> COMBINATION_PARAMETERS = Set.of(WEIGHTS_KEY);
 
+    /**
+     * The keys an inline {@code normalization} or {@code combination} clause may carry, and the one more an inline rrf
+     * combination clause may: {@code rank_constant} sits on the clause itself in the score-ranker shape. Anything else
+     * in an inline clause is refused — see {@link #rejectUnknownClauseKeys}.
+     */
+    private static final Set<String> CLAUSE_KEYS = Set.of(TECHNIQUE_KEY, PARAMETERS_KEY);
+    private static final Set<String> RRF_COMBINATION_CLAUSE_KEYS = Set.of(TECHNIQUE_KEY, PARAMETERS_KEY, RANK_CONSTANT_KEY);
+
     private final Shape shape; // which processor shape this was read as
     private final String combinationTechnique; // rrf | arithmetic_mean
     private final String normalizationTechnique; // min_max | z_score | l2 | rrf
@@ -179,13 +187,50 @@ public final class FusionSpec {
         }
         requireObjectClause(fusionConfig, NORMALIZATION_CLAUSE);
         requireObjectClause(fusionConfig, COMBINATION_CLAUSE);
+        rejectUnknownClauseKeys(fusionConfig, NORMALIZATION_CLAUSE, CLAUSE_KEYS);
         if (fusionConfig.get(COMBINATION_CLAUSE) instanceof Map) {
             Object technique = ((Map<String, Object>) fusionConfig.get(COMBINATION_CLAUSE)).get(TECHNIQUE_KEY);
-            if (Objects.nonNull(technique) && TECHNIQUE_RRF.equals(technique.toString().toLowerCase(Locale.ROOT))) {
+            boolean rrf = Objects.nonNull(technique) && TECHNIQUE_RRF.equals(technique.toString().toLowerCase(Locale.ROOT));
+            rejectUnknownClauseKeys(fusionConfig, COMBINATION_CLAUSE, rrf ? RRF_COMBINATION_CLAUSE_KEYS : CLAUSE_KEYS);
+            if (rrf) {
                 return fromScoreRankerProcessor(fusionConfig);
             }
         }
         return fromNormalizationProcessor(fusionConfig);
+    }
+
+    /**
+     * Refuse a key an inline clause carries beside {@code technique} and {@code parameters} (and, on an rrf combination
+     * clause, {@code rank_constant}). The readers below take the keys they know and leave the rest unread, so without this
+     * a {@code weights} written one level too high — {@code combination: {technique, weights: [...]}} rather than under
+     * {@code parameters} — fused unweighted at HTTP 200, and a {@code rank_constant} on an arithmetic_mean clause ranked at
+     * the default 60. Same silent mis-ranking as an unknown parameter, refused the same way.
+     *
+     * <p>Inline blocks only. A pipeline-sourced config keeps classic's leniency here, because classic's factories read the
+     * same two keys and ignore the rest: a stray clause key changes nothing in a classic ranking, so dropping it fuses the
+     * pipeline exactly as classic serves it, and refusing it would make {@code fusion: "pipeline"} a 400 for a pipeline
+     * classic runs. That is the one rule the whole class follows — refuse what fused mode would otherwise serve
+     * <em>differently</em> from what was asked, and nothing more.
+     */
+    @SuppressWarnings("unchecked")
+    private static void rejectUnknownClauseKeys(Map<String, Object> fusionConfig, String clause, Set<String> knownKeys) {
+        if ((fusionConfig.get(clause) instanceof Map) == false) {
+            return;
+        }
+        Set<String> unknown = new TreeSet<>(((Map<String, Object>) fusionConfig.get(clause)).keySet());
+        unknown.removeAll(knownKeys);
+        if (unknown.isEmpty()) {
+            return;
+        }
+        throw new IllegalArgumentException(
+            String.format(
+                Locale.ROOT,
+                "[%s] contains unknown key %s in fused mode; supported keys are %s",
+                clause,
+                unknown,
+                new TreeSet<>(knownKeys)
+            )
+        );
     }
 
     @SuppressWarnings("unchecked")
