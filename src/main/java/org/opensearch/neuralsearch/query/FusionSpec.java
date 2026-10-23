@@ -105,6 +105,14 @@ public final class FusionSpec {
      */
     private static final Set<String> RRF_NORMALIZATION_PARAMETERS = Set.of(RANK_CONSTANT_KEY);
 
+    /**
+     * The only {@code combination.parameters} key fused mode honors, for every combination technique. It is the same set
+     * each classic combiner declares as its {@code SUPPORTED_PARAMS} and validates in its constructor
+     * ({@code ScoreCombinationUtil#validateParams}), so a key refused here is a key classic refuses at pipeline creation;
+     * see {@link #rejectUnhonoredCombinationParameters}.
+     */
+    private static final Set<String> COMBINATION_PARAMETERS = Set.of(WEIGHTS_KEY);
+
     private final Shape shape; // which processor shape this was read as
     private final String combinationTechnique; // rrf | arithmetic_mean
     private final String normalizationTechnique; // min_max | z_score | l2 | rrf
@@ -198,7 +206,7 @@ public final class FusionSpec {
             if (Objects.nonNull(technique)) {
                 combination = technique.toString().toLowerCase(Locale.ROOT);
             }
-            weights = readWeights(combinationClause);
+            weights = readWeights(combinationClause, combination);
         }
         return new FusionSpec(Shape.NORMALIZATION_PROCESSOR, combination, normalization, readRankConstant(config, normalization), weights);
     }
@@ -243,8 +251,9 @@ public final class FusionSpec {
         float[] weights = new float[0];
         if (config.get(COMBINATION_CLAUSE) instanceof Map) {
             combinationClause = (Map<String, Object>) config.get(COMBINATION_CLAUSE);
+            // Before the generic parameter check, so a misplaced rank_constant keeps its own message saying where it goes.
             rejectRankConstantUnderParameters(combinationClause);
-            weights = readWeights(combinationClause);
+            weights = readWeights(combinationClause, TECHNIQUE_RRF);
         }
         int rankConstant = resolveScoreRankerRankConstant(combinationClause, readNormalizationParameters(config));
         // The score-ranker-processor has no normalization clause, so the default is what this shape almost always
@@ -310,6 +319,43 @@ public final class FusionSpec {
                 unhonored,
                 normalization,
                 new TreeSet<>(honoredParameters)
+            )
+        );
+    }
+
+    /**
+     * Refuse a {@code combination.parameters} key fused mode does not honor, rather than parsing the config as if it
+     * were not there. The only key any combiner reads is {@code weights}, and fused mode reads it itself and hands the
+     * combiner a map it rebuilt from the parsed array ({@code HybridFusionOrchestrator#weightsParams}) — so classic's own
+     * check, {@code ScoreCombinationUtil#validateParams}, never sees the raw keys. Without this a request whose intent is
+     * plainly weighted, {@code parameters: {weight: [0.2, 0.8]}}, fused <em>unweighted</em> at HTTP 200: the user asked
+     * for one ranking and silently received another, while the same clause in a classic pipeline is a 400 at creation
+     * ("supported parameters are [weights]").
+     *
+     * <p>Applied to the pipeline-sourced path too. In a single-version cluster that is a no-op, because classic has refused
+     * these keys at pipeline creation since the processor existed; in a mixed-version cluster, where a newer
+     * cluster-manager may have stored a pipeline whose combiner takes a parameter this coordinator does not know, it is
+     * the fail-closed check — and it matches classic on this same node, which cannot build that pipeline either.
+     *
+     * <p>The honored set is one set for every technique rather than one per technique only because that is what classic
+     * declares today: all four combiners' {@code SUPPORTED_PARAMS} are {@code [weights]}. A combiner that grows a
+     * parameter has to be admitted here as well, or fused mode starts dropping it.
+     */
+    private static void rejectUnhonoredCombinationParameters(Map<String, Object> combinationClause, String combination) {
+        Set<String> unhonored = new TreeSet<>(readParameters(combinationClause, COMBINATION_CLAUSE).keySet());
+        unhonored.removeAll(COMBINATION_PARAMETERS);
+        if (unhonored.isEmpty()) {
+            return;
+        }
+        throw new IllegalArgumentException(
+            String.format(
+                Locale.ROOT,
+                "[%s.%s] %s not supported with combination [%s] in fused mode; supported parameters are %s",
+                COMBINATION_CLAUSE,
+                PARAMETERS_KEY,
+                unhonored,
+                combination,
+                new TreeSet<>(COMBINATION_PARAMETERS)
             )
         );
     }
@@ -411,7 +457,8 @@ public final class FusionSpec {
 
     /**
      * {@code combination.parameters.weights}, read the same way for both shapes — weights sit on the combination clause,
-     * so the normalization technique has no bearing on them.
+     * so the normalization technique has no bearing on them. Every other key under {@code parameters} is refused first
+     * ({@link #rejectUnhonoredCombinationParameters}), so nothing a user wrote there can be read as "absent".
      *
      * <p>A {@code weights} that is present but not a list is refused rather than read as absent. The orchestrator hands
      * {@link org.opensearch.neuralsearch.processor.combination.ScoreCombinationUtil} a list it rebuilds from the parsed
@@ -424,7 +471,8 @@ public final class FusionSpec {
      * fails classic and fused mode alike with a cast failure at HTTP 500. Refused here with the reason instead — a request
      * that cannot be served should say what to fix.
      */
-    private static float[] readWeights(Map<String, Object> combinationClause) {
+    private static float[] readWeights(Map<String, Object> combinationClause, String combination) {
+        rejectUnhonoredCombinationParameters(combinationClause, combination);
         Map<String, Object> parameters = readParameters(combinationClause, COMBINATION_CLAUSE);
         if ((parameters.get(WEIGHTS_KEY) instanceof List) == false) {
             if (parameters.containsKey(WEIGHTS_KEY)) {

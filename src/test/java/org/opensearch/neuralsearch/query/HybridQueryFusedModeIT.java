@@ -1780,6 +1780,46 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * The typo that silently re-ranks: {@code parameters: {weight: [...]}} is plainly meant to be weighted, and before the
+     * guard fused mode read only {@code weights}, so this clause fused <em>unweighted</em> at HTTP 200 — the user asked for
+     * one ranking and got another, with nothing in the response saying so. Classic refuses the same clause at pipeline
+     * creation ("supported parameters are [weights]"); fused mode now refuses it at the request, naming the key.
+     *
+     * <p>The second half pins that the correctly spelled request on the same index is still served, so the refusal is a
+     * refusal of the unknown key and not of weighted fusion.
+     */
+    @SneakyThrows
+    public void testFusedMode_whenInlineCombinationParameterUnknown_thenRejectedWithValidationError() {
+        if (indexExists(INDEX_NO_PIPELINE) == false) {
+            createIndex(INDEX_NO_PIPELINE, indexConfigWithoutPipeline());
+            addFourDocs(INDEX_NO_PIPELINE);
+        }
+        for (String combination : List.of("arithmetic_mean", "rrf")) {
+            HybridQueryBuilder typo = new HybridQueryBuilder().fusion(
+                Map.of("combination", Map.of("technique", combination, "parameters", Map.of("weight", List.of(0.2, 0.8))))
+            );
+            typo.add(new MatchQueryBuilder(TEXT_FIELD, "hello"));
+            typo.add(new TermQueryBuilder(TEXT_FIELD, "place"));
+
+            ResponseException e = expectThrows(ResponseException.class, () -> search(INDEX_NO_PIPELINE, typo, 10));
+            assertEquals(
+                combination + ": an unknown combination parameter must be refused as a bad request, not fused without it",
+                RestStatus.BAD_REQUEST.getStatus(),
+                e.getResponse().getStatusLine().getStatusCode()
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("[combination.parameters] [weight] not supported"));
+            assertTrue(e.getMessage(), e.getMessage().contains("supported parameters are [weights]"));
+
+            HybridQueryBuilder spelledRight = new HybridQueryBuilder().fusion(
+                Map.of("combination", Map.of("technique", combination, "parameters", Map.of("weights", List.of(0.2, 0.8))))
+            );
+            spelledRight.add(new MatchQueryBuilder(TEXT_FIELD, "hello"));
+            spelledRight.add(new TermQueryBuilder(TEXT_FIELD, "place"));
+            assertEquals(combination, 3, getHitCount(search(INDEX_NO_PIPELINE, spelledRight, 10)));
+        }
+    }
+
+    /**
      * The zero-migration path carrying a config fused mode cannot honor. {@code min_max}'s {@code lower_bounds} live under
      * {@code normalization.parameters}, and there is no coordinator-side implementation of them — so fusing this pipeline
      * would answer the request at HTTP 200 with a ranking that differs from what the very same pipeline produces
