@@ -6,7 +6,7 @@
   "model_format": "TORCH_SCRIPT",
   "model_group_id": "%s",
   "model_content_hash_value": "15e97d44ca59f6cd3e977398e38a9cea401eb87f360b92ca9dd8b30afd41f926",
-  "url": "https://raw.githubusercontent.com/opensearch-project/ml-commons/refs/heads/main/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/question_answering/sentence_highlighting_qa_model_pt.zip",
+  "url": "https://raw.githubusercontent.com/opensearch-project/ml-commons/82da99868a0074374fa7274ceaa8d0ca291e736e/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/question_answering/sentence_highlighting_qa_model_pt.zip",
   "model_config": {
     "model_type": "sentence_highlighting",
     "framework_type": "huggingface_transformers"
