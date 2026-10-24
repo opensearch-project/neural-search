@@ -15,5 +15,5 @@
       "space_type": "l2"
     }
   },
-  "url": "https://raw.githubusercontent.com/opensearch-project/ml-commons/refs/heads/2.x/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/text_embedding/traced_small_model.zip"
+  "url": "https://raw.githubusercontent.com/opensearch-project/ml-commons/b57eb32e774a32bc1d002f144d48b271cbfae58e/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/text_embedding/traced_small_model.zip"
 }

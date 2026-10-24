@@ -12,5 +12,5 @@
         "framework_type": "huggingface_transformers",
         "all_config": "nobody will read this"
     },
-    "url": "https://raw.githubusercontent.com/opensearch-project/ml-commons/refs/heads/main/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/text_similarity/TinyBERT-CE-torch_script.zip"
+    "url": "https://raw.githubusercontent.com/opensearch-project/ml-commons/2761d7d3ed0a1c5ed72712e7485b9a95967b4620/ml-algorithms/src/test/resources/org/opensearch/ml/engine/algorithms/text_similarity/TinyBERT-CE-torch_script.zip"
 }
