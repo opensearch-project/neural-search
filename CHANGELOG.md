@@ -31,6 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Semantic Field] Stop logging the full ingest document on chunking or model-info failure; log only the document `_id` and `_index` so customer content is no longer written to service logs ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
 
 ### Infrastructure
+* Register test models from `raw.githubusercontent.com` directly instead of the `github.com/.../blob/...?raw=true` and `github.com/.../raw/...` forms, whose redirect hop GitHub now answers with HTTP 406 for the default `Accept` header of the JDK 17 bundled with OpenSearch 2.9–2.11, failing the restart-upgrade BWC tests' old-cluster model registration ([#XXXX](https://github.com/opensearch-project/neural-search/pull/XXXX))
 
 ### Documentation
 
