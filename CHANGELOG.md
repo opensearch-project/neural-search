@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Infrastructure
 * Register test models from `raw.githubusercontent.com` directly; the `github.com/.../blob/...?raw=true` redirect now returns HTTP 406 to the JDK 17 bundled with OpenSearch 2.9–2.11, failing the restart-upgrade BWC tests ([#2070](https://github.com/opensearch-project/neural-search/pull/2070))
+* Adapt `HybridQueryDlsIT` to the security plugin refusing `global` aggregations under DLS (security#6555): assert DLS-filtered aggregations with a `terms` aggregation and pin the refusal ([#2070](https://github.com/opensearch-project/neural-search/pull/2070))
 
 ### Documentation
 
