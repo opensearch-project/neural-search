@@ -9,6 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
 import org.opensearch.test.OpenSearchTestCase;
 
 public class FusionSpecTests extends OpenSearchTestCase {
@@ -485,6 +486,217 @@ public class FusionSpecTests extends OpenSearchTestCase {
             ).weights(),
             0.0001f
         );
+    }
+
+    public void testFromInlineFusion_whenCombinationParameterUnknown_thenRejectedLikeClassic() {
+        // `weight` for `weights` is the typo that matters: the request is plainly meant to be weighted, and before this guard
+        // fused mode read only `weights`, so the clause fused UNWEIGHTED at HTTP 200 — a different ranking than the one asked
+        // for, with nothing in the response saying so. Classic refuses the same clause at pipeline creation
+        // ("supported parameters are [weights]"), and so does every combiner fused mode admits, including rrf, which routes
+        // to the score-ranker shape.
+        for (String combination : List.of("arithmetic_mean", "geometric_mean", "harmonic_mean", "rrf")) {
+            IllegalArgumentException typo = assertThrows(
+                combination,
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of("combination", Map.of("technique", combination, "parameters", Map.of("weight", List.of(0.2, 0.8))))
+                )
+            );
+            assertTrue(typo.getMessage(), typo.getMessage().contains("[combination.parameters] [weight] not supported"));
+            assertTrue(typo.getMessage(), typo.getMessage().contains("combination [" + combination + "] in fused mode"));
+            assertTrue(typo.getMessage(), typo.getMessage().contains("supported parameters are [weights]"));
+
+            // A valid weights beside an unknown key is refused too: the unknown key is named, the honored one is not.
+            IllegalArgumentException beside = assertThrows(
+                combination,
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of("combination", Map.of("technique", combination, "parameters", Map.of("weights", List.of(0.4, 0.6), "bogus", 1)))
+                )
+            );
+            assertTrue(beside.getMessage(), beside.getMessage().contains("[combination.parameters] [bogus] not supported"));
+            assertFalse(beside.getMessage(), beside.getMessage().contains("[bogus, weights]"));
+        }
+        // The rank_constant-under-parameters refusal on the score-ranker shape keeps its own, more specific message —
+        // it runs first, so a user who put rrf's constant in the wrong place is told where it goes rather than that it is unknown.
+        IllegalArgumentException misplaced = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 42))))
+        );
+        assertTrue(misplaced.getMessage(), misplaced.getMessage().contains("must be set on the [combination] clause"));
+        // ...while under a score-based combiner the same key is simply unknown — there is no right place for it there.
+        IllegalArgumentException stray = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("combination", Map.of("technique", "arithmetic_mean", "parameters", Map.of("rank_constant", 42)))
+            )
+        );
+        assertTrue(stray.getMessage(), stray.getMessage().contains("[combination.parameters] [rank_constant] not supported"));
+    }
+
+    public void testFromPipelineConfig_whenCombinationParameterUnknown_thenRejected() {
+        // The pipeline-sourced path runs the same check. Classic has refused these keys at pipeline creation for as long as
+        // the processors have existed, so in a single-version cluster this never fires; in a mixed-version cluster — a newer
+        // cluster-manager storing a pipeline whose combiner takes a parameter this coordinator does not know — it is the
+        // fail-closed check, matching classic on this node, which cannot build that pipeline either.
+        Map<String, Object> normalizationProcessor = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "min_max"),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.4, 0.6), "future_knob", true))
+                    )
+                )
+            )
+        );
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromPipelineConfig(normalizationProcessor)
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[combination.parameters] [future_knob] not supported"));
+        assertTrue(e.getMessage(), e.getMessage().contains("combination [arithmetic_mean] in fused mode"));
+
+        Map<String, Object> scoreRanker = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "score-ranker-processor",
+                    Map.of("combination", Map.of("technique", "rrf", "rank_constant", 10, "parameters", Map.of("future_knob", true)))
+                )
+            )
+        );
+        IllegalArgumentException rrf = assertThrows(IllegalArgumentException.class, () -> FusionSpec.fromPipelineConfig(scoreRanker));
+        assertTrue(rrf.getMessage(), rrf.getMessage().contains("[combination.parameters] [future_knob] not supported"));
+        assertTrue(rrf.getMessage(), rrf.getMessage().contains("combination [rrf] in fused mode"));
+    }
+
+    public void testCombinationParameters_fusedHonorsExactlyWhatClassicHonors() {
+        // The guard that keeps the two in step: for every combiner fused mode admits, a parameters map classic accepts must
+        // parse in fused mode and one classic refuses must be refused — so a parameter added to a classic combiner alone
+        // breaks this test instead of being dropped silently by the coordinator.
+        ScoreCombinationFactory classic = new ScoreCombinationFactory();
+        for (String combination : List.of("arithmetic_mean", "geometric_mean", "harmonic_mean", "rrf")) {
+            for (Map<String, Object> parameters : List.of(
+                Map.<String, Object>of("weights", List.of(0.4, 0.6)),
+                Map.<String, Object>of("weights", List.of(0.4, 0.6), "bogus", 1),
+                Map.<String, Object>of("bogus", 1)
+            )) {
+                boolean classicAccepts;
+                try {
+                    classic.createCombination(combination, parameters);
+                    classicAccepts = true;
+                } catch (IllegalArgumentException refused) {
+                    classicAccepts = false;
+                }
+                boolean fusedAccepts;
+                try {
+                    FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", combination, "parameters", parameters)));
+                    fusedAccepts = true;
+                } catch (IllegalArgumentException refused) {
+                    fusedAccepts = false;
+                }
+                assertEquals(combination + " " + parameters, classicAccepts, fusedAccepts);
+            }
+        }
+    }
+
+    public void testFromInlineFusion_whenClauseKeyUnknown_thenRejected() {
+        // The readers take the keys they know and leave the rest unread, so a `weights` written one level too high — on the
+        // clause rather than under `parameters` — fused unweighted at HTTP 200, and a `rank_constant` on an arithmetic_mean
+        // clause ranked at the default 60. The same silent mis-ranking as an unknown parameter; refused the same way.
+        IllegalArgumentException weightsOnClause = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "min_max"),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "weights", List.of(0.3, 0.7))
+                )
+            )
+        );
+        assertTrue(weightsOnClause.getMessage(), weightsOnClause.getMessage().contains("[combination] contains unknown key [weights]"));
+        assertTrue(weightsOnClause.getMessage(), weightsOnClause.getMessage().contains("supported keys are [parameters, technique]"));
+
+        IllegalArgumentException boundsOnClause = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("normalization", Map.of("technique", "min_max", "lower_bounds", List.of(Map.of("mode", "apply"))))
+            )
+        );
+        assertTrue(
+            boundsOnClause.getMessage(),
+            boundsOnClause.getMessage().contains("[normalization] contains unknown key [lower_bounds]")
+        );
+
+        // rank_constant belongs on the clause only for the score-ranker shape; beside a score-based combiner there is no
+        // right place for it, so it is unknown there rather than silently unread.
+        IllegalArgumentException strayRankConstant = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "arithmetic_mean", "rank_constant", 42)))
+        );
+        assertTrue(
+            strayRankConstant.getMessage(),
+            strayRankConstant.getMessage().contains("[combination] contains unknown key [rank_constant]")
+        );
+        assertTrue(strayRankConstant.getMessage(), strayRankConstant.getMessage().contains("supported keys are [parameters, technique]"));
+        // ...and on an rrf clause it is a known key, spelled either way the technique name is written.
+        for (String rrf : List.of("rrf", "RRF")) {
+            assertEquals(
+                42,
+                FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", rrf, "rank_constant", 42))).rankConstant()
+            );
+        }
+        // A clause with no technique defaults to arithmetic_mean, and is checked against that shape's keys.
+        FusionSpec defaulted = FusionSpec.fromInlineFusion(
+            Map.of("combination", Map.of("parameters", Map.of("weights", List.of(0.3, 0.7))))
+        );
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, defaulted.combinationTechnique());
+        assertArrayEquals(new float[] { 0.3f, 0.7f }, defaulted.weights(), 0.0001f);
+        IllegalArgumentException defaultedStray = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("rank_constant", 42)))
+        );
+        assertTrue(defaultedStray.getMessage(), defaultedStray.getMessage().contains("[combination] contains unknown key [rank_constant]"));
+        // Several unknown keys are all named, sorted, so one round trip fixes them all.
+        IllegalArgumentException several = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("combination", Map.of("technique", "arithmetic_mean", "weights", List.of(0.5, 0.5), "boost", 2))
+            )
+        );
+        assertTrue(several.getMessage(), several.getMessage().contains("unknown key [boost, weights]"));
+    }
+
+    public void testFromPipelineConfig_whenClauseKeyUnknown_thenIgnoredLikeClassic() {
+        // Deliberately asymmetric with the inline block: classic's factories read `technique` and `parameters` and ignore
+        // every other clause key, so a stray one changes nothing in a classic ranking. Dropping it fuses the pipeline
+        // exactly as classic serves it, whereas refusing it would turn `fusion: "pipeline"` into a 400 for a pipeline
+        // classic runs. Pinned so the inline check cannot leak onto this path.
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "min_max", "stray", true),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean", "weights", List.of(0.3, 0.7))
+                    )
+                )
+            )
+        );
+        FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.NORMALIZATION_MIN_MAX, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        // The misplaced weights are unread here, as they are in classic — unweighted on both paths.
+        assertEquals(0, spec.weights().length);
     }
 
     public void testFromInlineFusion_whenClauseIsNotAnObject_thenRejected() {
