@@ -916,6 +916,11 @@ public class MLCommonsClientAccessor {
                             result.put(DSL_QUERY_FIELD_NAME, dslJson);
                         }
 
+                        // Keep the summary the agent wrote in its final output, per the documented output contract
+                        if (modelResponseMap.get(AGENT_STEPS_FIELD_NAME) instanceof String summary && !summary.isBlank()) {
+                            result.put(AGENT_STEPS_FIELD_NAME, summary);
+                        }
+
                         // Extract agent steps based on model type
                         if (isClaude || isOpenAI) {
                             Map<String, String> extractedResult = isClaude
@@ -941,8 +946,8 @@ public class MLCommonsClientAccessor {
             throw new IllegalArgumentException(CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
         }
 
-        // Combine agent steps if collected
-        if (!agentSteps.isEmpty()) {
+        // Otherwise fall back to the steps collected from the tool-call messages
+        if (!result.containsKey(AGENT_STEPS_FIELD_NAME) && !agentSteps.isEmpty()) {
             result.put(AGENT_STEPS_FIELD_NAME, String.join("\n", agentSteps));
         }
 

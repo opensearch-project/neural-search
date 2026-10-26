@@ -922,10 +922,7 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
     public void testBatchProcess_whenSetModelInfoFails_thenDoesNotLogDocumentContent() {
         // Chunking succeeds (default mocked settings), but setModelInfo throws because the REMOTE model
         // has no config, so getModelType rejects it.
-        final MLModel remoteModelWithoutConfig = MLModel.builder()
-            .algorithm(FunctionName.REMOTE)
-            .name(FunctionName.REMOTE.name())
-            .build();
+        final MLModel remoteModelWithoutConfig = MLModel.builder().algorithm(FunctionName.REMOTE).name(FunctionName.REMOTE.name()).build();
         doAnswer(invocationOnMock -> {
             final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
             onSuccess.accept(Map.of(DUMMY_MODEL_ID_1, remoteModelWithoutConfig, DUMMY_MODEL_ID_2, remoteModelWithoutConfig));

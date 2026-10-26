@@ -1779,6 +1779,41 @@ public class MLCommonsClientAccessorTests extends OpenSearchTestCase {
         assertEquals("I'll search for products using the query tool.", result.getAgentStepsSummary());
     }
 
+    public void testExecuteAgent_OpenAIWithAgentStepsSummaryInFinalResponse_UsesIt() throws Exception {
+        final String agentId = "test-agent-id";
+        final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
+
+        SearchRequest mockRequest = mock(SearchRequest.class);
+        when(mockRequest.indices()).thenReturn(new String[] { "test-index" });
+
+        AgenticSearchQueryBuilder mockQuery = mock(AgenticSearchQueryBuilder.class);
+        when(mockQuery.getQueryText()).thenReturn("Find products");
+
+        // Native function calling leaves content null on tool-call messages
+        String agentStepResponse =
+            "{\"choices\":[{\"message\":{\"content\":null,\"tool_calls\":[{\"function\":{\"name\":\"query_tool\"}}]}}]}";
+        String finalResponse = "{\"dsl_query\":{\"query\":{\"match_all\":{}}},\"agent_steps_summary\":\"First I used: query_tool\"}";
+
+        Mockito.doAnswer(invocation -> {
+            final ActionListener actionListener = invocation.getArgument(2);
+            MLExecuteTaskResponse mockResponse = mock(MLExecuteTaskResponse.class);
+            when(mockResponse.getOutput()).thenReturn(createOpenAIAgentResponse(agentStepResponse, finalResponse));
+            actionListener.onResponse(mockResponse);
+            return null;
+        }).when(client).execute(any(), any(), any());
+
+        AgentInfoDTO agentInfo = new AgentInfoDTO("conversational", false, false, "openai/v1/chat/completions");
+
+        accessor.executeAgent(mockRequest, mockQuery, agentId, agentInfo, null, mock(NamedXContentRegistry.class), listener);
+
+        ArgumentCaptor<AgentExecutionDTO> resultCaptor = ArgumentCaptor.forClass(AgentExecutionDTO.class);
+        verify(listener).onResponse(resultCaptor.capture());
+
+        AgentExecutionDTO result = resultCaptor.getValue();
+        assertEquals("{\"query\":{\"match_all\":{}}}", result.getDslQuery());
+        assertEquals("First I used: query_tool", result.getAgentStepsSummary());
+    }
+
     public void testExecuteAgent_OpenAIWithoutToolCalls_NoAgentSteps() throws Exception {
         final String agentId = "test-agent-id";
         final ActionListener<AgentExecutionDTO> listener = mock(ActionListener.class);
