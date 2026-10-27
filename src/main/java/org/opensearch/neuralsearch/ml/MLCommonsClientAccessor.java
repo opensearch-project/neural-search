@@ -916,11 +916,6 @@ public class MLCommonsClientAccessor {
                             result.put(DSL_QUERY_FIELD_NAME, dslJson);
                         }
 
-                        // Keep the summary the agent wrote in its final output, per the documented output contract
-                        if (modelResponseMap.get(AGENT_STEPS_FIELD_NAME) instanceof String summary && !summary.isBlank()) {
-                            result.put(AGENT_STEPS_FIELD_NAME, summary);
-                        }
-
                         // Extract agent steps based on model type
                         if (isClaude || isOpenAI) {
                             Map<String, String> extractedResult = isClaude
@@ -931,6 +926,9 @@ public class MLCommonsClientAccessor {
                             }
                             if (extractedResult.containsKey(INDEX_NAME_FIELD)) {
                                 result.put(SELECTED_INDEX, extractedResult.get(INDEX_NAME_FIELD));
+                            }
+                            if (extractedResult.containsKey(AGENT_STEPS_FIELD_NAME)) {
+                                result.put(AGENT_STEPS_FIELD_NAME, extractedResult.get(AGENT_STEPS_FIELD_NAME));
                             }
                         }
                     } catch (Exception e) {
@@ -1054,6 +1052,11 @@ public class MLCommonsClientAccessor {
     private Map<String, String> extractOpenAIAgentSteps(Map<String, Object> responseMap) {
         Map<String, String> extractedTrace = new HashMap<>();
         List<String> steps = new ArrayList<>();
+
+        // Keep the summary the agent wrote in its final output, per the documented output contract
+        if (responseMap.get(AGENT_STEPS_FIELD_NAME) instanceof String summary && !summary.isBlank()) {
+            extractedTrace.put(AGENT_STEPS_FIELD_NAME, summary);
+        }
 
         if (!responseMap.containsKey("choices")) {
             return extractedTrace;
