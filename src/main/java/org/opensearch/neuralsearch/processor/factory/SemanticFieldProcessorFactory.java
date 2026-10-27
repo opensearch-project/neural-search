@@ -113,9 +113,21 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
         }
 
         int batch_size = DEFAULT_BATCH_SIZE;
+        // First, check if batch size is configured per semantic field in the ingest pipeline config
+        for (final Map<String, Map<String, Object>> semanticFieldConfig : semanticFieldPathToConfigMap.values()) {
+            if (semanticFieldConfig.containsKey("batch_size")) {
+                Object batchSizeObj = semanticFieldConfig.get("batch_size");
+                if (batchSizeObj instanceof Integer) {
+                    batch_size = (Integer) batchSizeObj;
+                    break;
+                }
+            }
+        }
+        // Fall back to the global index setting if not configured per semantic field
         for (Settings settings : settingsList) {
             if (settings.hasValue(SEMANTIC_INGEST_BATCH_SIZE.getKey())) {
                 batch_size = SEMANTIC_INGEST_BATCH_SIZE.get(settings);
+                break;
             }
         }
 
