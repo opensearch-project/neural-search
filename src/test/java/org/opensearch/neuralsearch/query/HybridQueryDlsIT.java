@@ -100,11 +100,23 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
     public void testDlsFiltersHybridHitsAndAggregations() throws Exception {
         Map<String, Object> adminResponse = performSearch(primaryHybridRequest(), false);
         assertHitIds(adminResponse, ALL_DOCUMENT_IDS);
-        assertGlobalAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
+        assertAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
 
         Map<String, Object> restrictedResponse = performSearch(primaryHybridRequest(), true);
         assertHitIds(restrictedResponse, ALLOWED_DOCUMENT_IDS);
-        assertGlobalAccessBuckets(restrictedResponse, Map.of("allowed", 2));
+        assertAccessBuckets(restrictedResponse, Map.of("allowed", 2));
+    }
+
+    public void testDlsRefusesGlobalAggregationOnHybridRequest() throws Exception {
+        // Without DLS a global aggregation is scoped to every document in the index, whatever the query matched.
+        Map<String, Object> adminResponse = performSearch(hybridRequestWithGlobalAggregation(), false);
+        assertHitIds(adminResponse, ALL_DOCUMENT_IDS);
+        assertGlobalAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
+
+        // Under DLS the security plugin refuses it outright (security#6555): a global aggregation ignores the DLS query
+        // filter, so running it would read the restricted documents. The hybrid request is refused like any other query.
+        ResponseException refused = expectThrows(ResponseException.class, () -> performRequest(hybridRequestWithGlobalAggregation(), true));
+        assertTrue(refused.getMessage(), refused.getMessage().contains("global aggregations are not supported when DLS is activated"));
     }
 
     public void testDlsSupportsSuggestionBearingHybridRequest() throws Exception {
@@ -248,6 +260,12 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
     }
 
     private Map<String, Object> performSearch(String requestBody, boolean asDlsUser) throws IOException {
+        Response response = performRequest(requestBody, asDlsUser);
+        assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
+        return responseAsMap(response);
+    }
+
+    private Response performRequest(String requestBody, boolean asDlsUser) throws IOException {
         Request request = new Request("POST", "/" + INDEX_NAME + "/_search");
         request.addParameter("search_pipeline", SEARCH_PIPELINE_NAME);
         request.setJsonEntity(requestBody);
@@ -260,13 +278,31 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
             );
             request.setOptions(options.build());
         }
-
-        Response response = client().performRequest(request);
-        assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
-        return responseAsMap(response);
+        return client().performRequest(request);
     }
 
     private String primaryHybridRequest() {
+        return """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    { "term": { "signal": "alpha" } },
+                    { "term": { "signal": "beta" } }
+                  ]
+                }
+              },
+              "aggs": {
+                "visible_access": {
+                  "terms": { "field": "access" }
+                }
+              }
+            }
+            """;
+    }
+
+    private String hybridRequestWithGlobalAggregation() {
         return """
             {
               "size": 10,
@@ -439,20 +475,27 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
         assertEquals(expectedIds, Set.copyOf(hitIds));
     }
 
+    private void assertAccessBuckets(Map<String, Object> responseBody, Map<String, Integer> expectedBuckets) {
+        assertNotNull("response missing aggregations", responseBody.get("aggregations"));
+        assertEquals(expectedBuckets, accessBuckets(asMap(asMap(responseBody.get("aggregations")).get("visible_access"))));
+    }
+
     private void assertGlobalAccessBuckets(Map<String, Object> responseBody, Map<String, Integer> expectedBuckets) {
         assertNotNull("response missing aggregations", responseBody.get("aggregations"));
         Map<String, Object> aggregations = asMap(responseBody.get("aggregations"));
         Map<String, Object> allDocuments = asMap(aggregations.get("all_documents"));
-        Map<String, Object> visibleAccess = asMap(allDocuments.get("visible_access"));
-        List<Map<String, Object>> buckets = asList(visibleAccess.get("buckets"));
-        Map<String, Integer> actualBuckets = buckets.stream()
-            .collect(Collectors.toMap(bucket -> (String) bucket.get("key"), bucket -> ((Number) bucket.get("doc_count")).intValue()));
 
         assertEquals(
             expectedBuckets.values().stream().mapToInt(Integer::intValue).sum(),
             ((Number) allDocuments.get("doc_count")).intValue()
         );
-        assertEquals(expectedBuckets, actualBuckets);
+        assertEquals(expectedBuckets, accessBuckets(asMap(allDocuments.get("visible_access"))));
+    }
+
+    private Map<String, Integer> accessBuckets(Map<String, Object> termsAggregation) {
+        List<Map<String, Object>> buckets = asList(termsAggregation.get("buckets"));
+        return buckets.stream()
+            .collect(Collectors.toMap(bucket -> (String) bucket.get("key"), bucket -> ((Number) bucket.get("doc_count")).intValue()));
     }
 
     private void assertSuggestionContains(Map<String, Object> responseBody, String suggestionName, String expectedOption) {

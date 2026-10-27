@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Semantic Field] Stop logging the full ingest document on chunking or model-info failure; log only the document `_id` and `_index` so customer content is no longer written to service logs ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
 
 ### Infrastructure
+* Fetch test models from commit-pinned `raw.githubusercontent.com` URLs, fix ITs for secure cluster ([#2070](https://github.com/opensearch-project/neural-search/pull/2070))
 
 ### Documentation
 
