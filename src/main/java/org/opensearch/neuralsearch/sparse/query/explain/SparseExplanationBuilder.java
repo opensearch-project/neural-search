@@ -20,13 +20,20 @@ import org.opensearch.neuralsearch.sparse.common.BinaryVectorUtils;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 import org.opensearch.neuralsearch.sparse.query.SparseVectorQuery;
 import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizationUtil;
+import org.opensearch.neuralsearch.sparse.quantization.ByteQuantizer;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_SHORT;
+import static org.opensearch.neuralsearch.sparse.common.SparseConstants.MODULUS_FOR_UNSIGNED_SHORT;
 
 /**
  * Builder class for constructing detailed explanations of Sparse ANN query scoring.
@@ -41,11 +48,6 @@ import java.util.Map;
  * The score is recomputed from the document's stored vector rather than recorded during search, so
  * it reproduces the scorer's arithmetic: the quantized path matches nsparse's decode_dot_product,
  * which is the same `raw * ceiling_ingest * ceiling_search / 255 / 255` this class applies.
- *
- * Known limit on the quantized path: {@link SparseVector} folds token ids modulo
- * {@code MODULUS_FOR_SHORT} (32768) and merges collisions by max weight, while the native engine
- * indexes raw ids up to 65535. A field using ids at or above 32768 therefore aliases tokens here
- * and can report a score the native scorer did not produce.
  */
 @Log4j2
 @Builder
@@ -81,6 +83,13 @@ public class SparseExplanationBuilder {
     private final BinaryDocValues rawDocValues;
 
     /**
+     * Set instead of {@link #reader} for a native segment scored by its quantized seismic index. The
+     * native engine folds ids modulo 65536, which a {@link SparseVector} cannot hold, so the doc values
+     * are folded and quantized here the way the native writer and nsparse did.
+     */
+    private final BinaryDocValues nativeQuantizedDocValues;
+
+    /**
      * Constructs a complete explanation for the document's score.
      * @return A Lucene Explanation object containing the complete scoring breakdown
      */
@@ -94,14 +103,15 @@ public class SparseExplanationBuilder {
         if (rawDocValues != null) {
             return explainExactFloatScore();
         }
+        if (nativeQuantizedDocValues != null) {
+            return explainNativeQuantizedScore();
+        }
 
         SparseVector docVector;
         try {
             docVector = reader.read(docId);
         } catch (IOException e) {
-            return Explanation.noMatch(
-                String.format(Locale.ROOT, "error reading document %d in field '%s': %s", docId, query.getFieldName(), e.getMessage())
-            );
+            return readFailure(e);
         }
         if (docVector == null) {
             return Explanation.noMatch(
@@ -109,14 +119,51 @@ public class SparseExplanationBuilder {
             );
         }
 
-        // Calculate raw dot product score
-        byte[] queryDenseVector = query.getQueryVector().toDenseVector();
-        int rawScore = docVector.dotProduct(queryDenseVector);
+        int rawScore = docVector.dotProduct(query.getQueryVector().toDenseVector());
+        return explainQuantizedScore(rawScore, toWeights(docVector), toWeights(query.getQueryVector()), MODULUS_FOR_SHORT);
+    }
 
-        // Build explanation components
+    /**
+     * Explains a native seismic segment's score: the dot product of the folded document and query,
+     * each quantized at its own ceiling.
+     */
+    private Explanation explainNativeQuantizedScore() {
+        Map<Integer, Float> docWeights;
+        try {
+            docWeights = readNativeDocWeights(nativeQuantizedDocValues);
+        } catch (IOException e) {
+            return readFailure(e);
+        }
+        if (docWeights == null) {
+            return noSparseVector();
+        }
+        Map<Integer, Byte> docCodes = quantize(docWeights, ByteQuantizationUtil.getByteQuantizerIngest(fieldInfo));
+        Map<Integer, Byte> queryCodes = quantize(
+            SparseVector.foldTokens(query.getRawQueryTokens(), MODULUS_FOR_UNSIGNED_SHORT),
+            new ByteQuantizer(ByteQuantizationUtil.getCeilingValueSearch(fieldInfo))
+        );
+        int rawScore = 0;
+        for (Map.Entry<Integer, Byte> queryCode : queryCodes.entrySet()) {
+            Byte docCode = docCodes.get(queryCode.getKey());
+            if (docCode != null) {
+                rawScore += ByteQuantizationUtil.multiplyUnsignedByte(queryCode.getValue(), docCode);
+            }
+        }
+        return explainQuantizedScore(rawScore, docCodes, queryCodes, MODULUS_FOR_UNSIGNED_SHORT);
+    }
+
+    /**
+     * Builds the quantized breakdown, which is the same for both engines once each has folded its ids.
+     *
+     * @param rawScore   the dot product of the quantized codes, as the scorer computed it
+     * @param docCodes   the document's quantized weights by folded token id
+     * @param queryCodes the query's quantized weights by folded token id
+     * @param modulus    the modulus both were folded at
+     */
+    private Explanation explainQuantizedScore(int rawScore, Map<Integer, Byte> docCodes, Map<Integer, Byte> queryCodes, int modulus) {
         List<Explanation> details = new ArrayList<>();
         details.add(explainQueryPruning());
-        details.add(explainRawScore(rawScore, docVector, queryDenseVector));
+        details.add(explainRawScore(rawScore, docCodes, queryCodes, modulus));
         details.add(explainQuantizationRescaling());
 
         // Add filter explanation if filter is present
@@ -145,27 +192,17 @@ public class SparseExplanationBuilder {
     private Explanation explainExactFloatScore() {
         Map<Integer, Float> docWeights;
         try {
-            if (rawDocValues.advanceExact(docId) == false) {
-                return Explanation.noMatch(
-                    String.format(Locale.ROOT, "document %d has no sparse vector in field '%s'", docId, query.getFieldName())
-                );
-            }
-            BytesRef bytesRef = rawDocValues.binaryValue();
-            if (bytesRef == null) {
-                return Explanation.noMatch(
-                    String.format(Locale.ROOT, "document %d has no sparse vector in field '%s'", docId, query.getFieldName())
-                );
-            }
-            docWeights = BinaryVectorUtils.readToMap(bytesRef);
+            docWeights = readNativeDocWeights(rawDocValues);
         } catch (IOException e) {
-            return Explanation.noMatch(
-                String.format(Locale.ROOT, "error reading document %d in field '%s': %s", docId, query.getFieldName(), e.getMessage())
-            );
+            return readFailure(e);
+        }
+        if (docWeights == null) {
+            return noSparseVector();
         }
 
-        // The native scorer is handed the raw query weights, so the dot product is over the query as
-        // the user sent it, not the pruned token list -- pruning only picks posting lists to visit.
-        Map<Integer, Float> queryWeights = query.getRawQueryTokens();
+        // The native scorer folds the unpruned query weights and scores all of them -- pruning only picks
+        // posting lists to visit.
+        Map<Integer, Float> queryWeights = SparseVector.foldTokens(query.getRawQueryTokens(), MODULUS_FOR_UNSIGNED_SHORT);
         List<Explanation> tokenDetails = new ArrayList<>();
         float rawScore = 0.0f;
         List<Map.Entry<Integer, Float>> contributions = new ArrayList<>();
@@ -216,18 +253,76 @@ public class SparseExplanationBuilder {
     }
 
     /**
+     * Reads a native field's document from its doc values, folded as the native writer folded it so
+     * the keys line up with the folded query.
+     *
+     * @return the weights by folded token id, or null if the document has no vector
+     */
+    private Map<Integer, Float> readNativeDocWeights(BinaryDocValues docValues) throws IOException {
+        if (docValues.advanceExact(docId) == false) {
+            return null;
+        }
+        BytesRef bytesRef = docValues.binaryValue();
+        if (bytesRef == null) {
+            return null;
+        }
+        List<Integer> tokens = new ArrayList<>();
+        List<Float> weights = new ArrayList<>();
+        BinaryVectorUtils.readToList(bytesRef, tokens, weights, MODULUS_FOR_UNSIGNED_SHORT);
+        Map<Integer, Float> docWeights = new HashMap<>();
+        for (int i = 0; i < tokens.size(); i++) {
+            docWeights.put(tokens.get(i), weights.get(i));
+        }
+        return docWeights;
+    }
+
+    private Explanation noSparseVector() {
+        return Explanation.noMatch(
+            String.format(Locale.ROOT, "document %d has no sparse vector in field '%s'", docId, query.getFieldName())
+        );
+    }
+
+    private Explanation readFailure(IOException e) {
+        return Explanation.noMatch(
+            String.format(Locale.ROOT, "error reading document %d in field '%s': %s", docId, query.getFieldName(), e.getMessage())
+        );
+    }
+
+    private static Map<Integer, Byte> quantize(Map<Integer, Float> weights, ByteQuantizer quantizer) {
+        Map<Integer, Byte> codes = new HashMap<>();
+        for (Map.Entry<Integer, Float> weight : weights.entrySet()) {
+            codes.put(weight.getKey(), quantizer.quantize(weight.getValue()));
+        }
+        return codes;
+    }
+
+    private static Map<Integer, Byte> toWeights(SparseVector vector) {
+        Map<Integer, Byte> weights = new HashMap<>();
+        SparseVector.Item item;
+        var iterator = vector.iterator();
+        while ((item = iterator.next()) != null) {
+            weights.put(item.getToken(), item.getWeight());
+        }
+        return weights;
+    }
+
+    /**
      * Creates an explanation for the raw dot product score calculation.
-     * @param rawScore The calculated raw dot product score
-     * @param docVector The document's sparse vector
-     * @param queryDenseVector The query vector in dense format
+     * @param rawScore   The calculated raw dot product score
+     * @param docCodes   The document's quantized weights by folded token id
+     * @param queryCodes The query's quantized weights by folded token id
+     * @param modulus    The modulus both were folded at
      * @return An Explanation showing the raw score and token-level contributions
      */
-    private Explanation explainRawScore(int rawScore, SparseVector docVector, byte[] queryDenseVector) {
+    private Explanation explainRawScore(int rawScore, Map<Integer, Byte> docCodes, Map<Integer, Byte> queryCodes, int modulus) {
         List<Explanation> tokenDetails = new ArrayList<>();
         List<String> queryTokens = query.getQueryContext().getTokens();
 
-        // Calculate contribution for each query token
+        // The pruned tokens are raw ids, while both sides are folded. Tokens come heaviest first, so the
+        // first raw id to reach a folded id is the one whose weight the fold kept; any later one would
+        // count the same dimension twice.
         List<TokenContribution> contributions = new ArrayList<>();
+        Set<Integer> explainedTokens = new HashSet<>();
         for (String tokenStr : queryTokens) {
             int tokenId;
             try {
@@ -237,28 +332,19 @@ public class SparseExplanationBuilder {
                 continue;
             }
 
-            if (tokenId < 0 || tokenId >= queryDenseVector.length) {
+            if (tokenId < 0) {
+                continue;
+            }
+            int foldedTokenId = tokenId % modulus;
+            if (explainedTokens.add(foldedTokenId) == false) {
                 continue;
             }
 
-            byte queryWeight = queryDenseVector[tokenId];
-
-            if (queryWeight == 0) {
-                continue;
-            }
-
-            byte docWeight = 0;
-            SparseVector.Item item;
-            var iterator = docVector.iterator();
-            while ((item = iterator.next()) != null) {
-                if (item.getToken() == SparseVector.prepareTokenForShortType(tokenId)) {
-                    docWeight = item.getWeight();
-                    break;
-                }
-            }
+            Byte queryWeight = queryCodes.get(foldedTokenId);
+            Byte docWeight = docCodes.get(foldedTokenId);
 
             // Only include tokens that appear in both query and document
-            if (docWeight != 0) {
+            if (queryWeight != null && queryWeight != 0 && docWeight != null && docWeight != 0) {
                 int contribution = ByteQuantizationUtil.multiplyUnsignedByte(queryWeight, docWeight);
                 contributions.add(new TokenContribution(tokenStr, queryWeight, docWeight, contribution));
             }
@@ -344,7 +430,7 @@ public class SparseExplanationBuilder {
      * @return An Explanation showing the query pruning details
      */
     private Explanation explainQueryPruning() {
-        int originalTokenCount = query.getQueryVector().getSize();
+        int originalTokenCount = query.getRawQueryTokens().size();
         int prunedTokenCount = query.getQueryContext().getTokens().size();
 
         if (originalTokenCount == prunedTokenCount) {

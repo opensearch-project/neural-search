@@ -46,11 +46,18 @@ public class BinaryVectorUtils {
      * Appends the vector to two parallel lists, preserving the encoded order and any duplicate
      * tokens. Used where the pairs feed a CSR buffer and the map's rehashing would be wasted.
      *
-     * @param bytesRef the encoded vector
-     * @param keys     receives the token ids
-     * @param values   receives the weights, index-aligned with {@code keys}
+     * A token at or above {@code upperBound} is folded to {@code token % upperBound}. Once any token
+     * in the vector is folded, entries sharing a token are merged into the first one by max weight,
+     * the same rule the query side applies, so the index never holds two weights for one term.
+     *
+     * @param bytesRef   the encoded vector
+     * @param keys       receives the token ids, each below {@code upperBound}
+     * @param values     receives the weights, index-aligned with {@code keys}
+     * @param upperBound the exclusive limit on token ids the caller can store
      */
-    public static void readToList(BytesRef bytesRef, List<Integer> keys, List<Float> values) throws IOException {
+    public static void readToList(BytesRef bytesRef, List<Integer> keys, List<Float> values, int upperBound) throws IOException {
+        int start = keys.size();
+        boolean folded = false;
         // Windowed rather than copied: ArrayUtil.copyOfSubArray takes (from, to), so passing the
         // length as the second argument truncated any BytesRef whose offset was not 0.
         try (
@@ -60,9 +67,42 @@ public class BinaryVectorUtils {
             while (bais.available() > 0) {
                 int key = dis.readInt();
                 float value = dis.readFloat();
+                if (key >= upperBound) {
+                    key %= upperBound;
+                    folded = true;
+                }
                 keys.add(key);
                 values.add(value);
             }
         }
+        if (folded) {
+            mergeByMax(keys, values, start);
+        }
+    }
+
+    /**
+     * Collapses repeated tokens in {@code keys[start..]} in place, keeping first-seen order.
+     *
+     * Must keep the weight {@code SparseVector.foldTokens} keeps when it folds the query for the
+     * native engine: the larger float. Both sides are quantized only afterwards, by nsparse, so a
+     * folded id is weighted alike in the index and in the query.
+     */
+    private static void mergeByMax(List<Integer> keys, List<Float> values, int start) {
+        Map<Integer, Integer> slotByKey = new HashMap<>();
+        int write = start;
+        for (int read = start; read < keys.size(); read++) {
+            int key = keys.get(read);
+            float value = values.get(read);
+            Integer slot = slotByKey.putIfAbsent(key, write);
+            if (slot == null) {
+                keys.set(write, key);
+                values.set(write, value);
+                write++;
+            } else {
+                values.set(slot, Math.max(values.get(slot), value));
+            }
+        }
+        keys.subList(write, keys.size()).clear();
+        values.subList(write, values.size()).clear();
     }
 }

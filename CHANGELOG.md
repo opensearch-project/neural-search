@@ -30,6 +30,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Reject a hybrid query without `fusion` nested in a hybrid query with `fusion`, and the other way around ([#2051](https://github.com/opensearch-project/neural-search/pull/2051))
 * [Ingest Processors] Deep-merge `field_map` target maps so sibling keys that diverge below the first path segment (e.g. `author.name.first` and `author.name.last`) are no longer dropped ([#2054](https://github.com/opensearch-project/neural-search/pull/2054))
 * [Semantic Field] Stop logging the full ingest document on chunking or model-info failure; log only the document `_id` and `_index` so customer content is no longer written to service logs ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
+* [Sparse ANN] Fix documents with token ids at or above 32768 never matching: approximate search on the Lucene engine returned the documents of the id modulo 32768 instead (e.g. 0 for 32768), and the native engine never matched ids from 32768 to 65535 and failed the shard on an id above 65535. The native engine now folds ids modulo 65536, so ids up to 65535 match exactly ([#2059](https://github.com/opensearch-project/neural-search/pull/2059))
 
 ### Infrastructure
 * Fetch test models from commit-pinned `raw.githubusercontent.com` URLs, fix ITs for secure cluster ([#2070](https://github.com/opensearch-project/neural-search/pull/2070))
