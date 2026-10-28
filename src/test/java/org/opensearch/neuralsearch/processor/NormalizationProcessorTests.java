@@ -154,10 +154,7 @@ public class NormalizationProcessorTests extends OpenSearchTestCase {
             );
 
             ScoreCombinationTechnique resolved = processor.resolveCombinationTechnique(context);
-            ScoreCombinationTechnique expected = factory.createCombination(
-                technique,
-                Map.of("weights", List.of(0.25, 0.75))
-            );
+            ScoreCombinationTechnique expected = factory.createCombination(technique, Map.of("weights", List.of(0.25, 0.75)));
             assertNotSame("request weights must create a per-request " + technique + " technique", configured, resolved);
             assertEquals(technique, resolved.techniqueName());
             assertEquals(expected.combine(new float[] { 0.2f, 0.8f }), resolved.combine(new float[] { 0.2f, 0.8f }), 0.00001f);
