@@ -878,6 +878,7 @@ public class MLCommonsClientAccessor {
 
         Map<String, String> result = new HashMap<>();
         List<String> agentSteps = new ArrayList<>();
+        String finalSummary = null;
 
         // Iterate through all ModelTensors to find response and memory_id
         for (ModelTensors tensors : tensorOutputList) {
@@ -928,7 +929,7 @@ public class MLCommonsClientAccessor {
                                 result.put(SELECTED_INDEX, extractedResult.get(INDEX_NAME_FIELD));
                             }
                             if (extractedResult.containsKey(AGENT_STEPS_FIELD_NAME)) {
-                                result.put(AGENT_STEPS_FIELD_NAME, extractedResult.get(AGENT_STEPS_FIELD_NAME));
+                                finalSummary = extractedResult.get(AGENT_STEPS_FIELD_NAME);
                             }
                         }
                     } catch (Exception e) {
@@ -944,9 +945,11 @@ public class MLCommonsClientAccessor {
             throw new IllegalArgumentException(CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
         }
 
-        // Otherwise fall back to the steps collected from the tool-call messages
-        if (!result.containsKey(AGENT_STEPS_FIELD_NAME) && !agentSteps.isEmpty()) {
+        // Prefer the steps rebuilt from the tool-call messages, else the summary from the final output
+        if (!agentSteps.isEmpty()) {
             result.put(AGENT_STEPS_FIELD_NAME, String.join("\n", agentSteps));
+        } else if (finalSummary != null) {
+            result.put(AGENT_STEPS_FIELD_NAME, finalSummary);
         }
 
         return result;
