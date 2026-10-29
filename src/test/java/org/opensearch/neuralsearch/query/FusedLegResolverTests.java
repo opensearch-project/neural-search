@@ -67,13 +67,19 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
 
     private final Client client = mock(Client.class);
 
-    /** A leg that neither registers anything nor changes is handed back as itself, and the list is the caller's own. */
-    public void testResolve_whenNoLegRewrites_thenTheSameListIsHandedBackAtOnce() {
-        List<QueryBuilder> legs = List.of(new TermQueryBuilder(FIELD, "a"), new MatchQueryBuilder(FIELD, "b"));
+    /** A leg that neither registers anything nor changes is handed back as itself, and runs at once. */
+    public void testResolveAndRun_whenNoLegRewrites_thenEachLegIsHandedBackAsItselfAndRunsAtOnce() {
+        TermQueryBuilder first = new TermQueryBuilder(FIELD, "a");
+        MatchQueryBuilder second = new MatchQueryBuilder(FIELD, "b");
+        List<SearchRequest> dispatched = answerSearchesAtOnce();
 
-        List<QueryBuilder> resolved = resolve(legs, parentContext());
+        List<QueryBuilder> resolved = resolveAndRun(List.of(first, second), parentContext()).resolvedLegs();
 
-        assertSame("nothing changed, so the caller can tell by identity", legs, resolved);
+        assertSame("nothing changed, so the caller can tell by identity", first, resolved.get(0));
+        assertSame(second, resolved.get(1));
+        assertEquals("both legs were dispatched, nothing held them", 2, dispatched.size());
+        assertSame(first, dispatched.get(0).source().query());
+        assertSame(second, dispatched.get(1).source().query());
     }
 
     /**
@@ -81,12 +87,13 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
      * returning a new builder — is driven to the form that call produces, and the call is made once. The resolved builder
      * inherits the leg's {@code _name} and boost, so what reports on the leg still finds them.
      */
-    public void testResolve_whenALegRegistersItsInference_thenItIsResolvedOnceToItsFinalForm() {
+    public void testResolveAndRun_whenALegRegistersItsInference_thenItIsResolvedOnceToItsFinalForm() {
         ResolvingLegQueryBuilder neuralLike = new ResolvingLegQueryBuilder(FIELD, "shoes");
         neuralLike.queryName("vector_leg").boost(2.0f);
         TermQueryBuilder lexical = new TermQueryBuilder(FIELD, "shoes");
+        answerSearchesAtOnce();
 
-        List<QueryBuilder> resolved = resolve(List.of(lexical, neuralLike), parentContext());
+        List<QueryBuilder> resolved = resolveAndRun(List.of(lexical, neuralLike), parentContext()).resolvedLegs();
 
         assertEquals(2, resolved.size());
         assertSame("a leg with nothing to resolve is the same instance", lexical, resolved.get(0));
@@ -100,92 +107,93 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
     }
 
     /** Legs resolve concurrently and may answer in any order; the resolved list is still in leg order. */
-    public void testResolve_whenLegsAnswerOutOfOrder_thenTheResolvedListKeepsLegOrder() {
+    public void testResolveAndRun_whenLegsResolveOutOfOrder_thenTheResolvedListKeepsLegOrder() {
         ResolvingLegQueryBuilder first = new ResolvingLegQueryBuilder(FIELD, "first").holdActions();
         ResolvingLegQueryBuilder second = new ResolvingLegQueryBuilder(FIELD, "second").holdActions();
-        AtomicReference<List<QueryBuilder>> resolved = new AtomicReference<>();
+        answerSearchesAtOnce();
+        AtomicReference<FusedLegResolver.LegsRun> run = new AtomicReference<>();
 
-        FusedLegResolver.resolve(List.of(first, second), parentContext(), client, scope, WINDOW, ActionListener.wrap(resolved::set, e -> {
-            throw new AssertionError(e);
-        }));
-        assertNull("nothing is handed back while a leg is still resolving", resolved.get());
+        FusedLegResolver.resolveAndRun(
+            List.of(first, second),
+            parentContext(),
+            client,
+            scope,
+            WINDOW,
+            leg -> leg,
+            new FusedCoordinatorTimings(),
+            ActionListener.wrap(run::set, e -> {
+                throw new AssertionError(e);
+            })
+        );
+        assertNull("nothing is handed back while a leg is still resolving", run.get());
 
         second.completePending();
-        assertNull("the first leg has not answered yet", resolved.get());
+        assertNull("the first leg has not answered yet", run.get());
         first.completePending();
 
-        assertNotNull(resolved.get());
-        assertEquals(List.of(first.resolvedForm(), second.resolvedForm()), resolved.get());
+        assertNotNull(run.get());
+        assertEquals(List.of(first.resolvedForm(), second.resolvedForm()), run.get().resolvedLegs());
         assertEquals(1, first.inferences());
         assertEquals(1, second.inferences());
     }
 
     /**
-     * A failure is reported the way a failed leg sub-search is — same text, same status — and names the leg: here the leg
-     * whose inference fails with the ML client's 404, while the sibling resolves normally.
+     * Core's {@code rewriteAndFetch} routes an {@code IllegalArgumentException} to the listener and lets any other exception
+     * escape; both become that leg's item failure, carrying the cause itself — {@code groupLegHits} frames it with the leg's
+     * index and the cause's own status — and the sibling runs regardless.
      */
-    public void testResolve_whenALegsInferenceFails_thenTheFailureNamesTheLegAndKeepsItsStatus() {
-        OpenSearchStatusException modelMissing = new OpenSearchStatusException("model [m1] not found", RestStatus.NOT_FOUND);
-        ResolvingLegQueryBuilder failing = new ResolvingLegQueryBuilder(FIELD, "shoes").failWith(modelMissing);
-        ResolvingLegQueryBuilder fine = new ResolvingLegQueryBuilder(FIELD, "boots");
-
-        Exception failure = resolveExpectingFailure(List.of(fine, failing), parentContext());
-
-        assertTrue(failure instanceof OpenSearchStatusException);
-        assertEquals("[hybrid] fused-mode sub-query 1 failed: model [m1] not found", failure.getMessage());
-        assertEquals("the leg's own status is kept", RestStatus.NOT_FOUND, ((OpenSearchStatusException) failure).status());
-        assertSame("with the cause attached", modelMissing, failure.getCause());
-    }
-
-    /**
-     * Core's {@code rewriteAndFetch} routes an {@code IllegalArgumentException} to the listener (a 400) and lets any other
-     * exception escape; both reach the caller as the same attributed failure, each with the status its cause carries.
-     */
-    public void testResolve_whenALegThrowsWhileRewriting_thenTheFailureIsAttributedWhetherOrNotCoreRoutesIt() {
-        Exception routed = resolveExpectingFailure(
-            List.of(new TermQueryBuilder(FIELD, "a"), new ThrowingLegQueryBuilder(new IllegalArgumentException("bad bound"))),
+    public void testResolveAndRun_whenALegThrowsWhileRewriting_thenItIsThatLegsItemFailureWhetherOrNotCoreRoutesIt() {
+        IllegalArgumentException badBound = new IllegalArgumentException("bad bound");
+        List<SearchRequest> dispatched = answerSearchesAtOnce();
+        MultiSearchResponse.Item[] routed = resolveAndRun(
+            List.of(new TermQueryBuilder(FIELD, "a"), new ThrowingLegQueryBuilder(badBound)),
             parentContext()
-        );
-        assertEquals("[hybrid] fused-mode sub-query 1 failed: bad bound", routed.getMessage());
-        assertEquals(RestStatus.BAD_REQUEST, ((OpenSearchStatusException) routed).status());
+        ).responses().getResponses();
+        assertFalse("the sibling ran", routed[0].isFailure());
+        assertSame("the routed exception is the leg's item failure", badBound, routed[1].getFailure());
+        assertEquals("only the sibling was dispatched", 1, dispatched.size());
 
-        Exception escaped = resolveExpectingFailure(
-            List.of(new ThrowingLegQueryBuilder(new IllegalStateException("broken builder")), new TermQueryBuilder(FIELD, "a")),
+        IllegalStateException brokenBuilder = new IllegalStateException("broken builder");
+        MultiSearchResponse.Item[] escaped = resolveAndRun(
+            List.of(new ThrowingLegQueryBuilder(brokenBuilder), new TermQueryBuilder(FIELD, "a")),
             parentContext()
-        );
-        assertEquals("[hybrid] fused-mode sub-query 0 failed: broken builder", escaped.getMessage());
-        assertEquals(RestStatus.INTERNAL_SERVER_ERROR, ((OpenSearchStatusException) escaped).status());
+        ).responses().getResponses();
+        assertSame("the escaping exception is the leg's item failure too", brokenBuilder, escaped[0].getFailure());
+        assertFalse(escaped[1].isFailure());
     }
 
     /**
      * Resolution is generic: any leg with coordinator-side work is brought to its fixpoint, not only an inferring one. A
-     * {@code wrapper} leg is parsed into the query it holds, with the parent context's registry.
+     * {@code wrapper} leg is parsed into the query it holds, with the parent context's registry, and that is what runs.
      */
-    public void testResolve_whenALegIsAWrapper_thenItIsParsedIntoTheQueryItHolds() {
+    public void testResolveAndRun_whenALegIsAWrapper_thenItIsParsedIntoTheQueryItHolds() {
         QueryRewriteContext parent = parentContext();
         when(parent.getXContentRegistry()).thenReturn(queryParsingRegistry());
         WrapperQueryBuilder wrapper = new WrapperQueryBuilder("{\"match\":{\"" + FIELD + "\":\"hello\"}}");
+        List<SearchRequest> dispatched = answerSearchesAtOnce();
 
-        List<QueryBuilder> resolved = resolve(List.of(wrapper), parent);
+        List<QueryBuilder> resolved = resolveAndRun(List.of(wrapper), parent).resolvedLegs();
 
         assertEquals(List.of(new MatchQueryBuilder(FIELD, "hello")), resolved);
+        assertEquals("the parsed query is what ran", new MatchQueryBuilder(FIELD, "hello"), dispatched.get(0).source().query());
     }
 
     /**
-     * A leg that is itself a fused hybrid is left exactly as written: it runs as its own leg sub-search's request query,
-     * and resolving it here would fan it out on this coordinator instead. Nothing is dispatched for it.
+     * A leg that is itself a fused hybrid is left exactly as written and runs as its own leg sub-search's request query,
+     * where it fans out on its own; resolving it here would fan it out on this coordinator instead.
      */
-    public void testResolve_whenALegIsAFusedHybrid_thenItIsLeftAsWrittenAndNothingIsDispatched() {
+    public void testResolveAndRun_whenALegIsAFusedHybrid_thenItIsLeftAsWrittenAndRunsAsItsOwnSubSearch() {
         HybridQueryBuilder nested = new HybridQueryBuilder().add(new TermQueryBuilder(FIELD, "a")).add(new TermQueryBuilder(FIELD, "b"));
         nested.fusion(new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"))));
         TermQueryBuilder lexical = new TermQueryBuilder(FIELD, "c");
+        List<SearchRequest> dispatched = answerSearchesAtOnce();
 
-        List<QueryBuilder> resolved = resolve(List.of(nested, lexical), parentContext());
+        List<QueryBuilder> resolved = resolveAndRun(List.of(nested, lexical), parentContext()).resolvedLegs();
 
         assertSame("the nested fused hybrid is the same instance", nested, resolved.get(0));
         assertSame(lexical, resolved.get(1));
+        assertSame("and it is what its leg sub-search runs", nested, dispatched.get(0).source().query());
         verify(client, never()).multiSearch(any(), any());
-        verify(client, never()).search(any(), any());
     }
 
     /** The marker is not applied where no fan-out can happen, and never stacks on itself. */
@@ -214,10 +222,11 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
      * the value in as the leg's per-shard cap, so handing a leg the enclosing request would have shrunk a radial leg's
      * candidate set to the page without the leg sub-search being able to correct it.
      */
-    public void testResolve_whenALegReadsItsRequest_thenItSeesTheLegRequestSizedAtTheWindow() {
+    public void testResolveAndRun_whenALegReadsItsRequest_thenItSeesTheLegRequestSizedAtTheWindow() {
         RequestRecordingLegQueryBuilder recording = new RequestRecordingLegQueryBuilder();
+        answerSearchesAtOnce();
 
-        resolve(List.of(new TermQueryBuilder(FIELD, "a"), recording), parentContext());
+        resolveAndRun(List.of(new TermQueryBuilder(FIELD, "a"), recording), parentContext());
 
         SearchRequest seen = recording.seen;
         assertNotNull("the leg was resolved under a coordinator context carrying a request", seen);
@@ -401,22 +410,38 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
 
     // ---------------------------------------------------------------------------------------------------------------
 
-    private List<QueryBuilder> resolve(final List<QueryBuilder> legs, final QueryRewriteContext parent) {
-        AtomicReference<List<QueryBuilder>> resolved = new AtomicReference<>();
-        FusedLegResolver.resolve(legs, parent, client, scope, WINDOW, ActionListener.wrap(resolved::set, e -> {
-            throw new AssertionError("resolution failed: " + e.getMessage(), e);
-        }));
-        assertNotNull("every leg answered synchronously, so the result is in hand", resolved.get());
-        return resolved.get();
+    /**
+     * Resolve-and-run with the client already answering every leg search; everything completes synchronously, so the run is
+     * in hand when this returns. Legs whose searches must stay pending drive {@link FusedLegResolver#resolveAndRun} directly.
+     */
+    private FusedLegResolver.LegsRun resolveAndRun(final List<QueryBuilder> legs, final QueryRewriteContext parent) {
+        AtomicReference<FusedLegResolver.LegsRun> run = new AtomicReference<>();
+        FusedLegResolver.resolveAndRun(
+            legs,
+            parent,
+            client,
+            scope,
+            WINDOW,
+            leg -> leg,
+            new FusedCoordinatorTimings(),
+            ActionListener.wrap(run::set, e -> {
+                throw new AssertionError("the fan-out's own machinery failed: " + e.getMessage(), e);
+            })
+        );
+        assertNotNull("every leg answered synchronously, so the run is in hand", run.get());
+        return run.get();
     }
 
-    private Exception resolveExpectingFailure(final List<QueryBuilder> legs, final QueryRewriteContext parent) {
-        AtomicReference<Exception> failure = new AtomicReference<>();
-        FusedLegResolver.resolve(legs, parent, client, scope, WINDOW, ActionListener.wrap(resolved -> {
-            throw new AssertionError("expected the resolution to fail, got " + resolved);
-        }, failure::set));
-        assertNotNull("the failure is reported once every leg has answered", failure.get());
-        return failure.get();
+    /** Every leg search the client receives answers an empty page at once; the requests, in dispatch order. */
+    private List<SearchRequest> answerSearchesAtOnce() {
+        List<SearchRequest> dispatched = new ArrayList<>();
+        doAnswer(invocation -> {
+            dispatched.add(invocation.getArgument(0));
+            ActionListener<SearchResponse> listener = invocation.getArgument(1);
+            listener.onResponse(response(0));
+            return null;
+        }).when(client).search(any(), any());
+        return dispatched;
     }
 
     /** The context the hybrid is being rewritten under: a coordinator context for {@link #searchRequest}. */

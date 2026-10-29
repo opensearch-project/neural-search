@@ -1779,12 +1779,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             new float[0]
         );
 
-        org.opensearch.action.search.MultiSearchRequest fannedOut = HybridFusionOrchestrator.buildLegMultiSearch(
-            CandidateScope.from(userRequest),
-            HybridQueryBuilder.projectResolvedConfigOntoLegs(outer.queries(), resolved),
-            10
-        );
-        SearchRequest legRequest = fannedOut.requests().get(0);
+        SearchRequest legRequest = CandidateScope.from(userRequest)
+            .newLegRequest(HybridQueryBuilder.projectResolvedConfigOntoLegs(outer.queries(), resolved).get(0), 10);
         assertEquals("leg sub-searches run with the search pipeline disabled", "_none", legRequest.pipeline());
 
         QueryCoordinatorContext legCtx = mock(QueryCoordinatorContext.class);
@@ -1802,18 +1798,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertTrue(rewritten instanceof HybridQueryBuilder);
 
         // Negative control: the same nested leg WITHOUT the projected config still cannot resolve, and now says why.
-        org.opensearch.action.search.MultiSearchRequest unprojected = HybridFusionOrchestrator.buildLegMultiSearch(
-            CandidateScope.from(userRequest),
-            outer.queries(),
-            10
-        );
+        SearchRequest unprojected = CandidateScope.from(userRequest).newLegRequest(outer.queries().get(0), 10);
         QueryCoordinatorContext bareCtx = mock(QueryCoordinatorContext.class);
         when(bareCtx.convertToCoordinatorContext()).thenReturn(bareCtx);
-        when(bareCtx.getSearchRequest()).thenReturn(unprojected.requests().get(0));
-        IllegalArgumentException e = expectThrows(
-            IllegalArgumentException.class,
-            () -> unprojected.requests().get(0).source().query().rewrite(bareCtx)
-        );
+        when(bareCtx.getSearchRequest()).thenReturn(unprojected);
+        IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> unprojected.source().query().rewrite(bareCtx));
         assertThat(e.getMessage(), containsString("must not read from the pipeline"));
         assertThat(e.getMessage(), containsString("leg sub-search runs with the search pipeline disabled"));
     }
@@ -2449,7 +2438,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     public void testDoRewriteFused_endToEnd_asyncActionProducesFusedQuery() {
         // Drives the full round-1 → round-2 lifecycle: capture the registered async action, run it with a mock client
         // that returns a fake per-leg MultiSearchResponse, and confirm the marker's supplier then yields the fused
-        // HybridFusionQueryBuilder (exercises the registerAsyncAction lambda body: buildLegMultiSearch + buildFusedQuery).
+        // HybridFusionQueryBuilder (exercises the registerAsyncAction lambda body: resolveAndRun + buildFusedQuery).
         initClusterUtilWithMaxResultWindow(10000);
         HybridQueryBuilder builder = fusedBuilder(
             new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))

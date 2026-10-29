@@ -17,7 +17,6 @@ import org.apache.lucene.search.TotalHits;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchStatusException;
-import org.opensearch.action.search.MultiSearchRequest;
 import org.opensearch.action.search.MultiSearchResponse;
 import org.opensearch.action.search.SearchPhaseExecutionException;
 import org.opensearch.action.search.SearchRequest;
@@ -209,25 +208,34 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         return new MultiSearchResponse(items, 10L);
     }
 
-    // ---- buildLegMultiSearch ----
+    // ---- leg requests (CandidateScope#newLegRequest, the one place a leg sub-search is built) ----
 
     /**
      * The assembly contract only: one leg request per sub-query, each carrying that sub-query and the window. What a leg
      * inherits from the user's request is {@link CandidateScope}'s job and is covered by {@code CandidateScopeTests}.
      */
-    public void testBuildLegMultiSearch_oneRequestPerLegBuiltFromTheScope() {
+    public void testLegRequests_oneRequestPerLegBuiltFromTheScope() {
         SearchRequest request = new SearchRequest(INDEX);
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
 
-        MultiSearchRequest ms = HybridFusionOrchestrator.buildLegMultiSearch(CandidateScope.from(request), legs, 50);
+        List<SearchRequest> legRequests = legRequests(CandidateScope.from(request), legs, 50);
 
-        assertEquals(2, ms.requests().size());
+        assertEquals(2, legRequests.size());
         for (int i = 0; i < legs.size(); i++) {
-            SearchRequest leg = ms.requests().get(i);
+            SearchRequest leg = legRequests.get(i);
             assertEquals("leg " + i + " runs its own sub-query", legs.get(i), leg.source().query());
             assertEquals(50, leg.source().size());
             assertEquals(SearchPipelineService.NOOP_PIPELINE_ID, leg.pipeline());
         }
+    }
+
+    /** One leg request per sub-query, as the fan-out builds them ({@code FusedLegResolver#resolveAndRun}). */
+    private static List<SearchRequest> legRequests(CandidateScope scope, List<QueryBuilder> legs, int windowSize) {
+        List<SearchRequest> requests = new ArrayList<>(legs.size());
+        for (QueryBuilder leg : legs) {
+            requests.add(scope.newLegRequest(leg, windowSize));
+        }
+        return requests;
     }
 
     // ---- buildFusedQuery: Top+Tail / Top-only / match_none ----
@@ -829,6 +837,36 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     /**
+     * Materialization substitutes the documents a leg returned for its match set, and the window is not the only thing that
+     * trims the former below the latter. A {@code post_filter} rides on the leg request, so a short leg's hits are its match
+     * set intersected with the filter — while round 2 computes its aggregations before the filter applies, so an address of
+     * those hits would drop every match outside the filter from the buckets. Such a leg is kept as the real query.
+     */
+    public void testBuildFusedQuery_whenTheRequestHasAPostFilter_thenAShortLegIsKeptAsTheRealQueryInTheTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("knn"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+        SearchSourceBuilder postFiltered = sourceWithAggregation().postFilter(new TermQueryBuilder("visibility", "public"));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(postFiltered, ms, legs, minMaxArithmetic(), 10);
+
+        assertSame("short, but post-filtered: its hits are not its match set", legs.get(1), tailOf(fused).should().get(1));
+
+        QueryBuilder unfiltered = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+        assertAddressedTo(tailOf(unfiltered).should().get(1), INDEX, "2");
+    }
+
+    /** A leg that did not answer completely — here it timed out — returned a subset of unknown size, and is kept as the real query. */
+    public void testBuildFusedQuery_whenAShortLegDidNotAnswerCompletely_thenItIsKeptAsTheRealQueryInTheTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("knn"));
+        MultiSearchResponse.Item timedOutKnn = degradedLegItem(new TotalHits(2, TotalHits.Relation.EQUAL_TO), null, 0, true);
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), timedOutKnn);
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        assertSame("timed out: what it returned is not its match set", legs.get(1), tailOf(fused).should().get(1));
+    }
+
+    /**
      * The defect the bound was added for. {@code neural} is a materializable <i>name</i>, but against a
      * {@code rank_features} semantic embedding field a {@code neural} query rewrites into {@code neural_sparse}, whose match
      * set is every document holding a query token — far larger than the window. Fused mode substitutes the Tail before the
@@ -881,6 +919,31 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertEquals("registration must not turn a Top-only query into Top+Tail", 0, tailFilterCount(fused));
         QueryBuilder carried = namedOnlyLegsOf(fused).get(0);
         assertEquals("vector", carried.queryName());
+        assertAddressedTo(carried, INDEX, "2", "3");
+    }
+
+    /**
+     * The registration path's untruncated materialization is for ANN legs alone, whose match set is what they returned. A
+     * named {@code neural_sparse} leg matches every document holding a query token, so when it filled the window it is
+     * carried as the real (resolved) query — a page document it matched but never returned keeps its {@code matched_queries}
+     * entry — and only a short one, which returned its whole match set, is addressed by ids.
+     */
+    public void testBuildFusedQuery_whenTopOnlyAndNamedSparseLeg_thenMaterializedOnlyWhenItReturnedItsWholeMatchSet() {
+        QueryBuilder sparse = legNamed("neural_sparse").queryName("sparse");
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), sparse);
+        MultiSearchResponse ms = multiSearch(
+            legItemFromIndex(INDEX, Map.of("1", 0.9f)),
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))
+        );
+
+        QueryBuilder filled = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 2);
+        assertEquals(0, tailFilterCount(filled));
+        assertSame("filled the window: carried as the real query for registration", sparse, namedOnlyLegsOf(filled).get(0));
+
+        QueryBuilder shortRun = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+        assertEquals(0, tailFilterCount(shortRun));
+        QueryBuilder carried = namedOnlyLegsOf(shortRun).get(0);
+        assertEquals("sparse", carried.queryName());
         assertAddressedTo(carried, INDEX, "2", "3");
     }
 
@@ -3003,7 +3066,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     /** The shapes finding 1 of the review named: no leg may carry an aggregation, so nothing scans an unbounded match set. */
-    public void testBuildLegMultiSearch_noLegHostsForTheShapesThatWouldBeUnbounded() {
+    public void testLegRequests_noLegHostsForTheShapesThatWouldBeUnbounded() {
         QueryBuilder ann = new KNNQueryBuilder("vec", new float[] { 1f, 2f }, 10);
         QueryBuilder ann2 = new KNNQueryBuilder("vec2", new float[] { 3f, 4f }, 10);
         QueryBuilder title = new MatchQueryBuilder("title", "hello");
@@ -3017,23 +3080,18 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             CandidateScope scope = CandidateScope.from(new SearchRequest(INDEX).source(new SearchSourceBuilder().trackTotalHitsUpTo(500)));
             scope.enableLegTotalHits(500);
 
-            MultiSearchRequest ms = HybridFusionOrchestrator.buildLegMultiSearch(scope, legs, 50);
+            List<SearchRequest> legRequests = legRequests(scope, legs, 50);
 
-            for (int i = 0; i < ms.requests().size(); i++) {
-                assertNull("leg " + i + " of " + legs.size() + " must carry no aggregation", ms.requests().get(i).source().aggregations());
+            for (int i = 0; i < legRequests.size(); i++) {
+                assertNull("leg " + i + " of " + legs.size() + " must carry no aggregation", legRequests.get(i).source().aggregations());
             }
         }
     }
 
-    public void testBuildLegMultiSearch_noOverlapAggregationWithoutLegCounting_orWithAPostFilter() {
+    public void testLegRequests_noOverlapAggregationWithoutLegCounting_orWithAPostFilter() {
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), new TermQueryBuilder("text", "place"));
 
-        MultiSearchRequest notCounting = HybridFusionOrchestrator.buildLegMultiSearch(
-            CandidateScope.from(new SearchRequest(INDEX)),
-            legs,
-            50
-        );
-        for (SearchRequest leg : notCounting.requests()) {
+        for (SearchRequest leg : legRequests(CandidateScope.from(new SearchRequest(INDEX)), legs, 50)) {
             assertNull(leg.source().aggregations());
         }
 
@@ -3042,7 +3100,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         );
         postFiltered.enableLegTotalHits(500);
         assertFalse(postFiltered.legUnionCountAllowed());
-        for (SearchRequest leg : HybridFusionOrchestrator.buildLegMultiSearch(postFiltered, legs, 50).requests()) {
+        for (SearchRequest leg : legRequests(postFiltered, legs, 50)) {
             assertNull("a post_filter applies to hits but not to aggregations, so the counts would disagree", leg.source().aggregations());
         }
     }

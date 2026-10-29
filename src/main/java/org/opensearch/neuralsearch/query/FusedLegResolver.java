@@ -7,14 +7,11 @@ package org.opensearch.neuralsearch.query;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.UnaryOperator;
 
-import org.opensearch.ExceptionsHelper;
-import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.search.MultiSearchResponse;
 import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.support.GroupedActionListener;
@@ -151,7 +148,18 @@ final class FusedLegResolver {
         for (int legIndex = 0; legIndex < legCount; legIndex++) {
             final int leg = legIndex;
             final QueryBuilder asWritten = legs.get(leg);
-            resolveLeg(asWritten, parent, client, scope.newLegRequest(asWritten, windowSize), new NotifyOnceListener<>() {
+            // The request a leg is resolved against, built before anything is dispatched for it: a builder that cannot be
+            // placed in a request is this leg's item failure, the same as one that cannot be resolved or searched.
+            final SearchRequest resolutionRequest;
+            try {
+                resolutionRequest = scope.newLegRequest(asWritten, windowSize);
+            } catch (RuntimeException failure) {
+                resolved.set(leg, asWritten);
+                items.set(leg, new MultiSearchResponse.Item(null, failure));
+                allAnswered.onResponse(leg);
+                continue;
+            }
+            resolveLeg(asWritten, parent, client, resolutionRequest, new NotifyOnceListener<>() {
                 @Override
                 protected void innerOnResponse(final QueryBuilder resolvedLeg) {
                     resolved.set(leg, resolvedLeg);
@@ -199,56 +207,8 @@ final class FusedLegResolver {
     }
 
     /**
-     * Resolve {@code legs} to their coordinator fixpoints, concurrently, and hand the resolved list to {@code listener} in leg
-     * order, running nothing. The list is the original one when no leg changed, so a caller can tell. A leg that fails to
-     * resolve fails the whole resolution, after every leg has answered, with the failing leg's index in the message
-     * ({@link #legFailure}).
-     */
-    static void resolve(
-        final List<QueryBuilder> legs,
-        final QueryRewriteContext parent,
-        final Client client,
-        final CandidateScope scope,
-        final int windowSize,
-        final ActionListener<List<QueryBuilder>> listener
-    ) {
-        if (legs.isEmpty()) {
-            listener.onResponse(legs);
-            return;
-        }
-        // Indexed by leg, because GroupedActionListener collects in completion order and the legs complete in any order;
-        // what it collects is the indexes of the legs that answered, read for nothing but the join.
-        final AtomicReferenceArray<QueryBuilder> resolved = new AtomicReferenceArray<>(legs.size());
-        final GroupedActionListener<Integer> allLegs = new GroupedActionListener<>(ActionListener.wrap(answered -> {
-            List<QueryBuilder> resolvedLegs = new ArrayList<>(legs.size());
-            boolean changed = false;
-            for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
-                QueryBuilder leg = resolved.get(legIndex);
-                changed |= leg != legs.get(legIndex);
-                resolvedLegs.add(leg);
-            }
-            listener.onResponse(changed ? Collections.unmodifiableList(resolvedLegs) : legs);
-        }, listener::onFailure), legs.size());
-        for (int legIndex = 0; legIndex < legs.size(); legIndex++) {
-            final int leg = legIndex;
-            resolveLeg(legs.get(leg), parent, client, scope.newLegRequest(legs.get(leg), windowSize), new NotifyOnceListener<>() {
-                @Override
-                protected void innerOnResponse(final QueryBuilder resolvedLeg) {
-                    resolved.set(leg, resolvedLeg);
-                    allLegs.onResponse(leg);
-                }
-
-                @Override
-                protected void innerOnFailure(final Exception failure) {
-                    allLegs.onFailure(legFailure(leg, failure));
-                }
-            });
-        }
-    }
-
-    /**
      * One leg to its fixpoint on a context of its own. The listener is notified exactly once (a {@link NotifyOnceListener}):
-     * the joins above count each answer, so a second one — an answer followed by a routed failure, say — would complete a
+     * the join above counts each answer, so a second one — an answer followed by a routed failure, say — would complete a
      * join early with a leg missing.
      */
     private static void resolveLeg(
@@ -283,19 +243,5 @@ final class FusedLegResolver {
             parent::nowInMillis
         );
         return LegPreparationRewriteContext.wrap(new QueryCoordinatorContext(base, legRequest));
-    }
-
-    /**
-     * The failure a leg sub-search would have reported for the same cause — identical text and status to
-     * {@code HybridFusionOrchestrator#groupLegHits}, so a client sees one failure surface whether a leg fails while being
-     * resolved or while running. The leg's own status is kept: a bad bound is the user's 400, a missing model the ML client's
-     * 404, a rejection a retryable 429.
-     */
-    static OpenSearchStatusException legFailure(final int legIndex, final Exception cause) {
-        return new OpenSearchStatusException(
-            String.format(Locale.ROOT, "[hybrid] fused-mode sub-query %d failed: %s", legIndex, cause.getMessage()),
-            ExceptionsHelper.status(cause),
-            cause
-        );
     }
 }

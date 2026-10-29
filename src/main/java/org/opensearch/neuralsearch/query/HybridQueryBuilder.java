@@ -154,7 +154,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     /**
      * Fusion config projected onto this builder by an <b>enclosing</b> fused hybrid, when this builder is one of its legs.
      * A leg sub-search runs with the search pipeline pinned to {@code _none} (see
-     * {@link HybridFusionOrchestrator#buildLegMultiSearch}), so a nested fused hybrid cannot resolve its own config from
+     * {@link CandidateScope#newLegRequest}), so a nested fused hybrid cannot resolve its own config from
      * the leg request; the enclosing rewrite hands down the config it already resolved from the user's request instead.
      * Only ever set on a private copy made by {@link #withResolvedFusionSpec}, never parsed, never serialized, and
      * deliberately absent from {@link #doEquals}/{@link #doHashCode} — exactly like {@link #fusedSupplier}.
@@ -1998,7 +1998,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * Hand the already-resolved fusion config down to any leg that is itself a fused hybrid delegating to the pipeline.
      *
      * <p>Legs are fanned out with {@code pipeline=_none} so that per-leg request/response processors do not run
-     * ({@link HybridFusionOrchestrator#buildLegMultiSearch}); a nested fused hybrid would therefore resolve no config
+     * ({@link CandidateScope#newLegRequest}); a nested fused hybrid would therefore resolve no config
      * from its own leg request and fail with a message blaming a pipeline the user has correctly configured. Projecting
      * the enclosing config is faithful: resolving from the pipeline is exactly what the nested query would have done,
      * and it is the same request and therefore the same pipeline.

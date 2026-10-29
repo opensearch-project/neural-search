@@ -720,6 +720,13 @@ final class CandidateScope {
      *       index. Copying the request's indices alongside a PIT is safe: core's REST layer has already resolved a PIT
      *       request's indices to the PIT's own, and the transport layer derives shards from the PIT context regardless.</li>
      * </ul>
+     *
+     * <p>Note on ANN legs: {@code size} sets how many hits a leg returns, but an ANN leg's retrieval depth is bounded by its
+     * own {@code k} (collected per shard), not by {@code size} — a {@code knn}/{@code neural} leg with a small or default
+     * {@code k} (10) contributes at most that many candidates regardless of {@code windowSize}. This matches classic hybrid,
+     * which likewise never rewrites {@code k}; for a full window, set {@code k >= window_size} on the sub-query. {@code k} is
+     * deliberately NOT rewritten here — it would diverge from classic and has no analog for radial knn
+     * ({@code min_score}/{@code max_distance} have no {@code k}).
      */
     SearchRequest newLegRequest(final QueryBuilder leg, final int windowSize) {
         SearchSourceBuilder legSource = new SearchSourceBuilder().query(leg).size(windowSize).from(0);
