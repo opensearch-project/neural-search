@@ -152,7 +152,16 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         Map<String, Object> breakdown = mapAt(node, "breakdown");
         assertEquals(
             "the phases of a coordinator fusion",
-            Set.of("fan_out_build", "fan_out_wait", "union_count_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
+            Set.of(
+                "legs_resolve_wait",
+                "fan_out_build",
+                "fan_out_wait",
+                "union_count_wait",
+                "window_merge",
+                "fuse_scores",
+                "rank_window",
+                "substitute_build"
+            ),
             breakdown.keySet()
         );
         long summed = breakdown.values().stream().mapToLong(value -> ((Number) value).longValue()).sum();
@@ -182,7 +191,8 @@ public class HybridQueryFusedModeProfileIT extends BaseNeuralSearchIT {
         assertEquals("fuse_candidates", collector.get("reason"));
         assertEquals(
             "the collector slot carries what fusing cost once the legs were back",
-            summed - ((Number) breakdown.get("fan_out_build")).longValue() - ((Number) breakdown.get("fan_out_wait")).longValue(),
+            summed - ((Number) breakdown.get("legs_resolve_wait")).longValue() - ((Number) breakdown.get("fan_out_build")).longValue()
+                - ((Number) breakdown.get("fan_out_wait")).longValue(),
             ((Number) collector.get("time_in_nanos")).longValue()
         );
         assertEquals("no Lucene rewrite happens on the coordinator", 0L, ((Number) search.get("rewrite_time")).longValue());

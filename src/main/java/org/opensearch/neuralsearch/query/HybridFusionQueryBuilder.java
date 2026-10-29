@@ -332,9 +332,11 @@ public class HybridFusionQueryBuilder extends AbstractQueryBuilder<HybridFusionQ
     @Override
     protected QueryBuilder doRewrite(QueryRewriteContext queryRewriteContext) throws IOException {
         boolean changed = false;
-        // Both lists hold the original leg builders, and this query needs them for what they match, never for what they
-        // score — the fused scores are already baked into the Top. Rewriting them under a match-set marker is what keeps a
-        // leg that is itself a fused hybrid from firing its own legs a second time (see MatchSetRewriteContext).
+        // Both lists hold the enclosing query's legs as the fan-out ran them — resolved to their coordinator fixpoints ahead
+        // of it (FusedLegResolver), so rewriting them here resolves nothing again — and this query needs them for what they
+        // match, never for what they score — the fused scores are already baked into the Top. Rewriting them under a
+        // match-set marker is what keeps a leg that is itself a fused hybrid from firing its own legs a second time (see
+        // MatchSetRewriteContext).
         QueryRewriteContext matchSetContext = MatchSetRewriteContext.wrap(queryRewriteContext);
         List<QueryBuilder> rewrittenTail = new ArrayList<>(tailQueries.size());
         for (QueryBuilder q : tailQueries) {

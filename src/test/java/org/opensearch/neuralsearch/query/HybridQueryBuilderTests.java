@@ -13,6 +13,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opensearch.core.xcontent.ToXContent.EMPTY_PARAMS;
@@ -99,6 +100,7 @@ import org.opensearch.knn.index.mapper.KNNVectorFieldType;
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
 import lombok.SneakyThrows;
+import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 
@@ -820,19 +822,14 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             return null;
         }).when(ctx).registerAsyncAction(any());
         resolvedOuter.doRewrite(ctx);
-        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> fannedOut =
-            new java.util.concurrent.atomic.AtomicReference<>();
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
-        doAnswer(invocation -> {
-            fannedOut.set(invocation.getArgument(0));
-            return null; // the legs never answer: only the fan-out itself is under test
-        }).when(client).multiSearch(any(), any());
+        List<SearchRequest> fannedOut = recordLegSearches(client); // the legs never answer: only the fan-out itself is under test
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> {}, e -> fail(e.getMessage())));
-        assertEquals("one leg request per outer leg", 2, fannedOut.get().requests().size());
+        assertEquals("one leg request per outer leg", 2, fannedOut.size());
 
         // The nested leg, rewritten the way its leg sub-search would: it has to fan its three legs out, not fail on a
         // two-element weights array it never asked for.
-        SearchRequest legRequest = fannedOut.get().requests().get(0);
+        SearchRequest legRequest = fannedOut.get(0);
         QueryCoordinatorContext legCtx = mock(QueryCoordinatorContext.class);
         when(legCtx.convertToCoordinatorContext()).thenReturn(legCtx);
         when(legCtx.getSearchRequest()).thenReturn(legRequest);
@@ -1837,6 +1834,51 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
      * shard target, which is how a real coordinator-side hit gets its {@code _index} — fusion identifies a document by
      * {@code _index} plus {@code _id} and rejects a hit that carries no index.
      */
+    /**
+     * A union count round is the one {@code size: 0} search the fan-out issues ({@code CandidateScope#newUnionCountRequest});
+     * every other search the client sees is a leg, run as its own search the moment it resolved.
+     */
+    private static boolean isCountRequest(final org.opensearch.action.search.SearchRequest request) {
+        return Objects.nonNull(request) && Objects.nonNull(request.source()) && request.source().size() == 0;
+    }
+
+    /**
+     * Answers each leg search, in dispatch order, with the matching item of {@code legs} — the response, or the failure a
+     * failed item carries — and returns the leg requests as they were dispatched. Dispatch order is leg order here: the legs
+     * resolve synchronously in these tests, so each is run as soon as the loop reaches it. Count-round searches are left to
+     * their own stub ({@link #isCountRequest}).
+     */
+    private List<SearchRequest> answerLegSearchesFrom(
+        final org.opensearch.transport.client.Client client,
+        final org.opensearch.action.search.MultiSearchResponse legs
+    ) {
+        List<SearchRequest> dispatched = new ArrayList<>();
+        doAnswer(invocation -> {
+            SearchRequest request = invocation.getArgument(0);
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> listener = invocation.getArgument(1);
+            org.opensearch.action.search.MultiSearchResponse.Item item = legs.getResponses()[dispatched.size()];
+            dispatched.add(request);
+            if (item.isFailure()) {
+                listener.onFailure(item.getFailure());
+            } else {
+                listener.onResponse(item.getResponse());
+            }
+            return null;
+        }).when(client)
+            .search(org.mockito.ArgumentMatchers.argThat(request -> isCountRequest(request) == false), org.mockito.ArgumentMatchers.any());
+        return dispatched;
+    }
+
+    /** Records each leg search as dispatched and never answers it: for a test about what the legs are dispatched as. */
+    private List<SearchRequest> recordLegSearches(final org.opensearch.transport.client.Client client) {
+        List<SearchRequest> dispatched = new ArrayList<>();
+        doAnswer(invocation -> {
+            dispatched.add(invocation.getArgument(0));
+            return null;
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        return dispatched;
+    }
+
     private org.opensearch.action.search.MultiSearchResponse.Item legItem(Map<String, Float> idToScore) {
         return legItem(idToScore, null);
     }
@@ -2030,11 +2072,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             10L
         );
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        answerLegSearchesFrom(client, msResponse);
         doAnswer(invocation -> {
             countRequestOut.set(invocation.getArgument(0));
             org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
@@ -2048,7 +2086,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 l.onResponse((org.opensearch.action.search.SearchResponse) countAnswer);
             }
             return null;
-        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }).when(client)
+            .search(org.mockito.ArgumentMatchers.argThat(HybridQueryBuilderTests::isCountRequest), org.mockito.ArgumentMatchers.any());
 
         // Counters rather than flags: the core change is a new conditional async hop, so exactly-once is the property worth
         // pinning. The cross-branch half is already covered by failing on the branch not expected; this covers the rest.
@@ -2060,7 +2099,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         if (Objects.isNull(countAnswer)) {
             // Belt and braces alongside the fail() in the stub: this catches a dispatch that happened on another thread or
             // with a listener the stub did not invoke.
-            verify(client, never()).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+            verify(client, never()).search(
+                org.mockito.ArgumentMatchers.argThat(HybridQueryBuilderTests::isCountRequest),
+                org.mockito.ArgumentMatchers.any()
+            );
         }
         // Which object carries the total depends on the path the request took, and both are the same number. Armed and
         // settled, buildFusedResult assembles the page and deliberately tells the totals consumer null, because the page
@@ -2082,6 +2124,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     @SneakyThrows
     public void testDoRewriteFused_whenAnUnarmedNeuralLegIsShortOfTheWindow_thenTheCountIsRefused() {
         initClusterUtilWithMaxResultWindow(10000);
+        stubNeuralInference();
         HybridQueryBuilder builder = new HybridQueryBuilder();
         builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").build());
         builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
@@ -2111,14 +2154,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             10L
         );
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
-        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> legSearches =
-            new java.util.concurrent.atomic.AtomicReference<>();
-        doAnswer(invocation -> {
-            legSearches.set(invocation.getArgument(0));
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        List<SearchRequest> legSearches = answerLegSearchesFrom(client, msResponse);
         java.util.concurrent.atomic.AtomicBoolean counted = new java.util.concurrent.atomic.AtomicBoolean();
         java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
             new java.util.concurrent.atomic.AtomicReference<>();
@@ -2128,7 +2164,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
             l.onResponse(countResponse(55, 0, 0, false, null));
             return null;
-        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }).when(client)
+            .search(org.mockito.ArgumentMatchers.argThat(HybridQueryBuilderTests::isCountRequest), org.mockito.ArgumentMatchers.any());
 
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
@@ -2138,19 +2175,22 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertFalse("a neural leg short of the window must not be re-executed by the count round", counted.get());
         assertNull("no count ran, so the Tail counts and nothing is published", published.get());
         // And no leg carries an aggregation any more -- that mechanism is gone, so nothing is attached speculatively.
-        for (SearchRequest leg : legSearches.get().requests()) {
+        for (SearchRequest leg : legSearches) {
             assertNull("no leg carries an overlap aggregation", leg.source().aggregations());
         }
     }
 
     /**
      * The other arm: a {@code neural} leg the window truncated is kept verbatim by the Tail, so the count re-executes
-     * exactly what round 2 would have and costs no extra graph walk. It goes into the disjunction as the real query, and
-     * unlike the case above this holds whether or not the request armed.
+     * exactly what round 2 would have and costs no extra graph walk. It goes into the disjunction as the real query — in
+     * the RESOLVED form the fan-out ran, a {@code neural_knn} carrying the vector the leg inferred once before the fan-out
+     * (see {@code FusedLegResolver}), so neither the count nor the Tail can call the model again. Unlike the case above this
+     * holds whether or not the request armed.
      */
     @SneakyThrows
     public void testDoRewriteFused_whenANeuralLegFilledTheWindow_thenTheCountRoundServesIt() {
         initClusterUtilWithMaxResultWindow(10000);
+        MLCommonsClientAccessor mlClient = stubNeuralInference();
         HybridQueryBuilder builder = new HybridQueryBuilder();
         builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").build());
         builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
@@ -2193,11 +2233,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             10L
         );
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        answerLegSearchesFrom(client, msResponse);
         java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.SearchRequest> countRequest =
             new java.util.concurrent.atomic.AtomicReference<>();
         doAnswer(invocation -> {
@@ -2205,7 +2241,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
             l.onResponse(countResponse(4055, 0, 0, false, null));
             return null;
-        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }).when(client)
+            .search(org.mockito.ArgumentMatchers.argThat(HybridQueryBuilderTests::isCountRequest), org.mockito.ArgumentMatchers.any());
 
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
@@ -2221,7 +2258,28 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             .source()
             .query();
         assertEquals(2, disjunction.should().size());
-        assertEquals("neural", disjunction.should().get(0).getWriteableName());
+        assertEquals(
+            "the count carries the leg as the fan-out ran it: resolved, with its vector, so re-executing it is a graph walk",
+            NeuralKNNQueryBuilder.NAME,
+            disjunction.should().get(0).getWriteableName()
+        );
+        verify(mlClient, times(1)).inferenceSentencesMap(any(), any());
+    }
+
+    /**
+     * The model is called once for the whole rewrite: the leg is resolved ahead of the fan-out, and the stub above answers
+     * exactly one inference. Shared by the two tests with a real {@code neural} leg; a second call would surface as a
+     * second answer and, in the filled-window test, as a second {@code inferenceSentencesMap} invocation.
+     */
+    private MLCommonsClientAccessor stubNeuralInference() {
+        MLCommonsClientAccessor mlClient = mock(MLCommonsClientAccessor.class);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<List<Number>> listener = invocation.getArgument(1);
+            listener.onResponse(List.of(1.0f, 2.0f, 3.0f));
+            return null;
+        }).when(mlClient).inferenceSentencesMap(any(), any());
+        NeuralQueryBuilder.initialize(mlClient);
+        return mlClient;
     }
 
     /**
@@ -2349,11 +2407,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             10L
         );
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        answerLegSearchesFrom(client, msResponse);
         doAnswer(invocation -> {
             org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
             if (countSucceeds) {
@@ -2362,7 +2416,8 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 l.onFailure(new IllegalStateException("count rejected"));
             }
             return null;
-        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }).when(client)
+            .search(org.mockito.ArgumentMatchers.argThat(HybridQueryBuilderTests::isCountRequest), org.mockito.ArgumentMatchers.any());
 
         java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
         captured.get()
@@ -2414,7 +2469,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertTrue(marker instanceof HybridQueryBuilder);
         assertNotNull("an async action must have been registered", captured.get());
 
-        // Mock client: multiSearch(request, listener) → return a two-leg fake response.
+        // Mock client: each leg search is answered from a two-leg fake response, in leg order.
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
         org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(
             new org.opensearch.action.search.MultiSearchResponse.Item[] {
@@ -2422,11 +2477,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 legItem(Map.of("2", 0.8f, "3", 0.4f)) },
             10L
         );
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        answerLegSearchesFrom(client, msResponse);
 
         // Run the captured async action; its inner listener sets the fused query on the marker's SetOnce.
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
@@ -2469,20 +2520,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 legItem(Map.of("2", 0.8f, "3", 0.4f), legProfile("leg-1-node")) },
             10L
         );
-        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> legRequests =
-            new java.util.concurrent.atomic.AtomicReference<>();
-        doAnswer(invocation -> {
-            legRequests.set(invocation.getArgument(0));
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        List<SearchRequest> legRequests = answerLegSearchesFrom(client, msResponse);
 
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
         assertTrue("async action should complete", done.get());
 
-        for (SearchRequest legRequest : legRequests.get().requests()) {
+        for (SearchRequest legRequest : legRequests) {
             assertTrue("a leg has to run profiled for there to be a tree to publish", legRequest.source().profile());
         }
         assertEquals("every leg that answered publishes, keyed by its own index", Set.of(0, 1), published.keySet());
@@ -2523,20 +2567,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 explainedLegItem(Map.of("2", 0.8f, "3", 0.4f)) },
             10L
         );
-        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> legRequests =
-            new java.util.concurrent.atomic.AtomicReference<>();
-        doAnswer(invocation -> {
-            legRequests.set(invocation.getArgument(0));
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        List<SearchRequest> legRequests = answerLegSearchesFrom(client, msResponse);
 
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
         assertTrue("async action should complete", done.get());
 
-        for (SearchRequest legRequest : legRequests.get().requests()) {
+        for (SearchRequest legRequest : legRequests) {
             assertEquals("a leg has to run explained for there to be a breakdown to publish", Boolean.TRUE, legRequest.source().explain());
         }
         assertNotNull("the collector is published once the window is final", published.get());
@@ -2569,25 +2606,19 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         builder.doRewrite(ctx);
 
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
-        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> legRequests =
-            new java.util.concurrent.atomic.AtomicReference<>();
-        doAnswer(invocation -> {
-            legRequests.set(invocation.getArgument(0));
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(
-                new org.opensearch.action.search.MultiSearchResponse(
-                    new org.opensearch.action.search.MultiSearchResponse.Item[] { legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)) },
-                    10L
-                )
-            );
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        List<SearchRequest> legRequests = answerLegSearchesFrom(
+            client,
+            new org.opensearch.action.search.MultiSearchResponse(
+                new org.opensearch.action.search.MultiSearchResponse.Item[] { legItem(Map.of("1", 0.9f)), legItem(Map.of("2", 0.8f)) },
+                10L
+            )
+        );
 
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
 
         assertTrue(done.get());
-        assertNull("no consumer, so no leg pays explanation's per-hit cost", legRequests.get().requests().get(0).source().explain());
+        assertNull("no consumer, so no leg pays explanation's per-hit cost", legRequests.get(0).source().explain());
     }
 
     /**
@@ -2619,11 +2650,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 new org.opensearch.action.search.MultiSearchResponse.Item(null, new IllegalStateException("leg is down")) },
             10L
         );
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        answerLegSearchesFrom(client, msResponse);
 
         java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
         captured.get()
@@ -2675,11 +2702,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 legItem(Map.of("2", 0.8f, "3", 0.4f)) },
             10L
         );
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        answerLegSearchesFrom(client, msResponse);
 
         java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
@@ -2709,7 +2732,10 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
             timings.windowMergeNanos() + timings.fuseScoresNanos() + timings.rankWindowNanos() + timings.substituteBuildNanos(),
             timings.fusionNanos()
         );
-        assertEquals(timings.fanOutBuildNanos() + timings.fanOutWaitNanos() + timings.fusionNanos(), timings.totalNanos());
+        assertEquals(
+            timings.legsResolveWaitNanos() + timings.fanOutBuildNanos() + timings.fanOutWaitNanos() + timings.fusionNanos(),
+            timings.totalNanos()
+        );
     }
 
     /**
@@ -2742,11 +2768,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
                 new org.opensearch.action.search.MultiSearchResponse.Item(null, new IllegalStateException("leg is down")) },
             10L
         );
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        answerLegSearchesFrom(client, msResponse);
 
         java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
         captured.get()
@@ -2787,10 +2809,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testDoRewriteFused_whenMultiSearchTransportFails_thenErrorIsHybridFramedAndKeepsStatus() {
-        // Whole-MultiSearch transport failure (not a per-leg Item failure) is reframed as the user's hybrid/fused query
-        // instead of surfacing a bare multiSearch error — while keeping the underlying status, so a rejected fan-out is
-        // still the retryable 429 it was and not an opaque 500.
+    public void testDoRewriteFused_whenALegSearchIsRejected_thenErrorIsHybridFramedAndKeepsStatus() {
+        // A leg's search failing at the transport (a rejection, say) is reported as that leg's failure, framed as the user's
+        // hybrid/fused query rather than a bare search error — while keeping the underlying status, so a rejected fan-out is
+        // still the retryable 429 it was and not an opaque 500. Each leg is run as its own search the moment it resolves,
+        // so the failure names the first leg that was rejected.
         initClusterUtilWithMaxResultWindow(10000);
         HybridQueryBuilder builder = fusedBuilder(
             new HashMap<>(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")))
@@ -2805,19 +2828,19 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
         builder.doRewrite(ctx);
 
-        // Mock client whose multiSearch invokes the FAILURE consumer (transport-level failure).
+        // Mock client whose every leg search invokes the FAILURE consumer (transport-level failure).
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
         doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onFailure(new org.opensearch.core.concurrency.OpenSearchRejectedExecutionException("msearch rejected"));
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            l.onFailure(new org.opensearch.core.concurrency.OpenSearchRejectedExecutionException("search rejected"));
             return null;
-        }).when(client).multiSearch(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
 
         java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> fail("should have failed"), failure::set));
         assertNotNull(failure.get());
-        assertThat(failure.get().getMessage(), containsString("failed to execute fused-mode sub-queries"));
-        assertThat(failure.get().getMessage(), containsString("msearch rejected"));
+        assertThat(failure.get().getMessage(), containsString("[hybrid] fused-mode sub-query 0 failed"));
+        assertThat(failure.get().getMessage(), containsString("search rejected"));
         assertEquals(
             "a rejected fan-out must stay a 429 so client retry-on-429 fires",
             org.opensearch.core.rest.RestStatus.TOO_MANY_REQUESTS,
@@ -3009,16 +3032,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         QueryBuilder marker = builder.doRewrite(ctx);
         assertEquals("the round-1 marker keeps the depth", builder.paginationDepth(), ((HybridQueryBuilder) marker).paginationDepth());
 
-        java.util.concurrent.atomic.AtomicReference<org.opensearch.action.search.MultiSearchRequest> legSearches =
-            new java.util.concurrent.atomic.AtomicReference<>();
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
-        doAnswer(invocation -> {
-            legSearches.set(invocation.getArgument(0));
-            return null;
-        }).when(client).multiSearch(any(), any());
+        List<SearchRequest> legSearches = recordLegSearches(client); // the legs never answer: only the fan-out itself is under test
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> {}, e -> fail(e.getMessage())));
 
-        Set<Integer> sizes = legSearches.get().requests().stream().map(r -> r.source().size()).collect(Collectors.toSet());
+        Set<Integer> sizes = legSearches.stream().map(r -> r.source().size()).collect(Collectors.toSet());
         assertEquals("every leg is fanned out with the same window", 1, sizes.size());
         return sizes.iterator().next();
     }
@@ -3291,11 +3309,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
 
         org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
         org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(legItems, 10L);
-        doAnswer(invocation -> {
-            org.opensearch.core.action.ActionListener<org.opensearch.action.search.MultiSearchResponse> l = invocation.getArgument(1);
-            l.onResponse(msResponse);
-            return null;
-        }).when(client).multiSearch(any(), any());
+        answerLegSearchesFrom(client, msResponse);
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> {}, e -> fail(e.getMessage())));
         return published.get();
     }

@@ -14,6 +14,7 @@ import java.util.Set;
 
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.ExceptionsHelper;
 import org.opensearch.OpenSearchStatusException;
 import org.opensearch.action.search.MultiSearchRequest;
@@ -35,6 +36,7 @@ import org.opensearch.index.query.IdsQueryBuilder;
 import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
+import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.InnerHitBuilder;
@@ -651,6 +653,62 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertEquals(2, tail.should().size());
         assertEquals("the lexical leg stays a real query", legs.get(0), tail.should().get(0));
         assertAddressedTo(tail.should().get(1), INDEX, "2", "3");
+    }
+
+    /**
+     * A chunking-enabled semantic field's {@code neural} leg arrives resolved as {@code nested(chunks, neural_knn)}: the ANN
+     * walk is over the chunks, the hits are the parents. Seen through, so a short one is addressed by its parent ids rather than
+     * re-walking the chunk graph in the Tail — exactly what a flat kNN leg gets. A {@code nested} around a lexical query is not
+     * materialized: re-running it is cheap, and the cost filter is all this is.
+     */
+    public void testBuildFusedQuery_nestedKnnLeg_materializedByParentIds_nestedLexicalLegKept() {
+        QueryBuilder nestedKnn = new NestedQueryBuilder("chunks", legNamed("neural_knn"), ScoreMode.Max);
+        QueryBuilder nestedLexical = new NestedQueryBuilder("chunks", new MatchQueryBuilder("chunks.text", "hello"), ScoreMode.Max);
+        List<QueryBuilder> legs = List.of(nestedLexical, nestedKnn);
+        MultiSearchResponse ms = multiSearch(
+            legItemFromIndex(INDEX, Map.of("1", 0.9f)),
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))
+        );
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+
+        BoolQueryBuilder tail = tailOf(fused);
+        assertEquals(2, tail.should().size());
+        assertSame("a nested lexical leg stays a real query", nestedLexical, tail.should().get(0));
+        assertAddressedTo(tail.should().get(1), INDEX, "2", "3");
+    }
+
+    /**
+     * A {@code neural} leg over a {@code rank_features} semantic field arrives resolved as {@code neural_sparse}. Short, it has
+     * returned its whole match set and is addressed by ids, as the unresolved {@code neural} it used to arrive as was; filled,
+     * the truncation test keeps it as the real query — the shape whose match set is every document holding a query token, and
+     * the one that was once materialized on the strength of a name alone.
+     */
+    public void testBuildFusedQuery_neuralSparseLeg_materializedWhenShort_keptWhenItFilledTheWindow() {
+        QueryBuilder sparse = legNamed("neural_sparse");
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), sparse);
+
+        QueryBuilder shortRun = HybridFusionOrchestrator.buildFusedQuery(
+            sourceWithAggregation(),
+            multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))),
+            legs,
+            minMaxArithmetic(),
+            10
+        );
+        assertAddressedTo(tailOf(shortRun).should().get(1), INDEX, "2", "3");
+
+        QueryBuilder filledRun = HybridFusionOrchestrator.buildFusedQuery(
+            sourceWithAggregation(),
+            multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))),
+            legs,
+            minMaxArithmetic(),
+            2
+        );
+        assertSame(
+            "a sparse leg that filled the window may have matched more than it returned: kept as the real query",
+            sparse,
+            tailOf(filledRun).should().get(1)
+        );
     }
 
     /**
@@ -2770,10 +2828,11 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     /**
-     * A short {@code neural} leg is refused even when armed, unlike a short {@code knn} leg. The difference is what
-     * re-executing it costs: the count's disjunction is built from the ORIGINAL leg builders, whose {@code vectorSupplier()}
-     * round 1 never set ({@code rewriteQueryAgainstKnnField} returns a NEW builder holding the {@code SetOnce}), so
-     * rewriting the count re-enters the inference branch and calls the model a second time — and
+     * A short leg still named {@code neural} is refused even when armed, unlike a short {@code knn} leg. The difference is
+     * what re-executing it may cost: a {@code neural} that is still {@code neural} when it reaches the count is one whose
+     * vector the name does not prove held (the legs arrive resolved — see {@code FusedLegResolver} — so the common case has
+     * become a {@code neural_knn} by now; what stays {@code neural} is a semantic-field leg over several indices, which
+     * holds its embeddings in suppliers the name does not reveal), and rewriting it could re-enter the inference branch —
      * {@code MLCommonsClientAccessor} caches model metadata, not embeddings. Against a remote connector that is a network
      * call and per-call spend, which the knn measurement (+4 ms allowed vs +8 ms refused) says nothing about.
      *
@@ -2825,13 +2884,13 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     /**
-     * The premise the rule above rests on, asserted rather than argued: a {@code neural} leg that FILLED the window IS
-     * admitted, and what enters the disjunction is the user's own builder with {@code vectorSupplier() == null} — so
-     * rewriting it infers again. That is fine there only because {@code legInTailForm} keeps a window-filling leg verbatim,
-     * so round 2's Tail carries the same unresolved builder and pays the same inference. If this ever started carrying a
-     * resolved copy, the short-leg refusal above would be measuring the wrong thing.
+     * What the count does with a {@code neural} leg that FILLED the window: it IS admitted, and what enters the disjunction
+     * is the very builder it was handed — the count never resolves or copies a leg itself. That is correct only because the
+     * caller hands it the same legs the Tail carries ({@code doRewriteFused} passes both the RESOLVED legs), so whatever a
+     * re-execution costs, the count pays no more than the Tail it replaces. Asserted with an unresolved builder so the
+     * identity is unmistakable: the count passes legs through, it does not resolve them.
      */
-    public void testUnionCountRequest_admitsAFilledNeuralLegAsTheUnresolvedOriginal() {
+    public void testUnionCountRequest_admitsAFilledNeuralLegAsTheVeryBuilderItWasHanded() {
         initClusterMinVersionForNeuralLegs();
         QueryBuilder hello = new MatchQueryBuilder("text", "hello");
         NeuralQueryBuilder neural = NeuralQueryBuilder.builder().fieldName("vec").queryText("shoes").modelId("m1").k(100).build();
@@ -2848,8 +2907,39 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
 
         assertNotNull("a filled neural leg is re-executed by the Tail too, so counting it is cost-neutral", count);
         BoolQueryBuilder disjunction = (BoolQueryBuilder) count.source().query();
-        assertSame("the count carries the user's own leg, not a resolved copy", neural, disjunction.should().get(0));
-        assertNull("whose vector is still unresolved, so a rewrite of it would infer", neural.vectorSupplier());
+        assertSame("the count carries the leg it was handed, as is", neural, disjunction.should().get(0));
+        assertNull("the count resolved nothing on its own", neural.vectorSupplier());
+    }
+
+    /**
+     * What the leg resolution ahead of the fan-out buys the count: a {@code neural} leg against a k-NN field reaches the count
+     * as the {@code neural_knn} it resolved to, carrying its vector, so even a SHORT one is served — re-executing it is one
+     * graph walk, like {@code knn}, and no longer a second model call. The short-{@code neural} carve-out above is for the
+     * leg that stays {@code neural}; this is the shape nearly every real request now presents.
+     */
+    public void testUnionCountRequest_servesAShortResolvedNeuralLeg() {
+        initClusterMinVersionForNeuralLegs();
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        QueryBuilder resolvedNeural = NeuralKNNQueryBuilder.builder()
+            .fieldName("vec")
+            .vector(new float[] { 1f, 2f })
+            .k(10)
+            .originalQueryText("shoes")
+            .build();
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        SearchRequest count = HybridFusionOrchestrator.unionCountRequest(
+            armedScope(source),
+            source,
+            List.of(resolvedNeural, hello),
+            lexicalItems(eq(10), eq(3)),
+            100,
+            true
+        );
+
+        assertNotNull("a resolved neural leg carries its vector, so re-executing it is a graph walk the count may pay for", count);
+        BoolQueryBuilder disjunction = (BoolQueryBuilder) count.source().query();
+        assertSame(resolvedNeural, disjunction.should().get(0));
     }
 
     /** The same rule where it actually bites: a leg whose can_match skipped a shard must still be counted. */

@@ -165,6 +165,40 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
         assertHitIds(restrictedMixedResponse, PUBLIC_ALLOWED_DOCUMENT_IDS);
     }
 
+    /**
+     * Fused mode runs each leg as its own coordinator-side search. DLS must apply to those leg searches, to round 2 and to
+     * the derived {@code hits.total} exactly as it applies to a plain search by the same user.
+     */
+    public void testDlsFiltersFusedHybridHitsAndAggregations() throws Exception {
+        Map<String, Object> adminResponse = performFusedSearch(fusedHybridRequest(), false);
+        assertHitIds(adminResponse, ALL_DOCUMENT_IDS);
+        assertAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
+
+        Map<String, Object> restrictedResponse = performFusedSearch(fusedHybridRequest(), true);
+        assertHitIds(restrictedResponse, ALLOWED_DOCUMENT_IDS);
+        assertAccessBuckets(restrictedResponse, Map.of("allowed", 2));
+    }
+
+    /**
+     * A fused {@code neural} leg is resolved (model inference) and then run from the inference callback thread
+     * (<a href="https://github.com/opensearch-project/neural-search/pull/2074">#2074</a>). The leg search must still run as the
+     * requesting user: DLS keeps filtering it, and the role needs no permission beyond index {@code read}.
+     */
+    public void testDlsFiltersFusedHybridNeuralQuery() throws Exception {
+        String modelId = prepareModelForNeuralQuery();
+        Map<String, Object> adminNeuralResponse = performFusedSearch(fusedNeuralRequest(modelId), false);
+        assertHitIds(adminNeuralResponse, PUBLIC_DOCUMENT_IDS);
+
+        Map<String, Object> restrictedNeuralResponse = performFusedSearch(fusedNeuralRequest(modelId), true);
+        assertHitIds(restrictedNeuralResponse, PUBLIC_ALLOWED_DOCUMENT_IDS);
+
+        Map<String, Object> adminMixedResponse = performFusedSearch(fusedKnnAndNeuralRequest(modelId), false);
+        assertHitIds(adminMixedResponse, PUBLIC_DOCUMENT_IDS);
+
+        Map<String, Object> restrictedMixedResponse = performFusedSearch(fusedKnnAndNeuralRequest(modelId), true);
+        assertHitIds(restrictedMixedResponse, PUBLIC_ALLOWED_DOCUMENT_IDS);
+    }
+
     private void deleteObjects(List<String> endpoints) throws IOException {
         IOException cleanupFailure = null;
         for (String endpoint : endpoints) {
@@ -265,9 +299,22 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
         return responseAsMap(response);
     }
 
+    /** A fused-mode (in-query {@code fusion}) request: no search pipeline, the coordinator fuses the legs itself. */
+    private Map<String, Object> performFusedSearch(String requestBody, boolean asDlsUser) throws IOException {
+        Response response = performRequest(requestBody, asDlsUser, false);
+        assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
+        return responseAsMap(response);
+    }
+
     private Response performRequest(String requestBody, boolean asDlsUser) throws IOException {
+        return performRequest(requestBody, asDlsUser, true);
+    }
+
+    private Response performRequest(String requestBody, boolean asDlsUser, boolean withSearchPipeline) throws IOException {
         Request request = new Request("POST", "/" + INDEX_NAME + "/_search");
-        request.addParameter("search_pipeline", SEARCH_PIPELINE_NAME);
+        if (withSearchPipeline) {
+            request.addParameter("search_pipeline", SEARCH_PIPELINE_NAME);
+        }
         request.setJsonEntity(requestBody);
         if (asDlsUser) {
             RequestOptions.Builder options = RequestOptions.DEFAULT.toBuilder();
@@ -456,6 +503,96 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
                       }
                     }
                   ]
+                }
+              }
+            }
+            """, modelId);
+    }
+
+    private String fusedHybridRequest() {
+        return """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    { "term": { "signal": "alpha" } },
+                    { "term": { "signal": "beta" } }
+                  ],
+                  "fusion": {
+                    "normalization": { "technique": "min_max" },
+                    "combination": { "technique": "arithmetic_mean" }
+                  }
+                }
+              },
+              "aggs": {
+                "visible_access": {
+                  "terms": { "field": "access" }
+                }
+              }
+            }
+            """;
+    }
+
+    private String fusedNeuralRequest(String modelId) {
+        return String.format(Locale.ROOT, """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    {
+                      "neural": {
+                        "neural_embedding": {
+                          "query_text": "document",
+                          "model_id": "%s",
+                          "k": 10,
+                          "filter": { "term": { "visibility": "public" } }
+                        }
+                      }
+                    }
+                  ],
+                  "fusion": {
+                    "normalization": { "technique": "min_max" },
+                    "combination": { "technique": "arithmetic_mean" }
+                  }
+                }
+              }
+            }
+            """, modelId);
+    }
+
+    private String fusedKnnAndNeuralRequest(String modelId) {
+        return String.format(Locale.ROOT, """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    {
+                      "knn": {
+                        "knn_embedding": {
+                          "vector": [1.0, 0.0],
+                          "k": 10,
+                          "filter": { "term": { "visibility": "public" } }
+                        }
+                      }
+                    },
+                    {
+                      "neural": {
+                        "neural_embedding": {
+                          "query_text": "document",
+                          "model_id": "%s",
+                          "k": 10,
+                          "filter": { "term": { "visibility": "public" } }
+                        }
+                      }
+                    }
+                  ],
+                  "fusion": {
+                    "normalization": { "technique": "min_max" },
+                    "combination": { "technique": "arithmetic_mean" }
+                  }
                 }
               }
             }
