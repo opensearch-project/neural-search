@@ -460,7 +460,8 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
     /**
      * Collects the fused {@code hybrid} queries this request fans out itself, in walk order. Descends for itself and keys
      * by identity, because core's {@code visit} implementations disagree about recursing — see
-     * {@code HybridQueryBuilder.LegSearchCounter}, which uses the same shape for the fan-out ceiling.
+     * {@code HybridQueryBuilder.LegSearchCounter}, which uses the same shape for the fan-out ceiling — and reads a
+     * {@code neural_knn}'s filter, which its {@code visit} does not expose ({@link HybridQueryBuilder#neuralKnnFilter}).
      *
      * <p>The walk stops at a fused hybrid rather than descending into it. A fused hybrid below another one is a leg of
      * that one, and a leg sub-search is a search action of its own: it re-enters this filter, gets its own merger, and
@@ -486,6 +487,10 @@ public class HybridQuerySearchRequestFilter implements ActionFilter {
                 return;
             }
             queryBuilder.visit(this);
+            QueryBuilder neuralKnnFilter = HybridQueryBuilder.neuralKnnFilter(queryBuilder);
+            if (Objects.nonNull(neuralKnnFilter)) {
+                accept(neuralKnnFilter);
+            }
         }
 
         @Override

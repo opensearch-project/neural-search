@@ -180,7 +180,11 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
             node.getQueryName()
         );
         assertEquals("2 legs, window 11, min_max / arithmetic_mean", node.getLuceneDescription());
-        assertEquals("the node's time is the whole coordinator span for this hybrid", 20L + 30L + 40L + 50L + 60L + 70L, node.getTime());
+        assertEquals(
+            "the node's time is the whole coordinator span for this hybrid",
+            10L + 20L + 30L + 40L + 50L + 60L + 70L,
+            node.getTime()
+        );
         assertEquals("the phases are leaves", List.of(), node.getProfiledChildren());
     }
 
@@ -199,9 +203,21 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
 
         Map<String, Long> breakdown = node.getTimeBreakdown();
         assertEquals(
-            List.of("fan_out_build", "fan_out_wait", "union_count_wait", "window_merge", "fuse_scores", "rank_window", "substitute_build"),
+            List.of(
+                "legs_resolve_wait",
+                "fan_out_build",
+                "fan_out_wait",
+                "union_count_wait",
+                "window_merge",
+                "fuse_scores",
+                "rank_window",
+                "substitute_build"
+            ),
             new ArrayList<>(breakdown.keySet())
         );
+        // Resolving the legs is the first thing the coordinator waits on, and the one phase no shard entry can account for:
+        // a neural leg's model call happens here. Zero on every request whose legs have nothing to resolve.
+        assertEquals(Long.valueOf(10L), breakdown.get("legs_resolve_wait"));
         assertEquals(Long.valueOf(20L), breakdown.get("fan_out_build"));
         assertEquals(Long.valueOf(30L), breakdown.get("fan_out_wait"));
         // The count round is issued only when it can replace the Tail, so most requests report zero for it — but the phase
@@ -239,8 +255,8 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
             node.getTime(),
             breakdown.values().stream().mapToLong(Long::longValue).sum()
         );
-        // 20 + 30 + 40 + 50 + 60 + 70 = 270 for the spans the fixture sets, plus the count round's 25.
-        assertEquals("the count round's wait is added to the total rather than absorbed into another span", 295L, node.getTime());
+        // 10 + 20 + 30 + 40 + 50 + 60 + 70 = 280 for the spans the fixture sets, plus the count round's 25.
+        assertEquals("the count round's wait is added to the total rather than absorbed into another span", 305L, node.getTime());
     }
 
     /** {@code debug} carries what is not a duration — including each leg's own {@code took} and timeout flag. */
@@ -351,7 +367,8 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
 
     /** Recognizable, distinct spans per phase, so a phase reported under the wrong key is visible. */
     private static FusedCoordinatorTimings timings() {
-        FusedCoordinatorTimings timings = new FusedCoordinatorTimings().fanOutBuildNanos(20L)
+        FusedCoordinatorTimings timings = new FusedCoordinatorTimings().legsResolveWaitNanos(10L)
+            .fanOutBuildNanos(20L)
             .fanOutWaitNanos(30L)
             .windowMergeNanos(40L)
             .fuseScoresNanos(50L)

@@ -200,7 +200,10 @@ public final class FusedLegProfileMerger {
      * do not share a name.
      *
      * <p>{@code breakdown} carries the phases, and they are leaves: they sum to the node's own time, with nothing counted
-     * twice. {@code fan_out_wait} is the one to read carefully — it is elapsed time containing the legs' own execution,
+     * twice. Two of them are waits to read carefully. {@code legs_resolve_wait} runs until the last leg was dispatched and
+     * contains the legs' own coordinator-side resolution — a {@code neural} leg's model inference above all — which no shard
+     * entry reports, so it is the one place that cost is visible; legs that had nothing to resolve are already executing
+     * inside it. {@code fan_out_wait} runs from that last dispatch to the last response and contains the legs' own execution,
      * which the {@code [fused:hybrid_N.leg_M]} entries report per shard, so it is a wait to attribute rather than a cost to
      * add to them. {@code debug} carries what is not a duration: the window, what survived into it, whether round 2 needed
      * a Tail, and each leg's own {@code took} and {@code timed_out} — the last of which is the only place a soft-timeout leg
@@ -214,6 +217,7 @@ public final class FusedLegProfileMerger {
      */
     private static ProfileShardResult synthesize(final FusedCoordinatorTimings timings) {
         Map<String, Long> breakdown = new LinkedHashMap<>();
+        breakdown.put("legs_resolve_wait", timings.legsResolveWaitNanos());
         breakdown.put("fan_out_build", timings.fanOutBuildNanos());
         breakdown.put("fan_out_wait", timings.fanOutWaitNanos());
         breakdown.put("union_count_wait", timings.unionCountWaitNanos());

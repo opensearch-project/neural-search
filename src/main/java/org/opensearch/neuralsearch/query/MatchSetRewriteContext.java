@@ -15,7 +15,8 @@ import org.opensearch.index.query.QueryRewriteContext;
  * contribute what it matches instead.
  *
  * <p>Its one user is {@link HybridFusionQueryBuilder}, which rewrites the Tail (and the inner_hits sources) under this
- * context. Those hold the enclosing query's original leg builders, so a leg that is itself a fused
+ * context. Those hold the enclosing query's leg builders (resolved ahead of the fan-out, see {@link FusedLegResolver}, but a
+ * fused hybrid among them is left as written there), so a leg that is itself a fused
  * {@link HybridQueryBuilder} would otherwise reach {@code doRewriteFused} a <i>second</i> time and fire its legs again —
  * once as the enclosing query's leg sub-search, and once more here. That doubling compounds per nesting level: a chain
  * of fused hybrids {@code D} deep costs {@code 2^(D+1) - 2} leg sub-searches while its request body grows only linearly,

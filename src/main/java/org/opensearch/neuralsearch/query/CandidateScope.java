@@ -720,6 +720,15 @@ final class CandidateScope {
      *       index. Copying the request's indices alongside a PIT is safe: core's REST layer has already resolved a PIT
      *       request's indices to the PIT's own, and the transport layer derives shards from the PIT context regardless.</li>
      * </ul>
+     *
+     * <p>Note on ANN legs: {@code size} sets how many hits a leg returns, but a {@code knn}/{@code neural} leg with {@code k}
+     * is bounded by its own {@code k}, not by {@code size}: with a small or default {@code k} (10) it contributes at most
+     * that many candidates per shard regardless of {@code windowSize}. This matches classic hybrid, which likewise never
+     * rewrites {@code k}; for a full window, set {@code k >= window_size} on the sub-query. {@code k} is deliberately NOT
+     * rewritten here, since that would diverge from classic. A radial leg ({@code max_distance}/{@code min_score}, no
+     * {@code k}) is different: k-NN's coordinator rewrite copies the request's {@code size} into it, so one resolved against
+     * this request is bounded by {@code windowSize} where k-NN reads that size (see {@code FusedLegResolver}). Classic
+     * hybrid's radial sub-query takes the size of the request itself, its page.
      */
     SearchRequest newLegRequest(final QueryBuilder leg, final int windowSize) {
         SearchSourceBuilder legSource = new SearchSourceBuilder().query(leg).size(windowSize).from(0);

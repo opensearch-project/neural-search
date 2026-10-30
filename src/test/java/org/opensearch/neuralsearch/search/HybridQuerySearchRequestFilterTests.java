@@ -38,6 +38,7 @@ import org.opensearch.index.query.MatchAllQueryBuilder;
 import org.opensearch.index.query.QueryBuilders;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.neuralsearch.query.NeuralKNNQueryBuilder;
 import org.opensearch.neuralsearch.query.ObservedSourceSizes;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
@@ -961,6 +962,28 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
 
         assertNotNull(fused.legProfileConsumer());
         assertNull("and the classic wrapper has no legs of its own to profile", classic.legProfileConsumer());
+    }
+
+    /**
+     * {@code neural_knn} exposes nothing to {@code visit}; the walk reads its filter, so a fused hybrid there is found. A
+     * {@code neural} leg runs resolved, as a {@code neural_knn}, and its leg sub-search re-enters this filter with it.
+     */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenAFusedHybridIsInANeuralKnnFilter_thenItIsFound() {
+        HybridQueryBuilder fused = fusedHybrid();
+        NeuralKNNQueryBuilder neuralKnn = NeuralKNNQueryBuilder.builder()
+            .fieldName("embedding")
+            .vector(new float[] { 1f, 2f })
+            .k(10)
+            .filter(fused)
+            .build();
+
+        SearchRequest searchRequest = new SearchRequest("test_index");
+        searchRequest.source(new SearchSourceBuilder().query(neuralKnn).profile(true));
+
+        proceedListener(searchRequest, mock(ActionListener.class));
+
+        assertNotNull(fused.legProfileConsumer());
     }
 
     /** The response the user gets carries the leg trees, with round 2 relabelled so it cannot read as the user's query. */
