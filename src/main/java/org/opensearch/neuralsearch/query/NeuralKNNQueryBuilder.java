@@ -6,8 +6,12 @@ package org.opensearch.neuralsearch.query;
 
 import lombok.Getter;
 import org.apache.lucene.search.Query;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.core.common.bytes.BytesReference;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
@@ -332,7 +336,15 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
     }
 
     /**
-     * Renders this query as XContent.
+     * Renders this query as XContent, in the form of the inner {@code knn} query.
+     *
+     * <p>Core's {@code AbstractQueryBuilder#rewrite} copies a {@code neural} query's {@code _name} and {@code boost} onto
+     * this builder, not onto the inner {@code knn}, whose render prints only its own. When this builder carries either, the
+     * effective values are printed inside the {@code knn} field object: {@code boost} multiplied by the inner one, and this
+     * builder's {@code _name}, when set, in place of the inner one. A transport round trip puts them in the same place: the
+     * reading constructor hands this builder's boost and name to the inner {@code knn}. The inner {@code knn}'s own boost and
+     * name are not streamed, so the renders before and after a hop agree when the inner {@code knn} carries the defaults, as
+     * the {@code neural} rewrite builds it.
      *
      * @param builder The XContent builder to write to
      * @param params The parameters for rendering
@@ -340,7 +352,25 @@ public class NeuralKNNQueryBuilder extends AbstractQueryBuilder<NeuralKNNQueryBu
      */
     @Override
     protected void doXContent(XContentBuilder builder, Params params) throws IOException {
-        knnQueryBuilder.doXContent(builder, params);
+        if (Objects.isNull(queryName()) && boost() == DEFAULT_BOOST) {
+            knnQueryBuilder.doXContent(builder, params);
+            return;
+        }
+        // Edit the inner render rather than a copy of the inner builder, so no k-NN field has to be copied by hand.
+        Map<String, Object> knnRender;
+        try (XContentBuilder knnBuilder = XContentFactory.jsonBuilder()) {
+            knnQueryBuilder.toXContent(knnBuilder, params);
+            knnRender = XContentHelper.convertToMap(BytesReference.bytes(knnBuilder), true, MediaTypeRegistry.JSON).v2();
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> knnField = (Map<String, Object>) ((Map<String, Object>) knnRender.get(KNNQueryBuilder.NAME)).get(fieldName());
+        knnField.put(BOOST_FIELD.getPreferredName(), boost() * knnQueryBuilder.boost());
+        if (Objects.nonNull(queryName())) {
+            knnField.put(NAME_FIELD.getPreferredName(), queryName());
+        }
+        for (Map.Entry<String, Object> entry : knnRender.entrySet()) {
+            builder.field(entry.getKey(), entry.getValue());
+        }
     }
 
     /**

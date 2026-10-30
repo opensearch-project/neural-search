@@ -96,6 +96,7 @@ import org.opensearch.knn.index.engine.KNNMethodContext;
 import org.opensearch.knn.index.engine.MethodComponentContext;
 import org.opensearch.knn.index.mapper.KNNMappingConfig;
 import org.opensearch.knn.index.mapper.KNNVectorFieldType;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
 
 import com.carrotsearch.randomizedtesting.RandomizedTest;
 
@@ -2256,9 +2257,92 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     /**
+     * Radial legs ({@code max_distance}/{@code min_score}, no {@code k}) that filled the window go into the count's
+     * disjunction as the very builders the fan-out ran. Each was resolved against its leg request, so k-NN sized it at the
+     * window: not at the page (3), and not left unsized as the count's own {@code size: 0} would leave it. The count is
+     * therefore over the same window-bounded match sets as the Tail.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenRadialLegsFilledTheWindow_thenTheCountCarriesThemSizedAtTheWindow() {
+        initClusterUtilWithMaxResultWindow(10000);
+        stubNeuralInference();
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(KNNQueryBuilder.builder().fieldName(VECTOR_FIELD_NAME).vector(new float[] { 1f, 2f, 3f }).maxDistance(1.5f).build());
+        builder.add(NeuralQueryBuilder.builder().fieldName("embedding").queryText("hello").modelId("m1").minScore(0.5f).build());
+        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        builder.fusion(
+            new HashMap<>(
+                Map.of(
+                    "window_size",
+                    4,
+                    "normalization",
+                    Map.of("technique", "min_max"),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean")
+                )
+            )
+        );
+        // Armed, as the count round needs: a hits consumer beside the totals one, and _source:false for the fetch gate.
+        builder.fusedTotalHitsConsumer(total -> {});
+        builder.fusedHitsConsumer(hits -> {});
+        SearchRequest searchRequest = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().size(3).fetchSource(false).query(builder)
+        );
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(searchRequest);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        builder.doRewrite(ctx);
+
+        // Both radial legs fill the window of 4; the lexical leg stays short, which never refuses the count.
+        Map<String, Float> filled = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < 4; i++) {
+            filled.put("n" + i, 0.9f - i / 10.0f);
+        }
+        org.opensearch.action.search.MultiSearchResponse msResponse = new org.opensearch.action.search.MultiSearchResponse(
+            new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                countedLegItem(filled, 4),
+                countedLegItem(filled, 4),
+                countedLegItem(Map.of("2", 0.8f, "3", 0.4f), 20) },
+            10L
+        );
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        List<SearchRequest> legSearches = answerLegSearchesFrom(client, msResponse);
+        java.util.concurrent.atomic.AtomicReference<SearchRequest> countRequest = new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            countRequest.set(invocation.getArgument(0));
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            l.onResponse(countResponse(24, 0, 0, false, null));
+            return null;
+        }).when(client)
+            .search(org.mockito.ArgumentMatchers.argThat(HybridQueryBuilderTests::isCountRequest), org.mockito.ArgumentMatchers.any());
+
+        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
+
+        assertTrue(done.get());
+        assertNotNull("both radial legs filled the window, so the count round is issued", countRequest.get());
+        List<QueryBuilder> disjunction = ((BoolQueryBuilder) countRequest.get().source().query()).should();
+        assertSame("the count carries the radial knn leg the fan-out ran", legSearches.get(0).source().query(), disjunction.get(0));
+        assertEquals("sized at the window", Integer.valueOf(4), ((KNNQueryBuilder) disjunction.get(0)).getSize());
+        assertSame("and the radial neural leg, resolved", legSearches.get(1).source().query(), disjunction.get(1));
+        assertEquals(
+            "sized at the window too",
+            Integer.valueOf(4),
+            ((NeuralKNNQueryBuilder) disjunction.get(1)).getKnnQueryBuilder().getSize()
+        );
+    }
+
+    /**
      * The model is called once for the whole rewrite: the leg is resolved ahead of the fan-out, and the stub above answers
-     * exactly one inference. Shared by the two tests with a real {@code neural} leg; a second call would surface as a
-     * second answer and, in the filled-window test, as a second {@code inferenceSentencesMap} invocation.
+     * exactly one inference. Shared by the tests with a real {@code neural} leg; a second call would surface as a second
+     * answer and, in the filled-window test, as a second {@code inferenceSentencesMap} invocation.
      */
     private MLCommonsClientAccessor stubNeuralInference() {
         MLCommonsClientAccessor mlClient = mock(MLCommonsClientAccessor.class);

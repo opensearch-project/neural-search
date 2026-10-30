@@ -70,15 +70,30 @@ import org.opensearch.transport.client.Client;
  * {@code HybridFusionOrchestrator#groupLegHits} turns into the same {@code [hybrid] fused-mode sub-query N failed: …} with
  * the leg's own status that a failed leg sub-search always produced, so the failure surface is unchanged.
  *
+ * <p><b>A leg that resolving makes declare more leg sub-searches is refused.</b> Resolving parses a {@code wrapper} and
+ * renders a {@code template}, so a fused hybrid that one held would reach the leg sub-search as part of its query and be
+ * admitted there, though the request's leg sub-search budget ({@code HybridQueryBuilder#validateFusedLegSearchBudget})
+ * never counted it. A leg whose resolved form declares more leg sub-searches than it did as written
+ * ({@link HybridQueryBuilder#countFusedLegSearches}) is not run: it is that leg's item failure, with the message of the
+ * request-level reachability check ({@link HybridQueryBuilder#notPartOfRequestQueryMessage}). Counts are compared, not
+ * builders: what a leg sub-search runs never declares more than the request counted for that leg, and a leg whose
+ * resolution drops a counted fused hybrid while bringing out one that declares no more is not refused.
+ *
  * <p><b>The request each leg context carries is the leg's own</b> — {@link CandidateScope#newLegRequest} for that leg, the
  * request its sub-search will run — and not the enclosing request. A rewrite may read more than the indices off it:
- * k-NN's {@code KNNQueryBuilder#doRewrite} resolves a radial query's ({@code max_distance}/{@code min_score}, no {@code k})
- * per-shard result cap from {@code getSearchRequest().source().size()} and bakes it into the builder. The leg sub-search
- * sizes its source at {@code window_size}; the enclosing request is sized at the user's page. Handing a leg the enclosing
- * request would have resolved that cap to the page (10 by default) instead of the window, silently shrinking a radial leg's
- * candidate set, and the leg sub-search's own rewrite could not have corrected it — a builder with its size already set is
- * left alone. With the leg's own request, every read a resolving builder makes — indices, options, size — agrees with what
- * the sub-search would have read, which is the invariant this whole step rests on.
+ * k-NN's {@code KNNQueryBuilder#doRewrite} copies {@code getSearchRequest().source().size()} into a radial query
+ * ({@code max_distance}/{@code min_score}, no {@code k}) as its own {@code size} (10 for an unset size; a size of 0 sets
+ * nothing) and leaves a builder whose size is already set alone. The leg sub-search sizes its source at
+ * {@code window_size}, so a radial leg resolves with {@code size = window_size} whatever the request's {@code size} and
+ * {@code from}, and that builder is what the leg sub-search runs and what the Tail and the union count carry when they keep
+ * the leg as a query. At search time k-NN uses the size only on a field quantized to 1, 2 or 4 bits
+ * ({@code ResolvedIndexSpec#requiresFullPrecisionRadialRescore}), where it caps the quantized first pass at the size times
+ * the oversample factor: there {@code window_size} bounds a radial leg's match set, as {@code k} bounds a {@code knn}
+ * leg's. Resolved against the enclosing request, a radial leg would have been capped at the user's page (10 by default)
+ * instead, and the leg sub-search's own rewrite could not have corrected it. With the leg's own request, every
+ * read a resolving builder makes — indices, options, size — agrees with what the sub-search would have read, which is the
+ * invariant this whole step rests on. The legs of a leg that is itself a fused hybrid are not resolved here: in the
+ * enclosing Tail they are rewritten under the enclosing request, so a radial one there takes that request's size.
  */
 final class FusedLegResolver {
 
@@ -159,9 +174,25 @@ final class FusedLegResolver {
                 allAnswered.onResponse(leg);
                 continue;
             }
+            final int declaredLegSearches = HybridQueryBuilder.countFusedLegSearches(asWritten);
             resolveLeg(asWritten, parent, client, resolutionRequest, new NotifyOnceListener<>() {
                 @Override
                 protected void innerOnResponse(final QueryBuilder resolvedLeg) {
+                    // Resolving parses a wrapper or template in the leg. A fused hybrid one held was not counted against the
+                    // request's leg sub-search budget, so a leg that declares more leg sub-searches resolved than written is
+                    // refused, as the request-level reachability check refuses such a hybrid. The walk runs inside a listener
+                    // that has already been notified, so a failure escaping it would answer no one.
+                    final int resolvedLegSearches;
+                    try {
+                        resolvedLegSearches = HybridQueryBuilder.countFusedLegSearches(resolvedLeg);
+                    } catch (RuntimeException failure) {
+                        innerOnFailure(failure);
+                        return;
+                    }
+                    if (resolvedLegSearches > declaredLegSearches) {
+                        innerOnFailure(new IllegalArgumentException(HybridQueryBuilder.notPartOfRequestQueryMessage()));
+                        return;
+                    }
                     resolved.set(leg, resolvedLeg);
                     SearchRequest legSearch;
                     try {
@@ -191,8 +222,9 @@ final class FusedLegResolver {
 
                 @Override
                 protected void innerOnFailure(final Exception failure) {
-                    // The leg could not be resolved — a model that is not deployed, a wrapper that does not parse. Carried as
-                    // written (the Tail is never built over a failed fan-out) and reported as this leg's failure.
+                    // The leg could not be resolved — a model that is not deployed, a wrapper that does not parse — or it was
+                    // refused or failed to be counted above. Carried as written (the Tail is never built over a failed
+                    // fan-out) and reported as this leg's failure.
                     resolved.set(leg, asWritten);
                     lastDispatchNanos.accumulateAndGet(System.nanoTime(), Math::max);
                     answer(leg, new MultiSearchResponse.Item(null, failure));

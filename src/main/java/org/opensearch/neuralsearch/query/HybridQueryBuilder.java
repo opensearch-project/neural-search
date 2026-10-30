@@ -1154,8 +1154,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // What happens once every leg has answered: fusion over the legs' RESOLVED forms and their responses, the optional
         // count round, and round 2's query. A local rather than the async action itself so that the action below can resolve
         // and run the legs first (FusedLegResolver) and hand what came back here; the body is the fan-out's continuation as
-        // it has always been, reading the resolved legs wherever it used to read the legs as written. The legs' responses
-        // arrive in the MultiSearchResponse shape the fan-out always produced, in leg order.
+        // it has always been, reading the resolved legs wherever it used to read the legs as written, except for whether the
+        // Tail may materialize a leg, which is still read off the leg as written. The legs' responses arrive in the
+        // MultiSearchResponse shape the fan-out always produced, in leg order.
         LegsRunConsumer onLegsRun = (resolvedLegs, multiSearchResponse, client, listener) -> {
             // Fusion, given whatever the union count came to: the counted union when a lazy count-only round ran,
             // else null. Everything after the legs lives here so that the count round — which is conditional, and
@@ -1167,6 +1168,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 HybridFusionOrchestrator.FusedResult result = HybridFusionOrchestrator.buildFusedResult(
                     searchRequest.source(),
                     multiSearchResponse,
+                    legs,
                     resolvedLegs,
                     fusionSpec,
                     window,
@@ -1230,8 +1232,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 // than ahead.
                 // Beyond that gate leg shape is still not a filter: a lexical leg and an ANN leg that filled its
                 // window are both re-executed by the Tail this replaces, so counting them costs no extra graph walk.
-                // The one remaining per-leg refusal is a short `neural` leg that still carries its inference — see that
-                // method for why, and for why a leg resolved here (a `neural_knn` with its vector) is not one.
+                // The per-leg refusals for cost are a short `neural` leg that still carries its inference (a leg
+                // resolved here, a `neural_knn` with its vector, does not) and a leg that holds a fused hybrid, whose
+                // fan-out the count's own search would run again — see that method for why.
                 SearchRequest unionCountSearch = HybridFusionOrchestrator.unionCountRequest(
                     candidateScope,
                     searchRequest.source(),
@@ -1431,7 +1434,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * {@code bool{ should: [Top...], filter: Tail }} with no {@code minimum_should_match}, so its matches are its Tail's —
      * and the Tail is {@code bool{should: legs}}, the union of the legs. The scores differ (this loses them entirely), which
      * is exactly why this form is only ever used where scores are not read: inside the enclosing query's Tail
-     * {@code filter}. A doc that this bool matches while the real fused query would not (or the reverse) does not exist.
+     * {@code filter}. A doc that this bool matches while the real fused query would not (or the reverse) does not exist,
+     * with one exception: a radial k-NN leg handed over here is rewritten under the enclosing request and takes that
+     * request's size, while the fused query's own resolution sizes it at this hybrid's window ({@link FusedLegResolver});
+     * where k-NN reads that size, the two match sets can differ.
      *
      * <p>The legs are handed over as-is rather than rewritten here — the caller's rewrite loop keeps going. The one
      * exception is a leg that is itself a fused hybrid: it contributes <i>its</i> match set in this same pass, rather than
@@ -1573,6 +1579,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * than conservative — the shapes given up are the ones whose fan-out cannot be bounded, and each has the same body
      * written without that carrier as its remedy.
      *
+     * <p>A {@code wrapper} or {@code template} in a fused hybrid's leg is parsed on this coordinator before the leg
+     * sub-search runs ({@link FusedLegResolver}), which would put the hybrid it holds in that sub-search's own query, where
+     * this walk finds it. The resolver refuses a leg that declares more leg sub-searches resolved than as written, with this
+     * method's message ({@link #notPartOfRequestQueryMessage}).
+     *
      * <p>Inside the request's {@code query} this stays looser than what classic mode enforces shard-side
      * ({@code hybrid query must be a top level query and cannot be wrapped into other queries} —
      * {@code org.opensearch.neuralsearch.util.HybridQueryUtil}, which admits only the top level and the first clause of a
@@ -1584,22 +1595,28 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         if (Objects.nonNull(searchRequest.source()) && isReachableFrom(searchRequest.source().query())) {
             return;
         }
-        throw new IllegalArgumentException(
-            String.format(
-                Locale.ROOT,
-                "[%s] query [%s] must be part of the request's [query] and reachable within it, so that the leg "
-                    + "sub-searches it fans out can be counted. It is not: either it is in another position of the body "
-                    + "— [post_filter], an aggregation filter, a sort, [rescore] or a highlight query, none of which is "
-                    + "counted — in which case use a [bool] query with the same clauses as [should] there instead, which "
-                    + "matches what this [%s] matches but scores that disjunction rather than a fused combination; or it "
-                    + "is inside a query that carries its inner query without exposing it ([wrapper] carries it as bytes, "
-                    + "[template] as a map it parses in a later rewrite round), in which case write the [%s] directly "
-                    + "rather than through that query",
-                NAME,
-                FUSION_FIELD.getPreferredName(),
-                NAME,
-                NAME
-            )
+        throw new IllegalArgumentException(notPartOfRequestQueryMessage());
+    }
+
+    /**
+     * The message {@link #requireFusedQueryIsPartOfRequestQuery} refuses with. Package-private for {@link FusedLegResolver},
+     * which refuses with it a leg whose resolution brought out a fused hybrid.
+     */
+    static String notPartOfRequestQueryMessage() {
+        return String.format(
+            Locale.ROOT,
+            "[%s] query [%s] must be part of the request's [query] and reachable within it, so that the leg "
+                + "sub-searches it fans out can be counted. It is not: either it is in another position of the body "
+                + "— [post_filter], an aggregation filter, a sort, [rescore] or a highlight query, none of which is "
+                + "counted — in which case use a [bool] query with the same clauses as [should] there instead, which "
+                + "matches what this [%s] matches but scores that disjunction rather than a fused combination; or it "
+                + "is inside a query that carries its inner query without exposing it ([wrapper] carries it as bytes, "
+                + "[template] as a map it parses in a later rewrite round), in which case write the [%s] directly "
+                + "rather than through that query",
+            NAME,
+            FUSION_FIELD.getPreferredName(),
+            NAME,
+            NAME
         );
     }
 
@@ -1661,6 +1678,22 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
+     * The filter of a {@code neural_knn} query, or {@code null} when {@code queryBuilder} is not one or has none.
+     *
+     * <p>{@link NeuralKNNQueryBuilder} does not override {@link QueryBuilder#visit}, so a walk sees the builder and nothing
+     * below it, while the {@code neural} query it is rewritten from exposes the same filter as a child. A {@code neural} leg
+     * on a dense vector field runs in that rewritten form ({@link FusedLegResolver}), so a fused hybrid in its filter sits
+     * under a {@code neural_knn} in the leg sub-search. The fused walks read the filter through this and descend into it as
+     * into any other child. Public for {@code HybridQuerySearchRequestFilter}, which is in another package.
+     */
+    public static QueryBuilder neuralKnnFilter(final QueryBuilder queryBuilder) {
+        if (queryBuilder instanceof NeuralKNNQueryBuilder neuralKnnQueryBuilder) {
+            return neuralKnnQueryBuilder.getKnnQueryBuilder().getFilter();
+        }
+        return null;
+    }
+
+    /**
      * Looks for one exact query builder instance in a query tree.
      *
      * <p>The descent is this visitor's own: {@code accept} calls {@link QueryBuilder#visit} on whatever it is handed,
@@ -1668,8 +1701,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * not agree on descending. Five recurse — {@code bool}, {@code dis_max}, {@code constant_score}, {@code nested} and
      * {@code function_score} call {@code child.visit(subVisitor)} — while {@code boosting}, {@code script_score} and the
      * {@code span_*} builders hand their inner query to {@code accept} and stop there, and the builders that do not
-     * override {@code visit} expose nothing at all. Trusting them truncates the walk one level below the second group,
-     * which {@link #validateFusedLegSearchBudget} reads as an absence of legs rather than as an unknown: a chain of fused
+     * override {@code visit} expose nothing at all; of those, a {@code neural_knn}'s filter is read through
+     * {@link #neuralKnnFilter}. Trusting them truncates the walk one level below the second group, which
+     * {@link #validateFusedLegSearchBudget} reads as an absence of legs rather than as an unknown: a chain of fused
      * hybrids each written one level under a {@code boosting} counted {@code 2 x width} leg sub-searches at every depth,
      * was admitted on that number, and then served {@code width} per level — because each leg sub-search re-roots
      * this same walk at its own leg, where the next level is the root and trivially reachable. The ceiling held per
@@ -1697,6 +1731,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             }
             found = found || queryBuilder == target;
             queryBuilder.visit(this);
+            QueryBuilder neuralKnnFilter = neuralKnnFilter(queryBuilder);
+            if (Objects.nonNull(neuralKnnFilter)) {
+                accept(neuralKnnFilter);
+            }
         }
 
         @Override
@@ -1725,10 +1763,13 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * out. Nesting is walked through {@link QueryBuilder#visit}, descended by {@link LegSearchCounter} itself so that a
      * builder which exposes a child without recursing into it cannot truncate the count one level below itself. That one
      * number can be read off the request's query alone is what {@link #requireFusedQueryIsPartOfRequestQuery} makes true:
-     * it refuses every fused hybrid this same walk cannot see — in another rewritten position of the body, or inside a
-     * query that carries its inner query without exposing it — so the count is exact rather than a lower bound, and each
-     * leg sub-search's own count of its own leg is a part of it rather than a fresh budget. That leaves total cost linear
-     * in the size of the body the user had to spell out, which is the property this guard exists to keep.
+     * it refuses a fused hybrid this same walk cannot see — in another rewritten position of the body, or inside a query
+     * that carries its inner query without exposing it. A {@code wrapper} or {@code template} in a leg is rewritten into
+     * the query it holds before that leg's sub-search runs ({@link FusedLegResolver}), where a hybrid it held is part of
+     * the sub-search's query; the resolver refuses a leg whose resolved form declares more leg sub-searches than the leg as
+     * written. So what fans out never exceeds the count, and each leg sub-search's own count of its own leg is a part of it
+     * rather than a fresh budget. That leaves total cost linear in the size of the body the user had to spell out, which is
+     * the property this guard exists to keep.
      */
     private static void validateFusedLegSearchBudget(final SearchRequest searchRequest) {
         if (Objects.isNull(searchRequest.source())) {
@@ -1785,9 +1826,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     /**
      * Counts the legs of every fused hybrid it is shown. One instance walks the whole tree — it hands itself back as the
      * child visitor and descends into each builder it is handed, so a nested fused hybrid is counted at every depth,
-     * including under a builder that exposes a child without recursing into it. Keyed by identity, so a builder is counted
-     * once however many ways the walk reaches it; a body parsed from a request has a distinct builder per clause, which is
-     * what makes that the same thing as counting what the user wrote.
+     * including under a builder that exposes a child without recursing into it, and in a {@code neural_knn}'s filter
+     * ({@link #neuralKnnFilter}). Keyed by identity, so a builder is counted once however many ways the walk reaches it;
+     * a body parsed from a request has a distinct builder per clause, which is what makes that the same thing as
+     * counting what the user wrote.
      */
     private static final class LegSearchCounter implements QueryBuilderVisitor {
         private final Set<QueryBuilder> entered = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -1802,6 +1844,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 legSearches += ((HybridQueryBuilder) queryBuilder).queries().size();
             }
             queryBuilder.visit(this);
+            QueryBuilder neuralKnnFilter = neuralKnnFilter(queryBuilder);
+            if (Objects.nonNull(neuralKnnFilter)) {
+                accept(neuralKnnFilter);
+            }
         }
 
         @Override
@@ -1840,8 +1886,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     /**
      * Finds a hybrid query of the given mode at any depth, descending the way {@link LegSearchCounter} does: it hands
      * itself back as the child visitor and descends into each builder it is handed, keyed by identity. It also reads the
-     * query a {@code wrapper} or {@code template} query holds, without rewriting it. A query that a builder's own
-     * {@code visit} does not hand out, such as the filter of a {@code function_score} function, is not inspected.
+     * query a {@code wrapper} or {@code template} query holds, without rewriting it, and a {@code neural_knn}'s filter
+     * ({@link #neuralKnnFilter}). Any other query that a builder's own {@code visit} does not hand out, such as the filter
+     * of a {@code function_score} function, is not inspected.
      */
     private static final class NestedHybridModeFinder implements QueryBuilderVisitor {
         private final Set<QueryBuilder> entered = Collections.newSetFromMap(new IdentityHashMap<>());
@@ -1869,6 +1916,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 return;
             }
             queryBuilder.visit(this);
+            QueryBuilder neuralKnnFilter = neuralKnnFilter(queryBuilder);
+            if (Objects.nonNull(neuralKnnFilter)) {
+                accept(neuralKnnFilter);
+            }
         }
 
         @Override

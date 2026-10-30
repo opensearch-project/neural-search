@@ -27,9 +27,9 @@ import lombok.SneakyThrows;
  * the ML plugin's own predict counter for the model), it fuses correctly beside a lexical leg, and the
  * {@code neural_sparse_two_phase_processor} leaves a hybrid request unchanged, so attaching its pipeline changes nothing.
  *
- * <p>Two Tail shapes are covered. With the default window the sparse leg returns its whole match set and is <em>materialized</em>
- * into the Tail as the ids it returned; with a window of two it fills the window and is kept in the Tail as a query. Either way
- * the resolved leg carries its tokens, so round 2's rewrite has nothing left to infer.
+ * <p>Two windows are covered. With the default window the sparse leg returns its whole match set; with a window of two it fills
+ * the window. Either way the Tail carries it as the query it resolved to, since a leg written as {@code neural_sparse} is not
+ * materialized, and the resolved leg carries its tokens, so round 2's rewrite has nothing left to infer.
  */
 public class HybridQueryFusedModeNeuralSparseIT extends BaseNeuralSearchIT {
 
@@ -46,18 +46,19 @@ public class HybridQueryFusedModeNeuralSparseIT extends BaseNeuralSearchIT {
 
     @SneakyThrows
     @SuppressWarnings("unchecked")
-    public void testFusedNeuralSparseLeg_whenMaterializedOrCarriedByTheTail_thenOneInferenceAndCorrectFusion() {
+    public void testFusedNeuralSparseLeg_whenShortOrFillingTheWindow_thenOneInferenceAndCorrectFusion() {
         String modelId = prepareSparseEncodingModel();
         try {
             prepareDataset();
             // A plain sparse search first, so that model loading and first-call effects are attributed to no arm.
             search(plainSparse(modelId), null);
 
-            // Arm 1: default window -- the sparse leg returns all six documents, fewer than the window, and is materialized.
-            Map<String, Object>[] materialized = new Map[1];
-            int inferences = predictsDuring(modelId, () -> materialized[0] = search(fused(modelId, 10, 100), null));
-            assertEquals("materialized sparse leg: one inference", 1, inferences);
-            assertFusedUnion(materialized[0], DOCS);
+            // Arm 1: default window -- the sparse leg returns all six documents, fewer than the window, and the Tail carries
+            // it as the resolved query.
+            Map<String, Object>[] shortLeg = new Map[1];
+            int inferences = predictsDuring(modelId, () -> shortLeg[0] = search(fused(modelId, 10, 100), null));
+            assertEquals("short sparse leg carried by the Tail: one inference", 1, inferences);
+            assertFusedUnion(shortLeg[0], DOCS);
 
             // Arm 2: a window of two -- the sparse leg fills it and is kept in the Tail as a query, the shape that re-inferred.
             Map<String, Object>[] carried = new Map[1];
@@ -74,7 +75,7 @@ public class HybridQueryFusedModeNeuralSparseIT extends BaseNeuralSearchIT {
             inferences = predictsDuring(modelId, () -> twoPhase[0] = search(fused(modelId, 10, 100), TWO_PHASE_PIPELINE));
             assertEquals("through the two-phase pipeline: one inference", 1, inferences);
             assertFusedUnion(twoPhase[0], DOCS);
-            assertEquals("same documents in the same order as without the pipeline", ids(materialized[0]), ids(twoPhase[0]));
+            assertEquals("same documents in the same order as without the pipeline", ids(shortLeg[0]), ids(twoPhase[0]));
 
             // Control: a plain neural_sparse query infers once.
             inferences = predictsDuring(modelId, () -> search(plainSparse(modelId), null));

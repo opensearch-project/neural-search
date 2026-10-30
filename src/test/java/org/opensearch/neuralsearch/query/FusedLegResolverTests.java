@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -35,14 +36,19 @@ import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.NamedXContentRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.AbstractQueryBuilder;
+import org.opensearch.index.query.BaseQueryRewriteContext;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
 import org.opensearch.index.query.QueryCoordinatorContext;
 import org.opensearch.index.query.QueryRewriteContext;
 import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.WrapperQueryBuilder;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
+import org.opensearch.neuralsearch.util.TestUtils;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.builder.SearchSourceBuilder;
@@ -196,6 +202,63 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
         verify(client, never()).multiSearch(any(), any());
     }
 
+    /**
+     * A {@code wrapper} leg holding a fused hybrid resolves into a leg that declares leg sub-searches the leg as written did
+     * not. It is refused as that leg's item failure, with the request-level reachability check's message, carried as
+     * written and not run; the sibling runs.
+     */
+    public void testResolveAndRun_whenResolvingALegBringsOutAFusedHybrid_thenItIsRefusedCarriedAsWrittenAndNotRun() {
+        // Parsing a hybrid reads the cluster's minimum node version and counts the query in the event stats.
+        NeuralSearchClusterTestUtils.setUpClusterService();
+        TestUtils.initializeEventStatsManager();
+        QueryRewriteContext parent = parentContext();
+        when(parent.getXContentRegistry()).thenReturn(queryParsingRegistry());
+        WrapperQueryBuilder wrapper = new WrapperQueryBuilder(
+            "{\"hybrid\":{\"fusion\":{},\"queries\":[{\"match\":{\"" + FIELD + "\":\"hello\"}}]}}"
+        );
+        TermQueryBuilder lexical = new TermQueryBuilder(FIELD, "a");
+        List<SearchRequest> dispatched = answerSearchesAtOnce();
+
+        FusedLegResolver.LegsRun run = resolveAndRun(List.of(wrapper, lexical), parent);
+
+        Exception refusal = run.responses().getResponses()[0].getFailure();
+        assertTrue(String.format(Locale.ROOT, "refused as a bad request: %s", refusal), refusal instanceof IllegalArgumentException);
+        assertEquals(HybridQueryBuilder.notPartOfRequestQueryMessage(), refusal.getMessage());
+        assertSame("carried as written", wrapper, run.resolvedLegs().get(0));
+        assertEquals("only the sibling ran", 1, dispatched.size());
+        assertSame(lexical, dispatched.get(0).source().query());
+    }
+
+    /**
+     * The resolved leg's count runs inside a listener core has already notified, so an exception escaping it would answer no
+     * one and the request would wait forever. It is that leg's item failure instead, carried as written and not run; the
+     * sibling runs.
+     */
+    public void testResolveAndRun_whenTheResolvedLegCannotBeCounted_thenItIsThatLegsItemFailureAndNotRun() {
+        IllegalStateException brokenVisit = new IllegalStateException("broken visit");
+        QueryBuilder uncountable = new TermQueryBuilder(FIELD, "b") {
+            @Override
+            public void visit(final QueryBuilderVisitor visitor) {
+                throw brokenVisit;
+            }
+        };
+        QueryBuilder asWritten = new TermQueryBuilder(FIELD, "a") {
+            @Override
+            protected QueryBuilder doRewrite(final QueryRewriteContext queryRewriteContext) {
+                return uncountable;
+            }
+        };
+        TermQueryBuilder lexical = new TermQueryBuilder(FIELD, "c");
+        List<SearchRequest> dispatched = answerSearchesAtOnce();
+
+        FusedLegResolver.LegsRun run = resolveAndRun(List.of(asWritten, lexical), parentContext());
+
+        assertSame("the walk's exception is the leg's item failure", brokenVisit, run.responses().getResponses()[0].getFailure());
+        assertSame("carried as written", asWritten, run.resolvedLegs().get(0));
+        assertEquals("only the sibling ran", 1, dispatched.size());
+        assertSame(lexical, dispatched.get(0).source().query());
+    }
+
     /** The marker is not applied where no fan-out can happen, and never stacks on itself. */
     public void testLegPreparationContext_whenThereIsNothingToMark_thenTheContextIsUnchanged() {
         QueryRewriteContext plainContext = mock(QueryRewriteContext.class);
@@ -235,6 +298,24 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
         assertEquals("over the request's indices", List.of("index"), List.of(seen.indices()));
         assertEquals("with the search pipeline off, as a leg runs", "_none", seen.pipeline());
         assertSame("the leg request carries the leg itself", recording, seen.source().query());
+    }
+
+    /**
+     * A canary for the k-NN behavior the radial window bound rests on: under a coordinator context, a radial query
+     * ({@code max_distance}/{@code min_score}, no {@code k}) takes the request's {@code size} as its own, 10 for an unset
+     * size and nothing for {@code 0}, and a builder whose size is set keeps it under any later request. That is why a radial
+     * leg resolved against its leg request is sized at the window in the fan-out, the Tail and the union count alike.
+     */
+    public void testKnnRewrite_whenARadialQueryIsRewrittenForARequest_thenItTakesThatRequestsSizeOnce() throws IOException {
+        KNNQueryBuilder radial = KNNQueryBuilder.builder().fieldName(FIELD).vector(new float[] { 1f, 2f }).maxDistance(1.5f).build();
+
+        QueryBuilder sized = radial.rewrite(coordinatorContextFor(new SearchSourceBuilder().size(WINDOW)));
+
+        assertEquals("the request's size becomes the query's", Integer.valueOf(WINDOW), ((KNNQueryBuilder) sized).getSize());
+        QueryBuilder defaulted = radial.rewrite(coordinatorContextFor(new SearchSourceBuilder()));
+        assertEquals("an unset size is taken as 10", Integer.valueOf(10), ((KNNQueryBuilder) defaulted).getSize());
+        assertSame("size 0 sets nothing", radial, radial.rewrite(coordinatorContextFor(new SearchSourceBuilder().size(0))));
+        assertSame("a size already set is kept", sized, sized.rewrite(coordinatorContextFor(new SearchSourceBuilder().size(3))));
     }
 
     // ------------------------------------------- resolve and run: overlapped dispatch -------------------------------------------
@@ -444,6 +525,12 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
         return dispatched;
     }
 
+    /** A real coordinator context, not a mock, for a request with {@code source}. */
+    private static QueryCoordinatorContext coordinatorContextFor(final SearchSourceBuilder source) {
+        BaseQueryRewriteContext base = new BaseQueryRewriteContext(null, null, null, () -> 0L);
+        return new QueryCoordinatorContext(base, new SearchRequest("index").source(source));
+    }
+
     /** The context the hybrid is being rewritten under: a coordinator context for {@link #searchRequest}. */
     private QueryCoordinatorContext parentContext() {
         QueryCoordinatorContext parent = mock(QueryCoordinatorContext.class);
@@ -455,7 +542,16 @@ public class FusedLegResolverTests extends OpenSearchTestCase {
     private NamedXContentRegistry queryParsingRegistry() {
         return new NamedXContentRegistry(
             List.of(
-                new NamedXContentRegistry.Entry(QueryBuilder.class, new ParseField(MatchQueryBuilder.NAME), MatchQueryBuilder::fromXContent)
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(MatchQueryBuilder.NAME),
+                    MatchQueryBuilder::fromXContent
+                ),
+                new NamedXContentRegistry.Entry(
+                    QueryBuilder.class,
+                    new ParseField(HybridQueryBuilder.NAME),
+                    HybridQueryBuilder::fromXContent
+                )
             )
         );
     }

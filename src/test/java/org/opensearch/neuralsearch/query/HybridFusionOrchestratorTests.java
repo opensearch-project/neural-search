@@ -8,9 +8,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.TotalHits;
@@ -28,9 +30,12 @@ import org.opensearch.core.concurrency.OpenSearchRejectedExecutionException;
 import org.opensearch.core.index.Index;
 import org.opensearch.core.index.shard.ShardId;
 import org.opensearch.core.rest.RestStatus;
+import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.index.query.ConstantScoreQueryBuilder;
 import org.opensearch.search.SearchShardTarget;
 import org.opensearch.index.query.BoolQueryBuilder;
+import org.opensearch.index.query.BoostingQueryBuilder;
+import org.opensearch.index.query.DisMaxQueryBuilder;
 import org.opensearch.index.query.IdsQueryBuilder;
 import org.opensearch.index.query.MatchNoneQueryBuilder;
 import org.opensearch.index.query.MatchAllQueryBuilder;
@@ -39,11 +44,15 @@ import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.TermQueryBuilder;
 import org.opensearch.index.query.InnerHitBuilder;
+import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
+import org.opensearch.index.query.functionscore.ScoreFunctionBuilders;
+import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
 import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.neuralsearch.processor.normalization.RRFScoreNormalizer;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.profile.FastPathDecision;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
+import org.opensearch.script.Script;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.aggregations.AggregationBuilders;
@@ -630,6 +639,28 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         return new SearchSourceBuilder().aggregation(org.opensearch.search.aggregations.AggregationBuilders.terms("t").field("f"));
     }
 
+    /** As the fan-out calls it: the legs as written beside their resolved forms, which differ where resolution changed one. */
+    private QueryBuilder fusedOverResolvedLegs(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> writtenLegs,
+        List<QueryBuilder> resolvedLegs,
+        int window
+    ) {
+        return HybridFusionOrchestrator.buildFusedQuery(
+            source,
+            ms,
+            writtenLegs,
+            resolvedLegs,
+            minMaxArithmetic(),
+            window,
+            new FusedCoordinatorTimings(),
+            new FusedDocExplanations(),
+            null,
+            null
+        );
+    }
+
     private BoolQueryBuilder tailOf(QueryBuilder fused) {
         return (BoolQueryBuilder) ((HybridFusionQueryBuilder) fused).buildSelfErasedQuery().filter().get(0);
     }
@@ -666,56 +697,52 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     /**
      * A chunking-enabled semantic field's {@code neural} leg arrives resolved as {@code nested(chunks, neural_knn)}: the ANN
      * walk is over the chunks, the hits are the parents. Seen through, so a short one is addressed by its parent ids rather than
-     * re-walking the chunk graph in the Tail — exactly what a flat kNN leg gets. A {@code nested} around a lexical query is not
-     * materialized: re-running it is cheap, and the cost filter is all this is.
+     * re-walking the chunk graph in the Tail — exactly what a flat kNN leg gets. A {@code nested} leg the user wrote resolves to
+     * the same shape and is still kept as the real query: only a leg written as {@code knn}, {@code neural} or
+     * {@code neural_knn} is materialized, so what any other leg reports in {@code matched_queries} stays its own.
      */
-    public void testBuildFusedQuery_nestedKnnLeg_materializedByParentIds_nestedLexicalLegKept() {
-        QueryBuilder nestedKnn = new NestedQueryBuilder("chunks", legNamed("neural_knn"), ScoreMode.Max);
-        QueryBuilder nestedLexical = new NestedQueryBuilder("chunks", new MatchQueryBuilder("chunks.text", "hello"), ScoreMode.Max);
-        List<QueryBuilder> legs = List.of(nestedLexical, nestedKnn);
+    public void testBuildFusedQuery_whenALegResolvedToANestedNeuralKnn_thenItIsMaterializedOnlyIfWrittenAsNeural() {
+        QueryBuilder fromNeural = new NestedQueryBuilder("chunks", legNamed("neural_knn"), ScoreMode.Max);
+        QueryBuilder fromNested = new NestedQueryBuilder("chunks", legNamed("neural_knn"), ScoreMode.Max);
+        List<QueryBuilder> written = List.of(legNamed("neural"), new NestedQueryBuilder("chunks", legNamed("neural"), ScoreMode.Max));
         MultiSearchResponse ms = multiSearch(
-            legItemFromIndex(INDEX, Map.of("1", 0.9f)),
-            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f)),
+            legItemFromIndex(INDEX, Map.of("1", 0.9f))
         );
 
-        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
+        QueryBuilder fused = fusedOverResolvedLegs(sourceWithAggregation(), ms, written, List.of(fromNeural, fromNested), 10);
 
         BoolQueryBuilder tail = tailOf(fused);
-        assertEquals(2, tail.should().size());
-        assertSame("a nested lexical leg stays a real query", nestedLexical, tail.should().get(0));
-        assertAddressedTo(tail.should().get(1), INDEX, "2", "3");
+        assertAddressedTo(tail.should().get(0), INDEX, "2", "3");
+        assertSame("short, but written as nested", fromNested, tail.should().get(1));
     }
 
     /**
      * A {@code neural} leg over a {@code rank_features} semantic field arrives resolved as {@code neural_sparse}. Short, it has
      * returned its whole match set and is addressed by ids, as the unresolved {@code neural} it used to arrive as was; filled,
      * the truncation test keeps it as the real query — the shape whose match set is every document holding a query token, and
-     * the one that was once materialized on the strength of a name alone.
+     * the one that was once materialized on the strength of a name alone. A {@code neural_sparse} leg the user wrote is kept as
+     * the real query even when short, as it was before the legs were resolved.
      */
-    public void testBuildFusedQuery_neuralSparseLeg_materializedWhenShort_keptWhenItFilledTheWindow() {
+    public void testBuildFusedQuery_whenALegResolvedToNeuralSparse_thenOnlyAShortOneWrittenAsNeuralIsMaterialized() {
+        QueryBuilder fromNeural = legNamed("neural_sparse");
         QueryBuilder sparse = legNamed("neural_sparse");
-        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), sparse);
-
-        QueryBuilder shortRun = HybridFusionOrchestrator.buildFusedQuery(
-            sourceWithAggregation(),
-            multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))),
-            legs,
-            minMaxArithmetic(),
-            10
+        List<QueryBuilder> written = List.of(legNamed("neural"), legNamed("neural_sparse"));
+        List<QueryBuilder> resolved = List.of(fromNeural, sparse);
+        MultiSearchResponse ms = multiSearch(
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f)),
+            legItemFromIndex(INDEX, Map.of("1", 0.9f))
         );
-        assertAddressedTo(tailOf(shortRun).should().get(1), INDEX, "2", "3");
 
-        QueryBuilder filledRun = HybridFusionOrchestrator.buildFusedQuery(
-            sourceWithAggregation(),
-            multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))),
-            legs,
-            minMaxArithmetic(),
-            2
-        );
+        BoolQueryBuilder shortRun = tailOf(fusedOverResolvedLegs(sourceWithAggregation(), ms, written, resolved, 10));
+        assertAddressedTo(shortRun.should().get(0), INDEX, "2", "3");
+        assertSame("short, but written as neural_sparse", sparse, shortRun.should().get(1));
+
+        BoolQueryBuilder filledRun = tailOf(fusedOverResolvedLegs(sourceWithAggregation(), ms, written, resolved, 2));
         assertSame(
             "a sparse leg that filled the window may have matched more than it returned: kept as the real query",
-            sparse,
-            tailOf(filledRun).should().get(1)
+            fromNeural,
+            filledRun.should().get(0)
         );
     }
 
@@ -842,7 +869,7 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
      * set intersected with the filter — while round 2 computes its aggregations before the filter applies, so an address of
      * those hits would drop every match outside the filter from the buckets. Such a leg is kept as the real query.
      */
-    public void testBuildFusedQuery_whenTheRequestHasAPostFilter_thenAShortLegIsKeptAsTheRealQueryInTheTail() {
+    public void testBuildFusedQuery_whenAPostFilteredRequestAggregates_thenAShortLegIsKeptAsTheRealQueryInTheTail() {
         List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("knn"));
         MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f)));
         SearchSourceBuilder postFiltered = sourceWithAggregation().postFilter(new TermQueryBuilder("visibility", "public"));
@@ -853,6 +880,22 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
 
         QueryBuilder unfiltered = HybridFusionOrchestrator.buildFusedQuery(sourceWithAggregation(), ms, legs, minMaxArithmetic(), 10);
         assertAddressedTo(tailOf(unfiltered).should().get(1), INDEX, "2");
+    }
+
+    /**
+     * Without aggregations nothing in round 2 reads a leg's matches outside the {@code post_filter}: its hits and
+     * {@code total_hits} are cut to the same filter, and inside it an address of the leg's hits matches what the leg matches.
+     * So a short leg is still materialized rather than searched again on every shard.
+     */
+    public void testBuildFusedQuery_whenAPostFilteredRequestDoesNotAggregate_thenAShortLegIsMaterializedInTheTail() {
+        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), legNamed("knn"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+        SearchSourceBuilder exactTotals = new SearchSourceBuilder().trackTotalHits(true)
+            .postFilter(new TermQueryBuilder("visibility", "public"));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(exactTotals, ms, legs, minMaxArithmetic(), 10);
+
+        assertAddressedTo(tailOf(fused).should().get(1), INDEX, "2");
     }
 
     /** A leg that did not answer completely — here it timed out — returned a subset of unknown size, and is kept as the real query. */
@@ -924,27 +967,69 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
 
     /**
      * The registration path's untruncated materialization is for ANN legs alone, whose match set is what they returned. A
-     * named {@code neural_sparse} leg matches every document holding a query token, so when it filled the window it is
-     * carried as the real (resolved) query — a page document it matched but never returned keeps its {@code matched_queries}
-     * entry — and only a short one, which returned its whole match set, is addressed by ids.
+     * named {@code neural_sparse} leg a {@code neural} leg resolved to matches every document holding a query token, so when
+     * it filled the window it is carried as the real (resolved) query — a page document it matched but never returned keeps
+     * its {@code matched_queries} entry — and only a short one, which returned its whole match set, is addressed by ids. A
+     * named {@code neural_sparse} leg the user wrote is carried as the real query either way.
      */
-    public void testBuildFusedQuery_whenTopOnlyAndNamedSparseLeg_thenMaterializedOnlyWhenItReturnedItsWholeMatchSet() {
+    public void testBuildFusedQuery_whenTopOnlyAndANamedLegResolvedToNeuralSparse_thenOnlyAShortOneWrittenAsNeuralIsMaterialized() {
+        QueryBuilder fromNeural = legNamed("neural_sparse").queryName("semantic");
         QueryBuilder sparse = legNamed("neural_sparse").queryName("sparse");
-        List<QueryBuilder> legs = List.of(new MatchQueryBuilder("text", "hello"), sparse);
+        List<QueryBuilder> written = List.of(legNamed("neural").queryName("semantic"), legNamed("neural_sparse").queryName("sparse"));
+        List<QueryBuilder> resolved = List.of(fromNeural, sparse);
         MultiSearchResponse ms = multiSearch(
-            legItemFromIndex(INDEX, Map.of("1", 0.9f)),
-            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f))
+            legItemFromIndex(INDEX, Map.of("2", 0.8f, "3", 0.7f)),
+            legItemFromIndex(INDEX, Map.of("4", 0.6f, "5", 0.5f))
         );
 
-        QueryBuilder filled = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 2);
+        QueryBuilder filled = fusedOverResolvedLegs(topOnlySource(), ms, written, resolved, 2);
         assertEquals(0, tailFilterCount(filled));
-        assertSame("filled the window: carried as the real query for registration", sparse, namedOnlyLegsOf(filled).get(0));
+        assertSame("filled the window: carried as the real query for registration", fromNeural, namedOnlyLegsOf(filled).get(0));
+        assertSame(sparse, namedOnlyLegsOf(filled).get(1));
 
-        QueryBuilder shortRun = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
+        QueryBuilder shortRun = fusedOverResolvedLegs(topOnlySource(), ms, written, resolved, 10);
         assertEquals(0, tailFilterCount(shortRun));
         QueryBuilder carried = namedOnlyLegsOf(shortRun).get(0);
-        assertEquals("sparse", carried.queryName());
+        assertEquals("semantic", carried.queryName());
         assertAddressedTo(carried, INDEX, "2", "3");
+        assertSame("short, but written as neural_sparse", sparse, namedOnlyLegsOf(shortRun).get(1));
+    }
+
+    /**
+     * Under a {@code post_filter} a short named {@code neural_sparse} leg a {@code neural} leg resolved to is still addressed
+     * by ids: every page document passed the filter, and inside it an address of the leg's hits matches what the leg matches,
+     * so {@code matched_queries} reports the same names.
+     */
+    public void testBuildFusedQuery_whenTopOnlyAndPostFiltered_thenAShortNamedLegResolvedToNeuralSparseIsStillMaterialized() {
+        QueryBuilder lexical = new MatchQueryBuilder("text", "hello");
+        List<QueryBuilder> written = List.of(lexical, legNamed("neural").queryName("sparse"));
+        List<QueryBuilder> resolved = List.of(lexical, legNamed("neural_sparse").queryName("sparse"));
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+        SearchSourceBuilder postFiltered = topOnlySource().postFilter(new TermQueryBuilder("visibility", "public"));
+
+        QueryBuilder fused = fusedOverResolvedLegs(postFiltered, ms, written, resolved, 10);
+
+        assertEquals(0, tailFilterCount(fused));
+        assertAddressedTo(namedOnlyLegsOf(fused).get(0), INDEX, "2");
+    }
+
+    /**
+     * Without the legs as written, or with a list that does not line up with the resolved one, what a leg was written as is
+     * unknown, so no leg is materialized: the Tail and the registration path both carry every leg as it is.
+     */
+    public void testBuildFusedQuery_whenTheWrittenLegsDoNotLineUpWithTheResolvedOnes_thenNoLegIsMaterialized() {
+        QueryBuilder knn = legNamed("knn").queryName("vector");
+        List<QueryBuilder> resolved = List.of(new MatchQueryBuilder("text", "hello"), knn);
+        MultiSearchResponse ms = multiSearch(legItemFromIndex(INDEX, Map.of("1", 0.9f)), legItemFromIndex(INDEX, Map.of("2", 0.8f)));
+        List<QueryBuilder> missing = null;
+
+        for (List<QueryBuilder> written : Arrays.asList(missing, List.of(knn))) {
+            String shape = String.format(Locale.ROOT, "written legs %s", written);
+            assertSame(shape, knn, tailOf(fusedOverResolvedLegs(sourceWithAggregation(), ms, written, resolved, 10)).should().get(1));
+            assertSame(shape, knn, namedOnlyLegsOf(fusedOverResolvedLegs(topOnlySource(), ms, written, resolved, 10)).get(0));
+        }
+        // The control: the same legs lined up are materialized.
+        assertAddressedTo(tailOf(fusedOverResolvedLegs(sourceWithAggregation(), ms, resolved, resolved, 10)).should().get(1), INDEX, "2");
     }
 
     // ---- weighted combination + highlight/totals tail triggers (explain/profile do NOT trigger the Tail) ----
@@ -1336,9 +1421,8 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
     }
 
     /**
-     * A {@code _name} nested inside a leg counts. Only {@code bool} overrides {@code visit(QueryBuilderVisitor)} in core, so
-     * a visitor walk — like a shallow {@code queryName()} check — is blind to these shapes; the rendered form is what is
-     * inspected instead.
+     * A {@code _name} nested inside a leg counts. A shallow {@code queryName()} check is blind to these shapes; the rendered
+     * form is what is inspected instead.
      */
     public void testBuildFusedQuery_whenNameIsNestedInsideALeg_thenStillCarried() {
         QueryBuilder underConstantScore = new ConstantScoreQueryBuilder(new MatchQueryBuilder("text", "hello").queryName("inner"));
@@ -1347,7 +1431,6 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
             new MatchQueryBuilder("user.name", "alice").queryName("deep"),
             org.apache.lucene.search.join.ScoreMode.None
         );
-        // bool is the one container core teaches to visit(), so it is the only shape a visitor walk would have found.
         QueryBuilder underBool = new BoolQueryBuilder().must(new MatchQueryBuilder("text", "hello").queryName("in_bool"));
         QueryBuilder underFunctionScore = new org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder(
             new MatchQueryBuilder("text", "hello").queryName("scored")
@@ -1372,6 +1455,76 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, legs, minMaxArithmetic(), 10);
 
         assertEquals(0, namedOnlyLegsOf(fused).size());
+    }
+
+    /**
+     * A {@code neural} query's {@code _name} ends up on the {@code neural_knn} it resolves to (core's rewrite copies it onto
+     * the replacing builder), so a resolved container leg holding one is named only through that builder's render.
+     */
+    public void testBuildFusedQuery_whenTopOnlyAndAContainerLegHoldsANamedNeuralKnn_thenTheLegIsCarried() {
+        for (QueryBuilder leg : containerLegsHolding(() -> neuralKnn().queryName("vector"))) {
+            MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+
+            QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, List.of(leg), minMaxArithmetic(), 10);
+
+            List<QueryBuilder> carried = namedOnlyLegsOf(fused);
+            assertEquals(String.format(Locale.ROOT, "carried for registration: %s", leg), 1, carried.size());
+            // A nested leg too: written as nested, it is not materialized (eligibleForMaterialization).
+            assertSame("carried as the query itself, so the shard registers the inner name", leg, carried.get(0));
+        }
+    }
+
+    public void testBuildFusedQuery_whenAContainerLegHoldsAnUnnamedNeuralKnn_thenNotCarried() {
+        // With and without a boost: a boost alone is printed too, and must not read as a name.
+        for (Supplier<QueryBuilder> neuralKnn : List.<Supplier<QueryBuilder>>of(this::neuralKnn, () -> neuralKnn().boost(2.0f))) {
+            for (QueryBuilder leg : containerLegsHolding(neuralKnn)) {
+                MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+
+                QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, List.of(leg), minMaxArithmetic(), 10);
+
+                assertEquals(String.format(Locale.ROOT, "nothing to register: %s", leg), 0, namedOnlyLegsOf(fused).size());
+            }
+        }
+    }
+
+    /** A leg whose render throws cannot be ruled unnamed, so it is carried instead of failing the request. */
+    public void testBuildFusedQuery_whenALegsRenderThrows_thenTheLegIsCarried() {
+        QueryBuilder unrenderable = new MatchQueryBuilder("text", "hello") {
+            @Override
+            public void doXContent(XContentBuilder builder, Params params) {
+                throw new UnsupportedOperationException("no render");
+            }
+        };
+        MultiSearchResponse ms = multiSearch(legItem(Map.of("1", 0.9f)));
+
+        QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(topOnlySource(), ms, List.of(unrenderable), minMaxArithmetic(), 10);
+
+        assertSame(unrenderable, namedOnlyLegsOf(fused).get(0));
+    }
+
+    /** A {@code neural} leg as {@code FusedLegResolver} leaves it: a {@code neural_knn} over the resolved vector. */
+    private NeuralKNNQueryBuilder neuralKnn() {
+        return NeuralKNNQueryBuilder.builder().fieldName("vec").vector(new float[] { 1f, 2f }).k(10).originalQueryText("q").build();
+    }
+
+    /**
+     * Unnamed containers around one {@code neural_knn}: ones a visitor walk descends into, a function's filter it does not
+     * visit, and {@code boosting} and {@code script_score}, which hand the visitor their inner query but not its children.
+     */
+    private List<QueryBuilder> containerLegsHolding(Supplier<QueryBuilder> neuralKnn) {
+        return List.of(
+            new BoolQueryBuilder().must(neuralKnn.get()),
+            new DisMaxQueryBuilder().add(neuralKnn.get()),
+            new ConstantScoreQueryBuilder(neuralKnn.get()),
+            new FunctionScoreQueryBuilder(neuralKnn.get()),
+            new FunctionScoreQueryBuilder(
+                new FunctionScoreQueryBuilder.FilterFunctionBuilder[] {
+                    new FunctionScoreQueryBuilder.FilterFunctionBuilder(neuralKnn.get(), ScoreFunctionBuilders.weightFactorFunction(2.0f)) }
+            ),
+            new BoostingQueryBuilder(new BoolQueryBuilder().must(neuralKnn.get()), new TermQueryBuilder("text", "spam")),
+            new ScriptScoreQueryBuilder(new BoolQueryBuilder().must(neuralKnn.get()), new Script("_score")),
+            new NestedQueryBuilder("chunks", neuralKnn.get(), ScoreMode.Max)
+        );
     }
 
     /**
@@ -1917,10 +2070,23 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         int window,
         TotalHits[] out
     ) {
+        return selfErased(source, ms, legs, legs, window, out);
+    }
+
+    /** As above, with the legs as written beside their resolved forms. */
+    private BoolQueryBuilder selfErased(
+        SearchSourceBuilder source,
+        MultiSearchResponse ms,
+        List<QueryBuilder> writtenLegs,
+        List<QueryBuilder> resolvedLegs,
+        int window,
+        TotalHits[] out
+    ) {
         QueryBuilder fused = HybridFusionOrchestrator.buildFusedQuery(
             source,
             ms,
-            legs,
+            writtenLegs,
+            resolvedLegs,
             minMaxArithmetic(),
             window,
             new FusedCoordinatorTimings(),
@@ -2153,6 +2319,29 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
         assertEquals(0, selfErased(new SearchSourceBuilder().size(2), ms, unnamed, 2, derived).filter().size());
         MultiSearchResponse shortLeg = multiSearch(legItemWithTotal(Map.of("1", 0.9f), gte(10_000)), legItem(Map.of("2", 0.8f)));
         assertEquals(0, selfErased(new SearchSourceBuilder().size(2), shortLeg, legs, 2, derived).filter().size());
+    }
+
+    /**
+     * The same rule for a named leg that resolved to {@code nested(chunks, neural_knn)}: written as {@code neural}, it is
+     * registered as an address of what it returned, so having filled its window it keeps the Tail; written as {@code nested},
+     * it is registered as written, which reports what the Tail would, so the derived count replaces the Tail.
+     */
+    public void testBuildFusedQuery_whenANamedLegResolvedToANestedNeuralKnnFilledTheWindow_thenTheTailIsKeptOnlyIfWrittenAsNeural() {
+        QueryBuilder lexical = new MatchQueryBuilder("text", "hello");
+        QueryBuilder nestedKnn = new NestedQueryBuilder("chunks", legNamed("neural_knn"), ScoreMode.Max).queryName("chunks");
+        List<QueryBuilder> resolved = List.of(lexical, nestedKnn);
+        MultiSearchResponse ms = multiSearch(
+            legItemWithTotal(Map.of("1", 0.9f), gte(10_000)),
+            legItem(new LinkedHashMap<>(Map.of("2", 0.8f, "3", 0.7f)))
+        );
+        TotalHits[] derived = new TotalHits[] { eq(42) };
+
+        List<QueryBuilder> writtenAsNeural = List.of(lexical, legNamed("neural").queryName("chunks"));
+        assertEquals(1, selfErased(new SearchSourceBuilder().size(2), ms, writtenAsNeural, resolved, 2, derived).filter().size());
+        assertNull(derived[0]);
+
+        assertEquals(0, selfErased(new SearchSourceBuilder().size(2), ms, resolved, resolved, 2, derived).filter().size());
+        assertNotNull(derived[0]);
     }
 
     public void testRequestShapeAllowsDerivedTotalHits() {
@@ -3482,6 +3671,85 @@ public class HybridFusionOrchestratorTests extends OpenSearchTestCase {
                 true
             )
         );
+    }
+
+    /** Refused like any named leg; the same containers unnamed are counted, so the name is what refuses them. */
+    public void testUnionCountRequest_refusesAContainerLegHoldingANamedNeuralKnn() {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        for (QueryBuilder leg : containerLegsHolding(() -> neuralKnn().queryName("vector"))) {
+            assertNull(
+                String.format(Locale.ROOT, "named: %s", leg),
+                HybridFusionOrchestrator.unionCountRequest(
+                    armedScope(source),
+                    source,
+                    List.of(leg, hello),
+                    lexicalItems(eq(10), eq(3)),
+                    100,
+                    true
+                )
+            );
+        }
+        for (QueryBuilder leg : containerLegsHolding(() -> neuralKnn().boost(2.0f))) {
+            assertNotNull(
+                String.format(Locale.ROOT, "unnamed: %s", leg),
+                HybridFusionOrchestrator.unionCountRequest(
+                    armedScope(source),
+                    source,
+                    List.of(leg, hello),
+                    lexicalItems(eq(10), eq(3)),
+                    100,
+                    true
+                )
+            );
+        }
+    }
+
+    /**
+     * Refused: the count is a search of its own, where a fused hybrid held by a leg would run its fan-out again. The same
+     * leg pairs holding a plain query are counted (the {@code bool}'s sibling is a short {@code neural_knn}), so the fused
+     * hybrid is what refuses them.
+     */
+    public void testUnionCountRequest_refusesALegThatHoldsAFusedHybrid() {
+        SearchSourceBuilder source = new SearchSourceBuilder().size(3).trackTotalHitsUpTo(10_000);
+
+        for (List<QueryBuilder> legs : legPairsHolding(this::fusedHybrid)) {
+            assertNull(
+                String.format(Locale.ROOT, "fused: %s", legs),
+                HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, legs, lexicalItems(eq(10), eq(3)), 100, true)
+            );
+        }
+        for (List<QueryBuilder> legs : legPairsHolding(() -> new TermQueryBuilder("text", "place"))) {
+            assertNotNull(
+                String.format(Locale.ROOT, "plain: %s", legs),
+                HybridFusionOrchestrator.unionCountRequest(armedScope(source), source, legs, lexicalItems(eq(10), eq(3)), 100, true)
+            );
+        }
+    }
+
+    /**
+     * Two legs each, the first holding {@code inner}: in a {@code bool} beside a {@code neural_knn}, in a
+     * {@code nested}, and in a {@code neural_knn}'s and a {@code knn}'s filter.
+     */
+    private List<List<QueryBuilder>> legPairsHolding(Supplier<QueryBuilder> inner) {
+        QueryBuilder hello = new MatchQueryBuilder("text", "hello");
+        return List.of(
+            List.of(new BoolQueryBuilder().must(inner.get()), neuralKnn()),
+            List.of(new NestedQueryBuilder("chunks", inner.get(), ScoreMode.Max), hello),
+            List.of(
+                NeuralKNNQueryBuilder.builder().fieldName("vec").vector(new float[] { 1f, 2f }).k(10).filter(inner.get()).build(),
+                hello
+            ),
+            List.of(KNNQueryBuilder.builder().fieldName("vec").vector(new float[] { 1f, 2f }).k(10).filter(inner.get()).build(), hello)
+        );
+    }
+
+    /** A fused hybrid over two lexical legs. */
+    private HybridQueryBuilder fusedHybrid() {
+        return new HybridQueryBuilder().add(new TermQueryBuilder("text", "place"))
+            .add(new MatchQueryBuilder("text", "world"))
+            .fusion(Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean")));
     }
 
     public void testUnionCountRequest_readsTheSameViewAsTheLegs() {
