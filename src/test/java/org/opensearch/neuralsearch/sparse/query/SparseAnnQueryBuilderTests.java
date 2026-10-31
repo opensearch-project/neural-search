@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
@@ -368,6 +369,26 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
         assertEquals(10, query.getQueryContext().getK());
     }
 
+    public void testDoToQuery_queryTokensStayRawWhileQueryVectorFolds() throws IOException {
+        Map<String, Float> tokens = Map.of("1", 1.0f, "32769", 2.0f, "40000", 0.5f);
+        queryBuilder = SparseAnnQueryBuilder.builder().fieldName("test_field").queryTokens(tokens).build();
+        QueryShardContext context = mock(QueryShardContext.class);
+        MappedFieldType fieldType = mock(MappedFieldType.class);
+        when(fieldType.typeName()).thenReturn(SparseVectorFieldMapper.CONTENT_TYPE);
+        when(context.fieldMapper("test_field")).thenReturn(fieldType);
+        queryBuilder.fallbackQuery(mock(Query.class));
+
+        SparseVectorQuery query = (SparseVectorQuery) queryBuilder.doToQuery(context);
+
+        // The Lucene engine seeks these terms in clustered postings keyed by the raw id.
+        assertEquals(Set.of("1", "32769", "40000"), new HashSet<>(query.getQueryContext().getTokens()));
+        // The query vector folds: 32769 and 1 share id 1, and 40000 folds to 7232.
+        assertEquals(2, query.getQueryVector().getSize());
+        assertEquals(7233, query.getQueryVector().toDenseVector().length);
+        // The native scorer folds these itself.
+        assertEquals(Map.of(1, 1.0f, 32769, 2.0f, 40000, 0.5f), query.getRawQueryTokens());
+    }
+
     public void testDoToQuery_invalidFieldType() throws IOException {
         queryBuilder = SparseAnnQueryBuilder.builder()
             .fieldName("test_field")
@@ -484,9 +505,10 @@ public class SparseAnnQueryBuilderTests extends AbstractSparseTestBase {
     }
 
     public void testQueryTokens_SetterCanProcessTokens() {
-        Map<String, Float> queryTokens = Map.of("1", 1.0f, "65537", 2.0f, "2", 100f, "65538", 1.0f);
+        Map<String, Float> queryTokens = Map.of("1", 1.0f, "65537", 2.0f, "2", 100f, "02", 3.0f);
         SparseAnnQueryBuilder builder = SparseAnnQueryBuilder.builder().queryTokens(queryTokens).build();
-        Map<String, Float> expectedQueryTokens = Map.of("1", 2.0f, "2", 100f);
+        // Ids are canonicalized but not folded: 65537 stays apart from 1, while 02 and 2 merge by max.
+        Map<String, Float> expectedQueryTokens = Map.of("1", 1.0f, "65537", 2.0f, "2", 100f);
         assertEquals(expectedQueryTokens, builder.queryTokens());
 
         SparseAnnQueryBuilder builder2 = new SparseAnnQueryBuilder();

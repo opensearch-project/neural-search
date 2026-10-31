@@ -5,6 +5,14 @@
 package org.opensearch.neuralsearch.processor.semantic;
 
 import lombok.NonNull;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.appender.AbstractAppender;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.apache.logging.log4j.core.layout.PatternLayout;
 import org.junit.Before;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -12,6 +20,7 @@ import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.opensearch.action.get.GetResponse;
 import org.opensearch.action.get.MultiGetItemResponse;
+import org.opensearch.action.get.MultiGetRequest;
 import org.opensearch.action.get.MultiGetResponse;
 import org.opensearch.cluster.ClusterState;
 import org.opensearch.cluster.metadata.Metadata;
@@ -42,9 +51,12 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -215,6 +227,56 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
             verify(mlCommonsClientAccessor, times(2)).inferenceSentences(any(), any());
             verify(mlCommonsClientAccessor, times(2)).inferenceSentencesWithMapResult(any(), any());
         });
+    }
+
+    /**
+     * Regression test for the double-callback fall-through bug in {@link SemanticFieldProcessor} where,
+     * when embedding generation failed, the handler was invoked twice: once with the error and then again
+     * with success, indexing the document WITHOUT its embedding ("created but empty"). After the fix the
+     * handler must be invoked exactly once, with the error, and never with success.
+     */
+    public void testExecute_whenInferenceFails_thenHandlerCalledOnceWithErrorAndNoSuccess() throws URISyntaxException, IOException {
+        final Map<String, Object> ingestDocSource = readDocSourceFromFile("processor/semantic/ingest_doc1.json");
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", "routing", 1L, VersionType.INTERNAL, ingestDocSource);
+
+        // getModels succeeds so we reach embedding generation.
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(DUMMY_MODEL_ID_1, textEmbeddingModel, DUMMY_MODEL_ID_2, sparseEmbeddingModel));
+            return null;
+        }).when(mlCommonsClientAccessor).getModels(any(), any(), any());
+
+        // Dense inference fails -> setInference rethrows this exception for the dense chunk.
+        final RuntimeException inferenceError = new RuntimeException("inference failed (e.g. model cold start)");
+        doAnswer(invocationOnMock -> {
+            final ActionListener<List<List<Number>>> listener = invocationOnMock.getArgument(1);
+            listener.onFailure(inferenceError);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentences(any(), any());
+
+        // Sparse inference succeeds (keeps the embedding-generation counter complete).
+        doAnswer(invocationOnMock -> {
+            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
+            listener.onResponse(List.of(Map.of("response", List.of(Map.of("tok", 1.0)))));
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+
+        final AtomicInteger handlerInvocationCount = new AtomicInteger(0);
+        final AtomicInteger errorInvocationCount = new AtomicInteger(0);
+        final AtomicInteger successInvocationCount = new AtomicInteger(0);
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> {
+            handlerInvocationCount.incrementAndGet();
+            if (e != null) {
+                errorInvocationCount.incrementAndGet();
+            } else {
+                successInvocationCount.incrementAndGet();
+            }
+        });
+
+        assertEquals("handler must be invoked exactly once", 1, handlerInvocationCount.get());
+        assertEquals("handler must be invoked once with the error", 1, errorInvocationCount.get());
+        assertEquals("handler must NOT be invoked with success when inference failed", 0, successInvocationCount.get());
     }
 
     public void testExecute_whenValidDocReuseEmbedding_thenIngestDocSuccessfully() throws URISyntaxException, IOException {
@@ -671,6 +733,132 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
         return embeddingWithFloat;
     }
 
+    public void testExecute_whenSkipExistingEmbeddingAndRoutingPresent_thenMultiGetCarriesRouting() throws URISyntaxException, IOException {
+        semanticFieldProcessor = createSkipExistingEmbeddingProcessor();
+        final Map<String, Object> ingestDocSource = readDocSourceFromFile("processor/semantic/ingest_doc1.json");
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", "user-a", 1L, VersionType.INTERNAL, ingestDocSource);
+        mockGetModelAndInferenceAPI();
+        mockMultiGetDocsNotFound("1");
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> {});
+
+        // Without routing the lookup targets the _id shard, which misses a document written with custom routing
+        final MultiGetRequest multiGetRequest = captureMultiGetRequest();
+        assertEquals(1, multiGetRequest.getItems().size());
+        assertEquals("user-a", multiGetRequest.getItems().get(0).routing());
+    }
+
+    public void testExecute_whenSkipExistingEmbeddingAndNoRouting_thenMultiGetHasNoRouting() throws URISyntaxException, IOException {
+        semanticFieldProcessor = createSkipExistingEmbeddingProcessor();
+        final Map<String, Object> ingestDocSource = readDocSourceFromFile("processor/semantic/ingest_doc1.json");
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", null, 1L, VersionType.INTERNAL, ingestDocSource);
+        mockGetModelAndInferenceAPI();
+        mockMultiGetDocsNotFound("1");
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> {});
+
+        final MultiGetRequest multiGetRequest = captureMultiGetRequest();
+        assertEquals(1, multiGetRequest.getItems().size());
+        assertNull(multiGetRequest.getItems().get(0).routing());
+    }
+
+    public void testSubBatchExecute_whenSkipExistingEmbeddingAndRoutingDiffers_thenEachItemCarriesItsOwnRouting() throws URISyntaxException,
+        IOException {
+        semanticFieldProcessor = createSkipExistingEmbeddingProcessor();
+        final IngestDocumentWrapper userA = new IngestDocumentWrapper(
+            1,
+            0,
+            new IngestDocument(
+                "index",
+                "1",
+                "user-a",
+                1L,
+                VersionType.INTERNAL,
+                readDocSourceFromFile("processor/semantic/ingest_doc1.json")
+            ),
+            null
+        );
+        final IngestDocumentWrapper userB = new IngestDocumentWrapper(
+            2,
+            0,
+            new IngestDocument(
+                "index",
+                "2",
+                "user-b",
+                1L,
+                VersionType.INTERNAL,
+                readDocSourceFromFile("processor/semantic/ingest_doc2.json")
+            ),
+            null
+        );
+        mockGetModelAndInferenceAPI();
+        mockMultiGetDocsNotFound("1", "2");
+
+        semanticFieldProcessor.subBatchExecute(List.of(userA, userB), mock(Consumer.class));
+
+        // Routing is per document, so a batch must not apply one document's routing to the others
+        final Map<String, String> routingById = new HashMap<>();
+        for (MultiGetRequest.Item item : captureMultiGetRequest().getItems()) {
+            routingById.put(item.id(), item.routing());
+        }
+        assertEquals(Map.of("1", "user-a", "2", "user-b"), routingById);
+    }
+
+    private SemanticFieldProcessor createSkipExistingEmbeddingProcessor() {
+        final Map<String, Map<String, Object>> pathToFieldConfigMap = Map.of(
+            FIELD_NAME_PRODUCTS + PATH_SEPARATOR + FIELD_NAME_PRODUCT_DESCRIPTION,
+            Map.of(TYPE, SemanticFieldMapper.CONTENT_TYPE, MODEL_ID, DUMMY_MODEL_ID_1, CHUNKING, true, SKIP_EXISTING_EMBEDDING, true),
+            FIELD_NAME_GEO_DATA,
+            Map.of(
+                TYPE,
+                SemanticFieldMapper.CONTENT_TYPE,
+                MODEL_ID,
+                DUMMY_MODEL_ID_2,
+                SPARSE_ENCODING_CONFIG,
+                Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.MAX_RATIO.getValue(), PruneUtils.PRUNE_RATIO_FIELD, 0.5),
+                SKIP_EXISTING_EMBEDDING,
+                true
+            )
+        );
+        return new SemanticFieldProcessor(
+            "tag",
+            "description",
+            1,
+            pathToFieldConfigMap,
+            mlCommonsClientAccessor,
+            environment,
+            clusterService,
+            chunker,
+            analysisRegistry,
+            openSearchClient
+        );
+    }
+
+    private void mockMultiGetDocsNotFound(final String... ids) {
+        final MultiGetItemResponse[] items = new MultiGetItemResponse[ids.length];
+        for (int i = 0; i < ids.length; i++) {
+            final GetResponse getResponse = Mockito.mock(GetResponse.class);
+            when(getResponse.isExists()).thenReturn(false);
+            final MultiGetItemResponse item = Mockito.mock(MultiGetItemResponse.class);
+            when(item.getId()).thenReturn(ids[i]);
+            when(item.getResponse()).thenReturn(getResponse);
+            items[i] = item;
+        }
+        final MultiGetResponse multiGetResponse = Mockito.mock(MultiGetResponse.class);
+        when(multiGetResponse.getResponses()).thenReturn(items);
+        doAnswer(invocationOnMock -> {
+            final ActionListener<MultiGetResponse> listener = (ActionListener<MultiGetResponse>) invocationOnMock.getArguments()[2];
+            listener.onResponse(multiGetResponse);
+            return null;
+        }).when(openSearchClient).execute(any(), any(), any());
+    }
+
+    private MultiGetRequest captureMultiGetRequest() {
+        final ArgumentCaptor<MultiGetRequest> requestCaptor = ArgumentCaptor.forClass(MultiGetRequest.class);
+        verify(openSearchClient).execute(any(), requestCaptor.capture(), any());
+        return requestCaptor.getValue();
+    }
+
     private IngestDocumentWrapper createIngestDocWrapper(@NonNull final String id, @NonNull final Map<String, Object> source) {
         return createIngestDocWrapper(id, source, null);
     }
@@ -678,6 +866,239 @@ public class SemanticFieldProcessorTests extends OpenSearchTestCase {
     private IngestDocumentWrapper createIngestDocWrapper(@NonNull final String id, @NonNull final Map<String, Object> source, Exception e) {
         final IngestDocument ingestDocument = new IngestDocument("index", id, "routing", 1L, VersionType.INTERNAL, source);
         return new IngestDocumentWrapper(1, 0, ingestDocument, e);
+    }
+
+    private static final String SENSITIVE_SOURCE_VALUE = "SUPER-SECRET-CUSTOMER-CONTENT-should-never-be-logged";
+
+    /**
+     * Builds an ingest document source that carries {@link #SENSITIVE_SOURCE_VALUE} in the semantic
+     * field. If a failure in the ingest path logs the document body, this value would leak into the
+     * logs; the security tests below assert it never does.
+     */
+    private Map<String, Object> createDocSourceWithSensitiveValue() {
+        final Map<String, Object> products = new HashMap<>();
+        products.put(FIELD_NAME_PRODUCT_DESCRIPTION, SENSITIVE_SOURCE_VALUE);
+        final Map<String, Object> source = new HashMap<>();
+        source.put(FIELD_NAME_PRODUCTS, products);
+        source.put(FIELD_NAME_GEO_DATA, SENSITIVE_SOURCE_VALUE);
+        return source;
+    }
+
+    /**
+     * Security regression test (V2325294075): on a chunking failure the processor must NOT write the
+     * customer document body to the service logs. It may log only non-sensitive identifiers (index, id).
+     * Here chunking is forced to fail by making the cluster-state lookup (used to resolve the max token
+     * count) throw, and we assert no _source value appears in any emitted log message.
+     */
+    public void testBatchProcess_whenChunkingFails_thenDoesNotLogDocumentContent() {
+        // getModels must succeed so we reach batchProcess -> chunk().
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(DUMMY_MODEL_ID_1, textEmbeddingModel, DUMMY_MODEL_ID_2, sparseEmbeddingModel));
+            return null;
+        }).when(mlCommonsClientAccessor).getModels(any(), any(), any());
+
+        // Force chunk() to throw by making the cluster-state lookup inside getMaxTokenCount fail.
+        when(clusterService.state()).thenThrow(new RuntimeException("forced cluster-state failure"));
+
+        final IngestDocumentWrapper wrapper = createIngestDocWrapper("doc-id-chunk", createDocSourceWithSensitiveValue());
+        final Consumer<List<IngestDocumentWrapper>> handler = mock(Consumer.class);
+
+        final List<LogEvent> logEvents = runCapturingProcessorLogs(() -> semanticFieldProcessor.subBatchExecute(List.of(wrapper), handler));
+
+        // The failure must be surfaced on the document.
+        assertNotNull("The chunking failure must be attached to the document", wrapper.getException());
+
+        // At least one error must have been logged, and none of them may contain the customer content.
+        assertNoSensitiveContentLogged(logEvents, "chunk", "doc-id-chunk");
+    }
+
+    /**
+     * Security regression test (V2325294075): on a set-model-info failure the processor must NOT write
+     * the customer document body to the service logs. The set-model-info step is forced to fail by
+     * returning a REMOTE model with no model config (getModelType throws), and we assert no _source
+     * value appears in any emitted log message.
+     */
+    public void testBatchProcess_whenSetModelInfoFails_thenDoesNotLogDocumentContent() {
+        // Chunking succeeds (default mocked settings), but setModelInfo throws because the REMOTE model
+        // has no config, so getModelType rejects it.
+        final MLModel remoteModelWithoutConfig = MLModel.builder().algorithm(FunctionName.REMOTE).name(FunctionName.REMOTE.name()).build();
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(DUMMY_MODEL_ID_1, remoteModelWithoutConfig, DUMMY_MODEL_ID_2, remoteModelWithoutConfig));
+            return null;
+        }).when(mlCommonsClientAccessor).getModels(any(), any(), any());
+
+        final IngestDocumentWrapper wrapper = createIngestDocWrapper("doc-id-model", createDocSourceWithSensitiveValue());
+        final Consumer<List<IngestDocumentWrapper>> handler = mock(Consumer.class);
+
+        final List<LogEvent> logEvents = runCapturingProcessorLogs(() -> semanticFieldProcessor.subBatchExecute(List.of(wrapper), handler));
+
+        // The failure must be surfaced on the document.
+        assertNotNull("The set-model-info failure must be attached to the document", wrapper.getException());
+
+        assertNoSensitiveContentLogged(logEvents, "set model info", "doc-id-model");
+    }
+
+    /**
+     * Runs the given action with a temporary appender attached to the SemanticFieldProcessor logger and
+     * returns everything it logged.
+     */
+    private List<LogEvent> runCapturingProcessorLogs(@NonNull final Runnable action) {
+        final CapturingLogAppender appender = new CapturingLogAppender("SemanticFieldProcessorTestAppender");
+        final Logger processorLogger = LogManager.getLogger(SemanticFieldProcessor.class);
+        final LoggerContext context = (LoggerContext) LogManager.getContext(false);
+        final LoggerConfig loggerConfig = context.getConfiguration().getLoggerConfig(processorLogger.getName());
+        try {
+            loggerConfig.addAppender(appender, Level.ERROR, null);
+            context.updateLoggers();
+            action.run();
+        } finally {
+            loggerConfig.removeAppender(appender.getName());
+            appender.stop();
+            context.updateLoggers();
+        }
+        return appender.getLogEvents();
+    }
+
+    /**
+     * Asserts that an error was logged for the given operation, that it carries the safe identifiers,
+     * and that no emitted message leaks the customer document content.
+     */
+    private void assertNoSensitiveContentLogged(
+        @NonNull final List<LogEvent> logEvents,
+        @NonNull final String operation,
+        @NonNull final String docId
+    ) {
+        for (final LogEvent event : logEvents) {
+            final String message = event.getMessage().getFormattedMessage();
+            assertFalse(
+                "Customer document content must never be written to the logs. Offending message: " + message,
+                message.contains(SENSITIVE_SOURCE_VALUE)
+            );
+        }
+
+        final List<LogEvent> errorEvents = logEvents.stream()
+            .filter(e -> e.getLevel() == Level.ERROR)
+            .filter(e -> e.getMessage().getFormattedMessage().contains("Failed to " + operation + " ingest document"))
+            .toList();
+        assertEquals("Expected exactly one error log for the failed operation", 1, errorEvents.size());
+
+        final String errorMessage = errorEvents.getFirst().getMessage().getFormattedMessage();
+        assertTrue("The error log should include the document id for debugging", errorMessage.contains(docId));
+        assertTrue("The error log should include the index name for debugging", errorMessage.contains("index"));
+    }
+
+    private static final class CapturingLogAppender extends AbstractAppender {
+        private final List<LogEvent> logEvents = new ArrayList<>();
+
+        CapturingLogAppender(final String name) {
+            super(name, null, PatternLayout.createDefaultLayout(), false);
+            start();
+        }
+
+        @Override
+        public void append(final LogEvent event) {
+            logEvents.add(event.toImmutable());
+        }
+
+        List<LogEvent> getLogEvents() {
+            return logEvents;
+        }
+    }
+
+    /**
+     * Regression test mirroring the InferenceProcessor field_map overwrite bug: two sibling semantic
+     * fields nested under the same parent object ("author.name" and "author.bio") must each produce
+     * their own independent embedding instead of one overwriting the other. Unlike InferenceProcessor's
+     * flat field_map (which splits a key at the first dot and collapses to the parent segment),
+     * SemanticFieldProcessor keys fields by their full dotted path from the mapping tree, so each
+     * sibling is tracked and written back independently.
+     */
+    @SuppressWarnings("unchecked")
+    public void testExecute_whenSiblingSemanticFieldsShareParent_thenBothEmbeddingsGeneratedIndependently() {
+        final String FIELD_NAME_AUTHOR = "author";
+        final String FIELD_NAME_NAME = "name";
+        final String FIELD_NAME_BIO = "bio";
+
+        final Map<String, Map<String, Object>> pathToFieldConfigMap = Map.of(
+            FIELD_NAME_AUTHOR + PATH_SEPARATOR + FIELD_NAME_NAME,
+            Map.of(
+                TYPE,
+                SemanticFieldMapper.CONTENT_TYPE,
+                MODEL_ID,
+                DUMMY_MODEL_ID_2,
+                SPARSE_ENCODING_CONFIG,
+                Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.NONE.getValue())
+            ),
+            FIELD_NAME_AUTHOR + PATH_SEPARATOR + FIELD_NAME_BIO,
+            Map.of(
+                TYPE,
+                SemanticFieldMapper.CONTENT_TYPE,
+                MODEL_ID,
+                DUMMY_MODEL_ID_2,
+                SPARSE_ENCODING_CONFIG,
+                Map.of(PruneUtils.PRUNE_TYPE_FIELD, PruneType.NONE.getValue())
+            )
+        );
+        semanticFieldProcessor = new SemanticFieldProcessor(
+            "tag",
+            "description",
+            1,
+            pathToFieldConfigMap,
+            mlCommonsClientAccessor,
+            environment,
+            clusterService,
+            chunker,
+            analysisRegistry,
+            openSearchClient
+        );
+
+        final String nameValue = "Jane Doe";
+        final String bioValue = "An author bio";
+        final Map<String, Object> authorMap = new HashMap<>();
+        authorMap.put(FIELD_NAME_NAME, nameValue);
+        authorMap.put(FIELD_NAME_BIO, bioValue);
+        final Map<String, Object> ingestDocSource = new HashMap<>();
+        ingestDocSource.put(FIELD_NAME_AUTHOR, authorMap);
+        final IngestDocument ingestDocument = new IngestDocument("index", "1", "routing", 1L, VersionType.INTERNAL, ingestDocSource);
+
+        doAnswer(invocationOnMock -> {
+            final Consumer<Map<String, MLModel>> onSuccess = invocationOnMock.getArgument(1);
+            onSuccess.accept(Map.of(DUMMY_MODEL_ID_2, sparseEmbeddingModel));
+            return null;
+        }).when(mlCommonsClientAccessor).getModels(any(), any(), any());
+
+        // Return a distinct, text-derived token embedding per unique raw text, keyed by request order,
+        // so a sibling-field collision would surface as a mismatched token rather than passing by luck.
+        doAnswer(invocationOnMock -> {
+            final TextInferenceRequest textInferenceRequest = invocationOnMock.getArgument(0);
+            final List<String> inputTexts = textInferenceRequest.getInputTexts();
+            final ActionListener<List<Map<String, ?>>> listener = invocationOnMock.getArgument(1);
+            final List<Map<String, ?>> responses = new java.util.ArrayList<>();
+            for (final String text : inputTexts) {
+                responses.add(Map.of("response", List.of(Map.of(text, 1.0))));
+            }
+            listener.onResponse(responses);
+            return null;
+        }).when(mlCommonsClientAccessor).inferenceSentencesWithMapResult(any(), any());
+
+        semanticFieldProcessor.execute(ingestDocument, (doc, e) -> { assertNull("No error should occur", e); });
+
+        final Map<String, Object> sourceAndMetadata = ingestDocument.getSourceAndMetadata();
+        final Map<String, Object> nameSemanticInfo = (Map<String, Object>) ((Map<String, Object>) sourceAndMetadata.get(FIELD_NAME_AUTHOR))
+            .get(FIELD_NAME_NAME + "_semantic_info");
+        final Map<String, Object> bioSemanticInfo = (Map<String, Object>) ((Map<String, Object>) sourceAndMetadata.get(FIELD_NAME_AUTHOR))
+            .get(FIELD_NAME_BIO + "_semantic_info");
+
+        assertNotNull("name's semantic info must be present", nameSemanticInfo);
+        assertNotNull("bio's semantic info must be present", bioSemanticInfo);
+
+        final Map<String, Object> nameEmbedding = (Map<String, Object>) nameSemanticInfo.get("embedding");
+        final Map<String, Object> bioEmbedding = (Map<String, Object>) bioSemanticInfo.get("embedding");
+
+        assertEquals("name's embedding must be derived from its own text, not its sibling's", Set.of(nameValue), nameEmbedding.keySet());
+        assertEquals("bio's embedding must be derived from its own text, not its sibling's", Set.of(bioValue), bioEmbedding.keySet());
     }
 
 }

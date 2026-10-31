@@ -11,17 +11,24 @@ import lombok.extern.log4j.Log4j2;
 import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.ConstantScoreQuery;
+import org.apache.lucene.search.MatchNoDocsQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.join.ToChildBlockJoinQuery;
+import org.opensearch.action.search.SearchRequest;
 import org.opensearch.action.search.SearchType;
 import org.opensearch.index.search.NestedHelper;
 import org.opensearch.neuralsearch.query.HybridQuery;
+import org.opensearch.neuralsearch.query.HybridQueryBuilder;
+import org.opensearch.search.builder.SearchSourceBuilder;
 import org.opensearch.search.internal.SearchContext;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -33,6 +40,28 @@ import java.util.stream.IntStream;
 public class HybridQueryUtil {
     public static final String HYBRID_QUERY_DFS_SEARCH_TYPE_NOT_SUPPORTED_MESSAGE =
         "hybrid query does not support search_type [dfs_query_then_fetch]";
+
+    /**
+     * Top-level {@code hybrid.weights} of a classic hybrid request: the request's query is a {@link HybridQueryBuilder}
+     * without a {@code fusion} block and it carries weights. For the phase-results processors, which read the weights
+     * without depending on the builder beyond this one accessor. Empty for every other request — a fused hybrid self-erases
+     * at the coordinator and keeps its weights in its own {@code FusionSpec}, and a wrapped or absent hybrid has none to
+     * read — and for a request without a source.
+     */
+    public static Optional<List<Float>> classicRequestWeights(final SearchRequest searchRequest) {
+        if (Objects.isNull(searchRequest) || Objects.isNull(searchRequest.source())) {
+            return Optional.empty();
+        }
+        SearchSourceBuilder source = searchRequest.source();
+        if ((source.query() instanceof HybridQueryBuilder) == false) {
+            return Optional.empty();
+        }
+        HybridQueryBuilder hybridQuery = (HybridQueryBuilder) source.query();
+        if (Objects.nonNull(hybridQuery.fusion())) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(hybridQuery.weights());
+    }
 
     /**
      * This method validates whether the query object is an instance of hybrid query
@@ -56,7 +85,9 @@ public class HybridQueryUtil {
         }
 
         BooleanQuery boolQuery = (BooleanQuery) query;
-        return ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
+        return ((hasAliasFilter(searchContext)
+            || hasNestedFieldOrNestedDocs(query, searchContext)
+            || isFilteredBySearchContext(searchContext, boolQuery))
             && isWrappedHybridQuery(query)
             && boolQuery.clauses().isEmpty() == false);
     }
@@ -166,14 +197,24 @@ public class HybridQueryUtil {
      * by the security plugin, and wrapped in another boolean query object
      */
     public static boolean isHybridQueryExtendedWithDlsRulesAndWrappedInBoolQuery(final SearchContext searchContext, final Query query) {
-        return ((hasAliasFilter(searchContext) || hasNestedFieldOrNestedDocs(query, searchContext))
-            && query instanceof BooleanQuery booleanQuery
-            && booleanQuery.clauses().stream().anyMatch(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext)));
+        return query instanceof BooleanQuery booleanQuery
+            && (hasAliasFilter(searchContext)
+                || hasNestedFieldOrNestedDocs(query, searchContext)
+                || isFilteredBySearchContext(searchContext, booleanQuery))
+            && booleanQuery.clauses().stream().anyMatch(clause -> isHybridQueryExtendedWithDlsRules(clause.query(), searchContext));
     }
 
     @VisibleForTesting
     public static Query extractHybridQuery(final SearchContext searchContext, final Query query) {
         HybridQuery hybridQuery = extractHybridQuery(searchContext);
+        if (query instanceof MatchNoDocsQuery) {
+            // A filter that core adds to the request's query cannot match on this shard, so the whole shard query is a
+            // MatchNoDocsQuery: DefaultSearchContext#buildFilteredQuery returns it for a shard that is not part of the requested slice,
+            // and the rewrite returns it for an alias filter that matches no documents of this index. Keep one sub-query per
+            // sub-query of the hybrid query, so the shard returns the result of a hybrid query without matches, without executing any
+            // of the sub-queries.
+            return new HybridQuery(Collections.nCopies(hybridQuery.getSubQueries().size(), query), hybridQuery.getQueryContext());
+        }
         if (isHybridQueryExtendedWithDlsRules(query, searchContext)) {
             return HybridQuery.fromQueryExtendedWithDlsRules((BooleanQuery) query, hybridQuery, List.of());
         }
@@ -227,8 +268,21 @@ public class HybridQueryUtil {
                 throw new IllegalArgumentException("hybrid query must be a top level query and cannot be wrapped into other queries");
             }
             hybridQuery = (HybridQuery) booleanClauses.getFirst().query();
-        } else {
+        } else if (Objects.isNull(query) || query instanceof HybridQuery) {
             hybridQuery = (HybridQuery) query;
+        } else {
+            // a filter that core adds cannot match on this shard, see extractHybridQuery(SearchContext, Query)
+            hybridQuery = query instanceof MatchNoDocsQuery ? getHybridQueryFromParsedQuery(searchContext) : null;
+            if (Objects.isNull(hybridQuery)) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "hybrid query cannot be executed, the query on this shard is a [%s] that wraps the hybrid query "
+                            + "in a form that is not supported",
+                        query.getClass().getSimpleName()
+                    )
+                );
+            }
         }
         return hybridQuery;
     }
@@ -273,5 +327,40 @@ public class HybridQueryUtil {
 
     private static boolean hasAliasFilter(final SearchContext searchContext) {
         return Objects.nonNull(searchContext.aliasFilter());
+    }
+
+    /**
+     * This method checks whether the boolean query is the wrapper that DefaultSearchContext#buildFilteredQuery puts around the
+     * request's query: the query as the first, MUST clause, followed by FILTER clauses only, such as the slice filter. The wrapper is
+     * recognised only when the parsed query of the request is itself a hybrid query, bare or extended with DLS rules, as then no other
+     * component can have wrapped it into a boolean query. Alias and non-nested docs filters are recognised by the alias and nested
+     * checks as well.
+     */
+    private static boolean isFilteredBySearchContext(final SearchContext searchContext, final BooleanQuery booleanQuery) {
+        if (Objects.isNull(getHybridQueryFromParsedQuery(searchContext))) {
+            return false;
+        }
+        List<BooleanClause> booleanClauses = booleanQuery.clauses();
+        return booleanClauses.size() > 1
+            && booleanClauses.getFirst().occur() == BooleanClause.Occur.MUST
+            && booleanClauses.stream().skip(1).allMatch(clause -> clause.occur() == BooleanClause.Occur.FILTER);
+    }
+
+    /**
+     * Returns the hybrid query of the request's parsed query, when the parsed query is a hybrid query or a hybrid query extended
+     * with DLS rules by the security plugin, and null otherwise.
+     */
+    private static HybridQuery getHybridQueryFromParsedQuery(final SearchContext searchContext) {
+        if (Objects.isNull(searchContext.parsedQuery())) {
+            return null;
+        }
+        Query parsedQuery = searchContext.parsedQuery().query();
+        if (parsedQuery instanceof HybridQuery hybridQuery) {
+            return hybridQuery;
+        }
+        if (isHybridQueryExtendedWithDlsRules(parsedQuery, searchContext)) {
+            return unwrapHybridQueryWrappedInSecurityDlsRules((BooleanQuery) parsedQuery);
+        }
+        return null;
     }
 }

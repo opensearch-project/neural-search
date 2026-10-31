@@ -31,7 +31,6 @@ import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.processor.SearchShard;
-import org.opensearch.neuralsearch.processor.explain.ExplainableTechnique;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 
@@ -491,7 +490,7 @@ public class ScoreCombiner {
         String combinationDescription = String.format(
             Locale.ROOT,
             "%s combination of%s:",
-            ((ExplainableTechnique) scoreCombinationTechnique).describe(),
+            scoreCombinationTechnique.describe(),
             isMinScoreAvailable(minScore, sort) ? String.format(Locale.ROOT, " [filtered by min_score: %.4f]", minScore) : ""
         );
         for (int docId : sortedDocsIds) {

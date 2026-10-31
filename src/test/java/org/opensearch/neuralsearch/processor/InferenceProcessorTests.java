@@ -16,6 +16,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.env.Environment;
+import org.opensearch.index.mapper.IndexFieldMapper;
 import org.opensearch.ingest.IngestDocument;
 import org.opensearch.ingest.IngestDocumentWrapper;
 import org.opensearch.neuralsearch.constants.TestCommonConstants;
@@ -24,6 +25,8 @@ import org.opensearch.neuralsearch.ml.MLCommonsClientAccessor;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
@@ -172,6 +175,131 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         verify(clientAccessor).inferenceSentences(any(), any());
     }
 
+    public void test_buildMapWithTargetKeys_siblingFlatDottedKeys_mergeIntoSameParent() {
+        // field_map has two flat (unflattened) keys that share the same first path segment:
+        // "author.name" -> "author_name_embedding"
+        // "author.bio" -> "author_bio_embedding"
+        // Both must be preserved under the shared top-level "author" key instead of one
+        // overwriting the other.
+        Map<String, Object> siblingFieldMap = new LinkedHashMap<>();
+        siblingFieldMap.put("author.name", "author_name_embedding");
+        siblingFieldMap.put("author.bio", "author_bio_embedding");
+
+        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null, siblingFieldMap);
+
+        Map<String, Object> source = new HashMap<>();
+        Map<String, Object> authorMap = new HashMap<>();
+        authorMap.put("name", "Jane Doe");
+        authorMap.put("bio", "An author bio");
+        source.put("author", authorMap);
+        source.put(IndexFieldMapper.NAME, "my_index");
+        source.put("_id", "1");
+        IngestDocument ingestDocument = new IngestDocument(source, new HashMap<>());
+
+        Map<String, Object> processMap = processor.buildMapWithTargetKeys(ingestDocument);
+
+        assertTrue("expected top-level 'author' key in processMap", processMap.containsKey("author"));
+        Map<String, Object> authorProcessMap = (Map<String, Object>) processMap.get("author");
+        assertEquals(2, authorProcessMap.size());
+        assertEquals("Jane Doe", authorProcessMap.get("author_name_embedding"));
+        assertEquals("An author bio", authorProcessMap.get("author_bio_embedding"));
+    }
+
+    public void test_buildNLPResult_siblingFlatDottedKeys_bothEmbeddingsWritten() {
+        Map<String, Object> siblingFieldMap = new LinkedHashMap<>();
+        siblingFieldMap.put("author.name", "author_name_embedding");
+        siblingFieldMap.put("author.bio", "author_bio_embedding");
+
+        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null, siblingFieldMap);
+
+        Map<String, Object> source = new HashMap<>();
+        Map<String, Object> authorMap = new HashMap<>();
+        authorMap.put("name", "Jane Doe");
+        authorMap.put("bio", "An author bio");
+        source.put("author", authorMap);
+        source.put(IndexFieldMapper.NAME, "my_index");
+        source.put("_id", "1");
+        IngestDocument ingestDocument = new IngestDocument(source, new HashMap<>());
+
+        Map<String, Object> processMap = processor.buildMapWithTargetKeys(ingestDocument);
+        List<Float> nameEmbedding = Arrays.asList(1.0f, 2.0f);
+        List<Float> bioEmbedding = Arrays.asList(3.0f, 4.0f);
+        List<Object> results = Arrays.asList(nameEmbedding, bioEmbedding);
+
+        Map<String, Object> nlpResult = processor.buildNLPResult(processMap, results, ingestDocument.getSourceAndMetadata());
+        nlpResult.forEach(ingestDocument::setFieldValue);
+
+        assertEquals(nameEmbedding, ingestDocument.getFieldValue("author.author_name_embedding", List.class));
+        assertEquals(bioEmbedding, ingestDocument.getFieldValue("author.author_bio_embedding", List.class));
+    }
+
+    @SuppressWarnings("unchecked")
+    public void test_buildMapWithTargetKeys_deepSiblingFlatDottedKeys_mergeIntoSameNestedParent() {
+        // field_map has two flat keys that diverge BELOW the first path segment:
+        // "author.name.first" -> "first_embedding"
+        // "author.name.last" -> "last_embedding"
+        // Both resolve to originalKey "author" with nested target maps {name={first_embedding=...}}
+        // and {name={last_embedding=...}}. A shallow merge of the top-level "author" maps would
+        // replace the inner "name" map wholesale and drop one sibling; a recursive deep merge must
+        // preserve both under author -> name.
+        Map<String, Object> siblingFieldMap = new LinkedHashMap<>();
+        siblingFieldMap.put("author.name.first", "first_embedding");
+        siblingFieldMap.put("author.name.last", "last_embedding");
+
+        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null, siblingFieldMap);
+
+        Map<String, Object> source = new HashMap<>();
+        Map<String, Object> authorMap = new HashMap<>();
+        Map<String, Object> nameMap = new HashMap<>();
+        nameMap.put("first", "Jane");
+        nameMap.put("last", "Doe");
+        authorMap.put("name", nameMap);
+        source.put("author", authorMap);
+        source.put(IndexFieldMapper.NAME, "my_index");
+        source.put("_id", "1");
+        IngestDocument ingestDocument = new IngestDocument(source, new HashMap<>());
+
+        Map<String, Object> processMap = processor.buildMapWithTargetKeys(ingestDocument);
+
+        assertTrue("expected top-level 'author' key in processMap", processMap.containsKey("author"));
+        Map<String, Object> authorProcessMap = (Map<String, Object>) processMap.get("author");
+        assertTrue("expected nested 'name' key under 'author'", authorProcessMap.containsKey("name"));
+        Map<String, Object> nameProcessMap = (Map<String, Object>) authorProcessMap.get("name");
+        assertEquals("both nested siblings must be preserved", 2, nameProcessMap.size());
+        assertEquals("Jane", nameProcessMap.get("first_embedding"));
+        assertEquals("Doe", nameProcessMap.get("last_embedding"));
+    }
+
+    public void test_buildNLPResult_deepSiblingFlatDottedKeys_bothEmbeddingsWritten() {
+        Map<String, Object> siblingFieldMap = new LinkedHashMap<>();
+        siblingFieldMap.put("author.name.first", "first_embedding");
+        siblingFieldMap.put("author.name.last", "last_embedding");
+
+        TestInferenceProcessor processor = new TestInferenceProcessor(createMockVectorResult(), BATCH_SIZE, null, siblingFieldMap);
+
+        Map<String, Object> source = new HashMap<>();
+        Map<String, Object> authorMap = new HashMap<>();
+        Map<String, Object> nameMap = new HashMap<>();
+        nameMap.put("first", "Jane");
+        nameMap.put("last", "Doe");
+        authorMap.put("name", nameMap);
+        source.put("author", authorMap);
+        source.put(IndexFieldMapper.NAME, "my_index");
+        source.put("_id", "1");
+        IngestDocument ingestDocument = new IngestDocument(source, new HashMap<>());
+
+        Map<String, Object> processMap = processor.buildMapWithTargetKeys(ingestDocument);
+        List<Float> firstEmbedding = Arrays.asList(1.0f, 2.0f);
+        List<Float> lastEmbedding = Arrays.asList(3.0f, 4.0f);
+        List<Object> results = Arrays.asList(firstEmbedding, lastEmbedding);
+
+        Map<String, Object> nlpResult = processor.buildNLPResult(processMap, results, ingestDocument.getSourceAndMetadata());
+        nlpResult.forEach(ingestDocument::setFieldValue);
+
+        assertEquals(firstEmbedding, ingestDocument.getFieldValue("author.name.first_embedding", List.class));
+        assertEquals(lastEmbedding, ingestDocument.getFieldValue("author.name.last_embedding", List.class));
+    }
+
     public void test_batchExecute_subBatches() {
         final int docCount = 5;
         List<List<Float>> inferenceResults = createMockVectorWithLength(6);
@@ -201,7 +329,11 @@ public class InferenceProcessorTests extends InferenceProcessorTestCase {
         List<List<String>> allInferenceInputs = new ArrayList<>();
 
         public TestInferenceProcessor(List<?> vectors, int batchSize, Exception exception) {
-            super(TAG, DESCRIPTION, batchSize, TYPE, MAP_KEY, MODEL_ID, FIELD_MAP, clientAccessor, environment, mockClusterService);
+            this(vectors, batchSize, exception, FIELD_MAP);
+        }
+
+        public TestInferenceProcessor(List<?> vectors, int batchSize, Exception exception, Map<String, Object> fieldMap) {
+            super(TAG, DESCRIPTION, batchSize, TYPE, MAP_KEY, MODEL_ID, fieldMap, clientAccessor, environment, mockClusterService);
             this.vectors = vectors;
             this.exception = exception;
         }

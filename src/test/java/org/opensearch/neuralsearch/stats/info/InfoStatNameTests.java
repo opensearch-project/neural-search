@@ -8,6 +8,7 @@ import org.opensearch.neuralsearch.rest.RestNeuralStatsAction;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
@@ -25,6 +26,48 @@ public class InfoStatNameTests extends OpenSearchTestCase {
 
     public void test_fromInvalid() {
         assertThrows(IllegalArgumentException.class, () -> { InfoStatName.from("non_existent_stat"); });
+    }
+
+    /**
+     * The ordinal of an info stat is its wire format, so this list is frozen: a new stat goes at the end of the enum and
+     * at the end here. Inserting or reordering one is what breaks a mixed cluster - the coordinating node then sends the
+     * older node an ordinal that node reads as a different stat, or cannot read at all.
+     */
+    public void test_ordinalsAreFrozen() {
+        List<String> frozenOrder = List.of(
+            "CLUSTER_VERSION",
+            "TEXT_EMBEDDING_PROCESSORS",
+            "SKIP_EXISTING_PROCESSORS",
+            "TEXT_CHUNKING_PROCESSORS",
+            "TEXT_CHUNKING_DELIMITER_PROCESSORS",
+            "TEXT_CHUNKING_FIXED_TOKEN_LENGTH_PROCESSORS",
+            "TEXT_CHUNKING_FIXED_CHAR_LENGTH_PROCESSORS",
+            "NORMALIZATION_PROCESSORS",
+            "NORM_TECHNIQUE_L2_PROCESSORS",
+            "NORM_TECHNIQUE_MINMAX_PROCESSORS",
+            "NORM_TECHNIQUE_ZSCORE_PROCESSORS",
+            "COMB_TECHNIQUE_ARITHMETIC_PROCESSORS",
+            "COMB_TECHNIQUE_GEOMETRIC_PROCESSORS",
+            "COMB_TECHNIQUE_HARMONIC_PROCESSORS",
+            "RRF_PROCESSORS",
+            "COMB_TECHNIQUE_RRF_PROCESSORS",
+            "TEXT_IMAGE_EMBEDDING_PROCESSORS",
+            "SPARSE_ENCODING_PROCESSORS",
+            "NEURAL_QUERY_ENRICHER_PROCESSORS",
+            "NEURAL_SPARSE_TWO_PHASE_PROCESSORS",
+            "RERANK_BY_FIELD_PROCESSORS",
+            "RERANK_ML_PROCESSORS",
+            "AGENTIC_QUERY_TRANSLATOR_PROCESSORS",
+            "AGENTIC_CONTEXT_PROCESSORS",
+            "SPARSE_VECTOR_INDICES",
+            "SPARSE_VECTOR_FIELDS",
+            "SPARSE_NATIVE_ENGINE_INDICES",
+            "SPARSE_NATIVE_ENGINE_FIELDS",
+            // Resolver (in-query `fusion`) mode: the enabled-vs-used funnel. Appended, never inserted.
+            "HYBRID_FUSION_ENABLED"
+        );
+
+        assertEquals(frozenOrder, Arrays.stream(InfoStatName.values()).map(Enum::name).toList());
     }
 
     public void test_validNames() {

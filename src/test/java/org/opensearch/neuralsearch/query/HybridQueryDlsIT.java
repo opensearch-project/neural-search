@@ -100,11 +100,23 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
     public void testDlsFiltersHybridHitsAndAggregations() throws Exception {
         Map<String, Object> adminResponse = performSearch(primaryHybridRequest(), false);
         assertHitIds(adminResponse, ALL_DOCUMENT_IDS);
-        assertGlobalAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
+        assertAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
 
         Map<String, Object> restrictedResponse = performSearch(primaryHybridRequest(), true);
         assertHitIds(restrictedResponse, ALLOWED_DOCUMENT_IDS);
-        assertGlobalAccessBuckets(restrictedResponse, Map.of("allowed", 2));
+        assertAccessBuckets(restrictedResponse, Map.of("allowed", 2));
+    }
+
+    public void testDlsRefusesGlobalAggregationOnHybridRequest() throws Exception {
+        // Without DLS a global aggregation is scoped to every document in the index, whatever the query matched.
+        Map<String, Object> adminResponse = performSearch(hybridRequestWithGlobalAggregation(), false);
+        assertHitIds(adminResponse, ALL_DOCUMENT_IDS);
+        assertGlobalAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
+
+        // Under DLS the security plugin refuses it outright (security#6555): a global aggregation ignores the DLS query
+        // filter, so running it would read the restricted documents. The hybrid request is refused like any other query.
+        ResponseException refused = expectThrows(ResponseException.class, () -> performRequest(hybridRequestWithGlobalAggregation(), true));
+        assertTrue(refused.getMessage(), refused.getMessage().contains("global aggregations are not supported when DLS is activated"));
     }
 
     public void testDlsSupportsSuggestionBearingHybridRequest() throws Exception {
@@ -150,6 +162,40 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
         assertHitIds(adminMixedResponse, PUBLIC_DOCUMENT_IDS);
 
         Map<String, Object> restrictedMixedResponse = performSearch(hybridKnnAndNeuralRequest(modelId), true);
+        assertHitIds(restrictedMixedResponse, PUBLIC_ALLOWED_DOCUMENT_IDS);
+    }
+
+    /**
+     * Fused mode runs each leg as its own coordinator-side search. DLS must apply to those leg searches, to round 2 and to
+     * the derived {@code hits.total} exactly as it applies to a plain search by the same user.
+     */
+    public void testDlsFiltersFusedHybridHitsAndAggregations() throws Exception {
+        Map<String, Object> adminResponse = performFusedSearch(fusedHybridRequest(), false);
+        assertHitIds(adminResponse, ALL_DOCUMENT_IDS);
+        assertAccessBuckets(adminResponse, Map.of("allowed", 2, "blocked", 2));
+
+        Map<String, Object> restrictedResponse = performFusedSearch(fusedHybridRequest(), true);
+        assertHitIds(restrictedResponse, ALLOWED_DOCUMENT_IDS);
+        assertAccessBuckets(restrictedResponse, Map.of("allowed", 2));
+    }
+
+    /**
+     * A fused {@code neural} leg is resolved (model inference) and then run from the inference callback thread
+     * (<a href="https://github.com/opensearch-project/neural-search/pull/2074">#2074</a>). The leg search must still run as the
+     * requesting user: DLS keeps filtering it, and the role needs no permission beyond index {@code read}.
+     */
+    public void testDlsFiltersFusedHybridNeuralQuery() throws Exception {
+        String modelId = prepareModelForNeuralQuery();
+        Map<String, Object> adminNeuralResponse = performFusedSearch(fusedNeuralRequest(modelId), false);
+        assertHitIds(adminNeuralResponse, PUBLIC_DOCUMENT_IDS);
+
+        Map<String, Object> restrictedNeuralResponse = performFusedSearch(fusedNeuralRequest(modelId), true);
+        assertHitIds(restrictedNeuralResponse, PUBLIC_ALLOWED_DOCUMENT_IDS);
+
+        Map<String, Object> adminMixedResponse = performFusedSearch(fusedKnnAndNeuralRequest(modelId), false);
+        assertHitIds(adminMixedResponse, PUBLIC_DOCUMENT_IDS);
+
+        Map<String, Object> restrictedMixedResponse = performFusedSearch(fusedKnnAndNeuralRequest(modelId), true);
         assertHitIds(restrictedMixedResponse, PUBLIC_ALLOWED_DOCUMENT_IDS);
     }
 
@@ -248,8 +294,27 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
     }
 
     private Map<String, Object> performSearch(String requestBody, boolean asDlsUser) throws IOException {
+        Response response = performRequest(requestBody, asDlsUser);
+        assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
+        return responseAsMap(response);
+    }
+
+    /** A fused-mode (in-query {@code fusion}) request: no search pipeline, the coordinator fuses the legs itself. */
+    private Map<String, Object> performFusedSearch(String requestBody, boolean asDlsUser) throws IOException {
+        Response response = performRequest(requestBody, asDlsUser, false);
+        assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
+        return responseAsMap(response);
+    }
+
+    private Response performRequest(String requestBody, boolean asDlsUser) throws IOException {
+        return performRequest(requestBody, asDlsUser, true);
+    }
+
+    private Response performRequest(String requestBody, boolean asDlsUser, boolean withSearchPipeline) throws IOException {
         Request request = new Request("POST", "/" + INDEX_NAME + "/_search");
-        request.addParameter("search_pipeline", SEARCH_PIPELINE_NAME);
+        if (withSearchPipeline) {
+            request.addParameter("search_pipeline", SEARCH_PIPELINE_NAME);
+        }
         request.setJsonEntity(requestBody);
         if (asDlsUser) {
             RequestOptions.Builder options = RequestOptions.DEFAULT.toBuilder();
@@ -260,13 +325,31 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
             );
             request.setOptions(options.build());
         }
-
-        Response response = client().performRequest(request);
-        assertEquals(RestStatus.OK.getStatus(), response.getStatusLine().getStatusCode());
-        return responseAsMap(response);
+        return client().performRequest(request);
     }
 
     private String primaryHybridRequest() {
+        return """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    { "term": { "signal": "alpha" } },
+                    { "term": { "signal": "beta" } }
+                  ]
+                }
+              },
+              "aggs": {
+                "visible_access": {
+                  "terms": { "field": "access" }
+                }
+              }
+            }
+            """;
+    }
+
+    private String hybridRequestWithGlobalAggregation() {
         return """
             {
               "size": 10,
@@ -426,6 +509,96 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
             """, modelId);
     }
 
+    private String fusedHybridRequest() {
+        return """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    { "term": { "signal": "alpha" } },
+                    { "term": { "signal": "beta" } }
+                  ],
+                  "fusion": {
+                    "normalization": { "technique": "min_max" },
+                    "combination": { "technique": "arithmetic_mean" }
+                  }
+                }
+              },
+              "aggs": {
+                "visible_access": {
+                  "terms": { "field": "access" }
+                }
+              }
+            }
+            """;
+    }
+
+    private String fusedNeuralRequest(String modelId) {
+        return String.format(Locale.ROOT, """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    {
+                      "neural": {
+                        "neural_embedding": {
+                          "query_text": "document",
+                          "model_id": "%s",
+                          "k": 10,
+                          "filter": { "term": { "visibility": "public" } }
+                        }
+                      }
+                    }
+                  ],
+                  "fusion": {
+                    "normalization": { "technique": "min_max" },
+                    "combination": { "technique": "arithmetic_mean" }
+                  }
+                }
+              }
+            }
+            """, modelId);
+    }
+
+    private String fusedKnnAndNeuralRequest(String modelId) {
+        return String.format(Locale.ROOT, """
+            {
+              "size": 10,
+              "query": {
+                "hybrid": {
+                  "queries": [
+                    {
+                      "knn": {
+                        "knn_embedding": {
+                          "vector": [1.0, 0.0],
+                          "k": 10,
+                          "filter": { "term": { "visibility": "public" } }
+                        }
+                      }
+                    },
+                    {
+                      "neural": {
+                        "neural_embedding": {
+                          "query_text": "document",
+                          "model_id": "%s",
+                          "k": 10,
+                          "filter": { "term": { "visibility": "public" } }
+                        }
+                      }
+                    }
+                  ],
+                  "fusion": {
+                    "normalization": { "technique": "min_max" },
+                    "combination": { "technique": "arithmetic_mean" }
+                  }
+                }
+              }
+            }
+            """, modelId);
+    }
+
     private void assertHitIds(Map<String, Object> responseBody, Set<String> expectedIds) {
         assertNoFailedShards(responseBody);
 
@@ -439,20 +612,27 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
         assertEquals(expectedIds, Set.copyOf(hitIds));
     }
 
+    private void assertAccessBuckets(Map<String, Object> responseBody, Map<String, Integer> expectedBuckets) {
+        assertNotNull("response missing aggregations", responseBody.get("aggregations"));
+        assertEquals(expectedBuckets, accessBuckets(asMap(asMap(responseBody.get("aggregations")).get("visible_access"))));
+    }
+
     private void assertGlobalAccessBuckets(Map<String, Object> responseBody, Map<String, Integer> expectedBuckets) {
         assertNotNull("response missing aggregations", responseBody.get("aggregations"));
         Map<String, Object> aggregations = asMap(responseBody.get("aggregations"));
         Map<String, Object> allDocuments = asMap(aggregations.get("all_documents"));
-        Map<String, Object> visibleAccess = asMap(allDocuments.get("visible_access"));
-        List<Map<String, Object>> buckets = asList(visibleAccess.get("buckets"));
-        Map<String, Integer> actualBuckets = buckets.stream()
-            .collect(Collectors.toMap(bucket -> (String) bucket.get("key"), bucket -> ((Number) bucket.get("doc_count")).intValue()));
 
         assertEquals(
             expectedBuckets.values().stream().mapToInt(Integer::intValue).sum(),
             ((Number) allDocuments.get("doc_count")).intValue()
         );
-        assertEquals(expectedBuckets, actualBuckets);
+        assertEquals(expectedBuckets, accessBuckets(asMap(allDocuments.get("visible_access"))));
+    }
+
+    private Map<String, Integer> accessBuckets(Map<String, Object> termsAggregation) {
+        List<Map<String, Object>> buckets = asList(termsAggregation.get("buckets"));
+        return buckets.stream()
+            .collect(Collectors.toMap(bucket -> (String) bucket.get("key"), bucket -> ((Number) bucket.get("doc_count")).intValue()));
     }
 
     private void assertSuggestionContains(Map<String, Object> responseBody, String suggestionName, String expectedOption) {

@@ -17,7 +17,11 @@ import java.util.stream.Collectors;
 /**
  * Enum that contains all event stat names, paths, and types
  * WE SHOULD AVOID CHANGING THE ORDER OF THESE STAT ENUMS! The ordinal is used in StreamInput/Output.
- * Changing the order will break the mixed cluster version upgrade version case.
+ * Changing the order will break the mixed cluster version upgrade version case. Append a new stat at the end, never
+ * insert one: the coordinating node only sends the leading run of stats the oldest node in the cluster also has
+ * ({@code RestNeuralStatsAction#statsSupportedByAllNodes}), so an insertion silently cuts every stat after it out of the
+ * response on a mixed cluster. The version declares the release a stat's ordinal dates from, which is the release it was
+ * added in only as long as nothing was ever inserted before it.
  */
 @Getter
 public enum EventStatName implements StatName {
@@ -97,7 +101,7 @@ public enum EventStatName implements StatName {
         "agentic_query_translator_executions",
         "processors.search.agentic",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
-        Version.V_3_2_0
+        Version.V_3_3_0
     ),
     /** Tracks executions of the agentic context processor */
     AGENTIC_CONTEXT_PROCESSOR_EXECUTIONS(
@@ -254,7 +258,7 @@ public enum EventStatName implements StatName {
     RERANK_ML_PROCESSOR_EXECUTIONS("rerank_ml_executions", "processors.search", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_1_0),
 
     /** Counts agentic query requests */
-    AGENTIC_QUERY_REQUESTS("agentic_query_requests", "query.agentic", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_2_0),
+    AGENTIC_QUERY_REQUESTS("agentic_query_requests", "query.agentic", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_3_0),
 
     /** Counts seismic query requests */
     SEISMIC_QUERY_REQUESTS("seismic_query_requests", "query.neural_sparse", EventStatType.TIMESTAMPED_EVENT_COUNTER, Version.V_3_3_0),
@@ -274,12 +278,103 @@ public enum EventStatName implements StatName {
         Version.V_3_3_0
     ),
     /** Tracks failed existing-document lookups, which silently degrade skip_existing to full inference */
+    // Added by #2028 after the 3.9 branch was cut: 3.9.0 shipped without it, so a 3.10 coordinator must not send this
+    // ordinal to a 3.9 node (it has no entry for it and fails the stats request with "Unknown EventStatName ordinal").
     SKIP_EXISTING_LOOKUP_FAILURES(
         "skip_existing_lookup_failures",
         "processors.ingest",
         EventStatType.TIMESTAMPED_EVENT_COUNTER,
-        Version.V_3_9_0
+        Version.V_3_10_0
+    ),
+
+    // ---- resolver (in-query `fusion`) mode. Appended at the TAIL, which the ordinal contract above requires. ----
+    // These count the resolver ALONGSIDE hybrid_query_requests rather than instead of it: a fused hybrid is parsed by the
+    // same method as a classic one, so it already increments the combined counter, and these answer "how much of that is
+    // the resolver" without a second read.
+
+    /** Counts hybrid query requests that carry an in-query {@code fusion} block (resolver mode) */
+    HYBRID_QUERY_FUSION_REQUESTS(
+        "hybrid_query_with_fusion_requests",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests fused with min_max normalization */
+    HYBRID_QUERY_FUSION_NORM_MINMAX_EXECUTIONS(
+        "hybrid_query_fusion_norm_minmax_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests fused with z_score normalization */
+    HYBRID_QUERY_FUSION_NORM_ZSCORE_EXECUTIONS(
+        "hybrid_query_fusion_norm_zscore_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests fused with l2 normalization */
+    HYBRID_QUERY_FUSION_NORM_L2_EXECUTIONS(
+        "hybrid_query_fusion_norm_l2_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /**
+     * Counts resolver-mode requests fused with rrf normalization. Has no classic counterpart: the classic path counts
+     * rrf on the combination side only, so this is a dimension the combined technique counters cannot report.
+     */
+    HYBRID_QUERY_FUSION_NORM_RRF_EXECUTIONS(
+        "hybrid_query_fusion_norm_rrf_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with arithmetic_mean */
+    HYBRID_QUERY_FUSION_COMB_ARITHMETIC_EXECUTIONS(
+        "hybrid_query_fusion_comb_arithmetic_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with rrf */
+    HYBRID_QUERY_FUSION_COMB_RRF_EXECUTIONS(
+        "hybrid_query_fusion_comb_rrf_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with geometric_mean */
+    HYBRID_QUERY_FUSION_COMB_GEOMETRIC_EXECUTIONS(
+        "hybrid_query_fusion_comb_geometric_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
+    ),
+    /** Counts resolver-mode requests combined with harmonic_mean */
+    HYBRID_QUERY_FUSION_COMB_HARMONIC_EXECUTIONS(
+        "hybrid_query_fusion_comb_harmonic_executions",
+        "query.hybrid",
+        EventStatType.TIMESTAMPED_EVENT_COUNTER,
+        FusedStatsVersion.VALUE
     );
+
+    /**
+     * The release resolver mode ships in, and therefore the version every fused stat above is gated at.
+     *
+     * <p>Held in a nested class rather than a field of the enum because an enum constant's arguments cannot reference a
+     * static field of its own enum — the constants are initialized first.
+     *
+     * <p>Why the gate must name the shipping release exactly: {@code RestNeuralStatsAction#statsSupportedByAllNodes} sends
+     * the leading run of stats whose version is {@code onOrBefore} the oldest node's, and stops at the first newer one,
+     * because a stat enum travels as ordinals and a filtered set is only readable by an older node if it is a prefix of
+     * that node's own enum. Gated too low, these stats would be sent to a node that has no ordinal for them during a
+     * rolling upgrade; gated at the release that carries them, the run stops short on a mixed cluster and they are
+     * withheld, which is lossy and safe.
+     */
+    private static final class FusedStatsVersion {
+        private static final Version VALUE = Version.V_3_10_0;
+    }
 
     private final String nameString;
     private final String path;

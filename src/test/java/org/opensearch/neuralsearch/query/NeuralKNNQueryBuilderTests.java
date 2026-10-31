@@ -6,9 +6,18 @@ package org.opensearch.neuralsearch.query;
 
 import org.apache.lucene.search.Query;
 import org.opensearch.common.io.stream.BytesStreamOutput;
+import org.opensearch.common.xcontent.XContentFactory;
+import org.opensearch.common.xcontent.XContentHelper;
+import org.opensearch.core.common.bytes.BytesReference;
+import org.opensearch.core.common.io.stream.NamedWriteableAwareStreamInput;
+import org.opensearch.core.common.io.stream.NamedWriteableRegistry;
 import org.opensearch.core.common.io.stream.StreamInput;
+import org.opensearch.core.xcontent.MediaTypeRegistry;
+import org.opensearch.core.xcontent.ToXContent;
 import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.QueryShardContext;
+import org.opensearch.index.query.TermQueryBuilder;
+import org.opensearch.knn.index.query.KNNQueryBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 import org.opensearch.knn.index.SpaceType;
 import org.opensearch.knn.index.VectorDataType;
@@ -25,6 +34,7 @@ import org.opensearch.Version;
 import org.opensearch.knn.index.query.rescore.RescoreContext;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -314,5 +324,96 @@ public class NeuralKNNQueryBuilderTests extends OpenSearchTestCase {
         // Verify builders are equal (this checks all internal fields including field name and vector)
         assertEquals("Serialized and deserialized builders should be equal", originalBuilder, deserializedBuilder);
         assertEquals("Hash codes should match", originalBuilder.hashCode(), deserializedBuilder.hashCode());
+    }
+
+    public void testToXContent_whenNamedAndBoosted_thenPrintsThemInsideTheKnnField() throws IOException {
+        NeuralKNNQueryBuilder queryBuilder = NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).k(K).build();
+        // What core's AbstractQueryBuilder#rewrite does to the neural_knn a named, boosted neural query resolves to.
+        queryBuilder.queryName("vector").boost(2.0f);
+
+        assertEquals("vector", knnFieldOf(queryBuilder).get("_name"));
+        assertEquals(2.0f, ((Number) knnFieldOf(queryBuilder).get("boost")).floatValue(), 0.0f);
+
+        // Both levels set: the boosts multiply, as they do when the query runs, and this builder's name replaces the inner one.
+        queryBuilder.getKnnQueryBuilder().boost(3.0f).queryName("inner");
+        assertEquals(6.0f, ((Number) knnFieldOf(queryBuilder).get("boost")).floatValue(), 0.0f);
+        assertEquals("vector", knnFieldOf(queryBuilder).get("_name"));
+        queryBuilder.queryName(null);
+        assertEquals("without a name of its own, the inner one is kept", "inner", knnFieldOf(queryBuilder).get("_name"));
+    }
+
+    public void testToXContent_whenUnnamedWithDefaultBoost_thenRendersTheInnerKnnUnchanged() throws IOException {
+        NeuralKNNQueryBuilder queryBuilder = NeuralKNNQueryBuilder.builder()
+            .fieldName(FIELD_NAME)
+            .vector(VECTOR)
+            .k(K)
+            .filter(new TermQueryBuilder("category", "a"))
+            .build();
+
+        String rendered = render(queryBuilder);
+        assertEquals(render(queryBuilder.getKnnQueryBuilder()), rendered);
+        assertFalse(rendered.contains("\"_name\""));
+    }
+
+    /** The render before a transport hop equals the render after it, for each optional field the builder sets. */
+    public void testToXContent_whenNamedOrBoosted_thenMatchesTheRenderAfterATransportRoundTrip() throws IOException {
+        List<NeuralKNNQueryBuilder> variants = List.of(
+            NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).k(K).build(),
+            NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).maxDistance(0.5f).build(),
+            NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).minScore(0.7f).build(),
+            NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).k(K).filter(new TermQueryBuilder("category", "a")).build(),
+            NeuralKNNQueryBuilder.builder().fieldName(FIELD_NAME).vector(VECTOR).k(K).expandNested(true).build(),
+            NeuralKNNQueryBuilder.builder()
+                .fieldName(FIELD_NAME)
+                .vector(VECTOR)
+                .k(K)
+                .rescoreContext(RescoreContext.builder().oversampleFactor(2.0f).build())
+                .build(),
+            NeuralKNNQueryBuilder.builder()
+                .fieldName(FIELD_NAME)
+                .vector(VECTOR)
+                .k(K)
+                .methodParameters(METHOD_PARAMETERS)
+                .originalQueryText("text")
+                .build()
+        );
+        for (NeuralKNNQueryBuilder variant : variants) {
+            assertRendersAsAfterATransportRoundTrip(variant.queryName("vector"));
+            assertRendersAsAfterATransportRoundTrip(variant.queryName(null).boost(2.0f));
+            assertRendersAsAfterATransportRoundTrip(variant.queryName("vector").boost(2.0f));
+        }
+    }
+
+    private void assertRendersAsAfterATransportRoundTrip(NeuralKNNQueryBuilder queryBuilder) throws IOException {
+        BytesStreamOutput out = new BytesStreamOutput();
+        out.setVersion(Version.CURRENT);
+        queryBuilder.writeTo(out);
+        StreamInput in = new NamedWriteableAwareStreamInput(
+            out.bytes().streamInput(),
+            new NamedWriteableRegistry(
+                List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
+            )
+        );
+        in.setVersion(Version.CURRENT);
+        NeuralKNNQueryBuilder copy = new NeuralKNNQueryBuilder(in);
+
+        // The hop hands this builder's name and boost to the inner knn.
+        assertNull(copy.queryName());
+        assertEquals(queryBuilder.queryName(), copy.getKnnQueryBuilder().queryName());
+        assertEquals(queryBuilder.boost(), copy.getKnnQueryBuilder().boost(), 0.0f);
+        assertEquals(queryBuilder.toString(), renderAsMap(copy), renderAsMap(queryBuilder));
+    }
+
+    private static String render(QueryBuilder queryBuilder) throws IOException {
+        return BytesReference.bytes(queryBuilder.toXContent(XContentFactory.jsonBuilder(), ToXContent.EMPTY_PARAMS)).utf8ToString();
+    }
+
+    private static Map<String, Object> renderAsMap(QueryBuilder queryBuilder) throws IOException {
+        return XContentHelper.convertToMap(MediaTypeRegistry.JSON.xContent(), render(queryBuilder), false);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> knnFieldOf(QueryBuilder queryBuilder) throws IOException {
+        return (Map<String, Object>) ((Map<String, Object>) renderAsMap(queryBuilder).get(KNNQueryBuilder.NAME)).get(FIELD_NAME);
     }
 }

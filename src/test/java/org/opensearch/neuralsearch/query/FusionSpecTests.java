@@ -1,0 +1,810 @@
+/*
+ * Copyright OpenSearch Contributors
+ * SPDX-License-Identifier: Apache-2.0
+ */
+package org.opensearch.neuralsearch.query;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.opensearch.neuralsearch.processor.combination.ScoreCombinationFactory;
+import org.opensearch.test.OpenSearchTestCase;
+
+public class FusionSpecTests extends OpenSearchTestCase {
+
+    public void testFromInlineFusion_whenNormalizationCombination_thenParsed() {
+        Map<String, Object> inline = Map.of(
+            "normalization",
+            Map.of("technique", "l2"),
+            "combination",
+            Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.3, 0.7)))
+        );
+        FusionSpec spec = FusionSpec.fromInlineFusion(inline);
+        assertNotNull(spec);
+        assertEquals("l2", spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        assertArrayEquals(new float[] { 0.3f, 0.7f }, spec.weights(), 0.0001f);
+    }
+
+    public void testFromInlineFusion_whenRrf_thenRankConstantAndRrfNormalization() {
+        // An rrf block carries no normalization clause, and the technique it defaults to is rrf rather than none: rank
+        // scoring IS the normalization step, which is how the coordinator resolves it through the same lookup as min_max.
+        Map<String, Object> inline = Map.of("combination", Map.of("technique", "rrf", "rank_constant", 42));
+        FusionSpec spec = FusionSpec.fromInlineFusion(inline);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
+        assertEquals(FusionSpec.NORMALIZATION_RRF, spec.normalizationTechnique());
+        assertEquals(42, spec.rankConstant());
+    }
+
+    public void testFromInlineFusion_whenRrfWithNormalizationClause_thenNormalizationReported() {
+        // RRF takes no normalization technique, but an inline block can still carry one. It is reported rather than
+        // dropped so the caller's technique check can reject the contradictory pairing.
+        Map<String, Object> inline = Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "rrf"));
+        FusionSpec spec = FusionSpec.fromInlineFusion(inline);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
+        assertEquals(FusionSpec.NORMALIZATION_MIN_MAX, spec.normalizationTechnique());
+    }
+
+    public void testFromInlineFusion_whenRrfRankConstantInvalid_thenRejected() {
+        // Resolved through the shared validator, so fused mode rejects exactly what the score-ranker-processor rejects.
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 0)))
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "rank_constant", 10001)))
+        );
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "rank_constant", "not-a-number")))
+        );
+    }
+
+    public void testFromInlineFusion_whenRankConstantUnderParameters_thenRejected() {
+        // The score-ranker-processor reads rank_constant off the combination clause and rejects it under `parameters`
+        // ("supported parameters are [weights]"). Fused mode must reject it the same way rather than silently defaulting
+        // to 60 and mis-ranking every query.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 42))))
+        );
+        assertTrue(e.getMessage().contains("must be set on the [combination] clause"));
+    }
+
+    public void testFromInlineFusion_whenRrfWithoutRankConstant_thenDefault() {
+        FusionSpec spec = FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf")));
+        assertNotNull(spec);
+        assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
+        assertEquals(FusionSpec.DEFAULT_RANK_CONSTANT, spec.rankConstant());
+    }
+
+    public void testFromInlineFusion_whenDefaults_thenMinMaxArithmeticMean() {
+        // An empty inline block resolves to the min_max + arithmetic_mean defaults.
+        FusionSpec spec = FusionSpec.fromInlineFusion(Map.of());
+        assertNotNull(spec);
+        assertEquals(FusionSpec.NORMALIZATION_MIN_MAX, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        assertEquals(0, spec.weights().length);
+        assertEquals(FusionSpec.DEFAULT_RANK_CONSTANT, spec.rankConstant());
+    }
+
+    public void testFromInlineFusion_whenNull_thenNull() {
+        assertNull(FusionSpec.fromInlineFusion(null));
+    }
+
+    public void testFromPipelineConfig_whenNormalizationProcessor_thenParsed() {
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of("normalization", Map.of("technique", "z_score"), "combination", Map.of("technique", "arithmetic_mean"))
+                )
+            )
+        );
+        FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
+        assertNotNull(spec);
+        assertEquals("z_score", spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+    }
+
+    public void testFromPipelineConfig_whenScoreRankerProcessor_thenRrf() {
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(Map.of("score-ranker-processor", Map.of("combination", Map.of("technique", "rrf", "rank_constant", 10))))
+        );
+        FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
+        assertEquals(10, spec.rankConstant());
+    }
+
+    public void testFromPipelineConfig_whenNormalizationProcessorWithRrfNormalization_thenRankConstantHonored() {
+        // rrf is also a normalization-processor normalization technique, and there the rank constant lives under
+        // `normalization.parameters` — that is where NormalizationProcessorFactory hands params to RRFNormalizationTechnique.
+        // Reading it only off the combination clause would silently rank this config at the default 60.
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 100)),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean")
+                    )
+                )
+            )
+        );
+        FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.NORMALIZATION_RRF, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        assertEquals(100, spec.rankConstant());
+    }
+
+    public void testFromPipelineConfig_whenNormalizationProcessorRankConstantInvalid_thenRejected() {
+        // Same shared validator as the score-ranker shape, so an out-of-range value is a 400 here too rather than a
+        // silent fallback to 60.
+        assertThrows(IllegalArgumentException.class, () -> FusionSpec.fromPipelineConfig(normalizationProcessorWithRankConstant(0)));
+        assertThrows(IllegalArgumentException.class, () -> FusionSpec.fromPipelineConfig(normalizationProcessorWithRankConstant(10001)));
+    }
+
+    public void testShape_distinguishesRrfPairingsThatResolveIdentically() {
+        // Both shapes can resolve to normalization=rrf + combination=rrf, and only the score-ranker one is a pairing
+        // classic allows — a normalization-processor asked to combine rrf-normalized scores by rrf is rejected by classic's
+        // compatibility matrix. The technique names cannot tell them apart, so the shape is what the fused-mode gate keys
+        // its exemption from that matrix on.
+        Map<String, Object> asNormalizationProcessor = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of("normalization", Map.of("technique", "rrf"), "combination", Map.of("technique", "rrf"))
+                )
+            )
+        );
+        FusionSpec normalizationShaped = FusionSpec.fromPipelineConfig(asNormalizationProcessor);
+        assertNotNull(normalizationShaped);
+        assertEquals(FusionSpec.Shape.NORMALIZATION_PROCESSOR, normalizationShaped.shape());
+        assertEquals(FusionSpec.NORMALIZATION_RRF, normalizationShaped.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_RRF, normalizationShaped.combinationTechnique());
+
+        Map<String, Object> asScoreRanker = Map.of(
+            "phase_results_processors",
+            List.of(Map.of("score-ranker-processor", Map.of("combination", Map.of("technique", "rrf"))))
+        );
+        FusionSpec rankFusionShaped = FusionSpec.fromPipelineConfig(asScoreRanker);
+        assertNotNull(rankFusionShaped);
+        assertEquals(FusionSpec.Shape.SCORE_RANKER_PROCESSOR, rankFusionShaped.shape());
+        // Same two technique names as above, which is the whole point.
+        assertEquals(normalizationShaped.normalizationTechnique(), rankFusionShaped.normalizationTechnique());
+        assertEquals(normalizationShaped.combinationTechnique(), rankFusionShaped.combinationTechnique());
+    }
+
+    public void testFromInlineFusion_whenRrf_thenScoreRankerShape() {
+        // An inline block naming rrf as the combination is the score-ranker shape, wherever it came from.
+        assertEquals(
+            FusionSpec.Shape.SCORE_RANKER_PROCESSOR,
+            FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf"))).shape()
+        );
+        assertEquals(FusionSpec.Shape.NORMALIZATION_PROCESSOR, FusionSpec.fromInlineFusion(Map.of()).shape());
+    }
+
+    public void testFromInlineFusion_whenMinMaxBounds_thenRejected() {
+        // lower_bounds/upper_bounds are the documented way to bound min_max in classic, and fused mode has no
+        // coordinator-side implementation of them. Refused, because accepting them and normalizing without them answers
+        // the request with a different ranking at HTTP 200 — silent divergence on the zero-migration path.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "min_max", "parameters", Map.of("lower_bounds", List.of(Map.of("mode", "apply", "min_score", 0.1))))
+                )
+            )
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[lower_bounds] not supported with normalization [min_max] in fused mode"));
+    }
+
+    public void testFromPipelineConfig_whenMinMaxBounds_thenRejected() {
+        // Same refusal through the other entry point: a classic normalization-processor pipeline read at rewrite. This is
+        // the migration path a user takes without editing their query at all, so it must not fuse on unbounded scores.
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of(
+                            "technique",
+                            "min_max",
+                            "parameters",
+                            Map.of(
+                                "lower_bounds",
+                                List.of(Map.of("mode", "apply", "min_score", 0.1)),
+                                "upper_bounds",
+                                List.of(Map.of("mode", "apply", "max_score", 0.9))
+                            )
+                        ),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean")
+                    )
+                )
+            )
+        );
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> FusionSpec.fromPipelineConfig(pipelineConfig));
+        // Both offenders named, in a stable order, and the honored set reported as empty for a score-based technique.
+        assertTrue(e.getMessage(), e.getMessage().contains("[normalization.parameters] [lower_bounds, upper_bounds] not supported"));
+        assertTrue(e.getMessage(), e.getMessage().contains("supported parameters are []"));
+    }
+
+    public void testFromInlineFusion_whenScoreNormalizationHasAnyParameter_thenRejected() {
+        // l2 and z_score take no parameters at all in classic either, so anything under the clause is a config error
+        // rather than something fused mode is behind on.
+        for (String technique : List.of("l2", "z_score")) {
+            IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(Map.of("normalization", Map.of("technique", technique, "parameters", Map.of("bogus", 1))))
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("[bogus] not supported with normalization [" + technique + "]"));
+        }
+    }
+
+    public void testFromInlineFusion_whenRrfNormalizationUnknownParameter_thenRejected() {
+        // rrf-as-normalization honors rank_constant and nothing else — the unknown key is named, the honored one is not.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 100, "bogus", 1)),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean")
+                )
+            )
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[bogus] not supported"));
+        assertTrue(e.getMessage(), e.getMessage().contains("supported parameters are [rank_constant]"));
+    }
+
+    public void testFromInlineFusion_whenRrfNormalizationWithArithmeticMean_thenRankConstantHonored() {
+        // The honored case, inline: rrf as the normalization step with a mean doing the combining. Guards the refusal
+        // above from over-reaching, and is the only unit coverage of this pairing through the inline entry point.
+        FusionSpec spec = FusionSpec.fromInlineFusion(
+            Map.of(
+                "normalization",
+                Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 100)),
+                "combination",
+                Map.of("technique", "arithmetic_mean")
+            )
+        );
+        assertNotNull(spec);
+        assertEquals(FusionSpec.Shape.NORMALIZATION_PROCESSOR, spec.shape());
+        assertEquals(FusionSpec.NORMALIZATION_RRF, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        assertEquals(100, spec.rankConstant());
+    }
+
+    public void testFromInlineFusion_whenScoreRankerRankConstantUnderNormalizationParameters_thenHonored() {
+        // The other shape's spelling of the same rrf parameter. Honored rather than refused: it names one rank constant
+        // for one rrf normalization, so there is nothing ambiguous to resolve, and 100 must reach the spec — resolving to
+        // the default 60 here is exactly the silent mis-ranking the refusal was written to avoid.
+        FusionSpec spec = FusionSpec.fromInlineFusion(
+            Map.of(
+                "normalization",
+                Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 100)),
+                "combination",
+                Map.of("technique", "rrf")
+            )
+        );
+        assertEquals(FusionSpec.Shape.SCORE_RANKER_PROCESSOR, spec.shape());
+        assertEquals(FusionSpec.NORMALIZATION_RRF, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_RRF, spec.combinationTechnique());
+        assertEquals(100, spec.rankConstant());
+    }
+
+    public void testFromInlineFusion_whenScoreRankerRankConstantInBothPlacesAndAgree_thenHonored() {
+        FusionSpec spec = FusionSpec.fromInlineFusion(
+            Map.of(
+                "normalization",
+                Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 100)),
+                "combination",
+                Map.of("technique", "rrf", "rank_constant", 100)
+            )
+        );
+        assertEquals(100, spec.rankConstant());
+    }
+
+    public void testFromInlineFusion_whenScoreRankerRankConstantInBothPlacesAndConflict_thenRejected() {
+        // A contradiction, not a precedence question: picking one silently would rank by a constant the user did not ask
+        // for, whichever side the rule favored.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 100)),
+                    "combination",
+                    Map.of("technique", "rrf", "rank_constant", 10)
+                )
+            )
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[rank_constant] is set to [10] on the [combination] clause"));
+        assertTrue(e.getMessage(), e.getMessage().contains("to [100] under [normalization.parameters]"));
+        assertTrue(e.getMessage(), e.getMessage().contains("set it in one place only"));
+    }
+
+    public void testFromInlineFusion_whenScoreRankerRankConstantUnderNormalizationParametersInvalid_thenRejected() {
+        // Range and type checks have to hold at the alternate spelling too, or it becomes the lenient way in.
+        for (Object invalid : List.of(0, 10001, "not-a-number")) {
+            assertThrows(
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "rrf", "parameters", Map.of("rank_constant", invalid)),
+                        "combination",
+                        Map.of("technique", "rrf")
+                    )
+                )
+            );
+        }
+    }
+
+    public void testFromInlineFusion_whenWeightsIsAnEmptyList_thenRejectedLikeClassic() {
+        // The normalization-processor refuses `weights: []` at pipeline creation (an empty list sums to 0, not 1), so a
+        // pipeline carrying one cannot exist; inline was the only way to write it, and it fused unweighted at HTTP 200 as
+        // if the key were absent. Refused for both shapes, with a message that names the fix.
+        for (Map<String, Object> combination : List.of(
+            Map.<String, Object>of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of())),
+            Map.<String, Object>of("technique", "rrf", "parameters", Map.of("weights", List.of()))
+        )) {
+            IllegalArgumentException e = expectThrows(
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(Map.of("combination", combination))
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("parameter [weights] must not be empty"));
+        }
+        // Absent is still "unweighted": the key, not an empty value, is what asks for equal weights.
+        assertEquals(0, FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "arithmetic_mean"))).weights().length);
+    }
+
+    public void testWithWeights_thenOnlyTheWeightsChange() {
+        FusionSpec base = FusionSpec.fromInlineFusion(
+            Map.of(
+                "normalization",
+                Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 17)),
+                "combination",
+                Map.of("technique", "geometric_mean", "parameters", Map.of("weights", List.of(0.4, 0.6)))
+            )
+        );
+        FusionSpec overlaid = base.withWeights(new float[] { 0.9f, 0.1f });
+        assertNotSame(base, overlaid);
+        assertArrayEquals(new float[] { 0.9f, 0.1f }, overlaid.weights(), 0.0f);
+        assertArrayEquals("the base is untouched", new float[] { 0.4f, 0.6f }, base.weights(), 0.0001f);
+        assertEquals(base.shape(), overlaid.shape());
+        assertEquals(base.normalizationTechnique(), overlaid.normalizationTechnique());
+        assertEquals(base.combinationTechnique(), overlaid.combinationTechnique());
+        assertEquals(17, overlaid.rankConstant());
+    }
+
+    public void testWeightsFromList_readsWhatTheRequestWrote() {
+        assertArrayEquals(new float[] { 1.0f, 0.0f }, FusionSpec.weightsFromList(List.of(1, 0)), 0.0f);
+        assertArrayEquals(new float[] { 0.25f, 0.75f }, FusionSpec.weightsFromList(List.of(0.25, 0.75)), 0.0f);
+        for (Object malformed : List.<Object>of("0.5", 0.5, List.of("a", 0.5), new ArrayList<>(List.of(0.5, "b")))) {
+            IllegalArgumentException e = expectThrows(IllegalArgumentException.class, () -> FusionSpec.weightsFromList(malformed));
+            assertTrue(e.getMessage(), e.getMessage().contains("parameter [weights] must be a collection of numbers"));
+        }
+        IllegalArgumentException empty = expectThrows(IllegalArgumentException.class, () -> FusionSpec.weightsFromList(List.of()));
+        assertTrue(empty.getMessage(), empty.getMessage().contains("parameter [weights] must not be empty"));
+    }
+
+    public void testFromInlineFusion_whenWeights_thenParsedForEveryTechnique() {
+        // weights live on the combination clause, which both shapes read the same way, so the normalization technique is
+        // irrelevant to whether they parse. Pinned across all four so a future per-technique parameter check cannot start
+        // dropping them for one of them.
+        for (String normalization : List.of("min_max", "z_score", "l2", "rrf")) {
+            FusionSpec spec = FusionSpec.fromInlineFusion(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", normalization),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.4, 0.6)))
+                )
+            );
+            assertEquals(normalization, FusionSpec.Shape.NORMALIZATION_PROCESSOR, spec.shape());
+            assertArrayEquals(normalization, new float[] { 0.4f, 0.6f }, spec.weights(), 0.0001f);
+        }
+        // ...and on the score-ranker shape, alongside a rank_constant in either place.
+        FusionSpec scoreRanker = FusionSpec.fromInlineFusion(
+            Map.of("combination", Map.of("technique", "rrf", "rank_constant", 10, "parameters", Map.of("weights", List.of(0.4, 0.6))))
+        );
+        assertEquals(FusionSpec.Shape.SCORE_RANKER_PROCESSOR, scoreRanker.shape());
+        assertEquals(10, scoreRanker.rankConstant());
+        assertArrayEquals(new float[] { 0.4f, 0.6f }, scoreRanker.weights(), 0.0001f);
+    }
+
+    public void testFromInlineFusion_whenWeightsIsNotAList_thenRejected() {
+        // Classic answers this with a 400 from ScoreCombinationUtil.validateParams. Fused mode never let that check see the
+        // value — it rebuilds the list from the parsed array — so a scalar or string weights fused unweighted at HTTP 200.
+        for (Object malformed : List.of(0.5, "0.3,0.7", Map.of("0", 0.3))) {
+            IllegalArgumentException e = assertThrows(
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "min_max"),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", malformed))
+                    )
+                )
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("parameter [weights] must be a collection of numbers"));
+        }
+        // Absent is still absent, not malformed.
+        assertEquals(
+            0,
+            FusionSpec.fromInlineFusion(
+                Map.of("normalization", Map.of("technique", "min_max"), "combination", Map.of("technique", "arithmetic_mean"))
+            ).weights().length
+        );
+    }
+
+    public void testFromInlineFusion_whenWeightsHasNonNumericElement_thenRejected() {
+        // The list check one level up cannot see this, and the element read is an unchecked cast — so before this guard a
+        // non-numeric element was a ClassCastException and a null one a NullPointerException, both HTTP 500. Stricter than
+        // classic, which casts the elements just as unguardedly, rather than parity with it.
+        List<Object> withNull = new ArrayList<>();
+        withNull.add(0.5);
+        withNull.add(null);
+        for (Object malformed : List.<Object>of(List.of("a"), List.of("a", 0.5), List.of(0.5, "b"), List.of(0.5, Map.of()), withNull)) {
+            // Both shapes read weights through the same method, so both are pinned: rrf routes to the score-ranker shape.
+            for (String combination : List.of("arithmetic_mean", "rrf")) {
+                IllegalArgumentException e = assertThrows(
+                    combination + " " + malformed,
+                    IllegalArgumentException.class,
+                    () -> FusionSpec.fromInlineFusion(
+                        Map.of("combination", Map.of("technique", combination, "parameters", Map.of("weights", malformed)))
+                    )
+                );
+                assertTrue(e.getMessage(), e.getMessage().contains("parameter [weights] must be a collection of numbers"));
+            }
+        }
+        // An integer is a Number too — the guard must not reject a weights list a user wrote without decimal points.
+        assertArrayEquals(
+            new float[] { 1.0f, 0.0f },
+            FusionSpec.fromInlineFusion(
+                Map.of("combination", Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(1, 0))))
+            ).weights(),
+            0.0001f
+        );
+    }
+
+    public void testFromInlineFusion_whenCombinationParameterUnknown_thenRejectedLikeClassic() {
+        // `weight` for `weights` is the typo that matters: the request is plainly meant to be weighted, and before this guard
+        // fused mode read only `weights`, so the clause fused UNWEIGHTED at HTTP 200 — a different ranking than the one asked
+        // for, with nothing in the response saying so. Classic refuses the same clause at pipeline creation
+        // ("supported parameters are [weights]"), and so does every combiner fused mode admits, including rrf, which routes
+        // to the score-ranker shape.
+        for (String combination : List.of("arithmetic_mean", "geometric_mean", "harmonic_mean", "rrf")) {
+            IllegalArgumentException typo = assertThrows(
+                combination,
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of("combination", Map.of("technique", combination, "parameters", Map.of("weight", List.of(0.2, 0.8))))
+                )
+            );
+            assertTrue(typo.getMessage(), typo.getMessage().contains("[combination.parameters] [weight] not supported"));
+            assertTrue(typo.getMessage(), typo.getMessage().contains("combination [" + combination + "] in fused mode"));
+            assertTrue(typo.getMessage(), typo.getMessage().contains("supported parameters are [weights]"));
+
+            // A valid weights beside an unknown key is refused too: the unknown key is named, the honored one is not.
+            IllegalArgumentException beside = assertThrows(
+                combination,
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of("combination", Map.of("technique", combination, "parameters", Map.of("weights", List.of(0.4, 0.6), "bogus", 1)))
+                )
+            );
+            assertTrue(beside.getMessage(), beside.getMessage().contains("[combination.parameters] [bogus] not supported"));
+            assertFalse(beside.getMessage(), beside.getMessage().contains("[bogus, weights]"));
+        }
+        // The rank_constant-under-parameters refusal on the score-ranker shape keeps its own, more specific message —
+        // it runs first, so a user who put rrf's constant in the wrong place is told where it goes rather than that it is unknown.
+        IllegalArgumentException misplaced = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", 42))))
+        );
+        assertTrue(misplaced.getMessage(), misplaced.getMessage().contains("must be set on the [combination] clause"));
+        // ...while under a score-based combiner the same key is simply unknown — there is no right place for it there.
+        IllegalArgumentException stray = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("combination", Map.of("technique", "arithmetic_mean", "parameters", Map.of("rank_constant", 42)))
+            )
+        );
+        assertTrue(stray.getMessage(), stray.getMessage().contains("[combination.parameters] [rank_constant] not supported"));
+    }
+
+    public void testFromPipelineConfig_whenCombinationParameterUnknown_thenRejected() {
+        // The pipeline-sourced path runs the same check. Classic has refused these keys at pipeline creation for as long as
+        // the processors have existed, so in a single-version cluster this never fires; in a mixed-version cluster — a newer
+        // cluster-manager storing a pipeline whose combiner takes a parameter this coordinator does not know — it is the
+        // fail-closed check, matching classic on this node, which cannot build that pipeline either.
+        Map<String, Object> normalizationProcessor = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "min_max"),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean", "parameters", Map.of("weights", List.of(0.4, 0.6), "future_knob", true))
+                    )
+                )
+            )
+        );
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromPipelineConfig(normalizationProcessor)
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[combination.parameters] [future_knob] not supported"));
+        assertTrue(e.getMessage(), e.getMessage().contains("combination [arithmetic_mean] in fused mode"));
+
+        Map<String, Object> scoreRanker = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "score-ranker-processor",
+                    Map.of("combination", Map.of("technique", "rrf", "rank_constant", 10, "parameters", Map.of("future_knob", true)))
+                )
+            )
+        );
+        IllegalArgumentException rrf = assertThrows(IllegalArgumentException.class, () -> FusionSpec.fromPipelineConfig(scoreRanker));
+        assertTrue(rrf.getMessage(), rrf.getMessage().contains("[combination.parameters] [future_knob] not supported"));
+        assertTrue(rrf.getMessage(), rrf.getMessage().contains("combination [rrf] in fused mode"));
+    }
+
+    public void testCombinationParameters_fusedHonorsExactlyWhatClassicHonors() {
+        // The guard that keeps the two in step: for every combiner fused mode admits, a parameters map classic accepts must
+        // parse in fused mode and one classic refuses must be refused — so a parameter added to a classic combiner alone
+        // breaks this test instead of being dropped silently by the coordinator.
+        ScoreCombinationFactory classic = new ScoreCombinationFactory();
+        for (String combination : List.of("arithmetic_mean", "geometric_mean", "harmonic_mean", "rrf")) {
+            for (Map<String, Object> parameters : List.of(
+                Map.<String, Object>of("weights", List.of(0.4, 0.6)),
+                Map.<String, Object>of("weights", List.of(0.4, 0.6), "bogus", 1),
+                Map.<String, Object>of("bogus", 1)
+            )) {
+                boolean classicAccepts;
+                try {
+                    classic.createCombination(combination, parameters);
+                    classicAccepts = true;
+                } catch (IllegalArgumentException refused) {
+                    classicAccepts = false;
+                }
+                boolean fusedAccepts;
+                try {
+                    FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", combination, "parameters", parameters)));
+                    fusedAccepts = true;
+                } catch (IllegalArgumentException refused) {
+                    fusedAccepts = false;
+                }
+                assertEquals(combination + " " + parameters, classicAccepts, fusedAccepts);
+            }
+        }
+    }
+
+    public void testFromInlineFusion_whenClauseKeyUnknown_thenRejected() {
+        // The readers take the keys they know and leave the rest unread, so a `weights` written one level too high — on the
+        // clause rather than under `parameters` — fused unweighted at HTTP 200, and a `rank_constant` on an arithmetic_mean
+        // clause ranked at the default 60. The same silent mis-ranking as an unknown parameter; refused the same way.
+        IllegalArgumentException weightsOnClause = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of(
+                    "normalization",
+                    Map.of("technique", "min_max"),
+                    "combination",
+                    Map.of("technique", "arithmetic_mean", "weights", List.of(0.3, 0.7))
+                )
+            )
+        );
+        assertTrue(weightsOnClause.getMessage(), weightsOnClause.getMessage().contains("[combination] contains unknown key [weights]"));
+        assertTrue(weightsOnClause.getMessage(), weightsOnClause.getMessage().contains("supported keys are [parameters, technique]"));
+
+        IllegalArgumentException boundsOnClause = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("normalization", Map.of("technique", "min_max", "lower_bounds", List.of(Map.of("mode", "apply"))))
+            )
+        );
+        assertTrue(
+            boundsOnClause.getMessage(),
+            boundsOnClause.getMessage().contains("[normalization] contains unknown key [lower_bounds]")
+        );
+
+        // rank_constant belongs on the clause only for the score-ranker shape; beside a score-based combiner there is no
+        // right place for it, so it is unknown there rather than silently unread.
+        IllegalArgumentException strayRankConstant = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", "arithmetic_mean", "rank_constant", 42)))
+        );
+        assertTrue(
+            strayRankConstant.getMessage(),
+            strayRankConstant.getMessage().contains("[combination] contains unknown key [rank_constant]")
+        );
+        assertTrue(strayRankConstant.getMessage(), strayRankConstant.getMessage().contains("supported keys are [parameters, technique]"));
+        // ...and on an rrf clause it is a known key, spelled either way the technique name is written.
+        for (String rrf : List.of("rrf", "RRF")) {
+            assertEquals(
+                42,
+                FusionSpec.fromInlineFusion(Map.of("combination", Map.of("technique", rrf, "rank_constant", 42))).rankConstant()
+            );
+        }
+        // A clause with no technique defaults to arithmetic_mean, and is checked against that shape's keys.
+        FusionSpec defaulted = FusionSpec.fromInlineFusion(
+            Map.of("combination", Map.of("parameters", Map.of("weights", List.of(0.3, 0.7))))
+        );
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, defaulted.combinationTechnique());
+        assertArrayEquals(new float[] { 0.3f, 0.7f }, defaulted.weights(), 0.0001f);
+        IllegalArgumentException defaultedStray = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", Map.of("rank_constant", 42)))
+        );
+        assertTrue(defaultedStray.getMessage(), defaultedStray.getMessage().contains("[combination] contains unknown key [rank_constant]"));
+        // Several unknown keys are all named, sorted, so one round trip fixes them all.
+        IllegalArgumentException several = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(
+                Map.of("combination", Map.of("technique", "arithmetic_mean", "weights", List.of(0.5, 0.5), "boost", 2))
+            )
+        );
+        assertTrue(several.getMessage(), several.getMessage().contains("unknown key [boost, weights]"));
+    }
+
+    public void testFromPipelineConfig_whenClauseKeyUnknown_thenIgnoredLikeClassic() {
+        // Deliberately asymmetric with the inline block: classic's factories read `technique` and `parameters` and ignore
+        // every other clause key, so a stray one changes nothing in a classic ranking. Dropping it fuses the pipeline
+        // exactly as classic serves it, whereas refusing it would turn `fusion: "pipeline"` into a 400 for a pipeline
+        // classic runs. Pinned so the inline check cannot leak onto this path.
+        Map<String, Object> pipelineConfig = Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of(
+                        "normalization",
+                        Map.of("technique", "min_max", "stray", true),
+                        "combination",
+                        Map.of("technique", "arithmetic_mean", "weights", List.of(0.3, 0.7))
+                    )
+                )
+            )
+        );
+        FusionSpec spec = FusionSpec.fromPipelineConfig(pipelineConfig);
+        assertNotNull(spec);
+        assertEquals(FusionSpec.NORMALIZATION_MIN_MAX, spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        // The misplaced weights are unread here, as they are in classic — unweighted on both paths.
+        assertEquals(0, spec.weights().length);
+    }
+
+    public void testFromInlineFusion_whenClauseIsNotAnObject_thenRejected() {
+        // `"combination": "rrf"` copies the shape of the supported one-level-up shorthand `"fusion": "pipeline"`. Every
+        // reader gates on instanceof Map, so without this it resolved to min_max + arithmetic_mean at HTTP 200.
+        IllegalArgumentException combination = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("combination", "rrf"))
+        );
+        assertTrue(combination.getMessage(), combination.getMessage().contains("[combination] must be an object"));
+
+        IllegalArgumentException normalization = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("normalization", "min_max"))
+        );
+        assertTrue(normalization.getMessage(), normalization.getMessage().contains("[normalization] must be an object"));
+    }
+
+    public void testFromInlineFusion_whenParametersIsNotAnObject_thenRejected() {
+        // The same guard one level down, and the mistake is the container rather than the parameter:
+        // `"parameters": [{"lower_bounds": [...]}]` is one stray bracket from the honest form. Every reader gated on
+        // instanceof Map and fell back to an empty one, so rejectUnhonoredNormalizationParameters was handed no keys to
+        // refuse and the request fused with min_max's defaults at HTTP 200 — bounds accepted and silently ignored, which is
+        // the exact outcome that guard exists to prevent.
+        for (Object malformed : List.<Object>of(List.of(Map.of("lower_bounds", List.of())), "lower_bounds", 0.5)) {
+            IllegalArgumentException e = assertThrows(
+                String.valueOf(malformed),
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(Map.of("normalization", Map.of("technique", "min_max", "parameters", malformed)))
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("[normalization.parameters] must be an object"));
+        }
+        // And on the other clause, reached through a different reader on each shape: readWeights for the
+        // normalization-processor one, rejectRankConstantUnderParameters for the score-ranker one that rrf routes to.
+        for (String combination : List.of("arithmetic_mean", "rrf")) {
+            IllegalArgumentException e = assertThrows(
+                combination,
+                IllegalArgumentException.class,
+                () -> FusionSpec.fromInlineFusion(
+                    Map.of("combination", Map.of("technique", combination, "parameters", List.of(Map.of("weights", List.of(0.3, 0.7)))))
+                )
+            );
+            assertTrue(e.getMessage(), e.getMessage().contains("[combination.parameters] must be an object"));
+        }
+    }
+
+    public void testFromInlineFusion_whenRrfParametersIsNotAnObject_thenTypeErrorNotRankConstantError() {
+        // rrf reads rank_constant out of this very map, so which of the two guards runs first decides what the user is told.
+        // The type error is the actionable one: nothing true can be said about a rank constant in a map that is not a map.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromInlineFusion(Map.of("normalization", Map.of("technique", "rrf", "parameters", List.of(60))))
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[normalization.parameters] must be an object"));
+        assertFalse(e.getMessage(), e.getMessage().contains("rank constant must be in the interval"));
+    }
+
+    public void testFromInlineFusion_whenParametersIsExplicitlyNull_thenTreatedAsAbsent() {
+        // An explicit null asks for nothing, which is servable — the same tolerance requireObjectClause gives a null clause.
+        // Written through HashMap because Map.of rejects null values.
+        Map<String, Object> normalization = new HashMap<>();
+        normalization.put("technique", "min_max");
+        normalization.put("parameters", null);
+        Map<String, Object> combination = new HashMap<>();
+        combination.put("technique", "arithmetic_mean");
+        combination.put("parameters", null);
+
+        FusionSpec spec = FusionSpec.fromInlineFusion(Map.of("normalization", normalization, "combination", combination));
+        assertEquals("min_max", spec.normalizationTechnique());
+        assertEquals(FusionSpec.TECHNIQUE_ARITHMETIC_MEAN, spec.combinationTechnique());
+        assertEquals(0, spec.weights().length);
+    }
+
+    public void testFromPipelineConfig_whenParametersIsNotAnObject_thenRejected() {
+        // A stored pipeline cannot carry this — classic's factory reads the clause through core's readOptionalMap and
+        // refuses it at pipeline creation — but the same processor shape is also how an inline fusion block is spelled, and
+        // that one is only ever parsed here. Pinned on this entry point too so the guard cannot be lost to a refactor that
+        // only keeps fromInlineFusion covered.
+        IllegalArgumentException e = assertThrows(
+            IllegalArgumentException.class,
+            () -> FusionSpec.fromPipelineConfig(
+                Map.of(
+                    "phase_results_processors",
+                    List.of(
+                        Map.of("normalization-processor", Map.of("normalization", Map.of("technique", "rrf", "parameters", List.of(60))))
+                    )
+                )
+            )
+        );
+        assertTrue(e.getMessage(), e.getMessage().contains("[normalization.parameters] must be an object"));
+    }
+
+    private static Map<String, Object> normalizationProcessorWithRankConstant(int rankConstant) {
+        return Map.of(
+            "phase_results_processors",
+            List.of(
+                Map.of(
+                    "normalization-processor",
+                    Map.of("normalization", Map.of("technique", "rrf", "parameters", Map.of("rank_constant", rankConstant)))
+                )
+            )
+        );
+    }
+
+    public void testFromPipelineConfig_whenNoFusionProcessor_thenNull() {
+        // A pipeline with no normalization/score-ranker processor yields null → caller fails fast.
+        assertNull(FusionSpec.fromPipelineConfig(Map.of("phase_results_processors", List.of())));
+        assertNull(FusionSpec.fromPipelineConfig(Map.of()));
+        assertNull(FusionSpec.fromPipelineConfig(null));
+    }
+}

@@ -39,6 +39,7 @@ import org.opensearch.neuralsearch.sparse.AbstractSparseTestBase;
 import org.opensearch.neuralsearch.sparse.data.SparseVector;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -134,6 +135,7 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
         when(visitor.acceptField(anyString())).thenReturn(true);
         query.visit(visitor);
         verify(visitor).visitLeaf(eq(query));
+        verify(visitor, never()).getSubVisitor(any(), any());
     }
 
     public void testVisit_notAcceptField() {
@@ -147,6 +149,80 @@ public class SparseVectorQueryTests extends AbstractSparseTestBase {
         when(visitor.acceptField(anyString())).thenReturn(false);
         query.visit(visitor);
         verify(visitor, never()).visitLeaf(eq(query));
+        verify(visitor, never()).getSubVisitor(any(), any());
+    }
+
+    public void testVisit_withFilter_visitsCompleteFilterTree() {
+        assertVisitsFilter(true);
+    }
+
+    public void testVisit_withRejectedSparseField_stillVisitsFilter() {
+        assertVisitsFilter(false);
+    }
+
+    private void assertVisitsFilter(boolean acceptSparseField) {
+        Term term = new Term(FILTER_FIELD, "value");
+        BooleanQuery filter = new BooleanQuery.Builder().add(new TermQuery(term), BooleanClause.Occur.MUST).build();
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(mockQueryContext)
+            .fieldName(FIELD_NAME)
+            .fallbackQuery(filter)
+            .filter(filter)
+            .build();
+        List<Query> leaves = new ArrayList<>();
+        List<Term> terms = new ArrayList<>();
+        List<BooleanClause.Occur> occurrences = new ArrayList<>();
+        List<Query> parents = new ArrayList<>();
+
+        query.visit(new QueryVisitor() {
+            @Override
+            public boolean acceptField(String field) {
+                return FILTER_FIELD.equals(field) || (acceptSparseField && FIELD_NAME.equals(field));
+            }
+
+            @Override
+            public void visitLeaf(Query leaf) {
+                leaves.add(leaf);
+            }
+
+            @Override
+            public void consumeTerms(Query leaf, Term... consumedTerms) {
+                terms.addAll(List.of(consumedTerms));
+            }
+
+            @Override
+            public QueryVisitor getSubVisitor(BooleanClause.Occur occur, Query parent) {
+                occurrences.add(occur);
+                parents.add(parent);
+                return this;
+            }
+        });
+
+        assertEquals(acceptSparseField ? List.of(query) : List.of(), leaves);
+        assertEquals(List.of(term), terms);
+        assertEquals(List.of(BooleanClause.Occur.FILTER, BooleanClause.Occur.MUST), occurrences);
+        assertEquals(List.of(query, filter), parents);
+    }
+
+    public void testVisit_whenFilterVisitorPrunes_doesNotVisitFilterTerms() {
+        TermQuery filter = new TermQuery(new Term(FILTER_FIELD, "value"));
+        SparseVectorQuery query = SparseVectorQuery.builder()
+            .queryVector(queryVector)
+            .queryContext(mockQueryContext)
+            .fieldName(FIELD_NAME)
+            .fallbackQuery(filter)
+            .filter(filter)
+            .build();
+        QueryVisitor visitor = mock(QueryVisitor.class);
+        when(visitor.acceptField(anyString())).thenReturn(true);
+        when(visitor.getSubVisitor(BooleanClause.Occur.FILTER, query)).thenReturn(QueryVisitor.EMPTY_VISITOR);
+
+        query.visit(visitor);
+
+        verify(visitor).visitLeaf(query);
+        verify(visitor).getSubVisitor(BooleanClause.Occur.FILTER, query);
+        verify(visitor, never()).consumeTerms(any(), any(Term[].class));
     }
 
     public void testHashCode() {

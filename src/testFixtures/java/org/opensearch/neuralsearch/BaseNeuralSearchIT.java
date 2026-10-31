@@ -140,6 +140,8 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
     protected static final String CONCURRENT_SEGMENT_SEARCH_ENABLED = "search.concurrent_segment_search.enabled";
     protected static final String RRF_SEARCH_PIPELINE = "rrf-search-pipeline";
     protected static final Version DISK_CIRCUIT_BREAKER_SUPPORTED_VERSION = Version.V_2_16_0;
+    /** The hybrid query's fused-mode switch, on by default. */
+    protected static final String HYBRID_FUSION_ENABLED_SETTING = "plugins.neural_search.hybrid.fusion.enabled";
 
     private final Set<String> IMMUTABLE_INDEX_PREFIXES = Set.of(
         SECURITY_AUDITLOG_PREFIX,
@@ -2794,6 +2796,22 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     @SneakyThrows
     protected void createRRFSearchPipeline(final String pipelineName, final List<Double> weights, boolean addExplainResponseProcessor) {
+        createRRFSearchPipeline(pipelineName, weights, null, addExplainResponseProcessor);
+    }
+
+    /**
+     * @param rankConstant written as {@code combination.rank_constant} when non-null — the location
+     *                     {@code RRFProcessorFactory} reads, which is the combination clause itself and NOT
+     *                     {@code parameters} (whose only supported key is {@code weights}). Null omits the key so the
+     *                     processor applies its own default.
+     */
+    @SneakyThrows
+    protected void createRRFSearchPipeline(
+        final String pipelineName,
+        final List<Double> weights,
+        final Integer rankConstant,
+        boolean addExplainResponseProcessor
+    ) {
         XContentBuilder builder = XContentFactory.jsonBuilder()
             .startObject()
             .field("description", "Post processor for hybrid search")
@@ -2801,8 +2819,11 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
             .startObject()
             .startObject("score-ranker-processor")
             .startObject("combination")
-            .field("technique", "rrf")
-            .startObject("parameters");
+            .field("technique", "rrf");
+        if (rankConstant != null) {
+            builder.field("rank_constant", rankConstant);
+        }
+        builder.startObject("parameters");
         if (weights.size() > 0) {
             builder.startArray("weights");
             for (Double weight : weights) {
@@ -2842,6 +2863,25 @@ public abstract class BaseNeuralSearchIT extends OpenSearchSecureRestTestCase {
 
     protected void disableStats() {
         updateClusterSettings("plugins.neural_search.stats_enabled", false);
+    }
+
+    /** Switch fused mode on explicitly (the default is already on), asserting the setting was accepted. */
+    protected void enableFusedMode() {
+        updateClusterSettings(HYBRID_FUSION_ENABLED_SETTING, true);
+    }
+
+    /**
+     * Turn fused mode off. Restore the default in a {@code finally} with {@link #resetFusedMode()}: a persistent cluster
+     * setting outlives the test class — {@link #cleanUp()} does not reset cluster settings — so a leak refuses every fused
+     * query in every later class.
+     */
+    protected void disableFusedMode() {
+        updateClusterSettings(HYBRID_FUSION_ENABLED_SETTING, false);
+    }
+
+    /** Clear the switch so the cluster is back on the setting's default (on), not pinned either way. */
+    protected void resetFusedMode() {
+        updateClusterSettings(HYBRID_FUSION_ENABLED_SETTING, null);
     }
 
     protected String executeNeuralStatRequest(List<String> nodeIds, List<String> stats) throws IOException, ParseException {

@@ -878,6 +878,7 @@ public class MLCommonsClientAccessor {
 
         Map<String, String> result = new HashMap<>();
         List<String> agentSteps = new ArrayList<>();
+        String finalSummary = null;
 
         // Iterate through all ModelTensors to find response and memory_id
         for (ModelTensors tensors : tensorOutputList) {
@@ -927,6 +928,9 @@ public class MLCommonsClientAccessor {
                             if (extractedResult.containsKey(INDEX_NAME_FIELD)) {
                                 result.put(SELECTED_INDEX, extractedResult.get(INDEX_NAME_FIELD));
                             }
+                            if (extractedResult.containsKey(AGENT_STEPS_FIELD_NAME)) {
+                                finalSummary = extractedResult.get(AGENT_STEPS_FIELD_NAME);
+                            }
                         }
                     } catch (Exception e) {
                         // If JSON parsing fails, skip this response
@@ -941,9 +945,11 @@ public class MLCommonsClientAccessor {
             throw new IllegalArgumentException(CONVERSATIONAL_AGENT_MISSING_DSL_QUERY_ERROR);
         }
 
-        // Combine agent steps if collected
+        // Prefer the steps rebuilt from the tool-call messages, else the summary from the final output
         if (!agentSteps.isEmpty()) {
             result.put(AGENT_STEPS_FIELD_NAME, String.join("\n", agentSteps));
+        } else if (finalSummary != null) {
+            result.put(AGENT_STEPS_FIELD_NAME, finalSummary);
         }
 
         return result;
@@ -1049,6 +1055,11 @@ public class MLCommonsClientAccessor {
     private Map<String, String> extractOpenAIAgentSteps(Map<String, Object> responseMap) {
         Map<String, String> extractedTrace = new HashMap<>();
         List<String> steps = new ArrayList<>();
+
+        // Keep the summary the agent wrote in its final output, per the documented output contract
+        if (responseMap.get(AGENT_STEPS_FIELD_NAME) instanceof String summary && !summary.isBlank()) {
+            extractedTrace.put(AGENT_STEPS_FIELD_NAME, summary);
+        }
 
         if (!responseMap.containsKey("choices")) {
             return extractedTrace;

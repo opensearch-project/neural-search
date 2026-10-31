@@ -9,6 +9,7 @@ import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.core.index.shard.ShardId;
+import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
 import org.opensearch.neuralsearch.processor.dto.ExplainDTO;
 import org.opensearch.neuralsearch.processor.dto.NormalizeScoresDTO;
@@ -44,6 +45,26 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         // verify when parameter values are set
         normalizationTechnique = new RRFNormalizationTechnique(Map.of("rank_constant", 25), scoreNormalizationUtil);
         assertEquals("rrf, rank_constant [25]", normalizationTechnique.describe());
+    }
+
+    public void testDescribe_matchesTheCoordinatorSideNormalizer() {
+        // rrf normalizes in two places — this technique shard-side, and ScalarNormalizers' coordinator-side normalizer for a
+        // fused hybrid query — and one request explained through either path has to read the same. The fused side reported
+        // just the technique name at first, so two queries differing only in rank_constant explained identically while
+        // scoring differently. Both sides are actually constructed here, which is what makes this parity rather than a
+        // restatement of the format they now share.
+        for (int rankConstant : new int[] {
+            RRFScoreNormalizer.MIN_RANK_CONSTANT,
+            RANK_CONSTANT,
+            25,
+            RRFScoreNormalizer.MAX_RANK_CONSTANT }) {
+            Map<String, Object> parameters = Map.of(RRFScoreNormalizer.PARAM_NAME_RANK_CONSTANT, rankConstant);
+            assertEquals(
+                String.valueOf(rankConstant),
+                new RRFNormalizationTechnique(parameters, scoreNormalizationUtil).describe(),
+                ScalarNormalizers.forTechnique(RRFNormalizationTechnique.TECHNIQUE_NAME, parameters).describe()
+            );
+        }
     }
 
     public void testNormalization_whenResultFromOneShardOneSubQuery_thenSuccessful() {
@@ -245,6 +266,52 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
         }
     }
 
+    /**
+     * Pins the multi shard ranking contract with exact score equality. Ranks for a subquery are assigned
+     * globally across all shards, ordered by descending original score with ascending docId as tie break
+     * (the ordering of {@link ScoreDoc#COMPARATOR}), and only then by ascending shard. This is the contract
+     * that any other RRF implementation has to reproduce to stay score compatible, and the assertion
+     * deltas used elsewhere in this class are too loose to detect a regression in it.
+     */
+    public void testNormalization_whenResultFromMultipleShards_thenRanksAreGlobalAcrossShards() {
+        RRFNormalizationTechnique normalizationTechnique = new RRFNormalizationTechnique(Map.of(), scoreNormalizationUtil);
+        TopDocs shard1TopDocs = new TopDocs(
+            new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] { new ScoreDoc(3, 0.9f), new ScoreDoc(4, 0.7f), new ScoreDoc(2, 0.1f) }
+        );
+        TopDocs shard2TopDocs = new TopDocs(
+            new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+            new ScoreDoc[] { new ScoreDoc(3, 0.8f), new ScoreDoc(9, 0.7f), new ScoreDoc(10, 0.6f), new ScoreDoc(15, 0.5f) }
+        );
+        List<CompoundTopDocs> compoundTopDocs = List.of(
+            new CompoundTopDocs(
+                new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                List.of(shard1TopDocs),
+                false,
+                new SearchShard("my_index", 0, "shard-uuid-1")
+            ),
+            new CompoundTopDocs(
+                new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+                List.of(shard2TopDocs),
+                false,
+                new SearchShard("my_index", 1, "shard-uuid-2")
+            )
+        );
+
+        normalizationTechnique.normalize(
+            NormalizeScoresDTO.builder().queryTopDocs(compoundTopDocs).normalizationTechnique(normalizationTechnique).build()
+        );
+
+        // global order by descending score: 0.9, 0.8, then 0.7 tied and broken by docId 4 before 9, then 0.6, 0.5, 0.1
+        assertEquals(rrfNorm(0), shard1TopDocs.scoreDocs[0].score, 0.0f); // doc 3, score 0.9
+        assertEquals(rrfNorm(2), shard1TopDocs.scoreDocs[1].score, 0.0f); // doc 4, score 0.7
+        assertEquals(rrfNorm(6), shard1TopDocs.scoreDocs[2].score, 0.0f); // doc 2, score 0.1
+        assertEquals(rrfNorm(1), shard2TopDocs.scoreDocs[0].score, 0.0f); // doc 3, score 0.8
+        assertEquals(rrfNorm(3), shard2TopDocs.scoreDocs[1].score, 0.0f); // doc 9, score 0.7
+        assertEquals(rrfNorm(4), shard2TopDocs.scoreDocs[2].score, 0.0f); // doc 10, score 0.6
+        assertEquals(rrfNorm(5), shard2TopDocs.scoreDocs[3].score, 0.0f); // doc 15, score 0.5
+    }
+
     public void testNormalizedScoresAreSetAtCorrectIndices() {
         // Setup test data
         SearchShardTarget shardTarget = new SearchShardTarget("node1", new ShardId("index", "_na_", 0), null, null);
@@ -355,6 +422,15 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
     }
 
     /**
+     * Expected scores come from the shared normalizer rather than a local copy of the formula, so this asserts
+     * that the technique delegates to it. That the formula itself is correct, and bit-identical to the BigDecimal
+     * implementation it replaced, is pinned separately in {@link RRFScoreNormalizerTests}.
+     */
+    private float rrfNorm(int rank) {
+        return RRFScoreNormalizer.scoreForRank(rank, RANK_CONSTANT);
+    }
+
+    /**
      * Rank scores are computed in integer arithmetic rather than with {@link BigDecimal}. That is only a safe
      * substitution if it is exactly equal to the BigDecimal form it replaced, so this asserts on raw float bits
      * rather than within a delta - a change that rounded even one ULP differently would pass a delta comparison.
@@ -386,22 +462,18 @@ public class RRFNormalizationTechniqueTests extends OpenSearchQueryTestCase {
             for (int rank = 0; rank < numDocs; rank++) {
                 assertEquals(
                     "rank_constant [" + rankConstant + "], rank [" + rank + "]",
-                    Float.floatToIntBits(rrfNorm(rank, rankConstant)),
+                    Float.floatToIntBits(bigDecimalRrfNorm(rank, rankConstant)),
                     Float.floatToIntBits(scoreDocs[rank].score)
                 );
             }
         }
     }
 
-    private float rrfNorm(int rank) {
-        return rrfNorm(rank, RANK_CONSTANT);
-    }
-
     /**
-     * The BigDecimal implementation that {@code RRFNormalizationTechnique#calculateNormalizedScore} replaced,
+     * The BigDecimal implementation that {@code RRFScoreNormalizer#scoreForRank} replaced,
      * retained here as an independent reference for what the rank score must be.
      */
-    private float rrfNorm(int rank, int rankConstant) {
+    private float bigDecimalRrfNorm(int rank, int rankConstant) {
         // 1.0f / (float) (rank + rankConstant + 1);
         return BigDecimal.ONE.divide(BigDecimal.valueOf(rank + rankConstant + 1), 10, RoundingMode.HALF_UP).floatValue();
     }

@@ -43,17 +43,38 @@ jobs:
       - name: Detect added release notes
         id: detect
         run: |
-          set -euo pipefail
-          # List files added in this push. For the initial push (before is all
-          # zeros) fall back to comparing against the parent commit.
+          set -uo pipefail
+          # Determine the commit range for this push. GitHub provides the
+          # branch tip before ("before") and after ("after") the push. Some
+          # pushes (first commit on a ref, force pushes, shallow history, or
+          # squash merges) can yield SHAs that are not resolvable in the local
+          # clone, so validate every endpoint before using it and fall back to
+          # comparing the tip against its parent.
           before="${{ github.event.before }}"
           after="${{ github.sha }}"
-          if [[ -z "$before" || "$before" == "0000000000000000000000000000000000000000" ]]; then
-            range="${after}^..${after}"
-          else
-            range="${before}..${after}"
+
+          zero="0000000000000000000000000000000000000000"
+
+          # "after" should always exist; be defensive anyway.
+          if ! git rev-parse --verify --quiet "${after}^{commit}" >/dev/null; then
+            echo "HEAD commit ${after} not found; nothing to do."
+            echo "added=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          if [[ -n "$before" && "$before" != "$zero" ]] \
+             && git rev-parse --verify --quiet "${before}^{commit}" >/dev/null; then
+            range="${before}..${after}"
+          elif git rev-parse --verify --quiet "${after}^{commit}~1" >/dev/null; then
+            # No usable "before" SHA: diff the tip against its first parent.
+            range="${after}~1..${after}"
+          else
+            # "after" is a root commit with no parent: diff against the empty tree.
+            empty_tree=$(git hash-object -t tree /dev/null)
+            range="${empty_tree}..${after}"
+          fi
+
+          echo "Using diff range: $range"
           added=$(git diff --name-only --diff-filter=A "$range" -- 'release-notes/**' || true)
           echo "Added release note files:"
           echo "$added"

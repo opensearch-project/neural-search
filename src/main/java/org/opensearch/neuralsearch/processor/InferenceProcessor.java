@@ -69,17 +69,40 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
     public static final String FIELD_MAP_FIELD = "field_map";
     public static final String SKIP_EXISTING = "skip_existing";
     public static final boolean DEFAULT_SKIP_EXISTING = false;
-    private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = (v1, v2) -> {
+    private static final BiFunction<Object, Object, Object> REMAPPING_FUNCTION = InferenceProcessor::remappingFunction;
+
+    /**
+     * Merge function used when two field_map entries resolve to the same key. Collections are
+     * concatenated and scalars are overwritten by the newer value. Maps are merged recursively
+     * (deep merge) so that sibling keys which diverge below the first path segment are preserved.
+     * For example, flat field_map keys "author.name.first" and "author.name.last" both resolve to
+     * originalKey "author" with nested target maps {name={first=...}} and {name={last=...}}; a
+     * shallow merge would replace the "name" entry wholesale and drop "first", whereas this
+     * recursive merge keeps both.
+     */
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    private static Object remappingFunction(Object v1, Object v2) {
         if (v1 instanceof Collection && v2 instanceof Collection) {
             ((Collection) v1).addAll((Collection) v2);
             return v1;
         } else if (v1 instanceof Map && v2 instanceof Map) {
-            ((Map) v1).putAll((Map) v2);
-            return v1;
+            Map<Object, Object> target = (Map<Object, Object>) v1;
+            // Deep-merge key by key. We can't use Map.merge here because it rejects null values
+            // (and removes the key when the remapping result is null), whereas target values may
+            // legitimately be null (e.g. empty strings normalized to null and skipped). Only recurse
+            // when both sides hold a value for the same key; otherwise overwrite with the newer value.
+            ((Map<Object, Object>) v2).forEach((key, value) -> {
+                if (target.containsKey(key)) {
+                    target.put(key, remappingFunction(target.get(key), value));
+                } else {
+                    target.put(key, value);
+                }
+            });
+            return target;
         } else {
             return v2;
         }
-    };
+    }
 
     private final String type;
 
@@ -352,7 +375,11 @@ public abstract class InferenceProcessor extends AbstractBatchingProcessor {
             if (targetKey instanceof Map) {
                 Map<String, Object> treeRes = new LinkedHashMap<>();
                 buildNestedMap(originalKey, targetKey, sourceAndMetadataMap, treeRes);
-                mapWithProcessorKeys.put(originalKey, treeRes.get(originalKey));
+                // Multiple flat field_map entries can share the same leading path segment, e.g.
+                // "author.name" and "author.bio" (and even "author.name.first"/"author.name.last").
+                // Deep-merge their nested target maps instead of overwriting, so sibling keys at any
+                // depth aren't dropped. See REMAPPING_FUNCTION / remappingFunction.
+                mapWithProcessorKeys.merge(originalKey, treeRes.get(originalKey), REMAPPING_FUNCTION);
             } else {
                 mapWithProcessorKeys.put(String.valueOf(targetKey), normalizeSourceValue(sourceAndMetadataMap.get(originalKey)));
             }
