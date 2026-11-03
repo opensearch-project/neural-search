@@ -32,6 +32,7 @@ import static org.opensearch.neuralsearch.util.TestUtils.PARAM_NAME_WEIGHTS;
 import static org.opensearch.neuralsearch.util.TestUtils.RELATION_EQUAL_TO;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_DIMENSION;
 import static org.opensearch.neuralsearch.util.TestUtils.TEST_SPACE_TYPE;
+import static org.opensearch.neuralsearch.util.TestUtils.assertKnnWithinTopDocsExplanation;
 import static org.opensearch.neuralsearch.util.TestUtils.createRandomVector;
 import static org.opensearch.neuralsearch.util.TestUtils.getMaxScore;
 import static org.opensearch.neuralsearch.util.AggregationsTestUtils.getNestedHits;
@@ -202,7 +203,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         assertEquals(1, ((List) hit1DetailsForHit2.get("details")).size());
 
         Map<String, Object> explanationsHit2 = getListOfValues(hit1DetailsForHit2, "details").get(0);
-        assertEquals("within top 3 docs", explanationsHit2.get("description"));
+        assertKnnWithinTopDocsExplanation(3, explanationsHit2.get("description"));
         assertTrue((double) explanationsHit2.get("value") > 0.0f);
         assertEquals(0, ((List) explanationsHit2.get("details")).size());
 
@@ -242,7 +243,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         assertEquals(1, ((List) hit3DetailsForHit1.get("details")).size());
 
         Map<String, Object> explanationsHit3 = getListOfValues(hit3DetailsForHit1, "details").get(0);
-        assertEquals("within top 3 docs", explanationsHit3.get("description"));
+        assertKnnWithinTopDocsExplanation(3, explanationsHit3.get("description"));
         assertEquals(0, getListOfValues(explanationsHit3, "details").size());
         assertTrue((double) explanationsHit3.get("value") > 0.0f);
 
@@ -620,7 +621,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         assertEquals(1, ((List) hit1DetailsForHit2.get("details")).size());
 
         Map<String, Object> explanationsHit2 = getListOfValues(hit1DetailsForHit2, "details").get(0);
-        assertEquals("within top 3 docs", explanationsHit2.get("description"));
+        assertKnnWithinTopDocsExplanation(3, explanationsHit2.get("description"));
         assertTrue((double) explanationsHit2.get("value") > 0.0f);
         assertEquals(0, ((List) explanationsHit2.get("details")).size());
 
@@ -660,7 +661,7 @@ public class HybridQueryExplainIT extends BaseNeuralSearchIT {
         assertEquals(1, ((List) hit3DetailsForHit1.get("details")).size());
 
         Map<String, Object> explanationsHit3 = getListOfValues(hit3DetailsForHit1, "details").get(0);
-        assertEquals("within top 3 docs", explanationsHit3.get("description"));
+        assertKnnWithinTopDocsExplanation(3, explanationsHit3.get("description"));
         assertEquals(0, getListOfValues(explanationsHit3, "details").size());
         assertTrue((double) explanationsHit3.get("value") > 0.0f);
 

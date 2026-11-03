@@ -19,10 +19,13 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.IntStream;
 
 import org.apache.commons.lang3.Range;
@@ -417,6 +420,33 @@ public class TestUtils {
 
     public static String generateModelId() {
         return "public_model_" + RandomizedTest.randomAsciiAlphanumOfLength(8);
+    }
+
+    /**
+     * Lucene explains a k-NN match as the candidate set it came from rather than as a scored clause, and the wording is
+     * Lucene's: {@code "within top N docs"} through Lucene 10.5, {@code "Within top N doc(s)"} from Lucene 10.6
+     * (apache/lucene#16271). Tests match the shape of that message, not its exact text, so a wording change in Lucene does
+     * not fail them.
+     */
+    private static final Pattern KNN_WITHIN_TOP_DOCS_EXPLANATION = Pattern.compile("(?i)within top (\\d+) doc(?:s|\\(s\\))");
+
+    /**
+     * @return true when {@code description} is Lucene's explanation of a k-NN match, for any candidate-set size
+     */
+    public static boolean isKnnWithinTopDocsExplanation(final String description) {
+        return description != null && KNN_WITHIN_TOP_DOCS_EXPLANATION.matcher(description).matches();
+    }
+
+    /**
+     * Asserts that {@code description} is Lucene's explanation of a k-NN match drawn from the top {@code expectedTopN}
+     * candidates, whichever wording the Lucene version in use produces.
+     */
+    public static void assertKnnWithinTopDocsExplanation(final int expectedTopN, final Object description) {
+        Matcher matcher = description instanceof String ? KNN_WITHIN_TOP_DOCS_EXPLANATION.matcher((String) description) : null;
+        assertTrue(
+            String.format(Locale.ROOT, "expected a k-NN explanation within the top %d docs but was [%s]", expectedTopN, description),
+            matcher != null && matcher.matches() && Integer.parseInt(matcher.group(1)) == expectedTopN
+        );
     }
 
     public static void initializeEventStatsManager() {
