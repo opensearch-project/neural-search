@@ -18,6 +18,7 @@ import org.opensearch.neuralsearch.processor.semantic.SemanticFieldProcessor;
 import org.opensearch.transport.client.OpenSearchClient;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -113,9 +114,27 @@ public final class SemanticFieldProcessorFactory extends AbstractBatchingSystemP
         }
 
         int batch_size = DEFAULT_BATCH_SIZE;
+        // Check if batch size is configured per semantic field in the ingest pipeline config.
+        // Iterate in deterministic order (by field path) to avoid dependence on HashMap iteration order.
+        List<String> fieldPaths = new ArrayList<>(semanticFieldPathToConfigMap.keySet());
+        Collections.sort(fieldPaths);
+        for (final String fieldPath : fieldPaths) {
+            final Map<String, Object> semanticFieldConfig = semanticFieldPathToConfigMap.get(fieldPath);
+            if (semanticFieldConfig.containsKey("batch_size")) {
+                Object batchSizeObj = semanticFieldConfig.get("batch_size");
+                if (batchSizeObj instanceof Integer) {
+                    batch_size = (Integer) batchSizeObj;
+                    // Field-specific batch_size takes precedence; stop checking further fields.
+                    break;
+                }
+            }
+        }
+        // Fall back to the global index setting if not configured per semantic field.
+        // The global setting must not overwrite a valid field-specific batch_size (handled above).
         for (Settings settings : settingsList) {
             if (settings.hasValue(SEMANTIC_INGEST_BATCH_SIZE.getKey())) {
                 batch_size = SEMANTIC_INGEST_BATCH_SIZE.get(settings);
+                break;
             }
         }
 
