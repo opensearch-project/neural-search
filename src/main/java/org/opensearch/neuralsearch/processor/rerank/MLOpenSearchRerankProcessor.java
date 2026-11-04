@@ -4,9 +4,16 @@
  */
 package org.opensearch.neuralsearch.processor.rerank;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.opensearch.action.search.SearchResponse;
@@ -16,9 +23,12 @@ import org.opensearch.neuralsearch.processor.SimilarityInferenceRequest;
 import org.opensearch.neuralsearch.processor.factory.RerankProcessorFactory;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.InnerHitsContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.neuralsearch.stats.events.EventStatName;
 import org.opensearch.neuralsearch.stats.events.EventStatsManager;
+import org.opensearch.search.SearchHit;
+import org.opensearch.search.SearchHits;
 
 /**
  * Rescoring Rerank Processor that uses a TextSimilarity model in ml-commons to rescore
@@ -76,14 +86,143 @@ public class MLOpenSearchRerankProcessor extends RescoringRerankProcessor {
         }
         List<?> ctxList = (List<?>) ctxObj;
         List<String> contexts = ctxList.stream().map(str -> (String) str).collect(Collectors.toList());
+        ActionListener<List<Float>> scoreListener = listener;
+        if (rerankingContext.containsKey(InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD)) {
+            if (contexts.isEmpty()) {
+                // No chunks anywhere on the page: nothing to rerank, keep the original scores
+                listener.onResponse(Arrays.stream(response.getHits().getHits()).map(SearchHit::getScore).collect(Collectors.toList()));
+                return;
+            }
+            scoreListener = innerHitsScoreListener(response, rerankingContext, listener);
+        }
+        List<String> texts = contexts.stream().filter(Objects::nonNull).collect(Collectors.toList());
+        if (texts.size() < contexts.size()) {
+            if (texts.isEmpty()) {
+                // No text to rerank anywhere on the page: everything is unscored
+                scoreListener.onResponse(Collections.nCopies(contexts.size(), Float.NaN));
+                return;
+            }
+            scoreListener = missingTextScoreListener(contexts, scoreListener);
+        }
         mlCommonsClientAccessor.inferenceSimilarity(
             SimilarityInferenceRequest.builder()
                 .modelId(modelId)
                 .queryText((String) rerankingContext.get(QueryContextSourceFetcher.QUERY_TEXT_FIELD))
-                .inputTexts(contexts)
+                .inputTexts(texts)
                 .build(),
-            listener
+            scoreListener
         );
+    }
+
+    /** Puts the model scores of the present texts back in place and gives each missing (null) text a NaN score. */
+    private static ActionListener<List<Float>> missingTextScoreListener(
+        final List<String> contexts,
+        final ActionListener<List<Float>> listener
+    ) {
+        return ActionListener.wrap(scores -> {
+            long expected = contexts.stream().filter(Objects::nonNull).count();
+            if (scores.size() != expected) {
+                throw new IllegalStateException(
+                    String.format(Locale.ROOT, "Expected %d scores from the rerank model, got %d", expected, scores.size())
+                );
+            }
+            List<Float> allScores = new ArrayList<>(contexts.size());
+            Iterator<Float> modelScores = scores.iterator();
+            for (String context : contexts) {
+                allScores.add(context == null ? Float.NaN : modelScores.next());
+            }
+            listener.onResponse(allScores);
+        }, listener::onFailure);
+    }
+
+    /**
+     * Spreads the flat chunk scores back over each hit's inner hits lists, re-sorts them and reports the per-hit maximum.
+     * A hit without scored chunks gets a NaN score, which ranks it after all scored hits.
+     */
+    @SuppressWarnings("unchecked")
+    private ActionListener<List<Float>> innerHitsScoreListener(
+        final SearchResponse response,
+        final Map<String, Object> rerankingContext,
+        final ActionListener<List<Float>> listener
+    ) {
+        List<List<SearchHit.NestedIdentity>> chunkIdentities = (List<List<SearchHit.NestedIdentity>>) rerankingContext.get(
+            InnerHitsContextSourceFetcher.CHUNK_IDENTITIES_FIELD
+        );
+        return ActionListener.wrap(scores -> {
+            int expected = chunkIdentities.stream().mapToInt(List::size).sum();
+            if (scores.size() != expected) {
+                throw new IllegalStateException(
+                    String.format(Locale.ROOT, "Expected %d chunk scores from the rerank model, got %d", expected, scores.size())
+                );
+            }
+            SearchHit[] hits = response.getHits().getHits();
+            List<Float> hitScores = new ArrayList<>(hits.length);
+            int cursor = 0;
+            for (int i = 0; i < hits.length; i++) {
+                Map<SearchHit.NestedIdentity, Float> scoreByIdentity = new HashMap<>();
+                float maxScore = Float.NaN;
+                for (SearchHit.NestedIdentity identity : chunkIdentities.get(i)) {
+                    float score = scores.get(cursor++);
+                    scoreByIdentity.put(identity, score);
+                    if (!Float.isNaN(score) && (Float.isNaN(maxScore) || score > maxScore)) {
+                        maxScore = score;
+                    }
+                }
+                hitScores.add(maxScore);
+                if (!scoreByIdentity.isEmpty()) {
+                    rescoreInnerHits(hits[i], scoreByIdentity);
+                }
+            }
+            listener.onResponse(hitScores);
+        }, listener::onFailure);
+    }
+
+    /**
+     * Writes the chunk scores into every inner hits list holding scored chunks and re-sorts it, descending into the inner
+     * hits of inner hits for nested-in-nested chunks.
+     */
+    private static void rescoreInnerHits(final SearchHit hit, final Map<SearchHit.NestedIdentity, Float> scoreByIdentity) {
+        if (hit.getInnerHits() == null) {
+            return;
+        }
+        Map<String, SearchHits> innerHits = new LinkedHashMap<>(hit.getInnerHits());
+        for (Map.Entry<String, SearchHits> entry : innerHits.entrySet()) {
+            SearchHits list = entry.getValue();
+            SearchHit[] chunks = list.getHits();
+            if (chunks.length == 0) {
+                continue;
+            }
+            if (!scoreByIdentity.containsKey(chunks[0].getNestedIdentity())) {
+                for (SearchHit innerHit : chunks) {
+                    rescoreInnerHits(innerHit, scoreByIdentity);
+                }
+                continue;
+            }
+            float listMaxScore = Float.NaN;
+            for (SearchHit chunk : chunks) {
+                float score = scoreByIdentity.get(chunk.getNestedIdentity());
+                chunk.score(score);
+                if (!Float.isNaN(score) && (Float.isNaN(listMaxScore) || score > listMaxScore)) {
+                    listMaxScore = score;
+                }
+            }
+            // An explicit inner_hits sort wins: chunks get rerank scores but keep the requested order and sort values
+            boolean explicitlySorted = chunks[0].getSortValues().length > 0;
+            if (!explicitlySorted) {
+                Arrays.sort(chunks, RescoringRerankProcessor.BY_SCORE_DESC_UNSCORED_LAST);
+            }
+            entry.setValue(
+                new SearchHits(
+                    chunks,
+                    list.getTotalHits(),
+                    listMaxScore,
+                    list.getSortFields(),
+                    list.getCollapseField(),
+                    list.getCollapseValues()
+                )
+            );
+        }
+        hit.setInnerHits(innerHits);
     }
 
 }

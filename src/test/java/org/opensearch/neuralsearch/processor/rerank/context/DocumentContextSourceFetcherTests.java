@@ -59,14 +59,22 @@ public class DocumentContextSourceFetcherTests extends OpenSearchTestCase {
     }
 
     @SneakyThrows
-    public void testContextFromSearchHit_whenMissingField_thenReturnsEmpty() {
+    public void testContextFromSearchHit_whenMissingField_thenReturnsNull() {
         DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("nonexistent"));
         SearchResponse response = createSearchResponse(createHit("{\"title\": \"hello\"}", "1"));
 
         fetchAndAssert(fetcher, response, contexts -> {
             assertEquals(1, contexts.size());
-            assertEquals("", contexts.get(0));
+            assertNull(contexts.get(0));
         });
+    }
+
+    @SneakyThrows
+    public void testContextFromSearchHit_whenSomeFieldsMissing_thenJoinsPresentOnes() {
+        DocumentContextSourceFetcher fetcher = new DocumentContextSourceFetcher(List.of("title", "nonexistent", "body"));
+        SearchResponse response = createSearchResponse(createHit("{\"title\": \"hello \", \"body\": \"world\"}", "1"));
+
+        fetchAndAssert(fetcher, response, contexts -> assertEquals(List.of("hello world"), contexts));
     }
 
     @SneakyThrows
