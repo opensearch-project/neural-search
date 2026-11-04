@@ -33,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Agentic Search] Keep the `agent_steps_summary` returned in a conversational agent's final output, which was dropped for OpenAI native function calling ([#2071](https://github.com/opensearch-project/neural-search/pull/2071))
 * [Semantic Field] Stop logging the full ingest document on chunking or model-info failure; log only the document `_id` and `_index` so customer content is no longer written to service logs ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
 * [Sparse ANN] Fix documents with token ids at or above 32768 never matching: approximate search on the Lucene engine returned the documents of the id modulo 32768 instead (e.g. 0 for 32768), and the native engine never matched ids from 32768 to 65535 and failed the shard on an id above 65535. The native engine now folds ids modulo 65536, so ids up to 65535 match exactly ([#2059](https://github.com/opensearch-project/neural-search/pull/2059))
+* [Hybrid Query] Fix inaccurate hits.total.value on hybrid queries with a small size, caused by top-k heap eviction feeding min-competitive-score pruning before track_total_hits' threshold was reached ([opensearch-project/OpenSearch#22823](https://github.com/opensearch-project/OpenSearch/issues/22823))
 
 ### Infrastructure
 * Fetch test models from commit-pinned `raw.githubusercontent.com` URLs, fix ITs for secure cluster ([#2070](https://github.com/opensearch-project/neural-search/pull/2070))
