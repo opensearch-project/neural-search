@@ -271,6 +271,138 @@ public class ScoreCombinationTechniqueTests extends OpenSearchTestCase {
         }
     }
 
+    public void testCombination_whenScorePrimaryWithTiebreakField_thenOrderedByCombinedScoreThenTiebreaker() {
+        // [_score desc, price asc] without collapse: the page is ordered by the COMBINED score, ties broken by the field,
+        // not by the raw per-sub-query scores the shard sorted by. Scores below are the normalized per-sub-query scores the
+        // combiner receives; a 0 in a sub-query means the document did not match it.
+        // doc1: [1.0, 0 ] price 300 -> mean 0.5 doc2: [0.2, 1.0] price 100 -> mean 0.6
+        // doc3: [0.5, 0.5] price 200 -> mean 0.5 doc4: [0 , 0.4] price 50 -> mean 0.2
+        // combined order: doc2 (0.6), doc3 and doc1 tie at 0.5 -> price asc -> doc3 (200) before doc1 (300), doc4 (0.2).
+        // A merge on the raw sort values would give doc2, doc1 (raw 1.0), doc3 (0.5), doc4.
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+        SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) };
+        Sort sort = new Sort(sortFields);
+        List<CompoundTopDocs> queryTopDocs = List.of(scorePrimaryShard(sortFields));
+
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .sort(sort)
+                .isSingleShard(false)
+                .build()
+        );
+
+        List<ScoreDoc> combinedDocs = queryTopDocs.getFirst().getScoreDocs();
+        assertEquals(List.of(2, 3, 1, 4), combinedDocs.stream().map(scoreDoc -> scoreDoc.doc).toList());
+        float[] expectedCombinedScores = new float[] { 0.6f, 0.5f, 0.5f, 0.2f };
+        int[] expectedPrices = new int[] { 100, 200, 300, 50 };
+        for (int i = 0; i < combinedDocs.size(); i++) {
+            FieldDoc fieldDoc = (FieldDoc) combinedDocs.get(i);
+            assertEquals("combined score of doc " + fieldDoc.doc, expectedCombinedScores[i], fieldDoc.score, DELTA_FOR_SCORE_ASSERTION);
+            assertEquals(2, fieldDoc.fields.length);
+            assertEquals("_score sort value of doc " + fieldDoc.doc, fieldDoc.score, ((Number) fieldDoc.fields[0]).floatValue(), 0.0f);
+            assertEquals("tiebreaker of doc " + fieldDoc.doc, expectedPrices[i], ((Number) fieldDoc.fields[1]).intValue());
+        }
+    }
+
+    public void testCombination_whenScorePrimaryWithSearchAfter_thenOnlyDocsAfterCursorKept() {
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+        SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) };
+        Sort sort = new Sort(sortFields);
+
+        // cursor = doc3's own sort values [0.5, 200]: strictly after it are doc1 (tie on 0.5, price 300 > 200) and doc4 (0.2)
+        List<CompoundTopDocs> queryTopDocs = List.of(scorePrimaryShard(sortFields));
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .sort(sort)
+                .isSingleShard(false)
+                .searchAfter(new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 0.5f, 200 }))
+                .build()
+        );
+        assertEquals(List.of(1, 4), queryTopDocs.getFirst().getScoreDocs().stream().map(scoreDoc -> scoreDoc.doc).toList());
+
+        // a cursor between two tied scores: [0.5, 250] keeps doc1 (price 300) and drops doc3 (price 200)
+        queryTopDocs = List.of(scorePrimaryShard(sortFields));
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .sort(sort)
+                .isSingleShard(false)
+                .searchAfter(new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 0.5f, 250 }))
+                .build()
+        );
+        assertEquals(List.of(1, 4), queryTopDocs.getFirst().getScoreDocs().stream().map(scoreDoc -> scoreDoc.doc).toList());
+
+        // the cursor of the last document leaves nothing: search_after is exclusive
+        queryTopDocs = List.of(scorePrimaryShard(sortFields));
+        scoreCombiner.combineScores(
+            CombineScoresDto.builder()
+                .queryTopDocs(queryTopDocs)
+                .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .querySearchResults(Collections.emptyList())
+                .sort(sort)
+                .isSingleShard(false)
+                .searchAfter(new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 0.2f, 50 }))
+                .build()
+        );
+        assertTrue(queryTopDocs.getFirst().getScoreDocs().isEmpty());
+    }
+
+    public void testCombination_whenScorePrimaryWithSearchAfterOfWrongLength_thenFail() {
+        ScoreCombiner scoreCombiner = new ScoreCombiner();
+        SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) };
+        List<CompoundTopDocs> queryTopDocs = List.of(scorePrimaryShard(sortFields));
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> scoreCombiner.combineScores(
+                CombineScoresDto.builder()
+                    .queryTopDocs(queryTopDocs)
+                    .scoreCombinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                    .querySearchResults(Collections.emptyList())
+                    .sort(new Sort(sortFields))
+                    .isSingleShard(false)
+                    .searchAfter(new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 0.5f }))
+                    .build()
+            )
+        );
+        assertEquals("search_after has 1 value(s) but sort has 2", exception.getMessage());
+    }
+
+    /** One shard, two sub-queries, [_score, price] field docs holding the normalized per-sub-query scores; see the test above. */
+    private CompoundTopDocs scorePrimaryShard(SortField[] sortFields) {
+        return new CompoundTopDocs(
+            new TotalHits(4, TotalHits.Relation.EQUAL_TO),
+            List.of(
+                new TopFieldDocs(
+                    new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                    new FieldDoc[] {
+                        new FieldDoc(1, 1.0f, new Object[] { 1.0f, 300 }),
+                        new FieldDoc(3, 0.5f, new Object[] { 0.5f, 200 }),
+                        new FieldDoc(2, 0.2f, new Object[] { 0.2f, 100 }) },
+                    sortFields
+                ),
+                new TopFieldDocs(
+                    new TotalHits(3, TotalHits.Relation.EQUAL_TO),
+                    new FieldDoc[] {
+                        new FieldDoc(2, 1.0f, new Object[] { 1.0f, 100 }),
+                        new FieldDoc(3, 0.5f, new Object[] { 0.5f, 200 }),
+                        new FieldDoc(4, 0.4f, new Object[] { 0.4f, 50 }) },
+                    sortFields
+                )
+            ),
+            true,
+            SEARCH_SHARD
+        );
+    }
+
     public void testCombination_whenSortEnabledAndShardHasNoResults_thenNoException() {
         // Reproduces https://github.com/opensearch-project/neural-search/issues/1934:
         // with sort enabled (as search_after requires), a shard that contributed no results past the cursor

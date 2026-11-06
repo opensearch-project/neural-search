@@ -30,6 +30,7 @@ import org.apache.lucene.util.PriorityQueue;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.lucene.MultiLeafFieldComparator;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 
 /*
  Collects the TopFieldDocs after executing hybrid query. Uses HybridQueryTopDocs as DTO to handle each sub query results.
@@ -40,6 +41,13 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
     private final int numHits;
     private final HitsThresholdChecker hitsThresholdChecker;
     private final Sort sort;
+    // _score is the primary sort key ([_score] or [_score, field...]). Each sub-query's queue must then be ordered by that
+    // sub-query's OWN score: the SCORE comparator reads the score from its scorer, and HybridSubQueryScorer#score() is the sum of
+    // all sub-query scores, so the SCORE child comparator is wrapped (HybridLeafFieldComparator) and fed the per-sub-query score
+    // before every comparison and copy. Field children are left as they are; a field value does not depend on the sub-query.
+    private final boolean isSortByScore;
+    // per sub-query handle to the wrapped SCORE comparator; null entries when the sort is not by score
+    private HybridLeafFieldComparator[] scoreComparators;
     @Nullable
     private FieldDoc after;
     private FieldComparator<?> firstComparator;
@@ -92,6 +100,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         this.hitsThresholdChecker = hitsThresholdChecker;
         this.sort = sort;
         this.after = after;
+        this.isSortByScore = HybridSearchCollapseUtil.isScorePrimarySort(sort.getSort());
     }
 
     /**
@@ -176,12 +185,22 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         /*
          * This hit is competitive - replace bottom element in queue & adjustTop
          */
-        protected void collectCompetitiveHit(int doc, int subQueryNumber) throws IOException {
+        protected void collectCompetitiveHit(int doc, int subQueryNumber, float score) throws IOException {
             // This hit is competitive - replace bottom element in queue & adjustTop
             if (numHits > 0) {
                 comparators[subQueryNumber].copy(fieldValueLeafTrackers[subQueryNumber].slot, doc);
-                updateBottom(doc, compoundScores[subQueryNumber], subQueryNumber);
+                updateBottom(doc, score, compoundScores[subQueryNumber], subQueryNumber);
                 comparators[subQueryNumber].setBottom(fieldValueLeafTrackers[subQueryNumber].slot);
+            }
+        }
+
+        /**
+         * Hands the current document's score for one sub-query to that sub-query's SCORE comparator. Must be called before any
+         * comparison or copy for that sub-query on the current document; a no-op unless _score is the primary sort key.
+         */
+        protected void setCurrentSubQueryScore(int subQueryNumber, float score) {
+            if (isSortByScore && scoreComparators != null && scoreComparators[subQueryNumber] != null) {
+                scoreComparators[subQueryNumber].setCurrentSubQueryScore(score);
             }
         }
 
@@ -211,6 +230,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
             if (needsInitialization) {
                 compoundScores = new FieldValueHitQueue[numberOfSubQueries];
                 comparators = new LeafFieldComparator[numberOfSubQueries];
+                scoreComparators = new HybridLeafFieldComparator[numberOfSubQueries];
                 queueFull = new boolean[numberOfSubQueries];
                 collectedHits = new int[numberOfSubQueries];
                 for (int i = 0; i < numberOfSubQueries; i++) {
@@ -255,6 +275,13 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
 
             LeafFieldComparator[] leafFieldComparators = compoundScores[subQueryNumber].getComparators(context);
             int[] reverseMuls = compoundScores[subQueryNumber].getReverseMul();
+            HybridLeafFieldComparator scoreWrapper = null;
+            if (isSortByScore) {
+                // _score is the primary key (index 0): wrap ONLY that child so it is fed the per-sub-query score; a field child
+                // stays plain, its value does not depend on the sub-query
+                scoreWrapper = new HybridLeafFieldComparator(leafFieldComparators[0]);
+                leafFieldComparators[0] = scoreWrapper;
+            }
             if (leafFieldComparators.length == 1) {
                 reverseMul = reverseMuls[0];
                 comparators[subQueryNumber] = leafFieldComparators[0];
@@ -262,6 +289,7 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
                 reverseMul = 1;
                 comparators[subQueryNumber] = new MultiLeafFieldComparator(leafFieldComparators, reverseMuls);
             }
+            scoreComparators[subQueryNumber] = scoreWrapper;
             comparators[subQueryNumber].setScorer(compoundQueryScorer);
         }
 
@@ -346,8 +374,11 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
         queueFull[subQueryNumber] = isQueueFull;
     }
 
-    private void updateBottom(int doc, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int subQueryIndex) {
+    private void updateBottom(int doc, float score, FieldValueHitQueue<FieldValueHitQueue.Entry> compoundScore, int subQueryIndex) {
         fieldValueLeafTrackers[subQueryIndex].doc = docBase + doc;
+        // the entry is reused for the new document, so its score has to follow: populateResults() reports entry.score as the
+        // FieldDoc score, which the normalization processor reads as this sub-query's raw score for the document
+        fieldValueLeafTrackers[subQueryIndex].score = score;
         fieldValueLeafTrackers[subQueryIndex] = compoundScore.updateTop();
     }
 

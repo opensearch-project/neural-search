@@ -48,13 +48,16 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
                     if (score == 0) {
                         continue;
                     }
+                    // a _score-led sort compares this sub-query's own score, not the sum the scorer exposes
+                    setCurrentSubQueryScore(i, score);
 
                     // if queueFull[i] is true then it indicates
                     // that we have found the results equal to the size sent in the search request.
                     if (queueFull[i]) {
                         // If threshold is reached then return. Default value of threshold is 10000.
+                        // Not competitive for THIS sub-query only; the document can still enter another sub-query's queue.
                         if (thresholdCheck(doc, i)) {
-                            return;
+                            continue;
                         }
                     }
 
@@ -66,11 +69,11 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
                     // https://opensearch.org/docs/latest/search-plugins/searching-data/paginate/#the-search_after-parameter
                     boolean resultsFoundOnPreviousPage = checkIfSearchAfterResultsAreFound(i, doc);
                     if (resultsFoundOnPreviousPage) {
-                        return;
+                        continue;
                     }
                     maxScore = Math.max(score, maxScore);
                     if (queueFull[i]) {
-                        collectCompetitiveHit(doc, i);
+                        collectCompetitiveHit(doc, i, score);
                     } else {
                         collectedHits[i]++;
                         collectHit(doc, collectedHits[i], i, score);

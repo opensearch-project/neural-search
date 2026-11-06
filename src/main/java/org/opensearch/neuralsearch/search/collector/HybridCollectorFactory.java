@@ -13,6 +13,7 @@ import org.opensearch.index.mapper.KeywordFieldMapper;
 import org.opensearch.index.mapper.MappedFieldType;
 import org.opensearch.index.mapper.NumberFieldMapper;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 import org.opensearch.search.collapse.CollapseContext;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.sort.SortAndFormats;
@@ -105,11 +106,17 @@ public class HybridCollectorFactory {
                 // Sorting is applied
                 if (after == null) {
                     return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
-                } else {
-                    // search_after is applied
-                    validateSearchAfterFieldAndSortFormats(sortAndFormats, after);
-                    return new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
                 }
+                // search_after is applied
+                validateSearchAfterFieldAndSortFormats(sortAndFormats, after);
+                if (HybridSearchCollapseUtil.isScorePrimarySort(sortAndFormats.sort.getSort())) {
+                    // The cursor's score is the normalized, combined score that only exists on the coordinator after the
+                    // normalization processor has run; a shard cannot compare its raw sub-query scores against it. The shard
+                    // therefore collects its full window (pagination_depth per sub-query, as for the first page) and the
+                    // normalization processor applies the cursor once the combined scores are known.
+                    return new SimpleFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort);
+                }
+                return new PagingFieldCollector(numHits, hitsThresholdChecker, sortAndFormats.sort, after);
             }
         }
     }
