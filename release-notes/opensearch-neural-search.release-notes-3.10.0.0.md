@@ -8,8 +8,6 @@ Compatible with OpenSearch and OpenSearch Dashboards version 3.10.0
 * Enable fusion mode by default for hybrid queries via `plugins.neural_search.hybrid.fusion.enabled` setting ([#2037](https://github.com/opensearch-project/neural-search/pull/2037))
 * Accept `fusion.weights` for request-level combination weights in fused hybrid queries ([#2065](https://github.com/opensearch-project/neural-search/pull/2065))
 * Accept `pagination_depth` in fused hybrid queries as the fusion window size ([#2058](https://github.com/opensearch-project/neural-search/pull/2058))
-* Reject a hybrid query without fusion nested in a hybrid query with fusion, or vice versa, with a clear error ([#2051](https://github.com/opensearch-project/neural-search/pull/2051))
-* Resolve fused hybrid legs before fan-out so a sub-query's inference runs once per request instead of twice ([#2074](https://github.com/opensearch-project/neural-search/pull/2074))
 
 ### Enhancements
 
@@ -27,6 +25,8 @@ Compatible with OpenSearch and OpenSearch Dashboards version 3.10.0
 * Fix `ClassCastException` when a point-in-time slice or alias filter excludes a shard from a hybrid query ([#2045](https://github.com/opensearch-project/neural-search/pull/2045))
 * Reject sorting a hybrid query by `_score` ascending or by `_score` more than once, which previously returned wrong results silently ([#2046](https://github.com/opensearch-project/neural-search/pull/2046))
 * Reject unknown `combination.parameters` keys and unknown keys on inline `fusion` clauses instead of silently ignoring them ([#2069](https://github.com/opensearch-project/neural-search/pull/2069))
+* Reject a hybrid query without fusion nested in a hybrid query with fusion, or vice versa, with a clear error ([#2051](https://github.com/opensearch-project/neural-search/pull/2051))
+* Resolve fused hybrid legs before fan-out so a sub-query's inference runs once per request instead of twice ([#2074](https://github.com/opensearch-project/neural-search/pull/2074))
 * Keep `agent_steps_summary` from the conversational agent's final output for OpenAI native function calling in agentic search ([#2071](https://github.com/opensearch-project/neural-search/pull/2071))
 * Pass `_routing` to the semantic field `skip_existing_embedding` lookup so documents with custom routing are found correctly ([#2040](https://github.com/opensearch-project/neural-search/pull/2040))
 * Fix `field_map` sibling key overwrite when multiple fields share a dotted prefix, which silently dropped embeddings ([#2052](https://github.com/opensearch-project/neural-search/pull/2052))
