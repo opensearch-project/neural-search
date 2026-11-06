@@ -9,6 +9,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
+import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.Sort;
 import org.opensearch.common.Nullable;
 import org.opensearch.neuralsearch.processor.CompoundTopDocs;
@@ -33,4 +34,11 @@ public class CombineScoresDto {
     private boolean isSingleShard;
     private Float minScore;
     private boolean isCollapseEnabled;
+    /**
+     * The request's {@code search_after} cursor, typed against {@link #sort} — only for a {@code _score}-led sort, whose cursor
+     * compares against the combined score and so can only be applied here, after combination. {@code null} otherwise: a
+     * field-sorted cursor is applied on the shard, and a request without {@code search_after} has nothing to apply.
+     */
+    @Nullable
+    private FieldDoc searchAfter;
 }

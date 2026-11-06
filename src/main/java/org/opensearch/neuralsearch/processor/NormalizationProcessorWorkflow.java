@@ -32,11 +32,15 @@ import org.opensearch.neuralsearch.processor.explain.DocIdAtSearchShard;
 import org.opensearch.neuralsearch.processor.explain.ExplanationDetails;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
+import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
+import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.fetch.FetchSearchResult;
 import org.opensearch.search.pipeline.PipelineProcessingContext;
 import org.opensearch.search.query.QuerySearchResult;
+import org.opensearch.search.searchafter.SearchAfterBuilder;
+import org.opensearch.search.sort.SortAndFormats;
 
 import lombok.AllArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -96,15 +100,17 @@ public class NormalizationProcessorWorkflow {
         log.debug("Do score normalization");
         scoreNormalizer.normalizeScores(normalizeScoresDTO);
 
+        Sort sort = evaluateSortCriteria(querySearchResults, queryTopDocs);
         CombineScoresDto combineScoresDTO = CombineScoresDto.builder()
             .queryTopDocs(queryTopDocs)
             .scoreCombinationTechnique(request.getCombinationTechnique())
             .querySearchResults(querySearchResults)
-            .sort(evaluateSortCriteria(querySearchResults, queryTopDocs))
+            .sort(sort)
             .fromValueForSingleShard(getFromValueIfSingleShard(request))
             .isSingleShard(isSingleShard)
             .minScore(minScore)
             .isCollapseEnabled(request.searchPhaseContext.getRequest().source().collapse() != null)
+            .searchAfter(getScoreSortedSearchAfter(request, sort, querySearchResults))
             .build();
 
         // combine
@@ -143,6 +149,35 @@ public class NormalizationProcessorWorkflow {
                 String.format(Locale.ROOT, "min_score is invalid : [%f], must neither be Infinity nor NaN", minScore)
             );
         }
+    }
+
+    /**
+     * The request's {@code search_after} cursor, typed against the sort the shards reported, when the sort is led by
+     * {@code _score}; {@code null} otherwise. A {@code _score}-led cursor compares against the combined score, which exists
+     * only here after normalization and combination, so the shards collected their full window and left the cursor to this
+     * workflow. A field-sorted cursor was already applied on the shards and must not be applied twice.
+     */
+    private FieldDoc getScoreSortedSearchAfter(
+        final NormalizationProcessorWorkflowExecuteRequest request,
+        final Sort sort,
+        final List<QuerySearchResult> querySearchResults
+    ) {
+        if (Objects.isNull(sort) || HybridSearchCollapseUtil.isScorePrimarySort(sort.getSort()) == false) {
+            return null;
+        }
+        final SearchPhaseContext searchPhaseContext = request.getSearchPhaseContext();
+        if (searchPhaseContext.getRequest() == null
+            || searchPhaseContext.getRequest().source() == null
+            || searchPhaseContext.getRequest().source().collapse() != null) {
+            return null;
+        }
+        Object[] searchAfter = searchPhaseContext.getRequest().source().searchAfter();
+        if (searchAfter == null || searchAfter.length == 0) {
+            return null;
+        }
+        // the same conversion core applies on a shard: each cursor value is parsed with its sort field's type and format
+        DocValueFormat[] sortValueFormats = querySearchResults.get(0).sortValueFormats();
+        return SearchAfterBuilder.buildFieldDoc(new SortAndFormats(sort, sortValueFormats), searchAfter);
     }
 
     /**

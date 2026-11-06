@@ -337,4 +337,125 @@ public class HybridTopFieldDocSortCollectorTests extends HybridCollectorTestCase
         reader.close();
         directory.close();
     }
+
+    /**
+     * A [_score desc, field asc] sort: every sub-query's window is ordered by that sub-query's OWN score (not by the sum of all
+     * sub-query scores the scorer exposes), the SCORE sort value and the FieldDoc score are that own score — also for a document
+     * that replaced a queue's bottom entry — and the trailing sort value is the field value.
+     */
+    @SneakyThrows
+    public void testSimpleFieldCollector_whenScorePrimarySortWithTieBreaker_thenEachSubQueryOrderedByItsOwnScore() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        List<Document> documents = new ArrayList<>();
+        int[] intValues = new int[] { 100, 200, 300, 400 };
+        for (int i = 0; i < NUM_DOCS; i++) {
+            Document document = new Document();
+            document.add(new NumericDocValuesField("_id", i));
+            // a single-valued NUMERIC doc value, which is what an INT SortField reads (IntField writes SORTED_NUMERIC)
+            document.add(new NumericDocValuesField(INT_FIELD_NAME, intValues[i]));
+            document.add(new TextField(TEXT_FIELD_NAME, "text" + i, Field.Store.YES));
+            documents.add(document);
+        }
+        w.addDocuments(documents);
+        w.commit();
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        // two sub-queries, a window of two per sub-query so the third and fourth document go through the replace-bottom path
+        Sort sort = new Sort(SortField.FIELD_SCORE, new SortField(INT_FIELD_NAME, SortField.Type.INT));
+        HybridTopFieldDocSortCollector collector = new SimpleFieldCollector(2, new HitsThresholdChecker(TOTAL_HITS_UP_TO), sort);
+        collector.setWeight(mock(Weight.class));
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+        HybridSubQueryScorer scorer = new HybridSubQueryScorer(2);
+        leafCollector.setScorer(scorer);
+
+        // doc : sub-query 0 score, sub-query 1 score (0 = no match). The sums are 0.9, 0.9, 1.1, 0.9: a queue keyed on the sum
+        // would keep doc 2 for sub-query 0 and could not tell docs 0, 1 and 3 apart.
+        float[] subQuery0 = new float[] { 0.1f, 0.9f, 0.5f, 0.7f };
+        float[] subQuery1 = new float[] { 0.8f, 0.0f, 0.6f, 0.2f };
+        for (int doc = 0; doc < NUM_DOCS; doc++) {
+            scorer.getSubQueryScores()[0] = subQuery0[doc];
+            scorer.getSubQueryScores()[1] = subQuery1[doc];
+            leafCollector.collect(doc);
+            scorer.resetScores();
+        }
+
+        List<TopFieldDocs> topFieldDocs = collector.topDocs();
+        assertEquals(2, topFieldDocs.size());
+        // sub-query 0: doc 1 (0.9) then doc 3 (0.7); doc 3 replaced doc 2, which had replaced doc 0
+        assertSubQueryWindow(topFieldDocs.get(0), new int[] { 1, 3 }, new float[] { 0.9f, 0.7f }, new int[] { 200, 400 });
+        // sub-query 1: doc 0 (0.8) then doc 2 (0.6); doc 1 did not match it and doc 3 (0.2) was not competitive
+        assertSubQueryWindow(topFieldDocs.get(1), new int[] { 0, 2 }, new float[] { 0.8f, 0.6f }, new int[] { 100, 300 });
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    /**
+     * A document that is not competitive for one sub-query (whose window is full) is still offered to the other sub-queries:
+     * the per-sub-query windows are independent.
+     */
+    @SneakyThrows
+    public void testSimpleFieldCollector_whenDocNotCompetitiveForOneSubQuery_thenStillCollectedForTheOthers() {
+        final Directory directory = newDirectory();
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        List<Document> documents = new ArrayList<>();
+        for (int i = 0; i < NUM_DOCS; i++) {
+            Document document = new Document();
+            document.add(new NumericDocValuesField("_id", i));
+            document.add(new NumericDocValuesField(INT_FIELD_NAME, (i + 1) * 100));
+            document.add(new TextField(TEXT_FIELD_NAME, "text" + i, Field.Store.YES));
+            documents.add(document);
+        }
+        w.addDocuments(documents);
+        w.commit();
+        DirectoryReader reader = DirectoryReader.open(w);
+        LeafReaderContext leafReaderContext = reader.getContext().leaves().get(0);
+
+        Sort sort = new Sort(SortField.FIELD_SCORE, new SortField(INT_FIELD_NAME, SortField.Type.INT));
+        HybridTopFieldDocSortCollector collector = new SimpleFieldCollector(2, new HitsThresholdChecker(TOTAL_HITS_UP_TO), sort);
+        collector.setWeight(mock(Weight.class));
+        LeafCollector leafCollector = collector.getLeafCollector(leafReaderContext);
+        HybridSubQueryScorer scorer = new HybridSubQueryScorer(2);
+        leafCollector.setScorer(scorer);
+
+        // docs 0 and 1 fill sub-query 0's window; docs 2 and 3 are not competitive there but are the only matches of sub-query 1
+        float[] subQuery0 = new float[] { 0.9f, 0.8f, 0.1f, 0.7f };
+        float[] subQuery1 = new float[] { 0.0f, 0.0f, 0.6f, 0.5f };
+        for (int doc = 0; doc < NUM_DOCS; doc++) {
+            scorer.getSubQueryScores()[0] = subQuery0[doc];
+            scorer.getSubQueryScores()[1] = subQuery1[doc];
+            leafCollector.collect(doc);
+            scorer.resetScores();
+        }
+
+        List<TopFieldDocs> topFieldDocs = collector.topDocs();
+        assertEquals(2, topFieldDocs.size());
+        assertSubQueryWindow(topFieldDocs.get(0), new int[] { 0, 1 }, new float[] { 0.9f, 0.8f }, new int[] { 100, 200 });
+        assertSubQueryWindow(topFieldDocs.get(1), new int[] { 2, 3 }, new float[] { 0.6f, 0.5f }, new int[] { 300, 400 });
+
+        w.close();
+        reader.close();
+        directory.close();
+    }
+
+    private void assertSubQueryWindow(TopFieldDocs topFieldDocs, int[] expectedDocs, float[] expectedScores, int[] expectedFieldValues) {
+        ScoreDoc[] scoreDocs = topFieldDocs.scoreDocs;
+        assertEquals(expectedDocs.length, scoreDocs.length);
+        for (int i = 0; i < expectedDocs.length; i++) {
+            FieldDoc fieldDoc = (FieldDoc) scoreDocs[i];
+            assertEquals("doc at position " + i, expectedDocs[i], fieldDoc.doc);
+            assertEquals("score of doc " + fieldDoc.doc, expectedScores[i], fieldDoc.score, 0.0001f);
+            assertEquals(2, fieldDoc.fields.length);
+            assertEquals(
+                "_score sort value of doc " + fieldDoc.doc,
+                expectedScores[i],
+                ((Number) fieldDoc.fields[0]).floatValue(),
+                0.0001f
+            );
+            assertEquals("field sort value of doc " + fieldDoc.doc, expectedFieldValues[i], ((Number) fieldDoc.fields[1]).intValue());
+        }
+    }
 }

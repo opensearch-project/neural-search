@@ -351,7 +351,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             () -> HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQuery)
         );
         assertEquals(
-            "_score must be sorted descending when combined with a field in a hybrid query with collapse",
+            "_score must be sorted descending when combined with a field in a hybrid query",
             illegalArgumentException.getMessage()
         );
     }
@@ -369,21 +369,61 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testCreateCollectorManager_whenScoreDescendingWithFieldWithoutCollapse_thenFail() {
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldWithoutCollapse_thenSortCollectorCreated() {
+        // [_score desc, field] is accepted without collapse: the field breaks ties between equal combined scores and gives
+        // search_after a cursor over the relevance order
         SearchContext searchContext = mockSearchContextForSortValidation(
             new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT)),
             false
         );
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        Collector collector = hybridCollectorManager.newCollector();
+        assertTrue(collector instanceof SimpleFieldCollector);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldAndSearchAfterWithDepth_thenSortCollectorWithoutCursor() {
+        // the cursor of a _score-led sort compares against the combined score, which the shard does not know: the shard collects
+        // the whole pagination_depth window (SimpleFieldCollector) and the normalization processor applies the cursor
+        SearchContext searchContext = mockSearchContextForScoreSortedSearchAfter(10);
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        Collector collector = hybridCollectorManager.newCollector();
+        assertTrue(collector instanceof SimpleFieldCollector);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldAndSearchAfterWithoutDepth_thenFail() {
+        SearchContext searchContext = mockSearchContextForScoreSortedSearchAfter(null);
 
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
             () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
         );
         assertEquals(
-            "_score sort criteria cannot be applied with any other criteria unless the query uses collapse with _score as the "
-                + "primary, descending key. Please select one sort criteria out of them.",
+            "pagination_depth param is missing in the search request; it is required when search_after is used with a _score sort "
+                + "in a hybrid query",
             illegalArgumentException.getMessage()
         );
+    }
+
+    private SearchContext mockSearchContextForScoreSortedSearchAfter(Integer paginationDepth) throws IOException {
+        Sort sort = new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT));
+        SearchContext searchContext = mockSearchContextForSortValidation(sort, false);
+        when(searchContext.searchAfter()).thenReturn(new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 0.5f, 100 }, -1));
+        when(searchContext.from()).thenReturn(0);
+        when(searchContext.size()).thenReturn(5);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(TEXT_FIELD_NAME)).thenReturn(fieldType);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+        HybridQuery hybridQuery = new HybridQuery(
+            List.of(termSubQuery.toQuery(mockQueryShardContext)),
+            HybridQueryContext.builder().paginationDepth(paginationDepth).build()
+        );
+        when(searchContext.query()).thenReturn(hybridQuery);
+        return searchContext;
     }
 
     @SneakyThrows
@@ -398,7 +438,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
         );
         assertEquals(
-            "_score must be the primary sort key when combined with a field in a hybrid query with collapse",
+            "_score must be the primary sort key when combined with a field in a hybrid query",
             illegalArgumentException.getMessage()
         );
     }

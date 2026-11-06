@@ -203,25 +203,15 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             }
         }
         if (hasScoreSort && hasFieldSort) {
-            // Collapse-gated relaxation: a hybrid query with collapse may mix _score with a field so the collapse
-            // group head is deterministic (field breaks exact fused-score ties). Allowed only when _score is the
-            // primary (first) sort key AND descending; field-primary + _score, and ascending _score, stay rejected
-            // (see HybridSearchCollapseUtil#isScorePrimaryDescendingSort).
-            if (searchContext.collapse() == null) {
-                throw new IllegalArgumentException(
-                    "_score sort criteria cannot be applied with any other criteria unless the query uses collapse with _score as the "
-                        + "primary, descending key. Please select one sort criteria out of them."
-                );
-            }
+            // _score may be combined with field keys only as the primary (first), descending key: the fields then break ties
+            // between equal combined scores (a stable search_after cursor, a deterministic collapse group head). A field-primary
+            // sort would ask for an order no sub-query can collect by, and an ascending _score would put the least relevant
+            // documents first, which hybrid never collects (see HybridSearchCollapseUtil#isScorePrimaryDescendingSort).
             if (!HybridSearchCollapseUtil.isScorePrimarySort(sortFields)) {
-                throw new IllegalArgumentException(
-                    "_score must be the primary sort key when combined with a field in a hybrid query with collapse"
-                );
+                throw new IllegalArgumentException("_score must be the primary sort key when combined with a field in a hybrid query");
             }
             if (!HybridSearchCollapseUtil.isScorePrimaryDescendingSort(sortFields)) {
-                throw new IllegalArgumentException(
-                    "_score must be sorted descending when combined with a field in a hybrid query with collapse"
-                );
+                throw new IllegalArgumentException("_score must be sorted descending when combined with a field in a hybrid query");
             }
         }
         // "_score" listed more than once (core keeps every sort field, so the Sort has several SCORE fields): only the first sort
@@ -285,6 +275,15 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         if (Objects.isNull(paginationDepth) && searchContext.from() > 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth param is missing in the search request"));
         }
+        // A search_after cursor over the combined score pages the same fixed window on every request: the shard collects the
+        // window and the normalization processor applies the cursor after combination, so the window has to be stated explicitly,
+        // exactly as it has to be for from > 0. Field-sorted cursors are applied on the shard and keep their size-sized window.
+        if (Objects.isNull(paginationDepth) && isScoreSortedSearchAfter(searchContext)) {
+            throw new IllegalArgumentException(
+                "pagination_depth param is missing in the search request; it is required when search_after is used with a "
+                    + "_score sort in a hybrid query"
+            );
+        }
 
         if (Objects.nonNull(paginationDepth)) {
             return paginationDepth;
@@ -292,5 +291,12 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
 
         // Switch to from+size retrieval size during standard hybrid query execution where from is 0.
         return searchContext.size();
+    }
+
+    private static boolean isScoreSortedSearchAfter(final SearchContext searchContext) {
+        return searchContext.searchAfter() != null
+            && searchContext.sort() != null
+            && searchContext.collapse() == null
+            && HybridSearchCollapseUtil.isScorePrimarySort(searchContext.sort().sort.getSort());
     }
 }

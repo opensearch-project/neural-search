@@ -8,6 +8,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocDelimiterElementForHybridSearchResults;
+import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createFieldDocStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.createStartStopElementForHybridSearchResults;
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 
@@ -18,8 +20,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.TotalHits;
 import org.opensearch.action.OriginalIndices;
 import org.opensearch.action.search.SearchPhaseContext;
@@ -32,6 +37,7 @@ import org.opensearch.neuralsearch.processor.combination.ScoreCombiner;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizer;
 import org.opensearch.neuralsearch.processor.explain.ExplanationPayload;
+import org.opensearch.search.DocValueFormat;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
@@ -882,5 +888,90 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
             String.format(Locale.ROOT, "min_score is invalid : [%f], must neither be Infinity nor NaN", minScore),
             illegalArgumentException.getMessage()
         );
+    }
+
+    /**
+     * A request with a _score-led sort and a search_after cursor: the shards return their whole window (the cursor compares
+     * against the combined score, which they do not know), and this workflow keeps only the documents that sort strictly
+     * after the cursor, in combined-score order with the field as tie-breaker.
+     */
+    public void testScoreSortedSearchAfter_whenCursorInRequest_thenOnlyDocsAfterCursorRemain() {
+        NormalizationProcessorWorkflow normalizationProcessorWorkflow = new NormalizationProcessorWorkflow(
+            new ScoreNormalizer(),
+            new ScoreCombiner()
+        );
+        SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) };
+        Object[] delimiterFields = new Object[] { 0.0f, 0 };
+        // two shards, two sub-queries each; raw scores, normalized with min_max per sub-query across both shards
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        for (int shardId = 0; shardId < 2; shardId++) {
+            SearchShardTarget searchShardTarget = new SearchShardTarget(
+                "node",
+                new ShardId("index", "uuid", shardId),
+                null,
+                OriginalIndices.NONE
+            );
+            QuerySearchResult querySearchResult = new QuerySearchResult();
+            FieldDoc[] fieldDocs = shardId == 0
+                ? new FieldDoc[] {
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 10.0f, new Object[] { 10.0f, 300 }),
+                    new FieldDoc(1, 2.0f, new Object[] { 2.0f, 100 }),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(1, 4.0f, new Object[] { 4.0f, 100 }),
+                    new FieldDoc(2, 1.0f, new Object[] { 1.0f, 50 }),
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) }
+                : new FieldDoc[] {
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 6.0f, new Object[] { 6.0f, 200 }),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 4.0f, new Object[] { 4.0f, 200 }),
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) };
+            querySearchResult.topDocs(
+                new TopDocsAndMaxScore(new TopFieldDocs(new TotalHits(3, TotalHits.Relation.EQUAL_TO), fieldDocs, sortFields), 10.0f),
+                new DocValueFormat[] { DocValueFormat.RAW, DocValueFormat.RAW }
+            );
+            querySearchResult.setSearchShardTarget(searchShardTarget);
+            querySearchResult.setShardIndex(shardId);
+            querySearchResults.add(querySearchResult);
+        }
+        // min_max per sub-query over both shards: sub-query 0 scores {10, 2, 6} -> shard0 doc0 1.0, doc1 0.001, shard1 doc0 0.5;
+        // sub-query 1 scores {4, 1, 4} -> shard0 doc1 1.0, doc2 0.001, shard1 doc0 1.0. Arithmetic mean over both sub-queries:
+        // shard0 doc0 0.5 (price 300), shard0 doc1 0.5005 (100), shard0 doc2 0.0005 (50), shard1 doc0 0.75 (200)
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.from(0).size(10);
+        // cursor between shard0 doc1 (0.5005, 100) and shard0 doc0 (0.5, 300): keeps doc0 of shard 0 and doc2 of shard 0
+        searchSourceBuilder.searchAfter(new Object[] { 0.5005f, 100 });
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        when(searchPhaseContext.getNumShards()).thenReturn(2);
+        when(searchRequest.source()).thenReturn(searchSourceBuilder);
+        NormalizationProcessorWorkflowExecuteRequest normalizationExecuteDTO = NormalizationProcessorWorkflowExecuteRequest.builder()
+            .querySearchResults(querySearchResults)
+            .fetchSearchResultOptional(Optional.empty())
+            .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+            .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+            .searchPhaseContext(searchPhaseContext)
+            .build();
+
+        normalizationProcessorWorkflow.execute(normalizationExecuteDTO);
+
+        TopDocs shard0 = querySearchResults.get(0).topDocs().topDocs;
+        assertTrue(shard0 instanceof TopFieldDocs);
+        assertEquals(2, shard0.scoreDocs.length);
+        FieldDoc first = (FieldDoc) shard0.scoreDocs[0];
+        FieldDoc second = (FieldDoc) shard0.scoreDocs[1];
+        assertEquals(0, first.doc);
+        assertEquals(0.5f, first.score, TestUtils.DELTA_FOR_SCORE_ASSERTION);
+        assertEquals(first.score, ((Number) first.fields[0]).floatValue(), 0.0f);
+        assertEquals(300, ((Number) first.fields[1]).intValue());
+        assertEquals(2, second.doc);
+        assertEquals(0.0005f, second.score, TestUtils.DELTA_FOR_SCORE_ASSERTION);
+        // shard 1's only document (0.75) sorts before the cursor and is dropped
+        TopDocs shard1 = querySearchResults.get(1).topDocs().topDocs;
+        assertEquals(0, shard1.scoreDocs.length);
     }
 }
