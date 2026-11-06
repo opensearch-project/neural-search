@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -441,21 +442,120 @@ public class HybridTopFieldDocSortCollectorTests extends HybridCollectorTestCase
         directory.close();
     }
 
+    /**
+     * A field-sorted search_after page: a document that is not competitive for one sub-query (whose window is full) is still
+     * offered to the other sub-queries.
+     */
+    @SneakyThrows
+    public void testPagingFieldCollector_whenDocNotCompetitiveForOneSubQuery_thenStillCollectedForTheOthers() {
+        // field values 100, 200, 300, 400; every document sorts after the cursor (50)
+        PagingCollectorFixture fixture = pagingCollectorFixture(new int[] { 100, 200, 300, 400 }, 2);
+        // docs 0 and 1 fill sub-query 0's window; docs 2 and 3 are not competitive there but are the only matches of sub-query 1
+        fixture.collect(new float[] { 0.9f, 0.8f, 0.1f, 0.7f }, new float[] { 0.0f, 0.0f, 0.6f, 0.5f });
+
+        List<TopFieldDocs> topFieldDocs = fixture.collector().topDocs();
+        assertEquals(2, topFieldDocs.size());
+        assertSubQueryWindow(topFieldDocs.get(0), new int[] { 0, 1 }, new float[] { 0.9f, 0.8f }, new int[] { 100, 200 });
+        assertSubQueryWindow(topFieldDocs.get(1), new int[] { 2, 3 }, new float[] { 0.6f, 0.5f }, new int[] { 300, 400 });
+        fixture.close();
+    }
+
+    /**
+     * A field-sorted search_after page: a document that replaces the bottom of a full window keeps its own score, not the score
+     * of the document it replaced.
+     */
+    @SneakyThrows
+    public void testPagingFieldCollector_whenCompetitiveDocReplacesTheBottom_thenItKeepsItsOwnScore() {
+        // field values descend with the doc id, so with an ascending sort docs 2 and 3 each replace the bottom of a window of two
+        PagingCollectorFixture fixture = pagingCollectorFixture(new int[] { 400, 300, 200, 100 }, 2);
+        fixture.collect(new float[] { 0.1f, 0.2f, 0.3f, 0.4f });
+
+        List<TopFieldDocs> topFieldDocs = fixture.collector().topDocs();
+        assertEquals(1, topFieldDocs.size());
+        assertSubQueryWindow(topFieldDocs.get(0), new int[] { 3, 2 }, new float[] { 0.4f, 0.3f }, new int[] { 100, 200 });
+        fixture.close();
+    }
+
+    /** A PagingFieldCollector sorted by the int field ascending, after the cursor value 50, over one segment of documents. */
+    private PagingCollectorFixture pagingCollectorFixture(final int[] fieldValues, final int numHits) throws IOException {
+        Directory directory = newDirectory();
+        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        List<Document> documents = new ArrayList<>();
+        for (int i = 0; i < fieldValues.length; i++) {
+            Document document = new Document();
+            document.add(new NumericDocValuesField("_id", i));
+            document.add(new NumericDocValuesField(INT_FIELD_NAME, fieldValues[i]));
+            document.add(new TextField(TEXT_FIELD_NAME, "text" + i, Field.Store.YES));
+            documents.add(document);
+        }
+        writer.addDocuments(documents);
+        writer.commit();
+        DirectoryReader reader = DirectoryReader.open(writer);
+        PagingFieldCollector collector = new PagingFieldCollector(
+            numHits,
+            new HitsThresholdChecker(TOTAL_HITS_UP_TO),
+            new Sort(new SortField(INT_FIELD_NAME, SortField.Type.INT)),
+            new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 50 })
+        );
+        collector.setWeight(mock(Weight.class));
+        return new PagingCollectorFixture(
+            directory,
+            writer,
+            reader,
+            collector,
+            collector.getLeafCollector(reader.getContext().leaves().get(0))
+        );
+    }
+
+    private record PagingCollectorFixture(Directory directory, IndexWriter writer, DirectoryReader reader, PagingFieldCollector collector,
+        LeafCollector leafCollector) {
+
+        /** Collects every document of the segment with the given score per sub-query (0 = no match). */
+        void collect(final float[]... subQueryScores) throws IOException {
+            HybridSubQueryScorer scorer = new HybridSubQueryScorer(subQueryScores.length);
+            leafCollector.setScorer(scorer);
+            for (int doc = 0; doc < subQueryScores[0].length; doc++) {
+                for (int subQuery = 0; subQuery < subQueryScores.length; subQuery++) {
+                    scorer.getSubQueryScores()[subQuery] = subQueryScores[subQuery][doc];
+                }
+                leafCollector.collect(doc);
+                scorer.resetScores();
+            }
+        }
+
+        void close() throws IOException {
+            writer.close();
+            reader.close();
+            directory.close();
+        }
+    }
+
+    /**
+     * Each window entry: the doc, its own sub-query score, and the int field as the last sort value; with a _score-led sort the
+     * first sort value is that score too.
+     */
     private void assertSubQueryWindow(TopFieldDocs topFieldDocs, int[] expectedDocs, float[] expectedScores, int[] expectedFieldValues) {
         ScoreDoc[] scoreDocs = topFieldDocs.scoreDocs;
+        boolean isScoreLed = topFieldDocs.fields[0].getType() == SortField.Type.SCORE;
         assertEquals(expectedDocs.length, scoreDocs.length);
         for (int i = 0; i < expectedDocs.length; i++) {
             FieldDoc fieldDoc = (FieldDoc) scoreDocs[i];
             assertEquals("doc at position " + i, expectedDocs[i], fieldDoc.doc);
             assertEquals("score of doc " + fieldDoc.doc, expectedScores[i], fieldDoc.score, 0.0001f);
-            assertEquals(2, fieldDoc.fields.length);
+            assertEquals(isScoreLed ? 2 : 1, fieldDoc.fields.length);
+            if (isScoreLed) {
+                assertEquals(
+                    "_score sort value of doc " + fieldDoc.doc,
+                    expectedScores[i],
+                    ((Number) fieldDoc.fields[0]).floatValue(),
+                    0.0001f
+                );
+            }
             assertEquals(
-                "_score sort value of doc " + fieldDoc.doc,
-                expectedScores[i],
-                ((Number) fieldDoc.fields[0]).floatValue(),
-                0.0001f
+                "field sort value of doc " + fieldDoc.doc,
+                expectedFieldValues[i],
+                ((Number) fieldDoc.fields[fieldDoc.fields.length - 1]).intValue()
             );
-            assertEquals("field sort value of doc " + fieldDoc.doc, expectedFieldValues[i], ((Number) fieldDoc.fields[1]).intValue());
         }
     }
 }
