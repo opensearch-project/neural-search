@@ -32,7 +32,7 @@ Compatible with OpenSearch and OpenSearch Dashboards version 3.10.0
 * Fix `field_map` sibling key overwrite when multiple fields share a dotted prefix, which silently dropped embeddings ([#2052](https://github.com/opensearch-project/neural-search/pull/2052))
 * Fix deep-merge of `field_map` target maps so nested siblings at any depth are preserved ([#2054](https://github.com/opensearch-project/neural-search/pull/2054))
 * Stop logging customer document content on semantic field processor ingest failure; log only document identifiers ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
-* Fold sparse token IDs at or above 32768 on the native engine so they match the query-side folding ([#2048](https://github.com/opensearch-project/neural-search/pull/2048))
+* Fix sparse ANN documents with token IDs at or above 32768 never matching on approximate search on the Lucene and native engines ([#2059](https://github.com/opensearch-project/neural-search/pull/2059))
 
 ### Infrastructure
 
