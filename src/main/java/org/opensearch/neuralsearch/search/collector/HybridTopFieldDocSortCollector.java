@@ -196,10 +196,12 @@ public abstract class HybridTopFieldDocSortCollector implements HybridSearchColl
 
         /**
          * Hands the current document's score for one sub-query to that sub-query's SCORE comparator. Must be called before any
-         * comparison or copy for that sub-query on the current document; a no-op unless _score is the primary sort key.
+         * comparison or copy for that sub-query on the current document, which is after
+         * {@link #initializePriorityQueuesWithComparators} has wrapped every sub-query's SCORE comparator for the segment; a
+         * no-op unless _score is the primary sort key.
          */
         protected void setCurrentSubQueryScore(int subQueryNumber, float score) {
-            if (isSortByScore && scoreComparators != null && scoreComparators[subQueryNumber] != null) {
+            if (isSortByScore) {
                 scoreComparators[subQueryNumber].setCurrentSubQueryScore(score);
             }
         }

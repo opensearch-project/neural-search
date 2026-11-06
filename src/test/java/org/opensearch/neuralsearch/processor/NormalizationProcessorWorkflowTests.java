@@ -14,6 +14,7 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 import static org.opensearch.neuralsearch.plugin.NeuralSearch.EXPLANATION_RESPONSE_KEY;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -22,6 +23,7 @@ import java.util.Optional;
 
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.Sort;
 import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.TopFieldDocs;
@@ -973,5 +975,249 @@ public class NormalizationProcessorWorkflowTests extends OpenSearchTestCase {
         // shard 1's only document (0.75) sorts before the cursor and is dropped
         TopDocs shard1 = querySearchResults.get(1).topDocs().topDocs;
         assertEquals(0, shard1.scoreDocs.length);
+    }
+
+    /**
+     * Two shards and a _score-led sort: on shard 0 the document with the best combined score (doc 1: 0.75 and 0.5 after
+     * min_max -> 0.625) is second in both sub-query lists. The shard's page must still start with it, so that core's
+     * cross-shard merge, which takes every shard's page as sorted, returns it first.
+     */
+    public void testScoreSortedPage_whenBestCombinedScoreHeadsNoSubQueryList_thenShardPageStartsWithIt() {
+        SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) };
+        Object[] delimiterFields = new Object[] { 0.0f, 0 };
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        querySearchResults.add(
+            sortedShardResult(
+                0,
+                "index",
+                sortFields,
+                new FieldDoc[] {
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 10.0f, new Object[] { 10.0f, 100 }),
+                    new FieldDoc(1, 8.0f, new Object[] { 8.0f, 300 }),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(2, 10.0f, new Object[] { 10.0f, 400 }),
+                    new FieldDoc(1, 6.0f, new Object[] { 6.0f, 300 }),
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) }
+            )
+        );
+        querySearchResults.add(
+            sortedShardResult(
+                1,
+                "index",
+                sortFields,
+                new FieldDoc[] {
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 2.0f, new Object[] { 2.0f, 500 }),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 2.0f, new Object[] { 2.0f, 500 }),
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) }
+            )
+        );
+
+        executeWorkflow(querySearchResults, null);
+
+        TopFieldDocs[] shardTopDocs = new TopFieldDocs[2];
+        for (int shardIndex = 0; shardIndex < 2; shardIndex++) {
+            shardTopDocs[shardIndex] = (TopFieldDocs) querySearchResults.get(shardIndex).topDocs().topDocs;
+            for (ScoreDoc scoreDoc : shardTopDocs[shardIndex].scoreDocs) {
+                scoreDoc.shardIndex = shardIndex;
+            }
+        }
+        // shard 0: doc 1 (0.625), then docs 0 and 2 at 0.5 broken by price
+        assertEquals(List.of(1, 0, 2), Arrays.stream(shardTopDocs[0].scoreDocs).map(scoreDoc -> scoreDoc.doc).toList());
+        // what core's SearchPhaseController#mergeTopDocs does with more than one shard
+        TopDocs merged = TopDocs.merge(new Sort(shardTopDocs[0].fields), 0, 1, shardTopDocs);
+        assertEquals(0, merged.scoreDocs[0].shardIndex);
+        assertEquals(1, merged.scoreDocs[0].doc);
+    }
+
+    /**
+     * Two indices behind one search map the tie-breaker as integer and long. A _score-led cursor is typed for every shard
+     * with that shard's own sort fields, as core types it on the shards, and every shard's page keeps the sort fields it was
+     * collected with, so that core can widen the field when it merges the shards' pages.
+     */
+    public void testScoreSortedSearchAfter_whenIndicesMapTieBreakerWithDifferentTypes_thenEachShardComparesItsOwnType() {
+        List<QuerySearchResult> page1 = shardResultsWithIntAndLongTieBreaker();
+        executeWorkflow(page1, null);
+        float topCombinedScore = ((FieldDoc) page1.get(0).topDocs().topDocs.scoreDocs[0]).score;
+
+        // the cursor ties both doc 0s on the combined score and sits between their prices (5 and 9)
+        List<QuerySearchResult> page2 = shardResultsWithIntAndLongTieBreaker();
+        executeWorkflow(page2, new Object[] { topCombinedScore, 7 });
+
+        // index-int: doc 0 (price 5) is before the cursor; index-long: doc 0 (price 9) is after it
+        TopFieldDocs intShard = (TopFieldDocs) page2.get(0).topDocs().topDocs;
+        TopFieldDocs longShard = (TopFieldDocs) page2.get(1).topDocs().topDocs;
+        assertEquals(List.of(1), Arrays.stream(intShard.scoreDocs).map(scoreDoc -> scoreDoc.doc).toList());
+        assertEquals(List.of(0, 1), Arrays.stream(longShard.scoreDocs).map(scoreDoc -> scoreDoc.doc).toList());
+        assertEquals(9L, ((FieldDoc) longShard.scoreDocs[0]).fields[1]);
+        // the pages keep their own shard's sort field types for core's cross-shard merge
+        assertEquals(SortField.Type.INT, intShard.fields[1].getType());
+        assertEquals(SortField.Type.LONG, longShard.fields[1].getType());
+    }
+
+    /**
+     * A shard result that carries no sort fields (no documents) is typed and rebuilt with the request's sort fields, next to
+     * a shard that has its own.
+     */
+    public void testScoreSortedSearchAfter_whenAShardResultCarriesNoSortFields_thenTheRequestSortIsUsedForIt() {
+        SortField[] sortFields = new SortField[] { SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT) };
+        Object[] delimiterFields = new Object[] { 0.0f, 0 };
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        querySearchResults.add(
+            sortedShardResult(
+                0,
+                "index",
+                sortFields,
+                new FieldDoc[] {
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 4.0f, new Object[] { 4.0f, 10 }),
+                    new FieldDoc(1, 2.0f, new Object[] { 2.0f, 20 }),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 4.0f, new Object[] { 4.0f, 10 }),
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) }
+            )
+        );
+        QuerySearchResult emptyShardResult = new QuerySearchResult();
+        emptyShardResult.topDocs(
+            new TopDocsAndMaxScore(new TopDocs(new TotalHits(0, TotalHits.Relation.EQUAL_TO), new ScoreDoc[0]), Float.NaN),
+            new DocValueFormat[] { DocValueFormat.RAW, DocValueFormat.RAW }
+        );
+        emptyShardResult.setSearchShardTarget(
+            new SearchShardTarget("node", new ShardId("index", "index-uuid", 1), null, OriginalIndices.NONE)
+        );
+        emptyShardResult.setShardIndex(1);
+        querySearchResults.add(emptyShardResult);
+
+        executeWorkflow(querySearchResults, new Object[] { 1.0f, 10 });
+
+        // shard 0: doc 0 is the cursor document itself, doc 1 is after it
+        TopFieldDocs shard0 = (TopFieldDocs) querySearchResults.get(0).topDocs().topDocs;
+        assertEquals(List.of(1), Arrays.stream(shard0.scoreDocs).map(scoreDoc -> scoreDoc.doc).toList());
+        TopFieldDocs shard1 = (TopFieldDocs) querySearchResults.get(1).topDocs().topDocs;
+        assertEquals(0, shard1.scoreDocs.length);
+        assertArrayEquals(sortFields, shard1.fields);
+    }
+
+    /**
+     * A field-sorted search_after cursor is applied on the shards, which compare their own field values against it; the
+     * workflow must not apply it a second time. Here every document would sort before the cursor.
+     */
+    public void testFieldSortedSearchAfter_whenCursorInRequest_thenTheWorkflowLeavesTheShardPagesAsTheyAre() {
+        SortField[] sortFields = new SortField[] { new SortField("price", SortField.Type.INT) };
+        Object[] delimiterFields = new Object[] { 0 };
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        querySearchResults.add(
+            sortedShardResult(
+                0,
+                "index",
+                sortFields,
+                new FieldDoc[] {
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 2.0f, new Object[] { 100 }),
+                    new FieldDoc(1, 1.0f, new Object[] { 200 }),
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) }
+            )
+        );
+        querySearchResults.add(
+            sortedShardResult(
+                1,
+                "index",
+                sortFields,
+                new FieldDoc[] {
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                    createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                    new FieldDoc(0, 3.0f, new Object[] { 150 }),
+                    createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) }
+            )
+        );
+
+        executeWorkflow(querySearchResults, new Object[] { 300 });
+
+        TopDocs shard0 = querySearchResults.get(0).topDocs().topDocs;
+        TopDocs shard1 = querySearchResults.get(1).topDocs().topDocs;
+        assertEquals(List.of(0, 1), Arrays.stream(shard0.scoreDocs).map(scoreDoc -> scoreDoc.doc).toList());
+        assertEquals(List.of(0), Arrays.stream(shard1.scoreDocs).map(scoreDoc -> scoreDoc.doc).toList());
+    }
+
+    /**
+     * index-int maps the tie-breaker as integer, index-long as long; both shards hold the same scores, so every document has a
+     * twin with the same combined score on the other shard.
+     */
+    private List<QuerySearchResult> shardResultsWithIntAndLongTieBreaker() {
+        List<QuerySearchResult> querySearchResults = new ArrayList<>();
+        for (int shardId = 0; shardId < 2; shardId++) {
+            boolean intShard = shardId == 0;
+            SortField[] sortFields = new SortField[] {
+                SortField.FIELD_SCORE,
+                new SortField("price", intShard ? SortField.Type.INT : SortField.Type.LONG) };
+            Object[] delimiterFields = new Object[] { 0.0f, intShard ? (Object) 0 : (Object) 0L };
+            Object price = intShard ? (Object) 5 : (Object) 9L;
+            Object lowPrice = intShard ? (Object) 1 : (Object) 1L;
+            querySearchResults.add(
+                sortedShardResult(
+                    shardId,
+                    intShard ? "index-int" : "index-long",
+                    sortFields,
+                    new FieldDoc[] {
+                        createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields),
+                        createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                        new FieldDoc(0, 4.0f, new Object[] { 4.0f, price }),
+                        new FieldDoc(1, 2.0f, new Object[] { 2.0f, lowPrice }),
+                        createFieldDocDelimiterElementForHybridSearchResults(0, delimiterFields),
+                        new FieldDoc(0, 4.0f, new Object[] { 4.0f, price }),
+                        createFieldDocStartStopElementForHybridSearchResults(0, delimiterFields) }
+                )
+            );
+        }
+        return querySearchResults;
+    }
+
+    private QuerySearchResult sortedShardResult(
+        final int shardId,
+        final String indexName,
+        final SortField[] sortFields,
+        final FieldDoc[] fieldDocs
+    ) {
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        querySearchResult.topDocs(
+            new TopDocsAndMaxScore(
+                new TopFieldDocs(new TotalHits(fieldDocs.length, TotalHits.Relation.EQUAL_TO), fieldDocs, sortFields),
+                fieldDocs.length > 2 ? fieldDocs[2].score : 0.0f
+            ),
+            Collections.nCopies(sortFields.length, DocValueFormat.RAW).toArray(new DocValueFormat[0])
+        );
+        querySearchResult.setSearchShardTarget(
+            new SearchShardTarget("node", new ShardId(indexName, indexName + "-uuid", shardId), null, OriginalIndices.NONE)
+        );
+        querySearchResult.setShardIndex(shardId);
+        return querySearchResult;
+    }
+
+    private void executeWorkflow(final List<QuerySearchResult> querySearchResults, final Object[] searchAfter) {
+        SearchPhaseContext searchPhaseContext = mock(SearchPhaseContext.class);
+        SearchRequest searchRequest = mock(SearchRequest.class);
+        SearchSourceBuilder searchSourceBuilder = new SearchSourceBuilder();
+        searchSourceBuilder.from(0).size(10);
+        if (searchAfter != null) {
+            searchSourceBuilder.searchAfter(searchAfter);
+        }
+        when(searchPhaseContext.getRequest()).thenReturn(searchRequest);
+        when(searchPhaseContext.getNumShards()).thenReturn(querySearchResults.size());
+        when(searchRequest.source()).thenReturn(searchSourceBuilder);
+        new NormalizationProcessorWorkflow(new ScoreNormalizer(), new ScoreCombiner()).execute(
+            NormalizationProcessorWorkflowExecuteRequest.builder()
+                .querySearchResults(querySearchResults)
+                .fetchSearchResultOptional(Optional.empty())
+                .normalizationTechnique(ScoreNormalizationFactory.DEFAULT_METHOD)
+                .combinationTechnique(ScoreCombinationFactory.DEFAULT_METHOD)
+                .searchPhaseContext(searchPhaseContext)
+                .build()
+        );
     }
 }
