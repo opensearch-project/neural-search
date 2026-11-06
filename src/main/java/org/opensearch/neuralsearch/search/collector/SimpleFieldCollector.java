@@ -43,12 +43,15 @@ public final class SimpleFieldCollector extends HybridTopFieldDocSortCollector {
                     if (score == 0) {
                         continue;
                     }
+                    // a _score-led sort compares this sub-query's own score, not the sum the scorer exposes
+                    setCurrentSubQueryScore(i, score);
                     maxScore = Math.max(score, maxScore);
                     if (queueFull[i]) {
+                        // not competitive for THIS sub-query only; the document can still enter another sub-query's queue
                         if (thresholdCheck(doc, i)) {
-                            return;
+                            continue;
                         }
-                        collectCompetitiveHit(doc, i);
+                        collectCompetitiveHit(doc, i, score);
                     } else {
                         collectedHits[i]++;
                         collectHit(doc, collectedHits[i], i, score);

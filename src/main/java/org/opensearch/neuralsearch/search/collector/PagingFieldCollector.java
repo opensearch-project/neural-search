@@ -52,9 +52,9 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
                     // if queueFull[i] is true then it indicates
                     // that we have found the results equal to the size sent in the search request.
                     if (queueFull[i]) {
-                        // If threshold is reached then return. Default value of threshold is 10000.
+                        // Not competitive for THIS sub-query only; the document can still enter another sub-query's queue.
                         if (thresholdCheck(doc, i)) {
-                            return;
+                            continue;
                         }
                     }
 
@@ -64,13 +64,16 @@ public final class PagingFieldCollector extends HybridTopFieldDocSortCollector {
                     // Therefore when those 10 results are collected the resultsFoundOnPreviousPage.
                     // the search_after parameter to retrieve the next page of hits using a set of sort values from the previous page.
                     // https://opensearch.org/docs/latest/search-plugins/searching-data/paginate/#the-search_after-parameter
+                    // This collector never sorts by _score, so a document's position against the cursor is the same for every
+                    // sub-query: a document from a previous page is left for all of them, while the threshold check above only
+                    // skips this sub-query's window.
                     boolean resultsFoundOnPreviousPage = checkIfSearchAfterResultsAreFound(i, doc);
                     if (resultsFoundOnPreviousPage) {
                         return;
                     }
                     maxScore = Math.max(score, maxScore);
                     if (queueFull[i]) {
-                        collectCompetitiveHit(doc, i);
+                        collectCompetitiveHit(doc, i, score);
                     } else {
                         collectedHits[i]++;
                         collectHit(doc, collectedHits[i], i, score);

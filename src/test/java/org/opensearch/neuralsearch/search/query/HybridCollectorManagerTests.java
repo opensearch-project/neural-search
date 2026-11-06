@@ -41,6 +41,7 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
+import org.opensearch.Version;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.index.IndexSettings;
@@ -55,6 +56,7 @@ import org.opensearch.index.query.QueryBuilder;
 import org.opensearch.index.query.ParsedQuery;
 import org.opensearch.index.shard.IndexShard;
 import org.opensearch.neuralsearch.query.HybridQuery;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils;
 import org.opensearch.neuralsearch.query.HybridQueryContext;
 import org.opensearch.neuralsearch.query.HybridQueryWeight;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
@@ -85,6 +87,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_DELIMITER;
 import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUtil.MAGIC_NUMBER_START_STOP;
+import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY;
 
 import org.opensearch.search.rescore.QueryRescorerBuilder;
 import org.opensearch.search.rescore.RescoreContext;
@@ -104,6 +107,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             + "relevance. Use \"order\": \"desc\" for _score, or sort by a field.";
     private static final String SCORE_MORE_THAN_ONCE_NOT_SUPPORTED_MESSAGE =
         "Sorting a hybrid query by _score more than once is not supported; use a single \"_score\" sort criterion.";
+    private static final String PAGINATION_DEPTH_MISSING_FOR_SCORE_AND_FIELD_SORT_MESSAGE =
+        "pagination_depth param is missing in the search request; it is required when a hybrid query is sorted by _score and a field";
     private static final String QUERY2 = "hi";
     protected static final String QUERY3 = "everyone";
 
@@ -118,6 +123,8 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         directory = indexObjects.directory();
         writer = indexObjects.writer();
         indexReader = indexObjects.indexReader();
+        // the sort validation reads the cluster's minimum node version; NeuralSearchClusterUtil is a JVM-wide singleton
+        NeuralSearchClusterTestUtils.setUpClusterService();
     }
 
     @SneakyThrows
@@ -351,7 +358,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             () -> HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQuery)
         );
         assertEquals(
-            "_score must be sorted descending when combined with a field in a hybrid query with collapse",
+            "_score must be sorted descending when combined with a field in a hybrid query",
             illegalArgumentException.getMessage()
         );
     }
@@ -369,11 +376,82 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
     }
 
     @SneakyThrows
-    public void testCreateCollectorManager_whenScoreDescendingWithFieldWithoutCollapse_thenFail() {
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldWithoutCollapse_thenSortCollectorCreated() {
+        // [_score desc, field] is accepted without collapse: the field breaks ties between equal combined scores and gives
+        // search_after a cursor over the relevance order
         SearchContext searchContext = mockSearchContextForSortValidation(
             new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT)),
             false
         );
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        Collector collector = hybridCollectorManager.newCollector();
+        assertTrue(collector instanceof SimpleFieldCollector);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldAndSearchAfterWithDepth_thenSortCollectorWithoutCursor() {
+        // the cursor of a _score-led sort compares against the combined score, which the shard does not know: the shard collects
+        // the whole pagination_depth window (SimpleFieldCollector) and the normalization processor applies the cursor
+        SearchContext searchContext = mockSearchContextForScoreSortedSearchAfter(10);
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        Collector collector = hybridCollectorManager.newCollector();
+        assertTrue(collector instanceof SimpleFieldCollector);
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldAndSearchAfterWithoutDepth_thenFail() {
+        SearchContext searchContext = mockSearchContextForScoreSortedSearchAfter(null);
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(PAGINATION_DEPTH_MISSING_FOR_SCORE_AND_FIELD_SORT_MESSAGE, illegalArgumentException.getMessage());
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldWithoutCursorAndWithoutDepth_thenFail() {
+        // the first page of a search_after walk carries no cursor; it has to be computed over the same window as the pages after
+        // it, so the window is required on every request with this sort, not only on the ones that carry a cursor
+        SearchContext searchContext = mockSearchContextForScoreSortedSearchAfter(null);
+        when(searchContext.searchAfter()).thenReturn(null);
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(PAGINATION_DEPTH_MISSING_FOR_SCORE_AND_FIELD_SORT_MESSAGE, illegalArgumentException.getMessage());
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreAscendingWithFieldAndWithoutDepth_thenSortRejectedFirst() {
+        // a sort that is not supported is reported as such, not as a missing pagination_depth that would not make it valid
+        SearchContext searchContext = mockSearchContextForScoreSortedSearchAfter(null);
+        when(searchContext.sort()).thenReturn(
+            new SortAndFormats(
+                new Sort(new SortField(null, SortField.Type.SCORE, true), new SortField("price", SortField.Type.INT)),
+                new DocValueFormat[] { DocValueFormat.RAW, DocValueFormat.RAW }
+            )
+        );
+
+        IllegalArgumentException illegalArgumentException = assertThrows(
+            IllegalArgumentException.class,
+            () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
+        );
+        assertEquals(
+            "_score must be sorted descending when combined with a field in a hybrid query",
+            illegalArgumentException.getMessage()
+        );
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldWithoutCollapseOnLaggingCluster_thenFail() {
+        // a node from before the release that orders and pages this sort on the coordinator may be the one that combines the
+        // results, so the shape is refused until every node in the cluster runs that release
+        NeuralSearchClusterTestUtils.setUpClusterService(Version.V_3_9_0);
+        SearchContext searchContext = mockSearchContextForScoreSortedSearchAfter(10);
 
         IllegalArgumentException illegalArgumentException = assertThrows(
             IllegalArgumentException.class,
@@ -384,6 +462,59 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
                 + "primary, descending key. Please select one sort criteria out of them.",
             illegalArgumentException.getMessage()
         );
+    }
+
+    @SneakyThrows
+    public void testCreateCollectorManager_whenScoreDescendingWithFieldAndCollapseOnLaggingCluster_thenCollapseCollectorCreated() {
+        // with collapse the groups are ordered by the collapse executor, which an older node has too: the version gate does not
+        // apply to it
+        NeuralSearchClusterTestUtils.setUpClusterService(Version.V_3_9_0);
+        SearchContext searchContext = mockSearchContextForSortValidation(
+            new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT)),
+            true
+        );
+
+        CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query());
+        assertTrue(hybridCollectorManager.newCollector() instanceof HybridCollapsingTopDocsCollector);
+    }
+
+    /**
+     * {@code MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY} has to name the first release that contains the
+     * sort by {@code _score} and a field without collapse. While that release is not out, the only version it can be is the
+     * one under development: a released version below it is one whose nodes pass the gate but neither order the page by the
+     * combined score nor apply its cursor after combination.
+     *
+     * <p>Deliberately fails when the branch's core version moves past the constant, which is the moment the constant has to
+     * be raised with it, unless the feature shipped in that version (issue 2081). Delete this test in the release that ships
+     * the feature: from then on the constant names a released version and {@code Version.CURRENT} is legitimately ahead of it.
+     */
+    public void testScoreAndFieldSortMinimumVersion_isNotBehindTheVersionUnderDevelopment() {
+        assertTrue(
+            "["
+                + MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY
+                + "] is behind the version under development ["
+                + Version.CURRENT
+                + "], so it names a release that cannot contain the sort by _score and a field without collapse",
+            MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY.onOrAfter(Version.CURRENT)
+        );
+    }
+
+    private SearchContext mockSearchContextForScoreSortedSearchAfter(Integer paginationDepth) throws IOException {
+        Sort sort = new Sort(SortField.FIELD_SCORE, new SortField("price", SortField.Type.INT));
+        SearchContext searchContext = mockSearchContextForSortValidation(sort, false);
+        when(searchContext.searchAfter()).thenReturn(new FieldDoc(Integer.MAX_VALUE, 0.0f, new Object[] { 0.5f, 100 }, -1));
+        when(searchContext.from()).thenReturn(0);
+        when(searchContext.size()).thenReturn(5);
+        QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
+        TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
+        when(mockQueryShardContext.fieldMapper(TEXT_FIELD_NAME)).thenReturn(fieldType);
+        TermQueryBuilder termSubQuery = QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1);
+        HybridQuery hybridQuery = new HybridQuery(
+            List.of(termSubQuery.toQuery(mockQueryShardContext)),
+            HybridQueryContext.builder().paginationDepth(paginationDepth).build()
+        );
+        when(searchContext.query()).thenReturn(hybridQuery);
+        return searchContext;
     }
 
     @SneakyThrows
@@ -398,7 +529,7 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             () -> HybridCollectorManager.createHybridCollectorManager(searchContext, searchContext.query())
         );
         assertEquals(
-            "_score must be the primary sort key when combined with a field in a hybrid query with collapse",
+            "_score must be the primary sort key when combined with a field in a hybrid query",
             illegalArgumentException.getMessage()
         );
     }
