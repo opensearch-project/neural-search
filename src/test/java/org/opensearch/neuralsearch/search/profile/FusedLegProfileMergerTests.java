@@ -305,6 +305,20 @@ public class FusedLegProfileMergerTests extends OpenSearchTestCase {
         assertFalse("nothing recorded, nothing rendered", coordinatorDebug(silent).containsKey("fast_path"));
     }
 
+    /**
+     * A hybrid written without fusion that runs in fused mode with the default techniques says so under {@code debug}; one that
+     * wrote its own fusion block renders exactly what it did before, with no such key.
+     */
+    public void testForHybridTiming_whenTheHybridRunsWithTheDefaultFusion_thenDebugSaysSo() {
+        FusedLegProfileMerger merger = new FusedLegProfileMerger();
+        merger.forHybridTiming("hybrid_0").accept(timings().defaultFusion(true));
+        assertEquals(true, coordinatorDebug(merger).get("default_fusion"));
+
+        FusedLegProfileMerger explicit = new FusedLegProfileMerger();
+        explicit.forHybridTiming("hybrid_0").accept(timings());
+        assertFalse(coordinatorDebug(explicit).containsKey("default_fusion"));
+    }
+
     private Map<String, Object> coordinatorDebug(final FusedLegProfileMerger merger) {
         return merger.mergedProfileResults(responseWithProfile(null))
             .getShardResults()

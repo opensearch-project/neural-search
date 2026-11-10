@@ -201,6 +201,47 @@ public class FusionConfigResolverTests extends OpenSearchTestCase {
         assertNull(FusionConfigResolver.resolve(new SearchRequest("idx-a", "idx-b")));
     }
 
+    /**
+     * Core starts its index-default loop from {@code _none} and lets any index replace that, so an index that sets
+     * {@code _none} explicitly leaves the choice to the next one: {@code [_none, P]} runs P. Only the order matters —
+     * {@code [P, _none]} differs from P and collapses to no pipeline, as core does.
+     */
+    public void testResolve_whenTheFirstIndexDefaultIsNone_thenTheNextDefaultIsRead() throws Exception {
+        SearchPipelineMetadata pipelines = new SearchPipelineMetadata(Map.of("mm", minMaxPipeline("mm")));
+
+        initClusterUtilWithIndexDefaults(pipelines, "_none", "mm");
+        assertNotNull(FusionConfigResolver.resolve(new SearchRequest("idx-0", "idx-1")));
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx-0", "idx-1")));
+
+        initClusterUtilWithIndexDefaults(pipelines, "mm", "_none");
+        assertNull(FusionConfigResolver.resolve(new SearchRequest("idx-0", "idx-1")));
+        assertFalse(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx-0", "idx-1")));
+
+        initClusterUtilWithIndexDefaults(pipelines, "_none", "_none");
+        assertNull(FusionConfigResolver.resolve(new SearchRequest("idx-0", "idx-1")));
+    }
+
+    /** Concrete indices {@code idx-0}, {@code idx-1}, ... whose {@code index.search.default_pipeline} are the given ids. */
+    private void initClusterUtilWithIndexDefaults(final SearchPipelineMetadata pipelineMetadata, final String... defaultPipelineIds) {
+        Metadata metadata = mock(Metadata.class);
+        ClusterState clusterState = mock(ClusterState.class);
+        ClusterService clusterService = mock(ClusterService.class);
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(clusterState.getMetadata()).thenReturn(metadata);
+        when(metadata.custom(SearchPipelineMetadata.TYPE)).thenReturn(pipelineMetadata);
+        Index[] indices = new Index[defaultPipelineIds.length];
+        for (int i = 0; i < defaultPipelineIds.length; i++) {
+            indices[i] = new Index("idx-" + i, "uuid-" + i);
+            when(metadata.index(indices[i])).thenReturn(
+                IndexMetadata.builder("idx-" + i).settings(indexSettingsWithDefaultPipeline(defaultPipelineIds[i])).build()
+            );
+        }
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        when(resolver.concreteIndices(any(ClusterState.class), any(org.opensearch.action.IndicesRequest.class))).thenReturn(indices);
+        NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
+    }
+
     // ---- resolvedPipelineHasResponseProcessors ----
 
     private PipelineConfiguration pipelineWithResponseProcessor(String id) throws Exception {
@@ -338,21 +379,47 @@ public class FusionConfigResolverTests extends OpenSearchTestCase {
         assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("rrf")));
     }
 
-    public void testResolvedPipelineHasScoreHybridizationProcessor_whenInlineBody_thenTrueWithoutReadingIt() {
-        // Core drains the inline block before the rewrite, so even an empty one is taken as a pipeline that may read the
-        // weights: refusing it would be a false 400 for a legitimate request shape.
-        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(requestWithInlinePipeline(Map.of())));
-        assertTrue(
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenInlineBody_thenTheBodyIsRead() {
+        // Core builds its ad-hoc pipeline from a deep copy of the body, so the body is read as written: only a hybridizing
+        // phase-results processor counts, as for a named pipeline.
+        assertFalse(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(requestWithInlinePipeline(Map.of())));
+        assertFalse(
             FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
                 requestWithInlinePipeline(Map.of("phase_results_processors", List.of()))
             )
         );
+        for (String processor : List.of("normalization-processor", "score-ranker-processor")) {
+            assertTrue(
+                processor,
+                FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
+                    requestWithInlinePipeline(Map.of("phase_results_processors", List.of(Map.of(processor, Map.of()))))
+                )
+            );
+        }
+        // Next to a named pipeline the body is core's 400: answered true, so nothing here acts on a request core rejects.
+        SearchRequest inlineAndNamed = requestWithInlinePipeline(Map.of());
+        inlineAndNamed.pipeline("my-pipeline");
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(inlineAndNamed));
         // A source without an inline body is no inline body; _none is then answered before any cluster state is consulted.
         assertFalse(
             FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
                 new SearchRequest("idx").source(new SearchSourceBuilder()).pipeline("_none")
             )
         );
+    }
+
+    /**
+     * Core applies index defaults only to a request that names indices, so {@code GET /_search} and an index-less
+     * {@code _msearch} item run no pipeline unless they name one: the hybridization check answers false for them. {@link FusionConfigResolver#resolve}
+     * keeps reading the defaults of every index such a request reaches, which is what {@code fusion: "pipeline"} has done
+     * since it shipped.
+     */
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenTheRequestNamesNoIndex_thenNoIndexDefaultApplies() throws Exception {
+        initClusterUtil(new SearchPipelineMetadata(Map.of("mm", minMaxPipeline("mm"))), indexSettingsWithDefaultPipeline("mm"));
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest(INDEX)));
+        assertFalse(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest()));
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest().pipeline("mm")));
+        assertNotNull(FusionConfigResolver.resolve(new SearchRequest()));
     }
 
     public void testResolvedPipelineHasScoreHybridizationProcessor_whenNoClusterState_thenTrue() throws Exception {

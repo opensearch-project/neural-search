@@ -101,6 +101,13 @@ public final class FusedCoordinatorTimings {
      */
     private FastPathDecision fastPath;
 
+    /**
+     * Whether this hybrid was written without {@code fusion} and runs in fused mode with the default techniques because no
+     * search pipeline would combine its scores (see {@code DefaultFusion}). Rendered as {@code debug.default_fusion} only when
+     * true, so a request that wrote its own {@code fusion} block reports exactly what it did before.
+     */
+    private boolean defaultFusion;
+
     /** One entry per leg, in leg order, as rendered under the profile node's {@code debug}. */
     private final List<Map<String, Object>> legs = new ArrayList<>();
 

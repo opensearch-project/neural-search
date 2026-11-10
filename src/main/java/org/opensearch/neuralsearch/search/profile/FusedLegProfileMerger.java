@@ -231,6 +231,10 @@ public final class FusedLegProfileMerger {
         debug.put("ranked_docs", timings.rankedDocs());
         debug.put("tail_built", timings.tailBuilt());
         debug.put("legs", timings.legs());
+        if (timings.defaultFusion()) {
+            // Written without fusion; it runs in fused mode because no search pipeline would combine its scores.
+            debug.put("default_fusion", true);
+        }
         if (Objects.nonNull(timings.fastPath())) {
             // The fast-path verdict of this request's unprofiled twin: profiling keeps two rounds, so this is how a user
             // reads why the same request runs one round or two (see FastPathDecision).
