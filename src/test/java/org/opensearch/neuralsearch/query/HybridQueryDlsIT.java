@@ -180,6 +180,34 @@ public class HybridQueryDlsIT extends BaseNeuralSearchIT {
     }
 
     /**
+     * A classic hybrid with no search pipeline runs in fusion mode with the default techniques. Under DLS the security plugin
+     * pushes the DLS filter into every sub-query and dispatches the request again, which then runs with the default fusion as
+     * the same user: it answers exactly what the explicit fused request answers, DLS-filtered hits and buckets included.
+     */
+    public void testDlsFiltersClassicHybridThatRunsWithTheDefaultFusion() throws Exception {
+        for (boolean asDlsUser : new boolean[] { false, true }) {
+            Map<String, Object> classic = performFusedSearch(primaryHybridRequest(), asDlsUser);
+            Map<String, Object> fused = performFusedSearch(fusedHybridRequest(), asDlsUser);
+            assertEquals("as the DLS user: " + asDlsUser, rankedHits(fused), rankedHits(classic));
+            assertEquals("as the DLS user: " + asDlsUser, fused.get("aggregations"), classic.get("aggregations"));
+        }
+        Map<String, Object> restricted = performFusedSearch(primaryHybridRequest(), true);
+        assertHitIds(restricted, ALLOWED_DOCUMENT_IDS);
+        assertAccessBuckets(restricted, Map.of("allowed", 2));
+    }
+
+    /** The page as {@code _id@_score}: the ranking and the scores in one comparable value. */
+    @SuppressWarnings("unchecked")
+    private static List<String> rankedHits(final Map<String, Object> response) {
+        List<Map<String, Object>> hits = (List<Map<String, Object>>) ((Map<String, Object>) response.get("hits")).get("hits");
+        List<String> ranked = new java.util.ArrayList<>();
+        for (Map<String, Object> hit : hits) {
+            ranked.add(hit.get("_id") + "@" + hit.get("_score"));
+        }
+        return ranked;
+    }
+
+    /**
      * A fused {@code neural} leg is resolved (model inference) and then run from the inference callback thread
      * (<a href="https://github.com/opensearch-project/neural-search/pull/2074">#2074</a>). The leg search must still run as the
      * requesting user: DLS keeps filtering it, and the role needs no permission beyond index {@code read}.

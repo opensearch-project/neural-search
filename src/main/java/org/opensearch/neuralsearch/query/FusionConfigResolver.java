@@ -122,16 +122,16 @@ final class FusionConfigResolver {
      * say) is invisible to them; a caller that would otherwise hand a processor a number it is about to replace uses this
      * to leave the response as core built it instead.
      *
-     * <p>Answers {@code true} when it cannot tell: an inline pipeline body has been drained by core before rewrite (see
-     * {@link #resolve}), and a cluster state that is not available says nothing about the pipeline. Both are the
-     * fail-closed direction — the caller keeps today's behaviour. Never throws: the conflicting inline-plus-named shape is
-     * left for {@link #resolve} to report.
+     * <p>Answers {@code true} for any inline pipeline body, without reading it, and when a cluster state is not available.
+     * Core keeps the body whole since it builds its ad-hoc pipeline from a deep copy, so the body could be read; answering
+     * {@code true} is the fail-closed direction kept deliberately — the caller keeps today's behaviour — and reading it is a
+     * separate change, together with {@link #resolve}'s inline-body handling. Never throws: the conflicting
+     * inline-plus-named shape is left for {@link #resolve} to report.
      */
     static boolean resolvedPipelineHasResponseProcessors(SearchRequest searchRequest) {
         SearchSourceBuilder source = searchRequest.source();
         if (Objects.nonNull(source) && Objects.nonNull(source.searchPipelineSource())) {
-            // Drained to {} by core in the common case, which is indistinguishable from "no response processors"; treat any
-            // inline body as possibly carrying them.
+            // Not read: any inline body is taken as possibly carrying response processors (see the javadoc).
             return true;
         }
         ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
@@ -154,23 +154,31 @@ final class FusionConfigResolver {
     }
 
     /**
-     * Classic mode's question for a request carrying top-level {@code hybrid.weights}: will a phase-results processor that
-     * combines hybrid scores run, so that something reads them? True for a named ({@code ?search_pipeline=}) or
-     * index-default pipeline whose config carries a {@code normalization-processor} or {@code score-ranker-processor};
-     * false for {@code _none}, for no pipeline at all, and for a pipeline with neither processor.
+     * Whether the search pipeline core will run for this request carries a {@code normalization-processor} or a
+     * {@code score-ranker-processor} — the only two things that combine a classic hybrid's per-sub-query results — answered
+     * the way {@code SearchPipelineService#resolvePipeline} resolves the pipeline. Asked by two callers: {@link DefaultFusion}
+     * before core resolves the pipeline, to decide whether a classic hybrid runs in fused mode with the default techniques
+     * instead, and, for top-level {@code weights} on a request that stays classic, the weights check at the coordinator
+     * rewrite, since only such a processor reads them.
      *
-     * <p>Answers {@code true} when it cannot tell, like {@link #resolvedPipelineHasResponseProcessors}: an inline pipeline
-     * body has been drained by core before rewrite (see {@link #resolve}), and a cluster state that is not available says
-     * nothing about the pipeline. Refusing either would be a false 400 for a request that may well run the processor;
-     * accepting leaves today's behaviour for those shapes. {@code _none} is knowable without cluster state, so it is
-     * answered before that check. Never throws: the conflicting inline-plus-named shape is core's to report.
+     * <p>An inline pipeline body is read as written: core builds its ad-hoc pipeline from a deep copy of the body, so the
+     * request's own map stays whole for both callers. A request whose {@code indices} are empty ({@code GET /_search}, an
+     * index-less {@code _msearch} item) runs no index default, as in core; a point-in-time search over REST carries the
+     * point in time's indices, so their defaults apply. A pipeline id core does not know answers {@code false}; core refuses
+     * that request itself before any rewrite. Unlike core, which catches it and runs no pipeline, an
+     * {@code IndexNotFoundException} from resolving the index defaults propagates.
+     *
+     * <p>Answers {@code true} when it cannot tell, or when core is about to refuse the request: an inline body next to a
+     * named pipeline (core's 400), and a cluster state that is not available. Both keep today's behaviour for those shapes.
+     * {@code _none} is knowable without cluster state, so it is answered before that check. Never throws on the
+     * inline-plus-named shape.
      */
     static boolean resolvedPipelineHasScoreHybridizationProcessor(SearchRequest searchRequest) {
         SearchSourceBuilder source = searchRequest.source();
-        if (Objects.nonNull(source) && Objects.nonNull(source.searchPipelineSource())) {
-            return true;
-        }
         String pipelineId = searchRequest.pipeline();
+        if (Objects.nonNull(source) && Objects.nonNull(source.searchPipelineSource())) {
+            return Objects.nonNull(pipelineId) || hasScoreHybridizationProcessor(source.searchPipelineSource());
+        }
         if (NONE_PIPELINE_ID.equals(pipelineId)) {
             return false;
         }
@@ -179,6 +187,9 @@ final class FusionConfigResolver {
             return true;
         }
         if (Objects.isNull(pipelineId)) {
+            if (searchRequest.indices().length == 0) {
+                return false;
+            }
             pipelineId = resolveIndexDefaultPipelineId(searchRequest);
         }
         if (Objects.isNull(pipelineId) || NONE_PIPELINE_ID.equals(pipelineId)) {
@@ -211,7 +222,8 @@ final class FusionConfigResolver {
      * settings — the first default other than {@code _none} wins, because an index that sets {@code _none} leaves the
      * choice to the next one exactly as core's own {@code _none} starting value does; a later index with a different
      * default collapses to {@code _none} (no pipeline). Returns the resolved id, {@code _none}, or null when no index
-     * declares a default.
+     * declares a default. "First" is the order core's index resolution returns, which is not the order of the request, so
+     * targets mixing {@code _none} and a pipeline resolve as core resolves them on this node, not by their position.
      */
     private static String resolveIndexDefaultPipelineId(SearchRequest searchRequest) {
         List<IndexMetadata> indices = NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest);

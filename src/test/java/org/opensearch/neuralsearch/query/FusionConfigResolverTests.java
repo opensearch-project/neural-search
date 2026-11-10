@@ -379,21 +379,47 @@ public class FusionConfigResolverTests extends OpenSearchTestCase {
         assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx").pipeline("rrf")));
     }
 
-    public void testResolvedPipelineHasScoreHybridizationProcessor_whenInlineBody_thenTrueWithoutReadingIt() {
-        // Core drains the inline block before the rewrite, so even an empty one is taken as a pipeline that may read the
-        // weights: refusing it would be a false 400 for a legitimate request shape.
-        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(requestWithInlinePipeline(Map.of())));
-        assertTrue(
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenInlineBody_thenTheBodyIsRead() {
+        // Core builds its ad-hoc pipeline from a deep copy of the body, so the body is read as written: only a hybridizing
+        // phase-results processor counts, as for a named pipeline.
+        assertFalse(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(requestWithInlinePipeline(Map.of())));
+        assertFalse(
             FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
                 requestWithInlinePipeline(Map.of("phase_results_processors", List.of()))
             )
         );
+        for (String processor : List.of("normalization-processor", "score-ranker-processor")) {
+            assertTrue(
+                processor,
+                FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
+                    requestWithInlinePipeline(Map.of("phase_results_processors", List.of(Map.of(processor, Map.of()))))
+                )
+            );
+        }
+        // Next to a named pipeline the body is core's 400: answered true, so nothing here acts on a request core rejects.
+        SearchRequest inlineAndNamed = requestWithInlinePipeline(Map.of());
+        inlineAndNamed.pipeline("my-pipeline");
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(inlineAndNamed));
         // A source without an inline body is no inline body; _none is then answered before any cluster state is consulted.
         assertFalse(
             FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(
                 new SearchRequest("idx").source(new SearchSourceBuilder()).pipeline("_none")
             )
         );
+    }
+
+    /**
+     * Core applies index defaults only to a request that names indices, so {@code GET /_search} and an index-less
+     * {@code _msearch} item run no pipeline unless they name one: the hybridization check answers false for them. {@link FusionConfigResolver#resolve}
+     * keeps reading the defaults of every index such a request reaches, which is what {@code fusion: "pipeline"} has done
+     * since it shipped.
+     */
+    public void testResolvedPipelineHasScoreHybridizationProcessor_whenTheRequestNamesNoIndex_thenNoIndexDefaultApplies() throws Exception {
+        initClusterUtil(new SearchPipelineMetadata(Map.of("mm", minMaxPipeline("mm"))), indexSettingsWithDefaultPipeline("mm"));
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest(INDEX)));
+        assertFalse(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest()));
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest().pipeline("mm")));
+        assertNotNull(FusionConfigResolver.resolve(new SearchRequest()));
     }
 
     public void testResolvedPipelineHasScoreHybridizationProcessor_whenNoClusterState_thenTrue() throws Exception {

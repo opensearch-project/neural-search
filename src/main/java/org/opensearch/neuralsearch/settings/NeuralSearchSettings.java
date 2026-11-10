@@ -174,6 +174,12 @@ public final class NeuralSearchSettings {
      * ranking. Dynamic, so the same setting turns fused mode off and back on again without a restart — it is the kill
      * switch, and OpenSearch cannot be downgraded in place, so it is the only rollback lever a cluster has.
      *
+     * <p>It also decides what a {@code hybrid} query <i>without</i> {@code fusion} does when no search pipeline would combine
+     * its scores — neither a {@code normalization-processor} nor a {@code score-ranker-processor} applies to the request. On,
+     * such a query runs in fused mode with the default techniques, as if it carried {@code fusion: {}}. Off, it runs classic
+     * and unnormalized, as before fused mode existed: a downgrade rather than a refusal, because that request asked for no
+     * fusion.
+     *
      * <p>Both properties are load-bearing. {@code NodeScope} is the {@code opensearch.yml} route: declarative, at home in
      * whatever configures the nodes, carried by a replacement node without an API call, and the only way to bring a
      * cluster up with fused mode already off. {@code Dynamic} is the {@code PUT /_cluster/settings} route: it needs no

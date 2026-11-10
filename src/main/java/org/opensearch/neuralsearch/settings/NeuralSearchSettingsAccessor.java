@@ -57,10 +57,12 @@ public class NeuralSearchSettingsAccessor {
             // when that happened. WARN, not INFO, because it is a relevance change, and only a real change reaches a
             // consumer, so one line means one flip.
             log.warn(
-                "[{}] is now [{}] - a query carrying a fusion block will be {} on this cluster",
+                "[{}] is now [{}] - a query carrying a fusion block will be {} on this cluster, and a hybrid query without one "
+                    + "that no search pipeline normalizes runs {}",
                 HYBRID_FUSION_ENABLED.getKey(),
                 value,
-                value ? "accepted" : "refused"
+                value ? "accepted" : "refused",
+                value ? "in fusion mode with the default techniques" : "unnormalized, as before fusion mode existed"
             );
         });
     }

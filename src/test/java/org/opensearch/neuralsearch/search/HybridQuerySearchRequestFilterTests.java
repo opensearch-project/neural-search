@@ -44,6 +44,7 @@ import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.explain.FusedDocExplanations;
 import org.opensearch.neuralsearch.search.explain.FusedFirstPassMarker;
 import org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.search.SearchHit;
 import org.opensearch.search.SearchHits;
 import org.opensearch.search.SearchShardTarget;
@@ -72,6 +73,136 @@ public class HybridQuerySearchRequestFilterTests extends OpenSearchQueryTestCase
         super.setUp();
         filter = new HybridQuerySearchRequestFilter();
         ObservedSourceSizes.clear();
+        // No cluster service: a classic hybrid stays classic (DefaultFusion cannot decide), so the classic-root tests below keep
+        // their meaning whatever an earlier test class left in the singleton. The default-fusion tests wire a cluster themselves.
+        NeuralSearchClusterUtil.instance().initialize(null, null);
+    }
+
+    /**
+     * A classic hybrid that no search pipeline would combine runs in fused mode with the default techniques, decided first and
+     * on a copy of the request: the chain proceeds with the copy, which needs neither classic workaround — DFS is propagated to
+     * the legs, batched reduction is safe — and carries the fused reporting; the caller's request is left exactly as written.
+     */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenAClassicHybridRunsWithTheDefaultFusion_thenTheChainRunsACopyWithFusedReporting() {
+        initClusterWithPipelines(Map.of());
+        HybridQueryBuilder submitted = new HybridQueryBuilder();
+        submitted.add(new MatchQueryBuilder("field", "value"));
+        submitted.add(new MatchAllQueryBuilder());
+        SearchSourceBuilder submittedSource = new SearchSourceBuilder().query(submitted).explain(true);
+        SearchRequest searchRequest = new SearchRequest("test_index").source(submittedSource);
+        searchRequest.searchType(SearchType.DFS_QUERY_THEN_FETCH);
+        searchRequest.setBatchedReduceSize(5);
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+
+        verify(listener, never()).onFailure(any());
+        ArgumentCaptor<SearchRequest> proceeded = ArgumentCaptor.forClass(SearchRequest.class);
+        ArgumentCaptor<ActionListener<ActionResponse>> wrapped = ArgumentCaptor.forClass(ActionListener.class);
+        verify(chain).proceed(eq(task), eq(SearchAction.NAME), proceeded.capture(), wrapped.capture());
+        SearchRequest copy = proceeded.getValue();
+        assertNotSame(searchRequest, copy);
+        assertEquals(SearchType.DFS_QUERY_THEN_FETCH, copy.searchType());
+        assertEquals("batched reduction is safe in fused mode", 5, copy.getBatchedReduceSize());
+        HybridQueryBuilder installed = (HybridQueryBuilder) copy.source().query();
+        assertNotSame(submitted, installed);
+        assertEquals(Map.of(), installed.fusion());
+        assertNotNull("explain attaches to the copy's query", installed.fusedExplanationConsumer());
+        assertNotSame(listener, wrapped.getValue());
+        // The caller's request, source and hybrid are as written.
+        assertSame(submittedSource, searchRequest.source());
+        assertSame(submitted, submittedSource.query());
+        assertNull(submitted.fusion());
+        assertNull(submitted.fusedExplanationConsumer());
+        assertEquals(5, searchRequest.getBatchedReduceSize());
+    }
+
+    /** With a normalizing pipeline nothing changes: the classic hybrid keeps both classic workarounds. */
+    @SuppressWarnings("unchecked")
+    public void testApply_whenAPipelineCombinesTheScores_thenTheClassicWorkaroundsStillApply() {
+        initClusterWithPipelines(Map.of("norm", "normalization-processor"));
+        HybridQueryBuilder hybridQuery = new HybridQueryBuilder();
+        hybridQuery.add(new MatchQueryBuilder("field", "value"));
+        SearchRequest searchRequest = new SearchRequest("test_index").source(new SearchSourceBuilder().query(hybridQuery));
+        searchRequest.pipeline("norm");
+        searchRequest.setBatchedReduceSize(5);
+
+        Task task = mock(Task.class);
+        ActionListener<ActionResponse> listener = mock(ActionListener.class);
+        ActionFilterChain<SearchRequest, ActionResponse> chain = mock(ActionFilterChain.class);
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+        assertSame(hybridQuery, searchRequest.source().query());
+        assertEquals(Integer.MAX_VALUE, searchRequest.getBatchedReduceSize());
+
+        searchRequest.searchType(SearchType.DFS_QUERY_THEN_FETCH);
+        filter.apply(task, SearchAction.NAME, searchRequest, listener, chain);
+        verify(listener).onFailure(any(IllegalArgumentException.class));
+    }
+
+    /**
+     * Wire NeuralSearchClusterUtil to a current-version cluster with fused mode on, holding the given pipelines (id to the one
+     * phase-results processor each declares), and one index, {@code test_index}, without a default pipeline.
+     */
+    private static void initClusterWithPipelines(final Map<String, String> phaseResultsProcessorByPipelineId) {
+        org.opensearch.cluster.service.ClusterService clusterService = mock(org.opensearch.cluster.service.ClusterService.class);
+        org.opensearch.cluster.ClusterState clusterState = mock(org.opensearch.cluster.ClusterState.class);
+        org.opensearch.cluster.metadata.Metadata metadata = mock(org.opensearch.cluster.metadata.Metadata.class);
+        org.mockito.Mockito.when(clusterService.state()).thenReturn(clusterState);
+        org.mockito.Mockito.when(clusterState.metadata()).thenReturn(metadata);
+        org.mockito.Mockito.when(clusterState.getMetadata()).thenReturn(metadata);
+        org.opensearch.cluster.node.DiscoveryNodes nodes = mock(org.opensearch.cluster.node.DiscoveryNodes.class);
+        org.mockito.Mockito.when(clusterState.getNodes()).thenReturn(nodes);
+        org.mockito.Mockito.when(nodes.getMinNodeVersion()).thenReturn(org.opensearch.Version.CURRENT);
+        org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.stubFusedModeEnabled(clusterService);
+        Map<String, org.opensearch.search.pipeline.PipelineConfiguration> pipelines = new java.util.HashMap<>();
+        phaseResultsProcessorByPipelineId.forEach((id, processor) -> {
+            try {
+                pipelines.put(
+                    id,
+                    new org.opensearch.search.pipeline.PipelineConfiguration(
+                        id,
+                        org.opensearch.core.common.bytes.BytesReference.bytes(
+                            org.opensearch.common.xcontent.XContentFactory.jsonBuilder()
+                                .startObject()
+                                .startArray("phase_results_processors")
+                                .startObject()
+                                .startObject(processor)
+                                .endObject()
+                                .endObject()
+                                .endArray()
+                                .endObject()
+                        ),
+                        org.opensearch.core.xcontent.MediaTypeRegistry.JSON
+                    )
+                );
+            } catch (java.io.IOException e) {
+                throw new java.io.UncheckedIOException(e);
+            }
+        });
+        org.mockito.Mockito.when(metadata.custom(org.opensearch.search.pipeline.SearchPipelineMetadata.TYPE))
+            .thenReturn(new org.opensearch.search.pipeline.SearchPipelineMetadata(pipelines));
+        org.opensearch.core.index.Index index = new org.opensearch.core.index.Index("test_index", "uuid");
+        org.mockito.Mockito.when(metadata.index(index))
+            .thenReturn(
+                org.opensearch.cluster.metadata.IndexMetadata.builder("test_index")
+                    .settings(
+                        org.opensearch.common.settings.Settings.builder()
+                            .put("index.number_of_shards", 1)
+                            .put("index.number_of_replicas", 0)
+                            .put("index.version.created", org.opensearch.Version.CURRENT.id)
+                    )
+                    .build()
+            );
+        org.opensearch.cluster.metadata.IndexNameExpressionResolver resolver = mock(
+            org.opensearch.cluster.metadata.IndexNameExpressionResolver.class
+        );
+        org.mockito.Mockito.when(
+            resolver.concreteIndices(any(org.opensearch.cluster.ClusterState.class), any(org.opensearch.action.IndicesRequest.class))
+        ).thenReturn(new org.opensearch.core.index.Index[] { index });
+        NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
     }
 
     public void testOrder_thenReturnsZero() {
