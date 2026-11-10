@@ -6,10 +6,12 @@ package org.opensearch.neuralsearch.highlight.batch.config;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import lombok.extern.log4j.Log4j2;
@@ -121,41 +123,69 @@ public final class HighlightConfigResolver {
         return null;
     }
 
-    private record InnerHitHighlightVisitor(Consumer<SemanticHighlightTarget> consumer) implements QueryBuilderVisitor {
+    /**
+     * Collects the semantic highlight targets declared on the {@code inner_hits} of every {@code nested} query in the
+     * query tree.
+     * <p>
+     * The visitor descends into child queries itself instead of relying on each builder's
+     * {@link QueryBuilder#visit(QueryBuilderVisitor)}: OpenSearch core's compound builders disagree on whether
+     * {@code visit()} recurses. {@code bool}, {@code dis_max}, {@code constant_score}, {@code nested} and
+     * {@code function_score} call {@code child.visit(subVisitor)}, while {@code boosting} and {@code script_score}
+     * hand their child to {@code accept()} and stop, so a builder-driven walk silently saw one level under them and
+     * nothing below, e.g. the {@code nested} query in {@code boosting > bool > nested}. Builders are tracked by
+     * identity, so a query reached both through its parent's {@code visit()} and through this descent is processed
+     * once, and the walk terminates.
+     */
+    private static final class InnerHitHighlightVisitor implements QueryBuilderVisitor {
+        private final Consumer<SemanticHighlightTarget> consumer;
+        private final Set<QueryBuilder> visited = Collections.newSetFromMap(new IdentityHashMap<>());
+
+        private InnerHitHighlightVisitor(Consumer<SemanticHighlightTarget> consumer) {
+            this.consumer = consumer;
+        }
+
         @Override
         public void accept(QueryBuilder qb) {
-            if (qb instanceof NestedQueryBuilder nested) {
-                InnerHitBuilder inner = nested.innerHit();
-                if (inner == null) {
-                    return;
-                }
-                if (inner.getHighlightBuilder() == null) {
-                    return;
-                }
-                HighlightBuilder innerHighlight = inner.getHighlightBuilder();
-                String bucketName = inner.getName() != null ? inner.getName() : nested.path();
-                List<HighlightBuilder.Field> fields = Optional.ofNullable(innerHighlight.fields()).orElse(Collections.emptyList());
-                for (HighlightBuilder.Field field : fields) {
-                    if (!SemanticHighlightingConstants.HIGHLIGHTER_TYPE.equals(field.highlighterType())) {
-                        continue;
-                    }
-                    consumer.accept(
-                        SemanticHighlightTarget.builder()
-                            .fieldName(field.name())
-                            .nestedPath(nested.path())
-                            .innerHitsBucketName(bucketName)
-                            .options(mergeOptions(innerHighlight.options(), field.options()))
-                            .preTag(pickFirstTag(field.preTags(), innerHighlight.preTags()))
-                            .postTag(pickFirstTag(field.postTags(), innerHighlight.postTags()))
-                            .build()
-                    );
-                }
+            if (qb == null || visited.add(qb) == false) {
+                return;
             }
+            if (qb instanceof NestedQueryBuilder nested) {
+                collectInnerHitTargets(nested);
+            }
+            qb.visit(this);
         }
 
         @Override
         public QueryBuilderVisitor getChildVisitor(BooleanClause.Occur occur) {
             return this;
+        }
+
+        private void collectInnerHitTargets(NestedQueryBuilder nested) {
+            InnerHitBuilder inner = nested.innerHit();
+            if (inner == null) {
+                return;
+            }
+            if (inner.getHighlightBuilder() == null) {
+                return;
+            }
+            HighlightBuilder innerHighlight = inner.getHighlightBuilder();
+            String bucketName = inner.getName() != null ? inner.getName() : nested.path();
+            List<HighlightBuilder.Field> fields = Optional.ofNullable(innerHighlight.fields()).orElse(Collections.emptyList());
+            for (HighlightBuilder.Field field : fields) {
+                if (!SemanticHighlightingConstants.HIGHLIGHTER_TYPE.equals(field.highlighterType())) {
+                    continue;
+                }
+                consumer.accept(
+                    SemanticHighlightTarget.builder()
+                        .fieldName(field.name())
+                        .nestedPath(nested.path())
+                        .innerHitsBucketName(bucketName)
+                        .options(mergeOptions(innerHighlight.options(), field.options()))
+                        .preTag(pickFirstTag(field.preTags(), innerHighlight.preTags()))
+                        .postTag(pickFirstTag(field.postTags(), innerHighlight.postTags()))
+                        .build()
+                );
+            }
         }
     }
 }

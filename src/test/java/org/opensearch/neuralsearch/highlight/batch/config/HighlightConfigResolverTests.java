@@ -4,8 +4,13 @@
  */
 package org.opensearch.neuralsearch.highlight.batch.config;
 
+import org.apache.lucene.search.BooleanClause;
+import org.apache.lucene.search.Query;
 import org.apache.lucene.search.join.ScoreMode;
 import org.opensearch.action.search.SearchRequest;
+import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.xcontent.XContentBuilder;
+import org.opensearch.index.query.AbstractQueryBuilder;
 import org.opensearch.index.query.BoolQueryBuilder;
 import org.opensearch.index.query.BoostingQueryBuilder;
 import org.opensearch.index.query.ConstantScoreQueryBuilder;
@@ -14,6 +19,8 @@ import org.opensearch.index.query.InnerHitBuilder;
 import org.opensearch.index.query.MatchQueryBuilder;
 import org.opensearch.index.query.NestedQueryBuilder;
 import org.opensearch.index.query.QueryBuilder;
+import org.opensearch.index.query.QueryBuilderVisitor;
+import org.opensearch.index.query.QueryShardContext;
 import org.opensearch.index.query.functionscore.FunctionScoreQueryBuilder;
 import org.opensearch.index.query.functionscore.ScriptScoreQueryBuilder;
 import org.opensearch.neuralsearch.highlight.SemanticHighlightingConstants;
@@ -25,6 +32,7 @@ import org.opensearch.search.fetch.subphase.highlight.HighlightBuilder;
 import org.opensearch.test.OpenSearchTestCase;
 
 import java.util.List;
+import java.util.Objects;
 
 public class HighlightConfigResolverTests extends OpenSearchTestCase {
 
@@ -159,6 +167,79 @@ public class HighlightConfigResolverTests extends OpenSearchTestCase {
         ScriptScoreQueryBuilder ss = new ScriptScoreQueryBuilder(buildNestedWithInnerHit("chunks"), new Script("1"));
         HighlightConfig config = resolveWithQuery(ss);
         assertEquals(1, config.getTargetsOrEmpty().size());
+    }
+
+    // In OpenSearch core, BoostingQueryBuilder.visit() and ScriptScoreQueryBuilder.visit() hand their child to accept()
+    // without calling visit() on it, so a nested query one level below that child was never reached (#2083).
+    public void testResolvesInnerHitsInsideBoolUnderBoostingPositive() {
+        BoostingQueryBuilder b = new BoostingQueryBuilder(
+            new BoolQueryBuilder().must(buildNestedWithInnerHit("chunks")),
+            new MatchQueryBuilder("tag", "b")
+        );
+        HighlightConfig config = resolveWithQuery(b);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+        assertEquals("chunks", config.getTargetsOrEmpty().get(0).getNestedPath());
+    }
+
+    public void testResolvesInnerHitsInsideBoolUnderBoostingNegative() {
+        BoostingQueryBuilder b = new BoostingQueryBuilder(
+            new MatchQueryBuilder("tag", "a"),
+            new BoolQueryBuilder().should(buildNestedWithInnerHit("notes"))
+        );
+        HighlightConfig config = resolveWithQuery(b);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+        assertEquals("notes", config.getTargetsOrEmpty().get(0).getNestedPath());
+    }
+
+    public void testResolvesInnerHitsInsideBoolUnderScriptScore() {
+        ScriptScoreQueryBuilder ss = new ScriptScoreQueryBuilder(
+            new BoolQueryBuilder().filter(buildNestedWithInnerHit("chunks")),
+            new Script("1")
+        );
+        HighlightConfig config = resolveWithQuery(ss);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+    }
+
+    public void testResolvesInnerHitsThroughStackedBoostingAndScriptScore() {
+        ScriptScoreQueryBuilder ss = new ScriptScoreQueryBuilder(
+            new BoostingQueryBuilder(
+                new BoolQueryBuilder().must(new DisMaxQueryBuilder().add(buildNestedWithInnerHit("chunks"))),
+                new MatchQueryBuilder("tag", "b")
+            ),
+            new Script("1")
+        );
+        HighlightConfig config = resolveWithQuery(ss);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+    }
+
+    // The resolver must not depend on whether a compound query's visit() recurses. This test-only builder keeps the
+    // non-recursing shape even after core fixes boosting and script_score, so it keeps guarding the resolver.
+    public void testResolvesInnerHitsBelowACompoundQueryWhoseVisitDoesNotRecurse() {
+        QueryBuilder wrapper = new NonRecursingCompoundQueryBuilder(new BoolQueryBuilder().must(buildNestedWithInnerHit("chunks")));
+        HighlightConfig config = resolveWithQuery(wrapper);
+        assertEquals(1, config.getTargetsOrEmpty().size());
+        assertEquals("chunks", config.getTargetsOrEmpty().get(0).getNestedPath());
+    }
+
+    // A query reached both through its parent's visit() and through the resolver's own descent is one target, not two.
+    public void testEachInnerHitsTargetIsCapturedOnce() {
+        BoolQueryBuilder query = new BoolQueryBuilder().must(
+            new BoostingQueryBuilder(buildNestedWithInnerHit("chunks"), buildNestedWithInnerHit("notes"))
+        )
+            .should(new ScriptScoreQueryBuilder(buildNestedWithInnerHit("pages"), new Script("1")))
+            .filter(new ConstantScoreQueryBuilder(new DisMaxQueryBuilder().add(buildNestedWithInnerHit("rows"))));
+        HighlightConfig config = resolveWithQuery(query);
+        assertEquals(4, config.getTargetsOrEmpty().size());
+        assertEquals(
+            List.of("chunks", "notes", "pages", "rows"),
+            config.getTargetsOrEmpty().stream().map(SemanticHighlightTarget::getNestedPath).toList()
+        );
+    }
+
+    public void testNullChildHandedToTheVisitorIsIgnored() {
+        QueryBuilder wrapper = new NonRecursingCompoundQueryBuilder(null);
+        HighlightConfig config = resolveWithQuery(wrapper);
+        assertTrue(config.getTargetsOrEmpty().isEmpty());
     }
 
     public void testMixedTopLevelAndInnerHitsCaptureBoth() {
@@ -432,5 +513,53 @@ public class HighlightConfigResolverTests extends OpenSearchTestCase {
         assertTrue(config.hasTargets());
         // queryText is null because MatchAllQuery can't be extracted
         assertNull(config.getQueryText());
+    }
+
+    /**
+     * A compound query whose {@code visit()} hands its child to {@code accept()} without visiting it, the shape
+     * {@code boosting} and {@code script_score} have in OpenSearch core up to 3.10. Test-only; never serialized or run.
+     */
+    private static final class NonRecursingCompoundQueryBuilder extends AbstractQueryBuilder<NonRecursingCompoundQueryBuilder> {
+        private final QueryBuilder child;
+
+        private NonRecursingCompoundQueryBuilder(QueryBuilder child) {
+            this.child = child;
+        }
+
+        @Override
+        public void visit(QueryBuilderVisitor visitor) {
+            visitor.accept(this);
+            visitor.getChildVisitor(BooleanClause.Occur.MUST).accept(child);
+        }
+
+        @Override
+        public String getWriteableName() {
+            return "non_recursing_compound";
+        }
+
+        @Override
+        protected void doWriteTo(StreamOutput out) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        protected void doXContent(XContentBuilder builder, Params params) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        protected Query doToQuery(QueryShardContext context) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        protected boolean doEquals(NonRecursingCompoundQueryBuilder other) {
+            return Objects.equals(child, other.child);
+        }
+
+        @Override
+        protected int doHashCode() {
+            return Objects.hashCode(child);
+        }
     }
 }
