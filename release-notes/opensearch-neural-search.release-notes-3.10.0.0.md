@@ -33,6 +33,7 @@ Compatible with OpenSearch and OpenSearch Dashboards version 3.10.0
 * Fix deep-merge of `field_map` target maps so nested siblings at any depth are preserved ([#2054](https://github.com/opensearch-project/neural-search/pull/2054))
 * Stop logging customer document content on semantic field processor ingest failure; log only document identifiers ([#2057](https://github.com/opensearch-project/neural-search/pull/2057))
 * Fix sparse ANN documents with token IDs at or above 32768 never matching on approximate search on the Lucene and native engines ([#2059](https://github.com/opensearch-project/neural-search/pull/2059))
+* Fix batch semantic highlighting skipping `inner_hits` semantic highlight targets below `boosting` or `script_score` queries that wrap a compound query, such as `boosting > bool > nested` ([#2086](https://github.com/opensearch-project/neural-search/pull/2086))
 
 ### Infrastructure
 
