@@ -36,8 +36,8 @@ import org.opensearch.search.pipeline.SearchPipelineService;
  *       (mutually exclusive, not prioritized).</li>
  *   <li>Inline body block → read directly from the request source (an ad-hoc pipeline, never in cluster state).</li>
  *   <li>Named param → read that pipeline's config from cluster-state metadata by id.</li>
- *   <li>Index default ({@code index.search.default_pipeline}) → first concrete index's default wins; a second index
- *       with a different default collapses to {@code _none}.</li>
+ *   <li>Index default ({@code index.search.default_pipeline}) → the first concrete index's default other than
+ *       {@code _none} wins; a later index with a different default collapses to {@code _none}.</li>
  *   <li>Else {@code _none} → no pipeline (returns null; the caller fails fast).</li>
  * </ol>
  */
@@ -208,8 +208,10 @@ final class FusionConfigResolver {
 
     /**
      * Reproduce core's index-default resolution: scan the concrete indices' {@code index.search.default_pipeline}
-     * settings — the first non-none default wins, but a second index with a different default collapses to
-     * {@code _none} (no pipeline). Returns the resolved id, {@code _none}, or null when no index declares a default.
+     * settings — the first default other than {@code _none} wins, because an index that sets {@code _none} leaves the
+     * choice to the next one exactly as core's own {@code _none} starting value does; a later index with a different
+     * default collapses to {@code _none} (no pipeline). Returns the resolved id, {@code _none}, or null when no index
+     * declares a default.
      */
     private static String resolveIndexDefaultPipelineId(SearchRequest searchRequest) {
         List<IndexMetadata> indices = NeuralSearchClusterUtil.instance().getIndexMetadataList(searchRequest);
@@ -223,7 +225,7 @@ final class FusionConfigResolver {
                 continue;
             }
             String current = IndexSettings.DEFAULT_SEARCH_PIPELINE.get(indexSettings);
-            if (Objects.isNull(pipelineId)) {
+            if (Objects.isNull(pipelineId) || NONE_PIPELINE_ID.equals(pipelineId)) {
                 pipelineId = current;
             } else if (pipelineId.equals(current) == false) {
                 return NONE_PIPELINE_ID; // conflicting defaults across targeted indices → no pipeline

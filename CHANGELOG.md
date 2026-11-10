@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Accept top-level `weights` in classic and fused hybrid query modes ([#2065](https://github.com/opensearch-project/neural-search/pull/2065))
 
 ### Bug Fixes
+* [Hybrid Query] Resolve the index default search pipeline as core does when a targeted index sets it to `_none`, for `fusion: "pipeline"` and top-level `weights` ([#2084](https://github.com/opensearch-project/neural-search/pull/2084))
 * [Hybrid Query] Run a fused hybrid query's sub-query inference once per request, special optimization logic for `neural_sparse` sub-query, or a `nested` sub-query over a k-NN or sparse ([#2074](https://github.com/opensearch-project/neural-search/pull/2074))
 * [Hybrid Query] Reject an unknown `combination.parameters` and an unknown keys on an inline `fusion` clause ([#2069](https://github.com/opensearch-project/neural-search/pull/2069))
 * [Hybrid Query] Reject non-numeric score-combination `weights` with a `400` validation error instead of failing with a `ClassCastException` that surfaced as an internal `500` error ([#2067](https://github.com/opensearch-project/neural-search/pull/2067))
