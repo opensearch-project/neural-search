@@ -38,6 +38,8 @@ import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.LoggingDeprecationHandler;
 import org.opensearch.common.logging.HeaderWarning;
 import org.opensearch.core.ParseField;
+import org.opensearch.ExceptionsHelper;
+import org.opensearch.OpenSearchStatusException;
 import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
@@ -75,6 +77,8 @@ import lombok.experimental.Accessors;
 import lombok.extern.log4j.Log4j2;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizer;
 import org.opensearch.neuralsearch.fusion.ScalarNormalizers;
+import org.opensearch.neuralsearch.processor.NormalizationProcessor;
+import org.opensearch.neuralsearch.processor.RRFProcessor;
 import org.opensearch.neuralsearch.processor.normalization.ScoreNormalizationFactory;
 import org.opensearch.neuralsearch.processor.normalization.L2ScoreNormalizationTechnique;
 import org.opensearch.neuralsearch.processor.normalization.ZScoreNormalizationTechnique;
@@ -131,8 +135,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     private List<Float> weights;
 
     /**
-     * Resolver (fused) mode config: the raw inline {@code fusion} block from the query body. Its <b>presence</b> is the
-     * resolver on/off flag; its <b>shape</b> carries the config. {@code null} = classic hybrid (byte-identical wire
+     * Resolver (fused) mode config: the raw inline {@code fusion} block from the query body, or the empty block
+     * {@link DefaultFusion} sets on a copy of a classic hybrid that no search pipeline would combine. Its <b>presence</b> is
+     * the resolver on/off flag; its <b>shape</b> carries the config. {@code null} = classic hybrid (byte-identical wire
      * form). A string {@code "pipeline"} is normalized to {@code {source: "pipeline"}} at parse.
      *
      * <p>A well-formed {@code fusion} block drives execution: {@link #doRewrite} routes to {@link #doRewriteFused}, which
@@ -184,6 +189,19 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     @Getter(AccessLevel.NONE)
     @Setter(AccessLevel.NONE)
     private boolean requestOptionsAccepted;
+
+    /**
+     * Set only on the copy {@link DefaultFusion} makes of a classic hybrid that no search pipeline would combine: the request
+     * source as the caller submitted it, whose query is the classic hybrid this builder copies with {@code fusion: {}}. Its
+     * presence says that the fusion block came from the coordinator rather than from the request; it is read to explain a
+     * fused-mode refusal or failure in those terms, and for the profile's {@code default_fusion} flag. Never parsed, never
+     * serialized, absent from {@link #doEquals}/{@link #doHashCode}, like {@link #requestOptionsAccepted} — so a search request
+     * processor that rebuilds the source from its JSON turns the copy into an explicit {@code fusion: {}}, answered and
+     * counted as one.
+     */
+    @Getter(AccessLevel.PACKAGE)
+    @Setter(AccessLevel.NONE)
+    private SearchSourceBuilder submittedSource;
 
     /**
      * Where to publish this fused hybrid's leg profile trees. The setter is {@code HybridQuerySearchRequestFilter}'s attach
@@ -288,6 +306,18 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         "[%s] query [%s] (resolver/fused mode) must self-erase at the coordinator and must not reach a shard";
     public static final String ERROR_MSG_MIXED_HYBRID_NESTING =
         "a [%s] query without [%s] cannot be nested in a [%s] query with [%s], or the other way around; use [%s] on both";
+    /**
+     * What a refusal from the first round of the coordinator rewrite, and a failure of the leg fan-out, of a classic hybrid
+     * that runs with the default fusion ({@link DefaultFusion}) start with: the request never wrote {@code fusion}, so what
+     * fused mode says about it needs to say why fused mode ran.
+     */
+    private static final String ERROR_MSG_DEFAULT_FUSION =
+        "[%s] query without [%s] runs in fusion mode with the default techniques when no [%s] or [%s] applies to the request; "
+            + "attach a search pipeline with one of these processors to run it in classic mode. In fusion mode: %s";
+    private static final String ERROR_MSG_DEFAULT_FUSION_TURNED_OFF =
+        "fusion mode was turned off on this cluster ([%s] is false) while this request was in flight; retry it";
+    private static final String ERROR_MSG_DEFAULT_FUSION_OLD_NODE =
+        "a node older than [%s] joined the cluster while this request was in flight; retry it";
 
     public HybridQueryBuilder(StreamInput in) throws IOException {
         super(in);
@@ -680,7 +710,16 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         // Resolver (fused) mode self-erases at the coordinator into a standard query (see doRewriteFused). Classic mode
         // keeps the existing per-sub-query rewrite below.
         if (Objects.nonNull(fusion)) {
-            return doRewriteFused(queryShardContext);
+            if (Objects.isNull(submittedSource)) {
+                return doRewriteFused(queryShardContext);
+            }
+            // A classic hybrid running with the default fusion: a refusal speaks of fused mode, which the request never asked
+            // for, so it says why fused mode ran and how to run the query in classic mode instead.
+            try {
+                return doRewriteFused(queryShardContext);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalArgumentException(defaultFusionMessage(e.getMessage()), e);
+            }
         }
         // Ahead of rewriting the sub-queries: a fused hybrid among them would register its leg fan-out in its own rewrite,
         // and then self-erase into a standard query that the nested-hybrid check on the shard does not recognize.
@@ -705,8 +744,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     /**
      * Every per-query option a copy of this builder carries, in one place, so that the next one is added here and cannot be
      * missed at one of the copy sites — the silent-drop class of bug a request-level option has to guard against. The
-     * copies: the classic rebuild in {@link #doRewrite}, the fused marker in {@link #doRewriteFused}, and
-     * {@link #withResolvedFusionSpec}. The sub-queries and the never-serialized round-1 state are each site's own business.
+     * copies: the classic rebuild in {@link #doRewrite}, the fused marker in {@link #doRewriteFused},
+     * {@link #withResolvedFusionSpec}, and {@link #withDefaultFusion}. The sub-queries and the never-serialized round-1 state
+     * are each site's own business.
      */
     private void copyRequestOptionsTo(final HybridQueryBuilder target) {
         target.queryName(queryName);
@@ -841,9 +881,9 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         throw new IllegalArgumentException(
             String.format(
                 Locale.ROOT,
-                "[%s] query [%s] requires a normalization or score-ranker processor: the resolved search pipeline (from "
-                    + "?search_pipeline= or index.search.default_pipeline) has none, so nothing would read the weights. "
-                    + "Attach one, or add [%s] to fuse without a pipeline",
+                "[%s] query [%s] requires a normalization or score-ranker processor: the resolved search pipeline (named "
+                    + "with search_pipeline, defined inline, or the index default, which a request that names no index never "
+                    + "runs) has none, so nothing would read the weights. Attach one, or add [%s] to fuse without a pipeline",
                 NAME,
                 WEIGHTS_FIELD.getPreferredName(),
                 FUSION_FIELD.getPreferredName()
@@ -900,6 +940,20 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         QueryCoordinatorContext coordinatorContext = queryRewriteContext.convertToCoordinatorContext();
         if (Objects.isNull(coordinatorContext)) {
             return this;
+        }
+        // DefaultFusion decided before core resolved the search pipeline. A default-fusion copy that has lost fused mode since
+        // then says so, rather than pointing at a [fusion] block the request never had.
+        if (Objects.nonNull(submittedSource)) {
+            if (fusedModeEnabled() == false) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, ERROR_MSG_DEFAULT_FUSION_TURNED_OFF, HYBRID_FUSION_ENABLED.getKey())
+                );
+            }
+            if (clusterSupportsFusedMode() == false) {
+                throw new IllegalArgumentException(
+                    String.format(Locale.ROOT, ERROR_MSG_DEFAULT_FUSION_OLD_NODE, MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY)
+                );
+            }
         }
         // The operator's own switch ahead of the cluster's capability: on a cluster that is both lagging and switched off,
         // the version refusal would send them to upgrade nodes for a feature they never turned on.
@@ -1017,9 +1071,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         //
         // Reached exactly once per fused request: every earlier return in this method is taken before it -- a nested hybrid
         // rewritten as an enclosing query's match set, the round-2 re-entry guard, a non-SearchRequest rewrite
-        // (_explain, _validate/query), and every refusal above. It therefore counts requests that reached the fan-out,
-        // which is why these series are a lower bound on HYBRID_QUERY_FUSION_REQUESTS and never equal to it: that one is
-        // counted at parse time and includes everything refused in between.
+        // (_explain, _validate/query), and every refusal above. It therefore counts requests that reached the fan-out, with
+        // a fusion block or with the default fusion (DefaultFusion). HYBRID_QUERY_FUSION_REQUESTS is counted at parse time
+        // from bodies that carry a fusion block, so neither bounds the other: it includes requests refused in between, and
+        // these series include classic hybrids that ran with the default fusion.
         updateFusionTechniqueStats(fusionSpec);
 
         // The legs are resolved to their coordinator fixpoints inside the fan-out action below (FusedLegResolver), and the
@@ -1145,7 +1200,8 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         FusedCoordinatorTimings timings = new FusedCoordinatorTimings().windowSize(window)
             .normalizationTechnique(fusionSpec.normalizationTechnique())
             .combinationTechnique(fusionSpec.combinationTechnique())
-            .fastPath(fastPath);
+            .fastPath(fastPath)
+            .defaultFusion(Objects.nonNull(submittedSource));
         // Always constructed, for the same reason, but filled only when the legs actually explained — an unexplained
         // request's legs return no explanations, so this stays empty and is discarded.
         FusedDocExplanations explanations = new FusedDocExplanations();
@@ -1303,7 +1359,11 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 }
             }
         };
-        queryRewriteContext.registerAsyncAction((client, listener) -> {
+        final boolean defaultFusion = Objects.nonNull(submittedSource);
+        queryRewriteContext.registerAsyncAction((client, asyncActionListener) -> {
+            // A classic hybrid running with the default fusion fails the way doRewrite reports its refusals: saying why fused
+            // mode ran, at the failure's own status.
+            final ActionListener<?> listener = defaultFusion ? explainingDefaultFusion(asyncActionListener) : asyncActionListener;
             // Each leg to the fixpoint its own coordinator rewrite would reach — a `neural` leg's vector resolved, a
             // `neural_sparse` leg's tokens, a `terms` lookup fetched — and run the moment it is resolved, so a lexical leg
             // runs while a `neural` sibling is still inferring, exactly as the legs overlapped when each resolved inside its
@@ -1482,11 +1542,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * decided not to apply classic hybrid's own workarounds to this request.
      */
     private static void requireFusedModeIsEnabled() {
-        ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
-        boolean enabled = Objects.isNull(clusterService) || Objects.isNull(clusterService.getClusterSettings())
-            ? HYBRID_FUSION_ENABLED.getDefault(Settings.EMPTY)
-            : clusterService.getClusterSettings().get(HYBRID_FUSION_ENABLED);
-        if (enabled) {
+        if (fusedModeEnabled()) {
             return;
         }
         throw new IllegalArgumentException(
@@ -1500,6 +1556,58 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
                 FUSION_FIELD.getPreferredName()
             )
         );
+    }
+
+    /**
+     * {@link NeuralSearchSettings#HYBRID_FUSION_ENABLED}, read live off the cluster settings; the setting's own default when
+     * there are none to read. Shared by {@link #requireFusedModeIsEnabled} and {@link DefaultFusion}, so the two cannot
+     * disagree about whether fused mode is on.
+     */
+    static boolean fusedModeEnabled() {
+        ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
+        return Objects.isNull(clusterService) || Objects.isNull(clusterService.getClusterSettings())
+            ? HYBRID_FUSION_ENABLED.getDefault(Settings.EMPTY)
+            : clusterService.getClusterSettings().get(HYBRID_FUSION_ENABLED);
+    }
+
+    /**
+     * Whether every node can run round 2: all on {@code MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY} or later. The
+     * predicate behind {@link #requireClusterSupportsFusedMode}, for {@link DefaultFusion}; needs the cluster service.
+     */
+    static boolean clusterSupportsFusedMode() {
+        return isVersionOnOrAfterMinReqVersionForFusedModeInHybridQuery(NeuralSearchClusterUtil.instance().getClusterMinVersion());
+    }
+
+    /** A fused-mode message, re-stated as one about a classic hybrid that runs with the default fusion. */
+    private static String defaultFusionMessage(final String message) {
+        return String.format(
+            Locale.ROOT,
+            ERROR_MSG_DEFAULT_FUSION,
+            NAME,
+            FUSION_FIELD.getPreferredName(),
+            NormalizationProcessor.TYPE,
+            RRFProcessor.TYPE,
+            message
+        );
+    }
+
+    /**
+     * The async fan-out's listener for a classic hybrid that runs with the default fusion: the same listener, with a failure
+     * re-stated by {@link #defaultFusionMessage} at the failure's own status, the failure itself kept as the cause.
+     */
+    private static ActionListener<Object> explainingDefaultFusion(final ActionListener<?> listener) {
+        return new ActionListener<>() {
+            @Override
+            public void onResponse(final Object response) {
+                listener.onResponse(null);
+            }
+
+            @Override
+            public void onFailure(final Exception e) {
+                // No format arguments: LoggerMessageFormat returns the message verbatim, so a {} inside it stays as it is.
+                listener.onFailure(new OpenSearchStatusException(defaultFusionMessage(e.getMessage()), ExceptionsHelper.status(e), e));
+            }
+        };
     }
 
     /**
@@ -2099,6 +2207,27 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
+     * For {@link DefaultFusion}: a copy of this classic hybrid that runs in fused mode with the default techniques, exactly as
+     * this query would with {@code fusion: {}}. A copy, because this builder is the caller's and {@code fusion} takes part in
+     * {@link #doEquals}. The sub-query instances are shared, so a filter or a DLS restriction already pushed into them stays.
+     *
+     * @param submitted the request source as the caller submitted it, holding this builder
+     */
+    HybridQueryBuilder withDefaultFusion(final SearchSourceBuilder submitted) {
+        HybridQueryBuilder copy = new HybridQueryBuilder();
+        for (QueryBuilder query : queries) {
+            copy.add(query);
+        }
+        copyRequestOptionsTo(copy);
+        // The request's own query: its coordinator rewrite accepts the options itself, as it does for a parsed fusion block.
+        copy.requestOptionsAccepted = false;
+        // Mutable, like the block the parser builds for "fusion": {}.
+        copy.fusion = new HashMap<>();
+        copy.submittedSource = submitted;
+        return copy;
+    }
+
+    /**
      * Copy of this builder carrying a fusion config resolved by an enclosing fused hybrid. A copy rather than in-place
      * mutation because the same leg instance is also reused for the Tail, and because {@code fusion} participates in
      * {@link #doEquals}.
@@ -2640,14 +2769,17 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      * Parse-time usage counters for one hybrid query.
      *
      * <p>{@code HYBRID_QUERY_REQUESTS} is incremented for <b>every</b> hybrid, classic or resolver, so it stays the
-     * all-hybrid total; {@code hasFusion} adds the resolver to its own counter beside it rather than instead of it. That is
-     * what lets one read of {@code query.hybrid.*} answer both "how much hybrid" and "how much of it is the resolver", and
-     * it means a migration from classic to resolver shows up as a rising share and not as a fall in hybrid usage.
+     * all-hybrid total; {@code hasFusion} adds the bodies that wrote a {@code fusion} block to their own counter beside it
+     * rather than instead of it. How much hybrid runs in the resolver, explicitly or with the default fusion
+     * ({@link DefaultFusion}), is read off the per-technique series instead — the sum of the combination series over
+     * {@code HYBRID_QUERY_REQUESTS} — so a migration from classic to resolver shows up as a rising share and not as a fall in
+     * hybrid usage.
      *
      * <p>Counted at parse time, so it counts <i>requests as submitted</i>. A request refused later at rewrite (fused mode
      * disabled, an unsupported technique, cross-cluster) still counts here, and so do {@code _validate/query} and
-     * {@code _explain}, which parse a query without searching. That is pre-existing for the three flags beside it; it is
-     * noted because it puts an upper bound on the per-technique counters, which are counted at rewrite instead.
+     * {@code _explain}, which parse a query without searching. That is pre-existing for the three flags beside it. The
+     * per-technique counters are counted at rewrite instead, and also count classic hybrids that run with the default fusion
+     * ({@link DefaultFusion}), which {@code hasFusion} does not.
      */
     public static void updateQueryStats(boolean hasFilter, boolean hasPagination, boolean hasInnerHits, boolean hasFusion) {
         EventStatsManager.increment(EventStatName.HYBRID_QUERY_REQUESTS);
@@ -2676,9 +2808,10 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
      *
      * <p><b>One counter per name admitted by {@link #FUSED_COMBINATION_TECHNIQUES} and by the fused normalization
      * allowlist, and that coupling is the thing to keep.</b> Widening either set without adding a counter here does not
-     * fail anything — the name falls to the {@code default} arm and the request is counted in
-     * {@link EventStatName#HYBRID_QUERY_FUSION_REQUESTS} but in no technique series, so the technique counters quietly stop
-     * summing to the request count. That is exactly what happened when geometric_mean and harmonic_mean were admitted.
+     * fail anything — the name falls to the {@code default} arm and the request is counted in no technique series of that
+     * kind. Every request that reaches the fan-out adds to exactly one normalization series and one combination series, so
+     * the two sums stay equal, and a missing counter shows up as the two sums drifting apart. That is exactly what happened
+     * when geometric_mean and harmonic_mean were admitted.
      *
      * <p>The {@code default} arms are still deliberate: an unrecognized name is not counted rather than counted as
      * something else, so the failure mode of the next widening is a missing series instead of an inflated one.

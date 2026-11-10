@@ -1569,27 +1569,30 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
     }
 
     /**
-     * Classic weights are read by the pipeline's normalization or score-ranker processor and by nothing else, so a request
-     * that resolves to no such processor is refused rather than answered at HTTP 200 with the weights ignored. An inline
-     * pipeline body is the one carrier the rewrite cannot see (core drains it first): it is taken as present, and the
-     * processor it declares does read the weights.
+     * Classic weights are read by the pipeline's normalization or score-ranker processor. A request that resolves to no such
+     * processor runs in fusion mode with the default techniques (DefaultFusion), and the weights apply there exactly as they
+     * do on {@code fusion: {}}. Where such a request stays classic — {@code size: 0} — nothing would read the weights, so they
+     * are still refused rather than answered at HTTP 200 with the weights ignored. An inline pipeline body that carries the
+     * processor keeps the request classic, and the processor reads the weights.
      */
     @SneakyThrows
-    public void testClassicMode_whenRequestWeightsAndNoPhaseResultsProcessor_thenBadRequest() {
+    public void testClassicMode_whenRequestWeightsAndNoPhaseResultsProcessor_thenFusesWithTheDefaultsAndTheWeights() {
         ensureCombinationParityIndex();
         String endpoint = "/" + INDEX_FOR_COMBINATION_PARITY + "/_search";
         String weighted = "{\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}";
+        String weightedDefaultFusion = "{\"query\":" + disagreeingLegsQuery("{}", "[0.1,0.9]") + "}";
         for (Map<String, String> params : List.of(Map.<String, String>of(), Map.of("search_pipeline", "_none"))) {
-            ResponseException e = expectThrows(ResponseException.class, () -> searchRawWithParams(endpoint, weighted, params));
-            assertEquals(params.toString(), RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
-            assertTrue(
-                e.getMessage(),
-                e.getMessage().contains("[hybrid] query [weights] requires a normalization or score-ranker processor")
+            assertEquals(
+                params.toString(),
+                idsAndScores(getNestedHits(searchRawWithParams(endpoint, weightedDefaultFusion, params))),
+                idsAndScores(getNestedHits(searchRawWithParams(endpoint, weighted, params)))
             );
-            assertTrue(e.getMessage(), e.getMessage().contains("add [fusion] to fuse without a pipeline"));
         }
-        // Control: without weights there is nothing to read, so the request is answered as before (unfused scores).
-        searchRawWithParams(endpoint, "{\"query\":" + disagreeingLegsQuery(null) + "}", Map.of());
+        Request sizeZero = new Request("POST", endpoint);
+        sizeZero.setJsonEntity("{\"size\":0,\"query\":" + disagreeingLegsQuery(null, "[0.1,0.9]") + "}");
+        ResponseException e = expectThrows(ResponseException.class, () -> client().performRequest(sizeZero));
+        assertEquals(RestStatus.BAD_REQUEST.getStatus(), e.getResponse().getStatusLine().getStatusCode());
+        assertTrue(e.getMessage(), e.getMessage().contains("[hybrid] query [weights] requires a normalization or score-ranker processor"));
 
         // An inline pipeline body that carries the processor is accepted, and the request weights override its configured
         // ones exactly as they override a named pipeline's.
@@ -1907,9 +1910,12 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
      * block instead of quietly answering it some other way — and the error has to name the setting, since nothing else in
      * the response would tell a user why a documented query stopped working.
      *
-     * <p>The second half is the scope check: the same two legs without the {@code fusion} block are classic hybrid, which
-     * this setting has nothing to do with, and must still be served. That is also why the refusal is a refusal rather than
-     * a downgrade — dropping the block would have answered 200 from this very path, with un-normalized scores.
+     * <p>The second half is the scope check: the same two legs without the {@code fusion} block are classic hybrid, and must
+     * still be served. With the switch off, a classic hybrid that no search pipeline normalizes runs classic and
+     * unnormalized, as before fused mode existed — a downgrade, because that request wrote no fusion; once the switch is back
+     * on, it runs in fused mode with the default techniques. Only a request that wrote {@code fusion} is refused, which is
+     * why the refusal is a refusal rather than a downgrade: dropping the block would have answered 200 from this very path,
+     * with un-normalized scores.
      *
      * <p>Reset in a {@code finally}: the setting is persistent and {@link #cleanUp()} does not reset cluster settings,
      * so a leak here would refuse every fused query in every later suite of the run.
@@ -1936,9 +1942,10 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
             int classicHits = getHitCount(search(INDEX_NO_PIPELINE, classic, 10));
             // And this is what a downgrade would have answered: served at HTTP 200, but nothing like the fused result.
             // This index carries its whole fusion config in the query body, so classic hybrid here has no normalization
-            // processor to reduce with and reports the legs' raw concatenated candidate set instead of the three documents
-            // fused mode ranks. Asserted as a difference rather than an exact count because the number is classic hybrid's
-            // un-normalized behaviour, not anything this change defines.
+            // processor to reduce with; with fused mode switched off it cannot run with the default fusion either, so it
+            // reports the legs' raw concatenated candidate set instead of the three documents fused mode ranks. Asserted as
+            // a difference rather than an exact count because the number is classic hybrid's un-normalized behaviour, not
+            // anything this change defines.
             assertNotEquals("dropping the fusion block does not answer what fused mode answers", 3, classicHits);
         } finally {
             resetFusedMode();
@@ -1947,5 +1954,11 @@ public class HybridQueryFusedModeIT extends BaseNeuralSearchIT {
         // And back on the default without a restart, which is the point of a dynamic setting: the same query the cluster
         // just refused now fans out.
         assertEquals(3, getHitCount(search(INDEX_NO_PIPELINE, fusedTwoLegInlineConfigQuery(), 10)));
+        // With fused mode on again, the classic query that has no pipeline to combine its scores runs in fused mode with the
+        // default techniques (DefaultFusion), so it answers the same three documents.
+        HybridQueryBuilder classicAgain = new HybridQueryBuilder();
+        classicAgain.add(new MatchQueryBuilder(TEXT_FIELD, "hello"));
+        classicAgain.add(new TermQueryBuilder(TEXT_FIELD, "place"));
+        assertEquals(3, getHitCount(search(INDEX_NO_PIPELINE, classicAgain, 10)));
     }
 }

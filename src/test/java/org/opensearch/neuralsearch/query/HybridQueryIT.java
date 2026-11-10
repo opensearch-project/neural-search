@@ -225,14 +225,15 @@ public class HybridQueryIT extends BaseNeuralSearchIT {
         HybridQueryBuilder hybridQueryBuilderNeuralThenTerm = new HybridQueryBuilder();
         hybridQueryBuilderNeuralThenTerm.add(termQueryBuilder1);
         hybridQueryBuilderNeuralThenTerm.add(boolQueryBuilder);
-        Map<String, Object> searchResponseAsMap = search(
-            TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME,
-            hybridQueryBuilderNeuralThenTerm,
-            null,
-            10,
-            null,
-            null
-        );
+        // The max score the classic collector tracks, which a search pipeline's normalization would replace. Without a pipeline
+        // the query would run in fusion mode with the default techniques, so fusion mode is switched off for this search.
+        disableFusedMode();
+        Map<String, Object> searchResponseAsMap;
+        try {
+            searchResponseAsMap = search(TEST_BASIC_VECTOR_DOC_FIELD_INDEX_NAME, hybridQueryBuilderNeuralThenTerm, null, 10, null, null);
+        } finally {
+            resetFusedMode();
+        }
 
         double maxScore = getMaxScore(searchResponseAsMap).get();
         List<Map<String, Object>> hits = getNestedHits(searchResponseAsMap);

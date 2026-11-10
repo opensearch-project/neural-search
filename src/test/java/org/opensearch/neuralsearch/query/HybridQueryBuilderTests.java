@@ -7,6 +7,7 @@ package org.opensearch.neuralsearch.query;
 import static org.opensearch.neuralsearch.common.MinClusterVersionUtil.MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -53,6 +54,7 @@ import org.opensearch.cluster.service.ClusterService;
 import org.opensearch.common.UUIDs;
 import org.opensearch.common.io.stream.BytesStreamOutput;
 import org.opensearch.common.settings.ClusterSettings;
+import org.opensearch.neuralsearch.util.NeuralSearchClusterUtil;
 import org.opensearch.common.settings.Setting;
 import org.opensearch.common.settings.Settings;
 import org.opensearch.common.xcontent.XContentFactory;
@@ -937,6 +939,11 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         );
     }
 
+    /** An inline {@code search_pipeline} body carrying a {@code normalization-processor}, which reads classic weights. */
+    private static Map<String, Object> inlineNormalizationPipeline() {
+        return new HashMap<>(Map.of("phase_results_processors", List.of(Map.of("normalization-processor", Map.of()))));
+    }
+
     /**
      * The backstop runs where the request is accepted — on the coordinator — and nowhere else: a shard only receives what a
      * coordinator accepted, and core rewrites before toQuery, so a shard rewrite does not repeat the check.
@@ -968,9 +975,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         );
         assertThat(e.getMessage(), containsString("add [fusion] to fuse without a pipeline"));
 
-        // An inline pipeline body is drained by core before the rewrite and cannot be inspected; it is taken as present.
+        // An inline pipeline body is read as written (core builds its ad-hoc pipeline from a deep copy): one without a
+        // processor is refused like any other pipeline without one, and one with a normalization-processor reads the weights.
+        QueryCoordinatorContext inlineWithout = coordinatorContextFor(builder);
+        ((SearchRequest) inlineWithout.getSearchRequest()).source().searchPipelineSource(new HashMap<>());
+        expectThrows(IllegalArgumentException.class, () -> builder.doRewrite(inlineWithout));
         QueryCoordinatorContext inline = coordinatorContextFor(builder);
-        ((SearchRequest) inline.getSearchRequest()).source().searchPipelineSource(new HashMap<>());
+        ((SearchRequest) inline.getSearchRequest()).source().searchPipelineSource(inlineNormalizationPipeline());
         assertSame(builder, builder.doRewrite(inline));
 
         // Without weights there is nothing to read, so nothing to refuse.
@@ -1024,7 +1035,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         equalCopy.add(QueryBuilders.matchAllQuery());
         equalCopy.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
         SearchRequest requestWithEqualQuery = new SearchRequest("test-index").source(
-            new SearchSourceBuilder().query(weightedPostFilter).searchPipelineSource(new HashMap<>())
+            new SearchSourceBuilder().query(weightedPostFilter).searchPipelineSource(inlineNormalizationPipeline())
         );
         QueryCoordinatorContext equalCtx = mock(QueryCoordinatorContext.class);
         when(equalCtx.convertToCoordinatorContext()).thenReturn(equalCtx);
@@ -1094,7 +1105,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     /** A coordinator context whose request has the given top-level query, an inline pipeline body, and the test registry. */
     private QueryCoordinatorContext coordinatorContextHolding(QueryBuilder topLevelQuery) {
         SearchRequest request = new SearchRequest("test-index").source(
-            new SearchSourceBuilder().query(topLevelQuery).searchPipelineSource(new HashMap<>())
+            new SearchSourceBuilder().query(topLevelQuery).searchPipelineSource(inlineNormalizationPipeline())
         );
         QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
         when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
@@ -1116,7 +1127,7 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         builder.add(originalLeg);
         // Round 1: the request holds this very builder, and an inline pipeline body stands for a processor.
         QueryCoordinatorContext round1 = coordinatorContextFor(builder);
-        ((SearchRequest) round1.getSearchRequest()).source().searchPipelineSource(new HashMap<>());
+        ((SearchRequest) round1.getSearchRequest()).source().searchPipelineSource(inlineNormalizationPipeline());
         when(originalLeg.rewrite(round1)).thenReturn(rewrittenLeg);
         HybridQueryBuilder rebuilt = (HybridQueryBuilder) builder.doRewrite(round1);
         assertNotSame(builder, rebuilt);
@@ -2916,6 +2927,217 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertThat(failure.get().getMessage(), containsString("search rejected"));
         assertEquals(
             "a rejected fan-out must stay a 429 so client retry-on-429 fires",
+            org.opensearch.core.rest.RestStatus.TOO_MANY_REQUESTS,
+            org.opensearch.ExceptionsHelper.status(failure.get())
+        );
+    }
+
+    // ---- a classic hybrid that runs with the default fusion (DefaultFusion) ----
+
+    /** A classic hybrid with two sub-queries and no request-level options. */
+    private static HybridQueryBuilder classicBuilder() {
+        HybridQueryBuilder builder = new HybridQueryBuilder();
+        builder.add(new MatchQueryBuilder(TEXT_FIELD_NAME, "hello"));
+        builder.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        return builder;
+    }
+
+    /** A coordinator context over a request whose classic hybrid DefaultFusion has switched to the default fusion. */
+    private static QueryCoordinatorContext defaultFusionContext(final SearchSourceBuilder submitted) {
+        SearchRequest submittedRequest = new SearchRequest("test-index").source(submitted);
+        SearchRequest request = DefaultFusion.applyTo(submittedRequest);
+        assertNotSame("the request runs with the default fusion", submittedRequest, request);
+        QueryCoordinatorContext ctx = mock(QueryCoordinatorContext.class);
+        when(ctx.convertToCoordinatorContext()).thenReturn(ctx);
+        when(ctx.getSearchRequest()).thenReturn(request);
+        return ctx;
+    }
+
+    private static HybridQueryBuilder requestQuery(final QueryCoordinatorContext ctx) {
+        return (HybridQueryBuilder) ((SearchRequest) ctx.getSearchRequest()).source().query();
+    }
+
+    /** The copy is the explicit {@code fusion: {}} twin in every way that is compared, rendered or sent between nodes. */
+    @SneakyThrows
+    public void testWithDefaultFusion_thenEqualsAnExplicitEmptyFusionAndStaysOffTheWire() {
+        setUpClusterService(MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY);
+        HybridQueryBuilder classic = new HybridQueryBuilder();
+        classic.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        classic.weights(List.of(1.0f));
+        SearchSourceBuilder submitted = new SearchSourceBuilder().query(classic);
+        HybridQueryBuilder copy = classic.withDefaultFusion(submitted);
+
+        HybridQueryBuilder explicit = new HybridQueryBuilder();
+        explicit.add(QueryBuilders.termQuery(TEXT_FIELD_NAME, TERM_QUERY_TEXT));
+        explicit.weights(List.of(1.0f));
+        explicit.fusion(new HashMap<>());
+        assertEquals(explicit, copy);
+        assertEquals(explicit.hashCode(), copy.hashCode());
+        assertSame(submitted, copy.submittedSource());
+        assertNull("the caller's builder stays classic", classic.fusion());
+
+        BytesStreamOutput streamOutput = new BytesStreamOutput();
+        copy.writeTo(streamOutput);
+        HybridQueryBuilder read = new HybridQueryBuilder(
+            new NamedWriteableAwareStreamInput(
+                streamOutput.bytes().streamInput(),
+                new NamedWriteableRegistry(
+                    List.of(new NamedWriteableRegistry.Entry(QueryBuilder.class, TermQueryBuilder.NAME, TermQueryBuilder::new))
+                )
+            )
+        );
+        assertEquals(explicit, read);
+        assertNull("the submitted source never travels", read.submittedSource());
+
+        XContentBuilder rendered = XContentFactory.jsonBuilder();
+        copy.toXContent(rendered, ToXContent.EMPTY_PARAMS);
+        assertThat("rendered as what runs", BytesReference.bytes(rendered).utf8ToString(), containsString("\"fusion\":{}"));
+    }
+
+    /**
+     * A refusal of a classic hybrid running with the default fusion says why fused mode ran and how to run classic instead; the
+     * explicit {@code fusion: {}} twin gets fused mode's own message, unchanged. {@code terminate_after} stands in for every
+     * request shape fused mode refuses.
+     */
+    @SneakyThrows
+    public void testDoRewrite_whenTheDefaultFusionIsRefused_thenTheMessageSaysWhyFusionModeRan() {
+        initClusterUtilWithMaxResultWindow(10000);
+        QueryCoordinatorContext ctx = defaultFusionContext(new SearchSourceBuilder().query(classicBuilder()).terminateAfter(100));
+        HybridQueryBuilder defaultFusion = requestQuery(ctx);
+        IllegalArgumentException refused = expectThrows(IllegalArgumentException.class, () -> defaultFusion.doRewrite(ctx));
+        assertThat(
+            refused.getMessage(),
+            startsWith(
+                "[hybrid] query without [fusion] runs in fusion mode with the default techniques when no [normalization-processor] "
+                    + "or [score-ranker-processor] applies to the request; attach a search pipeline with one of these processors "
+                    + "to run it in classic mode. In fusion mode: "
+            )
+        );
+        assertThat(refused.getMessage(), containsString("does not support [terminate_after]"));
+
+        HybridQueryBuilder explicit = classicBuilder().fusion(new HashMap<>());
+        SearchRequest explicitRequest = new SearchRequest("test-index").source(
+            new SearchSourceBuilder().query(explicit).terminateAfter(100)
+        );
+        QueryCoordinatorContext explicitCtx = mock(QueryCoordinatorContext.class);
+        when(explicitCtx.convertToCoordinatorContext()).thenReturn(explicitCtx);
+        when(explicitCtx.getSearchRequest()).thenReturn(explicitRequest);
+        IllegalArgumentException explicitRefusal = expectThrows(IllegalArgumentException.class, () -> explicit.doRewrite(explicitCtx));
+        assertEquals(explicitRefusal.getMessage(), refused.getCause().getMessage());
+    }
+
+    /**
+     * DefaultFusion decided before core resolved the pipeline; if fused mode became unavailable since, the request says to
+     * retry it rather than pointing at a fusion block it never had.
+     */
+    @SneakyThrows
+    public void testDoRewrite_whenFusedModeBecameUnavailableAfterTheDecision_thenTheMessageSaysToRetry() {
+        initClusterUtilWithMaxResultWindow(10000);
+        QueryCoordinatorContext ctx = defaultFusionContext(new SearchSourceBuilder().query(classicBuilder()));
+        HybridQueryBuilder defaultFusion = requestQuery(ctx);
+        org.opensearch.cluster.service.ClusterService clusterService = NeuralSearchClusterUtil.instance().getClusterService();
+
+        when(clusterService.getClusterSettings()).thenReturn(
+            new ClusterSettings(
+                Settings.builder()
+                    .put(org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED.getKey(), false)
+                    .build(),
+                Set.of(
+                    org.opensearch.neuralsearch.settings.NeuralSearchSettings.HYBRID_FUSION_ENABLED,
+                    org.opensearch.neuralsearch.settings.NeuralSearchSettings.MAX_FUSION_LEG_SEARCHES
+                )
+            )
+        );
+        IllegalArgumentException switchedOff = expectThrows(IllegalArgumentException.class, () -> defaultFusion.doRewrite(ctx));
+        assertThat(
+            switchedOff.getMessage(),
+            containsString(
+                "In fusion mode: fusion mode was turned off on this cluster ([plugins.neural_search.hybrid.fusion.enabled] is false) "
+                    + "while this request was in flight; retry it"
+            )
+        );
+
+        org.opensearch.neuralsearch.util.NeuralSearchClusterTestUtils.stubFusedModeEnabled(clusterService);
+        stubClusterMinVersion(clusterService.state(), Version.V_3_9_0);
+        IllegalArgumentException oldNode = expectThrows(IllegalArgumentException.class, () -> defaultFusion.doRewrite(ctx));
+        assertThat(
+            oldNode.getMessage(),
+            containsString("In fusion mode: a node older than [3.10.0] joined the cluster while this request was in flight; retry it")
+        );
+    }
+
+    /**
+     * A classic hybrid running with the default fusion fans out and fuses like any fused hybrid: the outer listener answers,
+     * round 2 swaps in the fused query, and the coordinator timings say the fusion was the default one.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenTheDefaultFusionFansOut_thenItFusesAndTheTimingsSaySo() {
+        initClusterUtilWithMaxResultWindow(10000);
+        QueryCoordinatorContext ctx = defaultFusionContext(new SearchSourceBuilder().query(classicBuilder()));
+        HybridQueryBuilder defaultFusion = requestQuery(ctx);
+        java.util.concurrent.atomic.AtomicReference<org.opensearch.neuralsearch.search.profile.FusedCoordinatorTimings> timings =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        defaultFusion.fusionTimingConsumer(timings::set);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        QueryBuilder marker = defaultFusion.doRewrite(ctx);
+
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        answerLegSearchesFrom(
+            client,
+            new org.opensearch.action.search.MultiSearchResponse(
+                new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                    legItem(Map.of("1", 0.9f, "2", 0.5f)),
+                    legItem(Map.of("2", 0.8f, "3", 0.4f)) },
+                10L
+            )
+        );
+        java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> done.set(true), e -> fail(e.getMessage())));
+
+        assertTrue("the outer listener answers", done.get());
+        assertTrue("round 2 swaps in the fused query", marker.rewrite(ctx) instanceof HybridFusionQueryBuilder);
+        assertNotNull(timings.get());
+        assertTrue(timings.get().defaultFusion());
+    }
+
+    /** A leg failure of a classic hybrid running with the default fusion is re-stated the same way, at the leg's own status. */
+    @SneakyThrows
+    public void testDoRewriteFused_whenALegOfTheDefaultFusionIsRejected_thenThePrefixedFailureKeepsItsStatus() {
+        initClusterUtilWithMaxResultWindow(10000);
+        QueryCoordinatorContext ctx = defaultFusionContext(new SearchSourceBuilder().query(classicBuilder()));
+        HybridQueryBuilder defaultFusion = requestQuery(ctx);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        defaultFusion.doRewrite(ctx);
+
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            l.onFailure(new org.opensearch.core.concurrency.OpenSearchRejectedExecutionException("search rejected"));
+            return null;
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> fail("should have failed"), failure::set));
+        assertNotNull(failure.get());
+        assertThat(
+            failure.get().getMessage(),
+            startsWith("[hybrid] query without [fusion] runs in fusion mode with the default techniques")
+        );
+        assertThat(failure.get().getMessage(), containsString("In fusion mode: [hybrid] fused-mode sub-query 0 failed"));
+        assertEquals(
+            "a rejected fan-out stays a retryable 429",
             org.opensearch.core.rest.RestStatus.TOO_MANY_REQUESTS,
             org.opensearch.ExceptionsHelper.status(failure.get())
         );
