@@ -201,6 +201,47 @@ public class FusionConfigResolverTests extends OpenSearchTestCase {
         assertNull(FusionConfigResolver.resolve(new SearchRequest("idx-a", "idx-b")));
     }
 
+    /**
+     * Core starts its index-default loop from {@code _none} and lets any index replace that, so an index that sets
+     * {@code _none} explicitly leaves the choice to the next one: {@code [_none, P]} runs P. Only the order matters —
+     * {@code [P, _none]} differs from P and collapses to no pipeline, as core does.
+     */
+    public void testResolve_whenTheFirstIndexDefaultIsNone_thenTheNextDefaultIsRead() throws Exception {
+        SearchPipelineMetadata pipelines = new SearchPipelineMetadata(Map.of("mm", minMaxPipeline("mm")));
+
+        initClusterUtilWithIndexDefaults(pipelines, "_none", "mm");
+        assertNotNull(FusionConfigResolver.resolve(new SearchRequest("idx-0", "idx-1")));
+        assertTrue(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx-0", "idx-1")));
+
+        initClusterUtilWithIndexDefaults(pipelines, "mm", "_none");
+        assertNull(FusionConfigResolver.resolve(new SearchRequest("idx-0", "idx-1")));
+        assertFalse(FusionConfigResolver.resolvedPipelineHasScoreHybridizationProcessor(new SearchRequest("idx-0", "idx-1")));
+
+        initClusterUtilWithIndexDefaults(pipelines, "_none", "_none");
+        assertNull(FusionConfigResolver.resolve(new SearchRequest("idx-0", "idx-1")));
+    }
+
+    /** Concrete indices {@code idx-0}, {@code idx-1}, ... whose {@code index.search.default_pipeline} are the given ids. */
+    private void initClusterUtilWithIndexDefaults(final SearchPipelineMetadata pipelineMetadata, final String... defaultPipelineIds) {
+        Metadata metadata = mock(Metadata.class);
+        ClusterState clusterState = mock(ClusterState.class);
+        ClusterService clusterService = mock(ClusterService.class);
+        when(clusterService.state()).thenReturn(clusterState);
+        when(clusterState.metadata()).thenReturn(metadata);
+        when(clusterState.getMetadata()).thenReturn(metadata);
+        when(metadata.custom(SearchPipelineMetadata.TYPE)).thenReturn(pipelineMetadata);
+        Index[] indices = new Index[defaultPipelineIds.length];
+        for (int i = 0; i < defaultPipelineIds.length; i++) {
+            indices[i] = new Index("idx-" + i, "uuid-" + i);
+            when(metadata.index(indices[i])).thenReturn(
+                IndexMetadata.builder("idx-" + i).settings(indexSettingsWithDefaultPipeline(defaultPipelineIds[i])).build()
+            );
+        }
+        IndexNameExpressionResolver resolver = mock(IndexNameExpressionResolver.class);
+        when(resolver.concreteIndices(any(ClusterState.class), any(org.opensearch.action.IndicesRequest.class))).thenReturn(indices);
+        NeuralSearchClusterUtil.instance().initialize(clusterService, resolver);
+    }
+
     // ---- resolvedPipelineHasResponseProcessors ----
 
     private PipelineConfiguration pipelineWithResponseProcessor(String id) throws Exception {
