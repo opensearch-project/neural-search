@@ -24,13 +24,20 @@ import org.opensearch.search.sort.SortAndFormats;
 import org.opensearch.search.sort.SortBuilders;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
+    private static final Comparator<ScoreDoc> SCORE_COMPARATOR = Comparator.comparing((scoreDoc) -> scoreDoc.score);
+
+    /** Same construction as {@link TopDocsMerger}: the request's sort fields with a doc-id tie-breaker. */
+    private static HybridQueryFieldDocComparator fieldDocComparator(SortAndFormats sortAndFormats) {
+        return new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), Comparator.comparingInt(scoreDoc -> scoreDoc.doc));
+    }
+
     public void testIncorrectInput_whenScoreDocsAreNullOrNotEnoughElements_thenFail() {
         HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
         ScoreDoc[] scores = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(2),
             createDelimiterElementForHybridSearchResults(2),
@@ -39,29 +46,13 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
         NullPointerException exception = assertThrows(
             NullPointerException.class,
-            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
-                scores,
-                null,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
-                null,
-                null,
-                false,
-                false
-            )
+            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(scores, null, SCORE_COMPARATOR, null, null, false, false)
         );
         assertEquals("score docs cannot be null", exception.getMessage());
 
         exception = assertThrows(
             NullPointerException.class,
-            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
-                scores,
-                null,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
-                null,
-                null,
-                false,
-                false
-            )
+            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(null, scores, SCORE_COMPARATOR, null, null, false, false)
         );
         assertEquals("score docs cannot be null", exception.getMessage());
 
@@ -69,29 +60,13 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
         IllegalArgumentException notEnoughException = assertThrows(
             IllegalArgumentException.class,
-            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
-                lessElementsScoreDocs,
-                scores,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
-                null,
-                null,
-                false,
-                false
-            )
+            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(lessElementsScoreDocs, scores, SCORE_COMPARATOR, null, null, false, false)
         );
         assertEquals("cannot merge top docs because it does not have enough elements", notEnoughException.getMessage());
 
         notEnoughException = assertThrows(
             IllegalArgumentException.class,
-            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
-                scores,
-                lessElementsScoreDocs,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
-                null,
-                null,
-                false,
-                false
-            )
+            () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(scores, lessElementsScoreDocs, SCORE_COMPARATOR, null, null, false, false)
         );
         assertEquals("cannot merge top docs because it does not have enough elements", notEnoughException.getMessage());
     }
@@ -116,11 +91,10 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             new ScoreDoc(4, 0.6f),
             createStartStopElementForHybridSearchResults(2) };
 
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
         MergeResult mergeResult = scoreDocsMerger.mergeScoreDocsAndCollapseValues(
             scoreDocsOriginal,
             scoreDocsNew,
-            topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+            SCORE_COMPARATOR,
             null,
             null,
             false,
@@ -147,7 +121,6 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
     public void testMergeScoreDocs_whenOneTopDocsHasHitsAndOtherIsEmpty_thenSuccessful() {
         HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),
             createDelimiterElementForHybridSearchResults(0),
@@ -166,7 +139,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = scoreDocsMerger.mergeScoreDocsAndCollapseValues(
             scoreDocsOriginal,
             scoreDocsNew,
-            topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+            SCORE_COMPARATOR,
             null,
             null,
             false,
@@ -189,7 +162,6 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
     public void testMergeScoreDocs_whenBothTopDocsHasNoHits_thenSuccessful() {
         HybridQueryScoreDocsMerger<ScoreDoc> scoreDocsMerger = new HybridQueryScoreDocsMerger<>();
-        TopDocsMerger topDocsMerger = new TopDocsMerger(null, null);
         ScoreDoc[] scoreDocsOriginal = new ScoreDoc[] {
             createStartStopElementForHybridSearchResults(0),
             createDelimiterElementForHybridSearchResults(0),
@@ -204,7 +176,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = scoreDocsMerger.mergeScoreDocsAndCollapseValues(
             scoreDocsOriginal,
             scoreDocsNew,
-            topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+            SCORE_COMPARATOR,
             null,
             null,
             false,
@@ -227,7 +199,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
+        HybridQueryFieldDocComparator fieldDocComparator = fieldDocComparator(sortAndFormats);
 
         FieldDoc[] scores = new FieldDoc[] {
             createFieldDocStartStopElementForHybridSearchResults(2, new Object[] { 1 }),
@@ -237,29 +209,13 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
         NullPointerException exception = assertThrows(
             NullPointerException.class,
-            () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
-                scores,
-                null,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
-                null,
-                null,
-                true,
-                false
-            )
+            () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(scores, null, fieldDocComparator, null, null, true, false)
         );
         assertEquals("score docs cannot be null", exception.getMessage());
 
         exception = assertThrows(
             NullPointerException.class,
-            () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
-                scores,
-                null,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
-                null,
-                null,
-                true,
-                false
-            )
+            () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(null, scores, fieldDocComparator, null, null, true, false)
         );
         assertEquals("score docs cannot be null", exception.getMessage());
 
@@ -272,7 +228,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 lessElementsScoreDocs,
                 scores,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                fieldDocComparator,
                 null,
                 null,
                 true,
@@ -286,7 +242,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 scores,
                 lessElementsScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                fieldDocComparator,
                 null,
                 null,
                 true,
@@ -320,12 +276,12 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
+        HybridQueryFieldDocComparator fieldDocComparator = fieldDocComparator(sortAndFormats);
 
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             fieldDocsOriginal,
             fieldDocsNew,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            fieldDocComparator,
             null,
             null,
             true,
@@ -354,7 +310,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
+        HybridQueryFieldDocComparator fieldDocComparator = fieldDocComparator(sortAndFormats);
 
         FieldDoc[] fieldDocsOriginal = new FieldDoc[] {
             createFieldDocStartStopElementForHybridSearchResults(0, new Object[] { 1 }),
@@ -374,7 +330,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             fieldDocsOriginal,
             fieldDocsNew,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            fieldDocComparator,
             null,
             null,
             true,
@@ -400,7 +356,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, null);
+        HybridQueryFieldDocComparator fieldDocComparator = fieldDocComparator(sortAndFormats);
 
         FieldDoc[] fieldDocsOriginal = new FieldDoc[] {
             createFieldDocStartStopElementForHybridSearchResults(0, new Object[] { 1 }),
@@ -416,7 +372,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             fieldDocsOriginal,
             fieldDocsNew,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            fieldDocComparator,
             null,
             null,
             true,
@@ -438,6 +394,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
+        HybridQueryFieldDocComparator fieldDocComparator = fieldDocComparator(sortAndFormats);
         InnerHitBuilder collapsedAgesInnerHitBuilder = new InnerHitBuilder("authors");
         collapsedAgesInnerHitBuilder.setSize(10);
         collapsedAgesInnerHitBuilder.setSorts(List.of(SortBuilders.scoreSort()));
@@ -445,7 +402,6 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         List<InnerHitBuilder> innerHitBuilders = new ArrayList<>();
         innerHitBuilders.add(collapsedAgesInnerHitBuilder);
         CollapseContext collapseContext = new CollapseContext("author", null, innerHitBuilders);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, collapseContext);
 
         FieldDoc[] sourceScoreDocs = new FieldDoc[] {
             createFieldDocStartStopElementForHybridSearchResults(2, new Object[] { 1 }),
@@ -461,15 +417,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
 
         NullPointerException nullPointerException = assertThrows(
             NullPointerException.class,
-            () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
-                sourceScoreDocs,
-                newScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
-                null,
-                null,
-                true,
-                true
-            )
+            () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(sourceScoreDocs, newScoreDocs, fieldDocComparator, null, null, true, true)
         );
         assertEquals("collapse values cannot be null", nullPointerException.getMessage());
 
@@ -482,7 +430,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 sourceScoreDocs,
                 newScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                fieldDocComparator,
                 mismatchedSourceCollapseValues,
                 validNewCollapseValues,
                 true,
@@ -503,7 +451,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 sourceScoreDocs,
                 newScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                fieldDocComparator,
                 mismatchedSourceValues,
                 mismatchedNewValues,
                 true,
@@ -522,6 +470,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         SortField sortField = new SortField("stock", SortField.Type.INT, true);
         Sort sort = new Sort(sortField);
         SortAndFormats sortAndFormats = new SortAndFormats(sort, docValueFormat);
+        HybridQueryFieldDocComparator fieldDocComparator = fieldDocComparator(sortAndFormats);
         InnerHitBuilder collapsedAgesInnerHitBuilder = new InnerHitBuilder("authors");
         collapsedAgesInnerHitBuilder.setSize(10);
         collapsedAgesInnerHitBuilder.setSorts(List.of(SortBuilders.scoreSort()));
@@ -529,7 +478,6 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         List<InnerHitBuilder> innerHitBuilders = new ArrayList<>();
         innerHitBuilders.add(collapsedAgesInnerHitBuilder);
         CollapseContext collapseContext = new CollapseContext("author", null, innerHitBuilders);
-        TopDocsMerger topDocsMerger = new TopDocsMerger(sortAndFormats, collapseContext);
 
         FieldDoc[] sourceScoreDocs = new FieldDoc[] {
             createFieldDocStartStopElementForHybridSearchResults(2, new Object[] { 1 }),
@@ -546,7 +494,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             sourceScoreDocs,
             newScoreDocs,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            fieldDocComparator,
             new Object[] { "value1", "value2", "value3", "value4" },
             new Object[] { "value1", "value2", "value7", "value4" },
             true,
