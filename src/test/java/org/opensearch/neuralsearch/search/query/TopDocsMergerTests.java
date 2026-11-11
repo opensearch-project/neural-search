@@ -32,6 +32,12 @@ import org.opensearch.search.sort.SortBuilders;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class TopDocsMergerTests extends OpenSearchQueryTestCase {
 
@@ -683,6 +689,158 @@ public class TopDocsMergerTests extends OpenSearchQueryTestCase {
         assertEquals(0, mergedCollapseValues[1]);
         assertEquals(0, mergedCollapseValues[2]);
         assertEquals(0, mergedCollapseValues[3]);
+    }
+
+    /**
+     * Regression test for the comparator race: the comparators used to be static fields overwritten by every
+     * TopDocsMerger constructor, so a merger created for a second request with the opposite sort order changed the
+     * order in which the first merger merged. Creating merger B must not change what merger A produces.
+     */
+    @SneakyThrows
+    public void testMergeFieldDocs_whenAnotherMergerWithOppositeSortIsCreated_thenFirstMergerKeepsItsOrder() {
+        SortAndFormats ascending = sortByStock(false);
+        SortAndFormats descending = sortByStock(true);
+        TopDocsMerger ascendingMerger = new TopDocsMerger(ascending, null);
+        // a second request with the opposite sort order creates its own merger; it must not affect the first one
+        TopDocsMerger descendingMerger = new TopDocsMerger(descending, null);
+
+        TopDocsAndMaxScore mergedAscending = ascendingMerger.merge(
+            singleSubQueryFieldDocs(ascending, new int[] { 0, 2 }, new int[] { 10, 30 }),
+            singleSubQueryFieldDocs(ascending, new int[] { 1, 3 }, new int[] { 20, 40 })
+        );
+        TopDocsAndMaxScore mergedDescending = descendingMerger.merge(
+            singleSubQueryFieldDocs(descending, new int[] { 2, 0 }, new int[] { 30, 10 }),
+            singleSubQueryFieldDocs(descending, new int[] { 3, 1 }, new int[] { 40, 20 })
+        );
+
+        assertSortValues(mergedAscending, 10, 20, 30, 40);
+        assertSortValues(mergedDescending, 40, 30, 20, 10);
+        assertNotSame(ascendingMerger.fieldDocBySortCriteriaComparator, descendingMerger.fieldDocBySortCriteriaComparator);
+    }
+
+    @SneakyThrows
+    public void testMergeScoreDocs_whenSortedMergerIsCreated_thenScoreMergerKeepsItsComparator() {
+        TopDocsMerger scoreMerger = new TopDocsMerger(null, null);
+        TopDocsMerger sortedMerger = new TopDocsMerger(sortByStock(true), null);
+
+        assertNotNull(scoreMerger.scoreDocByScoreComparator);
+        assertNull(scoreMerger.fieldDocBySortCriteriaComparator);
+        assertNull(sortedMerger.scoreDocByScoreComparator);
+        assertNotNull(sortedMerger.fieldDocBySortCriteriaComparator);
+
+        TopDocsAndMaxScore merged = scoreMerger.merge(
+            singleSubQueryScoreDocs(new int[] { 0, 2 }, new float[] { 0.9f, 0.3f }),
+            singleSubQueryScoreDocs(new int[] { 1, 3 }, new float[] { 0.7f, 0.1f })
+        );
+        ScoreDoc[] scoreDocs = merged.topDocs.scoreDocs;
+        // start | delimiter | 4 hits | stop
+        assertEquals(7, scoreDocs.length);
+        assertScoreDoc(scoreDocs[2], 0, 0.9f);
+        assertScoreDoc(scoreDocs[3], 1, 0.7f);
+        assertScoreDoc(scoreDocs[4], 2, 0.3f);
+        assertScoreDoc(scoreDocs[5], 3, 0.1f);
+    }
+
+    /**
+     * Concurrent requests with opposite sort orders, each merging on its own thread while others construct mergers.
+     * Every merge must come out in its own request's order.
+     */
+    @SneakyThrows
+    public void testMergeFieldDocs_whenConcurrentMergersWithOppositeSortOrders_thenEachKeepsItsOrder() {
+        int threads = 8;
+        int iterations = 200;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        AtomicInteger wrongOrder = new AtomicInteger();
+        List<Future<?>> futures = new ArrayList<>();
+        try {
+            for (int t = 0; t < threads; t++) {
+                boolean reverse = (t % 2) == 1;
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    SortAndFormats sortAndFormats = sortByStock(reverse);
+                    for (int i = 0; i < iterations; i++) {
+                        TopDocsMerger merger = new TopDocsMerger(sortAndFormats, null);
+                        TopDocsAndMaxScore merged = reverse
+                            ? merger.merge(
+                                singleSubQueryFieldDocs(sortAndFormats, new int[] { 2, 0 }, new int[] { 30, 10 }),
+                                singleSubQueryFieldDocs(sortAndFormats, new int[] { 3, 1 }, new int[] { 40, 20 })
+                            )
+                            : merger.merge(
+                                singleSubQueryFieldDocs(sortAndFormats, new int[] { 0, 2 }, new int[] { 10, 30 }),
+                                singleSubQueryFieldDocs(sortAndFormats, new int[] { 1, 3 }, new int[] { 20, 40 })
+                            );
+                        int[] expected = reverse ? new int[] { 40, 30, 20, 10 } : new int[] { 10, 20, 30, 40 };
+                        if (!hasSortValues(merged, expected)) {
+                            wrongOrder.incrementAndGet();
+                        }
+                    }
+                    return null;
+                }));
+            }
+            start.countDown();
+            for (Future<?> future : futures) {
+                future.get(60, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+        assertEquals("merges that came out in another request's sort order", 0, wrongOrder.get());
+    }
+
+    private static SortAndFormats sortByStock(boolean reverse) {
+        return new SortAndFormats(
+            new Sort(new SortField("stock", SortField.Type.INT, reverse)),
+            new DocValueFormat[] { DocValueFormat.RAW }
+        );
+    }
+
+    /** One sub-query whose hits are already in the given order: start | delimiter | hits | stop. */
+    private static TopDocsAndMaxScore singleSubQueryFieldDocs(SortAndFormats sortAndFormats, int[] docIds, int[] sortValues) {
+        FieldDoc[] fieldDocs = new FieldDoc[docIds.length + 3];
+        fieldDocs[0] = createFieldDocStartStopElementForHybridSearchResults(docIds[0], new Object[] { 1 });
+        fieldDocs[1] = createFieldDocDelimiterElementForHybridSearchResults(docIds[0], new Object[] { 1 });
+        for (int i = 0; i < docIds.length; i++) {
+            fieldDocs[i + 2] = new FieldDoc(docIds[i], 1.0f, new Object[] { sortValues[i] });
+        }
+        fieldDocs[fieldDocs.length - 1] = createFieldDocStartStopElementForHybridSearchResults(docIds[0], new Object[] { 1 });
+        TopDocs topDocs = new TopFieldDocs(
+            new TotalHits(docIds.length, TotalHits.Relation.EQUAL_TO),
+            fieldDocs,
+            sortAndFormats.sort.getSort()
+        );
+        return new TopDocsAndMaxScore(topDocs, 1.0f);
+    }
+
+    private static TopDocsAndMaxScore singleSubQueryScoreDocs(int[] docIds, float[] scores) {
+        ScoreDoc[] scoreDocs = new ScoreDoc[docIds.length + 3];
+        scoreDocs[0] = createStartStopElementForHybridSearchResults(docIds[0]);
+        scoreDocs[1] = createDelimiterElementForHybridSearchResults(docIds[0]);
+        float maxScore = 0f;
+        for (int i = 0; i < docIds.length; i++) {
+            scoreDocs[i + 2] = new ScoreDoc(docIds[i], scores[i]);
+            maxScore = Math.max(maxScore, scores[i]);
+        }
+        scoreDocs[scoreDocs.length - 1] = createStartStopElementForHybridSearchResults(docIds[0]);
+        return new TopDocsAndMaxScore(new TopDocs(new TotalHits(docIds.length, TotalHits.Relation.EQUAL_TO), scoreDocs), maxScore);
+    }
+
+    private static boolean hasSortValues(TopDocsAndMaxScore merged, int... expectedSortValues) {
+        ScoreDoc[] scoreDocs = merged.topDocs.scoreDocs;
+        // start | delimiter | hits... | stop
+        if (scoreDocs.length != expectedSortValues.length + 3) {
+            return false;
+        }
+        for (int i = 0; i < expectedSortValues.length; i++) {
+            if (!Integer.valueOf(expectedSortValues[i]).equals(((FieldDoc) scoreDocs[i + 2]).fields[0])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void assertSortValues(TopDocsAndMaxScore merged, int... expectedSortValues) {
+        assertTrue("expected sort values " + java.util.Arrays.toString(expectedSortValues), hasSortValues(merged, expectedSortValues));
     }
 
     private void assertScoreDoc(ScoreDoc scoreDoc, int expectedDocId, float expectedScore) {

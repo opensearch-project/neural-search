@@ -42,7 +42,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
                 scores,
                 null,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+                topDocsMerger.scoreDocByScoreComparator,
                 null,
                 null,
                 false,
@@ -56,7 +56,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
                 scores,
                 null,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+                topDocsMerger.scoreDocByScoreComparator,
                 null,
                 null,
                 false,
@@ -72,7 +72,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
                 lessElementsScoreDocs,
                 scores,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+                topDocsMerger.scoreDocByScoreComparator,
                 null,
                 null,
                 false,
@@ -86,7 +86,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> scoreDocsMerger.mergeScoreDocsAndCollapseValues(
                 scores,
                 lessElementsScoreDocs,
-                topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+                topDocsMerger.scoreDocByScoreComparator,
                 null,
                 null,
                 false,
@@ -120,7 +120,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = scoreDocsMerger.mergeScoreDocsAndCollapseValues(
             scoreDocsOriginal,
             scoreDocsNew,
-            topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+            topDocsMerger.scoreDocByScoreComparator,
             null,
             null,
             false,
@@ -166,7 +166,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = scoreDocsMerger.mergeScoreDocsAndCollapseValues(
             scoreDocsOriginal,
             scoreDocsNew,
-            topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+            topDocsMerger.scoreDocByScoreComparator,
             null,
             null,
             false,
@@ -204,7 +204,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = scoreDocsMerger.mergeScoreDocsAndCollapseValues(
             scoreDocsOriginal,
             scoreDocsNew,
-            topDocsMerger.SCORE_DOC_BY_SCORE_COMPARATOR,
+            topDocsMerger.scoreDocByScoreComparator,
             null,
             null,
             false,
@@ -240,7 +240,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 scores,
                 null,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                topDocsMerger.fieldDocBySortCriteriaComparator,
                 null,
                 null,
                 true,
@@ -254,7 +254,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 scores,
                 null,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                topDocsMerger.fieldDocBySortCriteriaComparator,
                 null,
                 null,
                 true,
@@ -272,7 +272,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 lessElementsScoreDocs,
                 scores,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                topDocsMerger.fieldDocBySortCriteriaComparator,
                 null,
                 null,
                 true,
@@ -286,7 +286,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 scores,
                 lessElementsScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                topDocsMerger.fieldDocBySortCriteriaComparator,
                 null,
                 null,
                 true,
@@ -325,7 +325,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             fieldDocsOriginal,
             fieldDocsNew,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            topDocsMerger.fieldDocBySortCriteriaComparator,
             null,
             null,
             true,
@@ -374,7 +374,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             fieldDocsOriginal,
             fieldDocsNew,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            topDocsMerger.fieldDocBySortCriteriaComparator,
             null,
             null,
             true,
@@ -416,7 +416,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             fieldDocsOriginal,
             fieldDocsNew,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            topDocsMerger.fieldDocBySortCriteriaComparator,
             null,
             null,
             true,
@@ -464,7 +464,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 sourceScoreDocs,
                 newScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                topDocsMerger.fieldDocBySortCriteriaComparator,
                 null,
                 null,
                 true,
@@ -482,7 +482,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 sourceScoreDocs,
                 newScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                topDocsMerger.fieldDocBySortCriteriaComparator,
                 mismatchedSourceCollapseValues,
                 validNewCollapseValues,
                 true,
@@ -503,7 +503,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
             () -> fieldDocsMerger.mergeScoreDocsAndCollapseValues(
                 sourceScoreDocs,
                 newScoreDocs,
-                topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+                topDocsMerger.fieldDocBySortCriteriaComparator,
                 mismatchedSourceValues,
                 mismatchedNewValues,
                 true,
@@ -546,7 +546,7 @@ public class HybridQueryScoreDocsMergerTests extends OpenSearchQueryTestCase {
         MergeResult mergeResult = fieldDocsMerger.mergeScoreDocsAndCollapseValues(
             sourceScoreDocs,
             newScoreDocs,
-            topDocsMerger.FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR,
+            topDocsMerger.fieldDocBySortCriteriaComparator,
             new Object[] { "value1", "value2", "value3", "value4" },
             new Object[] { "value1", "value2", "value7", "value4" },
             true,

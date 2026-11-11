@@ -5,7 +5,6 @@
 package org.opensearch.neuralsearch.search.query;
 
 import com.google.common.annotations.VisibleForTesting;
-import lombok.RequiredArgsConstructor;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.SortField;
@@ -23,17 +22,23 @@ import org.opensearch.search.sort.SortAndFormats;
 import org.opensearch.neuralsearch.search.query.HybridQueryScoreDocsMerger.MergeResult;
 
 /**
- * Utility class for merging TopDocs and MaxScore across multiple search queries
+ * Utility class for merging TopDocs and MaxScore across multiple search queries.
+ * <p>
+ * One instance is created per shard search request ({@link HybridCollectorResultsUtilParams}) and the comparators it
+ * merges with are bound to that request's sort. They are instance fields on purpose: a shared static comparator is
+ * overwritten by every request that creates a merger, so two concurrent requests with different sort orders would
+ * merge each other's results with the wrong comparator and return wrong documents.
  */
-@RequiredArgsConstructor
 public class TopDocsMerger {
-    private HybridQueryScoreDocsMerger docsMerger;
-    private SortAndFormats sortAndFormats;
-    private CollapseContext collapseContext;
+    private final HybridQueryScoreDocsMerger docsMerger;
+    private final SortAndFormats sortAndFormats;
+    private final CollapseContext collapseContext;
+    /** Comparator used when the request has no sort; null when sorting is enabled. */
     @VisibleForTesting
-    protected static Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR;
+    final Comparator<ScoreDoc> scoreDocByScoreComparator;
+    /** Comparator bound to this request's sort fields; null when sorting is disabled. */
     @VisibleForTesting
-    protected static HybridQueryFieldDocComparator FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR;
+    final HybridQueryFieldDocComparator fieldDocBySortCriteriaComparator;
     private final Comparator<ScoreDoc> MERGING_TIE_BREAKER = (o1, o2) -> {
         int docIdComparison = Integer.compare(o1.doc, o2.doc);
         return docIdComparison;
@@ -47,10 +52,12 @@ public class TopDocsMerger {
         this.collapseContext = collapseContext;
         if (isSortingEnabled()) {
             docsMerger = new HybridQueryScoreDocsMerger<FieldDoc>();
-            FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
+            fieldDocBySortCriteriaComparator = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
+            scoreDocByScoreComparator = null;
         } else {
             docsMerger = new HybridQueryScoreDocsMerger<>();
-            SCORE_DOC_BY_SCORE_COMPARATOR = Comparator.comparing((scoreDoc) -> scoreDoc.score);
+            scoreDocByScoreComparator = Comparator.comparing((scoreDoc) -> scoreDoc.score);
+            fieldDocBySortCriteriaComparator = null;
         }
     }
 
@@ -177,7 +184,7 @@ public class TopDocsMerger {
     }
 
     private Comparator<? extends ScoreDoc> comparator() {
-        return sortAndFormats != null ? FIELD_DOC_BY_SORT_CRITERIA_COMPARATOR : SCORE_DOC_BY_SCORE_COMPARATOR;
+        return sortAndFormats != null ? fieldDocBySortCriteriaComparator : scoreDocByScoreComparator;
     }
 
     private boolean isSortingEnabled() {
