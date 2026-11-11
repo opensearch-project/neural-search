@@ -4,7 +4,6 @@
  */
 package org.opensearch.neuralsearch.search.query;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.SortField;
@@ -24,25 +23,22 @@ import org.opensearch.neuralsearch.search.query.HybridQueryScoreDocsMerger.Merge
 /**
  * Utility class for merging TopDocs and MaxScore across multiple search queries.
  * <p>
- * One instance is created per shard search request ({@link HybridCollectorResultsUtilParams}) and the comparators it
- * merges with are bound to that request's sort. They are instance fields on purpose: a shared static comparator is
- * overwritten by every request that creates a merger, so two concurrent requests with different sort orders would
- * merge each other's results with the wrong comparator and return wrong documents.
+ * One instance is created per shard search request ({@link HybridCollectorResultsUtilParams}), and the comparator it
+ * merges with is bound to that request's sort. It must be an instance field: before this was so, the comparator was a
+ * static field that every constructor overwrote, so under concurrent segment search a request whose comparator had been
+ * replaced merged its own, correctly sorted per-sub-query lists with another request's comparator. Its lists then came
+ * out unsorted (wrong documents after the coordinator's sorted merge), or the merge threw a {@code ClassCastException}
+ * when the other request sorted a field of another type, or an {@code ArrayIndexOutOfBoundsException} when it sorted by
+ * more fields and the leading values tied.
  */
 public class TopDocsMerger {
+    private static final Comparator<ScoreDoc> SCORE_DOC_BY_SCORE_COMPARATOR = Comparator.comparing((scoreDoc) -> scoreDoc.score);
+    private static final Comparator<ScoreDoc> MERGING_TIE_BREAKER = (o1, o2) -> Integer.compare(o1.doc, o2.doc);
     private final HybridQueryScoreDocsMerger docsMerger;
     private final SortAndFormats sortAndFormats;
     private final CollapseContext collapseContext;
-    /** Comparator used when the request has no sort; null when sorting is enabled. */
-    @VisibleForTesting
-    final Comparator<ScoreDoc> scoreDocByScoreComparator;
-    /** Comparator bound to this request's sort fields; null when sorting is disabled. */
-    @VisibleForTesting
-    final HybridQueryFieldDocComparator fieldDocBySortCriteriaComparator;
-    private final Comparator<ScoreDoc> MERGING_TIE_BREAKER = (o1, o2) -> {
-        int docIdComparison = Integer.compare(o1.doc, o2.doc);
-        return docIdComparison;
-    };
+    /** Comparator for this request: by the request's sort fields when sorting is enabled, otherwise by score. */
+    private final Comparator<? extends ScoreDoc> comparator;
 
     /**
      * Uses hybrid query score docs merger to merge internal score docs
@@ -52,12 +48,10 @@ public class TopDocsMerger {
         this.collapseContext = collapseContext;
         if (isSortingEnabled()) {
             docsMerger = new HybridQueryScoreDocsMerger<FieldDoc>();
-            fieldDocBySortCriteriaComparator = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
-            scoreDocByScoreComparator = null;
+            comparator = new HybridQueryFieldDocComparator(sortAndFormats.sort.getSort(), MERGING_TIE_BREAKER);
         } else {
             docsMerger = new HybridQueryScoreDocsMerger<>();
-            scoreDocByScoreComparator = Comparator.comparing((scoreDoc) -> scoreDoc.score);
-            fieldDocBySortCriteriaComparator = null;
+            comparator = SCORE_DOC_BY_SCORE_COMPARATOR;
         }
     }
 
@@ -175,16 +169,12 @@ public class TopDocsMerger {
         return docsMerger.mergeScoreDocsAndCollapseValues(
             source,
             newScoreDocs,
-            comparator(),
+            comparator,
             sourceCollapseValues,
             newCollapseValues,
             isSortingEnabled(),
             isCollapseEnabled()
         );
-    }
-
-    private Comparator<? extends ScoreDoc> comparator() {
-        return sortAndFormats != null ? fieldDocBySortCriteriaComparator : scoreDocByScoreComparator;
     }
 
     private boolean isSortingEnabled() {
