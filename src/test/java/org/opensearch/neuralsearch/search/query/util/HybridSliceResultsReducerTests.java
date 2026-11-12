@@ -294,6 +294,23 @@ public class HybridSliceResultsReducerTests extends OpenSearchQueryTestCase {
         assertEquals(0.0f, reduced.maxScore, 0.0f);
     }
 
+    public void testReduce_whenCollectorCountedHitsButHasNoCandidateLists_thenTotalAndMaxScoreAreKept() throws IOException {
+        final HybridSearchCollector collector = mock(HybridSearchCollector.class);
+        when(collector.topDocs()).thenReturn(List.of());
+        when(collector.getTotalHits()).thenReturn(7);
+        when(collector.getMaxScore()).thenReturn(3.0f);
+
+        final SearchContext searchContext = mock(SearchContext.class);
+        final TopDocsAndMaxScore reduced = new HybridSliceResultsReducer(
+            new HybridCollectorResultsUtilParams.Builder().searchContext(searchContext).build(),
+            NUM_HITS
+        ).reduce(List.of(collector));
+
+        assertEquals(0, reduced.topDocs.scoreDocs.length);
+        assertEquals(new TotalHits(7, TotalHits.Relation.EQUAL_TO), reduced.topDocs.totalHits);
+        assertEquals(3.0f, reduced.maxScore, 0.0f);
+    }
+
     public void testReduce_whenSortedByANumericField_thenEachSubQueryEqualsOneCollectorOverTheShard() throws IOException {
         try (Directory directory = newDirectory()) {
             indexSegments(directory);
@@ -549,6 +566,38 @@ public class HybridSliceResultsReducerTests extends OpenSearchQueryTestCase {
         assertEquals("only default-mode collapse results of a hybrid query can be merged across slices", exception.getMessage());
     }
 
+    public void testCanMerge_whenCollapseIsOffOrEveryCollectorIsDefaultMode_thenTrueElseFalse() {
+        final HitsThresholdChecker hitsThresholdChecker = new HitsThresholdChecker(Integer.MAX_VALUE);
+        final HybridSearchCollector defaultMode = HybridCollapsingTopDocsCollector.createKeyword(
+            GROUP_FIELD,
+            collapseFieldType(true),
+            collapseSort(null),
+            NUM_HITS,
+            hitsThresholdChecker
+        );
+        final HybridSearchCollector distinctGroups = HybridCollapsingTopGroupsCollector.createKeyword(
+            GROUP_FIELD,
+            collapseFieldType(true),
+            collapseSort(null),
+            NUM_HITS,
+            hitsThresholdChecker
+        );
+        final HybridCollectorResultsUtilParams collapse = new HybridCollectorResultsUtilParams.Builder().searchContext(
+            collapseSearchContext(null, GROUP_FIELD)
+        ).build();
+        final HybridCollectorResultsUtilParams noCollapse = new HybridCollectorResultsUtilParams.Builder().searchContext(
+            mock(SearchContext.class)
+        ).build();
+
+        // no collapse: any collector merges
+        assertTrue(HybridSliceResultsReducer.canMerge(noCollapse, List.of(new HybridTopScoreDocCollector(NUM_HITS, hitsThresholdChecker))));
+        // default-mode collapse only
+        assertTrue(HybridSliceResultsReducer.canMerge(collapse, List.of(defaultMode, defaultMode)));
+        // distinct-groups alone, or mixed with default mode after the dynamic setting flipped
+        assertFalse(HybridSliceResultsReducer.canMerge(collapse, List.of(distinctGroups)));
+        assertFalse(HybridSliceResultsReducer.canMerge(collapse, List.of(defaultMode, distinctGroups)));
+    }
+
     public void testReduce_whenCollapseCollectorsAreWrappedInMultiCollectors_thenTheyAreReduced() throws IOException {
         try (Directory directory = newDirectory()) {
             indexSegments(directory);
@@ -727,7 +776,7 @@ public class HybridSliceResultsReducerTests extends OpenSearchQueryTestCase {
         assertEquals(1, merged.size());
         assertEquals(List.of(2, 4, 7), docs(merged.get(0)));
         assertArrayEquals(new Object[] { new BytesRef("a"), new BytesRef("a"), new BytesRef("b") }, merged.get(0).collapseValues);
-        assertSame(slices.get(1).get(0).scoreDocs[0], merged.get(0).scoreDocs[0]);
+        // each kept hit carries the value its own slice reported, found by doc id
         assertSame(((CollapseTopFieldDocs) slices.get(1).get(0)).collapseValues[0], merged.get(0).collapseValues[0]);
         assertSame(((CollapseTopFieldDocs) slices.get(0).get(0)).collapseValues[0], merged.get(0).collapseValues[1]);
         assertEquals(GROUP_FIELD, merged.get(0).field);
@@ -798,6 +847,26 @@ public class HybridSliceResultsReducerTests extends OpenSearchQueryTestCase {
             )
         );
         assertEquals("slice collectors of a collapsed hybrid query must return collapse results per sub-query", exception.getMessage());
+    }
+
+    public void testMergeCollapseSubQueryTopDocs_whenTwoSlicesReturnTheSameDoc_thenIllegalState() {
+        // slices partition a shard's segments, so one doc id can come from one slice only; two lists with the same doc would make
+        // the collapse value ambiguous, and the merge refuses instead of picking one
+        final Sort sort = new Sort(new SortField(PRICE_FIELD, SortField.Type.LONG));
+
+        final IllegalStateException exception = expectThrows(
+            IllegalStateException.class,
+            () -> HybridSliceResultsReducer.mergeCollapseSubQueryTopDocs(
+                List.of(
+                    List.of(collapseTopDocs(sort, new FieldDoc[] { fieldDoc(5, 1L) }, 1L)),
+                    List.of(collapseTopDocs(sort, new FieldDoc[] { fieldDoc(5, 2L) }, 2L))
+                ),
+                10,
+                sort,
+                BUCKET_FIELD
+            )
+        );
+        assertEquals("doc [5] appears in the collapse results of more than one slice", exception.getMessage());
     }
 
     private static void assertCutFallsInsideATie(final int subQuery) {
@@ -1180,6 +1249,7 @@ public class HybridSliceResultsReducerTests extends OpenSearchQueryTestCase {
     /** Same collapse field and the same collapse value entry by entry, sentinels included. */
     private static void assertSameCollapseValues(final CollapseTopFieldDocs expected, final CollapseTopFieldDocs actual) {
         assertEquals(expected.field, actual.field);
+        assertEquals(expected.scoreDocs.length, expected.collapseValues.length);
         assertEquals(actual.scoreDocs.length, actual.collapseValues.length);
         assertArrayEquals(expected.collapseValues, actual.collapseValues);
     }

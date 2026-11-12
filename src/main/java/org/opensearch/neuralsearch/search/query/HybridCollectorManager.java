@@ -56,7 +56,7 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
     private final FieldDoc after;
     private final SearchContext searchContext;
 
-    private final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
+    private static final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
         HybridTopScoreDocCollector.class,
         HybridTopFieldDocSortCollector.class,
         HybridCollapsingTopDocsCollector.class,
@@ -146,11 +146,9 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         final HybridCollectorResultsUtilParams hybridCollectorResultsUtilParams = new HybridCollectorResultsUtilParams.Builder()
             .searchContext(searchContext)
             .build();
-        // distinct-groups collapse results cannot be merged across slices, so a shard with any distinct-groups collector (the
-        // setting is dynamic, so it can be mixed with default-mode ones) keeps the per-collector fold. Decided by collector type,
-        // before topDocs() drains any queue
-        if (hybridCollectorResultsUtilParams.isCollapseEnabled()
-            && hybridSearchCollectors.stream().anyMatch(collector -> !(collector instanceof HybridCollapsingTopDocsCollector))) {
+        // distinct-groups collapse results cannot be merged across slices, so such a shard keeps the per-collector fold; the
+        // reducer owns that decision (see HybridSliceResultsReducer#canMerge) and is asked before any queue is drained
+        if (HybridSliceResultsReducer.canMerge(hybridCollectorResultsUtilParams, hybridSearchCollectors) == false) {
             return reduceSearchResults(getSearchResults(hybridSearchCollectors, hybridCollectorResultsUtilParams));
         }
         final TopDocsAndMaxScore topDocsAndMaxScore = new HybridSliceResultsReducer(hybridCollectorResultsUtilParams, numHits).reduce(

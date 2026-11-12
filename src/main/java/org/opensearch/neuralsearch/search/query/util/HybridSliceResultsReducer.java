@@ -21,7 +21,7 @@ import org.opensearch.neuralsearch.search.query.HybridCollectorResultsUtilParams
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.IdentityHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -32,9 +32,11 @@ import java.util.Objects;
  * (https://github.com/opensearch-project/neural-search/issues/2091). Every sub-query's slice lists are merged, by score, by the
  * request's sort or by the collapse sort, and cut to numHits before the result is encoded, and rescore sees one window per
  * sub-query. When every slice collector's lists are the top hits of its own segments, each sub-query keeps the hits, order,
- * scores, sort values and collapse values that a single collector over all the shard's segments keeps. The shard total stays the
- * sum of the collectors' counts, as before; it can differ from a single collector's count once the hybrid bulk scorer skips docs
- * that are not competitive.
+ * scores, sort values and collapse values that a single collector over all the shard's segments keeps. The sort collectors do not
+ * meet that condition for every sub-query: they stop collecting a doc for the later sub-queries once an earlier full queue rejects
+ * it, so with a field sort the final hits, their order and their sort values match one collector, while per sub-query lists and
+ * the max score can differ. The shard total stays the sum of the collectors' counts, as before; it can differ from a single
+ * collector's count once the hybrid bulk scorer skips docs that are not competitive.
  */
 @RequiredArgsConstructor
 public class HybridSliceResultsReducer {
@@ -52,15 +54,29 @@ public class HybridSliceResultsReducer {
     private final int numHits;
 
     /**
+     * Whether the collectors' results can be merged across slices. Default-mode collapse collectors
+     * ({@link HybridCollapsingTopDocsCollector}) keep documents with their collapse values, so their lists merge like sorted
+     * results; the distinct-groups collapse collector keeps groups whose election key is not in its output, so a shard with any
+     * other collapse collector (the setting is dynamic, so modes can be mixed within one request) keeps the per-collector fold.
+     * Decided by collector type, before any queue is drained.
+     * @param params the request's parameters
+     * @param collectors the shard's collectors
+     * @return true when {@link #reduce} accepts these collectors
+     */
+    public static boolean canMerge(final HybridCollectorResultsUtilParams params, final List<HybridSearchCollector> collectors) {
+        return params.isCollapseEnabled() == false
+            || collectors.stream().allMatch(collector -> collector instanceof HybridCollapsingTopDocsCollector);
+    }
+
+    /**
      * Merges the collectors' per sub-query top docs, cut to numHits, rescores each merged list once unless the request sorts by a
      * field or collapses, and encodes the shard result. Supports score ordered, field sorted and default-mode collapse results;
-     * distinct-groups collapse results cannot be merged across slices.
+     * distinct-groups collapse results cannot be merged across slices, see {@link #canMerge}.
      * @param collectors the shard's collectors, at least one
      * @return the encoded shard result and its max score
      */
     public TopDocsAndMaxScore reduce(final List<HybridSearchCollector> collectors) throws IOException {
-        if (params.isCollapseEnabled()
-            && collectors.stream().anyMatch(collector -> !(collector instanceof HybridCollapsingTopDocsCollector))) {
+        if (canMerge(params, collectors) == false) {
             throw new IllegalStateException("only default-mode collapse results of a hybrid query can be merged across slices");
         }
         final List<List<? extends TopDocs>> perSliceSubQueryTopDocs = new ArrayList<>(collectors.size());
@@ -70,11 +86,12 @@ public class HybridSliceResultsReducer {
         for (HybridSearchCollector collector : collectors) {
             final List<? extends TopDocs> subQueryTopDocs = collector.topDocs();
             maxScore = Math.max(maxScore, collector.getMaxScore());
-            // a collector that saw no document returns no lists and adds no hits, as in the per-collector fold
+            totalHits += collector.getTotalHits();
+            // a current collector that saw no document returns no lists and adds zero hits; count first so a future collector that
+            // reports an empty candidate list after counting matches still contributes to the shard total
             if (subQueryTopDocs.isEmpty()) {
                 continue;
             }
-            totalHits += collector.getTotalHits();
             perSliceSubQueryTopDocs.add(subQueryTopDocs);
         }
         final TotalHits shardTotalHits = new TotalHits(totalHits, HybridSearchCollectorResultUtil.totalHitsRelation(params));
@@ -180,18 +197,23 @@ public class HybridSliceResultsReducer {
         final List<TopDocs> merged = mergeSubQueryTopDocs(perSliceSubQueryTopDocs, numHits, collapseSort);
         final List<CollapseTopFieldDocs> collapseMerged = new ArrayList<>(merged.size());
         for (int subQuery = 0; subQuery < merged.size(); subQuery++) {
-            // the merge keeps the slices' own hit objects, so each hit finds its collapse value by identity; null is a valid value
-            final Map<ScoreDoc, Object> collapseValueByHit = new IdentityHashMap<>();
+            // slices partition a shard's segments and doc ids are global within a shard, so a doc id names exactly one hit of this
+            // sub-query across all slices; null is a valid collapse value, so presence is tracked by the key
+            final Map<Integer, Object> collapseValueByDoc = new HashMap<>();
             for (List<? extends TopDocs> subQueryTopDocs : perSliceSubQueryTopDocs) {
-                putCollapseValues(subQueryTopDocs.get(subQuery), collapseValueByHit);
+                putCollapseValues(subQueryTopDocs.get(subQuery), collapseValueByDoc);
             }
             final ScoreDoc[] hits = merged.get(subQuery).scoreDocs;
             final FieldDoc[] fieldDocs = new FieldDoc[hits.length];
             final Object[] collapseValues = new Object[hits.length];
             for (int hit = 0; hit < hits.length; hit++) {
-                assert collapseValueByHit.containsKey(hits[hit]);
+                if (collapseValueByDoc.containsKey(hits[hit].doc) == false) {
+                    throw new IllegalStateException(
+                        String.format(Locale.ROOT, "merged collapse hit for doc [%d] has no collapse value", hits[hit].doc)
+                    );
+                }
                 fieldDocs[hit] = (FieldDoc) hits[hit];
-                collapseValues[hit] = collapseValueByHit.get(hits[hit]);
+                collapseValues[hit] = collapseValueByDoc.get(hits[hit].doc);
             }
             collapseMerged.add(
                 new CollapseTopFieldDocs(collapseField, merged.get(subQuery).totalHits, fieldDocs, collapseSort.getSort(), collapseValues)
@@ -200,7 +222,7 @@ public class HybridSliceResultsReducer {
         return collapseMerged;
     }
 
-    private static void putCollapseValues(final TopDocs topDocs, final Map<ScoreDoc, Object> collapseValueByHit) {
+    private static void putCollapseValues(final TopDocs topDocs, final Map<Integer, Object> collapseValueByDoc) {
         if (Objects.isNull(topDocs) || Objects.isNull(topDocs.scoreDocs)) {
             return;
         }
@@ -216,7 +238,13 @@ public class HybridSliceResultsReducer {
                 );
             }
             for (int hit = 0; hit < collapseTopFieldDocs.scoreDocs.length; hit++) {
-                collapseValueByHit.put(collapseTopFieldDocs.scoreDocs[hit], collapseTopFieldDocs.collapseValues[hit]);
+                final int doc = collapseTopFieldDocs.scoreDocs[hit].doc;
+                if (collapseValueByDoc.containsKey(doc)) {
+                    throw new IllegalStateException(
+                        String.format(Locale.ROOT, "doc [%d] appears in the collapse results of more than one slice", doc)
+                    );
+                }
+                collapseValueByDoc.put(doc, collapseTopFieldDocs.collapseValues[hit]);
             }
         } else {
             throw new IllegalStateException("slice collectors of a collapsed hybrid query must return collapse results per sub-query");

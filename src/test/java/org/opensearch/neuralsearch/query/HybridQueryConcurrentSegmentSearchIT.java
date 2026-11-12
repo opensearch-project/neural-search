@@ -16,7 +16,6 @@ import org.opensearch.common.xcontent.XContentHelper;
 import org.opensearch.common.xcontent.XContentType;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
-import org.opensearch.neuralsearch.SparseTestCommon;
 import org.opensearch.neuralsearch.settings.NeuralSearchSettings;
 
 import java.util.ArrayList;
@@ -31,14 +30,18 @@ import static org.opensearch.neuralsearch.util.TestUtils.getTotalHits;
 /**
  * A hybrid query must return the same response with concurrent segment search as without it
  * (https://github.com/opensearch-project/neural-search/issues/2091): every request runs once with
- * {@code search.concurrent_segment_search.mode: none} and once with {@code all} and four slices, on a shard with at least six
- * segments, and the two responses must have the same hits (ids, order, scores, sort values, collapse values), total, max score
- * and aggregations. Segments stay far below 4,096 docs, so the hybrid bulk scorer never skips docs and totals are comparable.
+ * {@code search.concurrent_segment_search.mode: none} and once with {@code all} and four slices, on shards that keep at least six
+ * segments (merging is held back and the per-shard segment count and the profiled slice count are asserted before the concurrent
+ * arm), and the two responses must have the same hits (ids, order, sort values, collapse values), total and aggregations. Scores
+ * and max score are compared too, except for field-sorted requests, where the sort collectors make them depend on how segments
+ * are grouped into collectors (see {@link Expect#FIELD_SORTED_HITS}). Segments stay far below 4,096 docs, so the hybrid bulk
+ * scorer never skips docs and totals are comparable.
  */
 public class HybridQueryConcurrentSegmentSearchIT extends BaseNeuralSearchIT {
 
     private static final String CONCURRENT_SEGMENT_SEARCH_MODE = "search.concurrent_segment_search.mode";
     private static final String CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT = "search.concurrent.max_slice_count";
+    private static final int MAX_SLICE_COUNT = 4;
     private static final String INDEX_ONE_SHARD = "test-hybrid-css-one-shard";
     private static final String INDEX_THREE_SHARDS = "test-hybrid-css-three-shards";
     private static final String MIN_MAX_PIPELINE = "test-hybrid-css-min-max";
@@ -126,6 +129,28 @@ public class HybridQueryConcurrentSegmentSearchIT extends BaseNeuralSearchIT {
                     5,
                     "rescore",
                     Map.of("window_size", 3, "query", Map.of("rescore_query", match("gamma")))
+                )
+            )
+        );
+        // a page that pagination_depth, not size, bounds: each shard keeps 20 hits per sub-query and the second page is served
+        shapes.add(
+            shape(
+                "second page within pagination_depth",
+                MIN_MAX_PIPELINE,
+                body(paginatedHybrid(20, match("alpha"), match("beta")), "size", 5, "from", 5)
+            )
+        );
+        // post_filter wraps the hybrid collector in core's FilteredCollector; the filter keeps about half of the docs
+        shapes.add(
+            shape(
+                "post_filter",
+                MIN_MAX_PIPELINE,
+                body(
+                    hybrid(match("alpha"), match("beta")),
+                    "size",
+                    5,
+                    "post_filter",
+                    Map.of("range", Map.of(PRICE_FIELD, Map.of("lte", 5)))
                 )
             )
         );
@@ -249,6 +274,9 @@ public class HybridQueryConcurrentSegmentSearchIT extends BaseNeuralSearchIT {
             withoutConcurrentSearch.add(search(index, shape));
         }
         setConcurrentSegmentSearch(true);
+        // the concurrent arm is meaningful only if every shard still has several segments and core really splits them into slices
+        assertEveryShardHasSeveralSegments(index);
+        assertConcurrentSearchUsesSeveralSlices(index);
         // every difference of every shape, so one run shows the whole picture
         final List<String> differences = new ArrayList<>();
         for (int i = 0; i < shapes.size(); i++) {
@@ -310,6 +338,9 @@ public class HybridQueryConcurrentSegmentSearchIT extends BaseNeuralSearchIT {
             .field("number_of_shards", numberOfShards)
             .field("number_of_replicas", 0)
             .field("refresh_interval", "-1")
+            // keep the one-segment-per-batch layout: no background merge may fold the segments into one before the concurrent arm
+            .field("index.merge.policy.segments_per_tier", 2 * BATCHES)
+            .field("index.merge.policy.floor_segment", "1kb")
             .field("index.knn", true)
             .endObject()
             .startObject("mappings")
@@ -355,7 +386,7 @@ public class HybridQueryConcurrentSegmentSearchIT extends BaseNeuralSearchIT {
             final Response response = client().performRequest(request);
             assertFalse(EntityUtils.toString(response.getEntity()).contains("\"errors\":true"));
         }
-        assertTrue(SparseTestCommon.getSegmentCount(client(), index) >= BATCHES * numberOfShards);
+        assertEveryShardHasSeveralSegments(index);
         createSearchPipeline(MIN_MAX_PIPELINE, "min_max", "arithmetic_mean", Map.of());
         createRRFSearchPipeline(RRF_PIPELINE, List.of(), false);
     }
@@ -389,7 +420,81 @@ public class HybridQueryConcurrentSegmentSearchIT extends BaseNeuralSearchIT {
 
     private void setConcurrentSegmentSearch(final boolean concurrent) {
         updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_MODE, concurrent ? "all" : "none");
-        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT, concurrent ? 4 : null);
+        updateClusterSettings(CONCURRENT_SEGMENT_SEARCH_MAX_SLICE_COUNT, concurrent ? MAX_SLICE_COUNT : null);
+    }
+
+    /** Every shard of the index still holds at least BATCHES segments, so the slice merge has several lists to merge per shard. */
+    @SneakyThrows
+    private void assertEveryShardHasSeveralSegments(final String index) {
+        final Request request = new Request("GET", "/_cat/segments/" + index);
+        request.addParameter("h", "shard");
+        final Map<String, Integer> segmentsPerShard = new LinkedHashMap<>();
+        for (String line : EntityUtils.toString(client().performRequest(request).getEntity()).split("\n")) {
+            if (line.isBlank() == false) {
+                segmentsPerShard.merge(line.trim(), 1, Integer::sum);
+            }
+        }
+        assertFalse("no segments reported for " + index, segmentsPerShard.isEmpty());
+        for (Map.Entry<String, Integer> shard : segmentsPerShard.entrySet()) {
+            assertTrue(
+                String.format(
+                    Locale.ROOT,
+                    "[%s] shard %s has %d segments, fewer than %d",
+                    index,
+                    shard.getKey(),
+                    shard.getValue(),
+                    BATCHES
+                ),
+                shard.getValue() >= BATCHES
+            );
+        }
+    }
+
+    /**
+     * With {@code mode: all} and four slices, core splits every shard's segments into several slices: the profiled hybrid collector
+     * of each shard must report more than one slice, otherwise the concurrent arm would run the same single-collector path as the
+     * other arm and the comparison would prove nothing.
+     */
+    @SneakyThrows
+    @SuppressWarnings("unchecked")
+    private void assertConcurrentSearchUsesSeveralSlices(final String index) {
+        final Request request = new Request("POST", "/" + index + "/_search");
+        request.addParameter("search_pipeline", MIN_MAX_PIPELINE);
+        request.addParameter("request_cache", "false");
+        request.setJsonEntity(
+            XContentFactory.jsonBuilder().map(body(hybrid(match("alpha"), match("beta")), "size", 5, "profile", true)).toString()
+        );
+        final Map<String, Object> response = XContentHelper.convertToMap(
+            XContentType.JSON.xContent(),
+            EntityUtils.toString(client().performRequest(request).getEntity()),
+            false
+        );
+        final List<Map<String, Object>> shards = (List<Map<String, Object>>) ((Map<String, Object>) response.get("profile")).get("shards");
+        assertFalse("no shard profiles for " + index, shards.isEmpty());
+        for (Map<String, Object> shard : shards) {
+            final List<Map<String, Object>> searches = (List<Map<String, Object>>) shard.get("searches");
+            final List<Map<String, Object>> collectors = (List<Map<String, Object>>) searches.get(0).get("collector");
+            final int sliceCount = maxSliceCount(collectors);
+            assertTrue(
+                String.format(Locale.ROOT, "[%s] shard %s searched %d slice(s): %s", index, shard.get("id"), sliceCount, collectors),
+                sliceCount > 1
+            );
+        }
+    }
+
+    /** The largest slice_count in a profiled collector tree; core reports it on the collectors that ran concurrently. */
+    @SuppressWarnings("unchecked")
+    private static int maxSliceCount(final List<Map<String, Object>> collectors) {
+        int max = 0;
+        for (Map<String, Object> collector : collectors) {
+            if (collector.get("slice_count") instanceof Number sliceCount) {
+                max = Math.max(max, sliceCount.intValue());
+            }
+            if (collector.get("children") instanceof List<?> children) {
+                max = Math.max(max, maxSliceCount((List<Map<String, Object>>) children));
+            }
+        }
+        return max;
     }
 
     /** The response, or the status and root cause reason of a failed request. */

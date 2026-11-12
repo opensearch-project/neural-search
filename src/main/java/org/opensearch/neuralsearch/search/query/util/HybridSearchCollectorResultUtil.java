@@ -132,12 +132,13 @@ public class HybridSearchCollectorResultUtil {
         result.add(createFieldDocStartStopElementForHybridSearchResults(delimiterDocId, fields));
         collapseValues.add(new BytesRef(createCollapseValueStartStopElementForHybridSearchResults()));
         for (TopDocs topDoc : collapseTopFieldDocs) {
-            CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
-            collapseField = collapseTopFieldDoc.field;
             if (Objects.isNull(topDoc) || Objects.isNull(topDoc.scoreDocs)) {
                 result.add(createFieldDocDelimiterElementForHybridSearchResults(delimiterDocId, fields));
+                collapseValues.add(new BytesRef(createCollapseValueDelimiterElementForHybridSearchResults()));
                 continue;
             }
+            CollapseTopFieldDocs collapseTopFieldDoc = (CollapseTopFieldDocs) topDoc;
+            collapseField = collapseTopFieldDoc.field;
 
             List<FieldDoc> fieldDocsPerQuery = new ArrayList<>();
             for (ScoreDoc scoreDoc : collapseTopFieldDoc.scoreDocs) {
@@ -165,7 +166,11 @@ public class HybridSearchCollectorResultUtil {
      * Encodes per sub-query sorted top docs into the hybrid shard result format, like {@link #getNewTopDocs} with field docs.
      * Returns empty top field docs when no sub-query has a hit.
      */
-    static TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
+    static TopDocs getNewTopFieldDocs(
+        final TotalHits totalHits,
+        final List<? extends TopFieldDocs> topFieldDocs,
+        final SortField sortFields[]
+    ) {
         if (Objects.isNull(topFieldDocs)) {
             return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
         }
