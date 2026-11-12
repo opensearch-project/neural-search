@@ -39,7 +39,8 @@ import static org.opensearch.neuralsearch.search.util.HybridSearchResultFormatUt
 
 /**
  * Single class responsible for all collector results operations.
- * This class takes input as a collector and arguments needed to process the results.
+ * This class takes input as a collector and arguments needed to process the results. Its static helpers also encode and rescore
+ * the shard result that {@link HybridSliceResultsReducer} merges from concurrent segment search slices.
  */
 @Log4j2
 @AllArgsConstructor
@@ -88,19 +89,28 @@ public class HybridSearchCollectorResultUtil {
         final SortField sortFields[] = hybridSearchCollectorResultsDTO.getSortFields();
         TopDocs sortedTopDocs;
         if (hybridSearchCollectorResultsDTO.isCollapseEnabled()) {
-            sortedTopDocs = getCollapseTopFieldDocs(getTotalHits(topDocs), topDocs, sortFields);
+            sortedTopDocs = getCollapseTopFieldDocs(
+                hybridSearchCollectorResultsDTO.getSearchContext().collapse().getFieldName(),
+                getTotalHits(topDocs),
+                topDocs,
+                sortFields
+            );
         } else {
             sortedTopDocs = getNewTopFieldDocs(getTotalHits(topDocs), topDocs, sortFields);
         }
         return new TopDocsAndMaxScore(sortedTopDocs, hybridSearchCollector.getMaxScore());
     }
 
-    private TopDocs getCollapseTopFieldDocs(
+    /**
+     * Encodes per sub-query collapse results into the hybrid shard result format, like {@link #getNewTopFieldDocs} with the
+     * collapse values aligned to the field docs. Returns empty collapse results when no sub-query has a hit.
+     */
+    static TopDocs getCollapseTopFieldDocs(
+        String collapseField,
         final TotalHits totalHits,
-        final List<TopFieldDocs> collapseTopFieldDocs,
+        final List<? extends TopFieldDocs> collapseTopFieldDocs,
         final SortField sortFields[]
     ) {
-        String collapseField = hybridSearchCollectorResultsDTO.getSearchContext().collapse().getFieldName();
         if (Objects.isNull(collapseTopFieldDocs)) {
             return new CollapseTopFieldDocs(collapseField, totalHits, new FieldDoc[0], sortFields, new Object[0]);
         }
@@ -151,7 +161,11 @@ public class HybridSearchCollectorResultUtil {
         );
     }
 
-    private TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
+    /**
+     * Encodes per sub-query sorted top docs into the hybrid shard result format, like {@link #getNewTopDocs} with field docs.
+     * Returns empty top field docs when no sub-query has a hit.
+     */
+    static TopDocs getNewTopFieldDocs(final TotalHits totalHits, final List<TopFieldDocs> topFieldDocs, final SortField sortFields[]) {
         if (Objects.isNull(topFieldDocs)) {
             return new TopFieldDocs(totalHits, new FieldDoc[0], sortFields);
         }
@@ -199,10 +213,7 @@ public class HybridSearchCollectorResultUtil {
     }
 
     private TotalHits getTotalHits(final List<?> topDocs) {
-        final TotalHits.Relation relation = hybridSearchCollectorResultsDTO
-            .getTrackTotalHitsUpTo() == SearchContext.TRACK_TOTAL_HITS_DISABLED
-                ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
-                : TotalHits.Relation.EQUAL_TO;
+        final TotalHits.Relation relation = totalHitsRelation(hybridSearchCollectorResultsDTO);
 
         if (topDocs == null || topDocs.isEmpty()) {
             return new TotalHits(0, relation);
@@ -211,16 +222,29 @@ public class HybridSearchCollectorResultUtil {
         return new TotalHits(hybridSearchCollector.getTotalHits(), relation);
     }
 
+    /**
+     * Relation of a shard's total hits: a lower bound when total hits tracking is disabled, exact otherwise.
+     */
+    static TotalHits.Relation totalHitsRelation(final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO) {
+        return hybridSearchCollectorResultsDTO.getTrackTotalHitsUpTo() == SearchContext.TRACK_TOTAL_HITS_DISABLED
+            ? TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO
+            : TotalHits.Relation.EQUAL_TO;
+    }
+
     private TopDocsAndMaxScore getTopDocsAndMaxScore(List<TopDocs> topDocs) {
-        if (shouldRescore()) {
-            topDocs = rescore(topDocs);
+        if (shouldRescore(hybridSearchCollectorResultsDTO)) {
+            topDocs = rescore(topDocs, hybridSearchCollectorResultsDTO);
         }
-        float maxScore = calculateMaxScore(topDocs, hybridSearchCollector.getMaxScore());
+        float maxScore = calculateMaxScore(topDocs, hybridSearchCollector.getMaxScore(), hybridSearchCollectorResultsDTO);
         TopDocs finalTopDocs = getNewTopDocs(getTotalHits(topDocs), topDocs);
         return new TopDocsAndMaxScore(finalTopDocs, maxScore);
     }
 
-    private TopDocs getNewTopDocs(final TotalHits totalHits, final List<TopDocs> topDocs) {
+    /**
+     * Encodes per sub-query top docs into the hybrid shard result format: start, then a delimiter and the hits of every
+     * sub-query, then stop. Returns empty top docs when no sub-query has a hit.
+     */
+    static TopDocs getNewTopDocs(final TotalHits totalHits, final List<? extends TopDocs> topDocs) {
         ScoreDoc[] scoreDocs = new ScoreDoc[0];
         if (Objects.isNull(topDocs)) {
             return new TopDocs(totalHits, scoreDocs);
@@ -260,7 +284,7 @@ public class HybridSearchCollectorResultUtil {
         return new TopDocs(totalHits, scoreDocs);
     }
 
-    private int findDelimiterDocId(List<? extends TopDocs> topDocs) {
+    private static int findDelimiterDocId(List<? extends TopDocs> topDocs) {
         return topDocs.stream()
             .filter(Objects::nonNull)
             .filter(topDoc -> Objects.nonNull(topDoc.scoreDocs))
@@ -274,7 +298,11 @@ public class HybridSearchCollectorResultUtil {
     /**
      * Calculates the maximum score from the provided TopDocs, considering rescoring.
      */
-    private float calculateMaxScore(List<TopDocs> topDocsList, float initialMaxScore) {
+    static float calculateMaxScore(
+        final List<TopDocs> topDocsList,
+        float initialMaxScore,
+        final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO
+    ) {
         List<RescoreContext> rescoreContexts = hybridSearchCollectorResultsDTO.getRescoreContexts();
         if (Objects.nonNull(rescoreContexts) && !rescoreContexts.isEmpty()) {
             for (TopDocs topDocs : topDocsList) {
@@ -287,15 +315,21 @@ public class HybridSearchCollectorResultUtil {
         return initialMaxScore;
     }
 
-    private boolean shouldRescore() {
+    /**
+     * True when the request has at least one rescore context.
+     */
+    static boolean shouldRescore(final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO) {
         List<RescoreContext> rescoreContexts = hybridSearchCollectorResultsDTO.getRescoreContexts();
         return CollectionUtils.isEmpty(rescoreContexts) == false;
     }
 
-    private List<TopDocs> rescore(List<TopDocs> topDocs) {
+    /**
+     * Applies every rescore context, in order, to each sub-query's top docs.
+     */
+    static List<TopDocs> rescore(final List<TopDocs> topDocs, final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO) {
         List<TopDocs> rescoredTopDocs = topDocs;
         for (RescoreContext ctx : hybridSearchCollectorResultsDTO.getRescoreContexts()) {
-            rescoredTopDocs = rescoredTopDocs(ctx, rescoredTopDocs);
+            rescoredTopDocs = rescoredTopDocs(ctx, rescoredTopDocs, hybridSearchCollectorResultsDTO);
         }
         return rescoredTopDocs;
     }
@@ -303,7 +337,11 @@ public class HybridSearchCollectorResultUtil {
     /**
      * Rescores the top documents using the provided context. The input topDocs may be modified during this process.
      */
-    private List<TopDocs> rescoredTopDocs(final RescoreContext ctx, final List<TopDocs> topDocs) {
+    private static List<TopDocs> rescoredTopDocs(
+        final RescoreContext ctx,
+        final List<TopDocs> topDocs,
+        final HybridCollectorResultsUtilParams hybridSearchCollectorResultsDTO
+    ) {
         List<TopDocs> result = new ArrayList<>(topDocs.size());
         for (TopDocs topDoc : topDocs) {
             try {
