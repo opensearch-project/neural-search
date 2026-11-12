@@ -58,7 +58,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testKeywordCollapse_whenCollectAndTopDocs_thenSuccessful() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Add 1000 documents with keyword collapse field values
         for (int i = 0; i < 1000; i++) {
@@ -112,7 +112,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testNumericCollapse_whenCollectAndTopDocs_thenSuccessful() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Add 1000 documents with numeric collapse field values
         for (int i = 0; i < 1000; i++) {
@@ -168,7 +168,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenDefaultConfig_thenCollectsSuccessfully() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Add 1000 documents with keyword collapse field values
         for (int i = 0; i < 1000; i++) {
@@ -221,7 +221,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenManyDocsInSameGroup_thenGroupsCollapsedCorrectly() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Add 100 documents where many documents map to the same collapse group
         // This creates the scenario where multiple documents compete for the same small queue
@@ -288,7 +288,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenAllDocsInSameGroup_thenSingleGroupReturned() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Add documents where ALL documents map to the same group
         // This maximizes the pressure on the group bookkeeping
@@ -350,7 +350,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenSortByScore_thenCorrectRanking() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Add documents with known scores to verify ranking
         for (int i = 0; i < 50; i++) {
@@ -412,7 +412,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenSortByField_thenCorrectOrdering() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Add documents with varying integer field values
         for (int i = 0; i < 50; i++) {
@@ -474,7 +474,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenMultipleSubQueries_thenEachSubQueryHasResults() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         for (int i = 0; i < 100; i++) {
             addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + (i % 10));
@@ -564,7 +564,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenNoDocumentsMatch_thenEmptyResults() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         for (int i = 0; i < 10; i++) {
             addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + i);
@@ -621,7 +621,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenGetTotalHitsAndMaxScore_thenCorrectValues() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         for (int i = 0; i < 50; i++) {
             addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + (i % 5));
@@ -672,7 +672,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenReverseSortOrder_thenCorrectOrdering() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         for (int i = 0; i < 50; i++) {
             addKeywordDoc(writer, i, "text" + i, 100 + i, "group" + (i % 5));
@@ -733,7 +733,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenMoreGroupsThanNumHits_thenOnlyTopKGroupsSurvive() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // 20 unique groups, TOP_N_GROUPS=5, so 15 groups should be evicted
         for (int i = 0; i < 20; i++) {
@@ -874,7 +874,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenGroupsEvictedSortByScore_thenMinScoresNotPropagated() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // 10 groups, TOP_N_GROUPS=5, so evictions start after 6th group
         for (int i = 0; i < 10; i++) {
@@ -930,7 +930,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenEvictedGroupReappears_thenNoError() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // groupA appears first with low score, then 4 other groups push it out, then groupA reappears with high score
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
@@ -1028,7 +1028,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenGroupOwnsMultipleTopSlots_thenDistinctGroupsReturned() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
         addKeywordDoc(writer, 1, "text1", 101, "groupB");
@@ -1111,7 +1111,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenSortByFieldAndGroupsEvicted_thenMinScoresNotUpdated() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // 10 groups, TOP_N_GROUPS=5, so evictions happen
         for (int i = 0; i < 10; i++) {
@@ -1163,7 +1163,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenScoreBelowThreshold_thenDocSkipped() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // 10 unique groups
         for (int i = 0; i < 10; i++) {
@@ -1226,7 +1226,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
      */
     public void testCollapse_whenLegsDisagreeWithinGroup_thenSameRepresentativeElectedAcrossLegs() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // groupA has two documents the legs rank differently; groupB has one document
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
@@ -1299,7 +1299,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenGroupStrongInOneLegOnly_thenLegKeepsItsOwnCandidates() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         addKeywordDoc(writer, 0, "text0", 100, "groupX");
         addKeywordDoc(writer, 1, "text1", 101, "groupY");
@@ -1351,7 +1351,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenLegScoreScalesDiffer_thenEachLegKeepsItsOwnTopGroups() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Five disjoint groups: leg 0 scores on a BM25-like scale, leg 1 on a normalized [0, 1] scale
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
@@ -1420,7 +1420,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenSortByScore_thenEachLegOrderedByOwnScore() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
         addKeywordDoc(writer, 1, "text1", 101, "groupA");
@@ -1476,7 +1476,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenGroupHoldsLegExclusiveDocs_thenEveryMatchingLegKeepsTheGroup() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // Two groups, each holding a lexical-only and a vector-only document
         addKeywordDoc(writer, 0, "text0", 100, "groupP");
@@ -1538,7 +1538,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenRepresentativesMissFromOneLeg_thenItsCandidateSetStillFills() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
         addKeywordDoc(writer, 1, "text1", 101, "groupA");
@@ -1593,7 +1593,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenSortByScoreAscending_thenLowestScoringGroupSurvives() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // groupA owns the globally lowest-scoring document and a high-scoring one, groupB sits in between
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
@@ -1646,7 +1646,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenHitsThresholdReached_thenCollectionTerminatesWithLowerBoundRelation() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
         addKeywordDoc(writer, 1, "text1", 101, "groupB");
@@ -1697,7 +1697,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenAllComparatorSlotsOccupied_thenNewGroupsStillCollected() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // 2 sub-queries * numHits 2 fills every live slot with leg-exclusive groups; the last two docs
         // then exercise the transient insertion slot while the pool is at its floor
@@ -1753,7 +1753,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenDocumentHasNoCollapseField_thenItFormsTheNullGroup() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
         // doc 1 carries no collapse field and must fold into the null group
@@ -1812,7 +1812,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapse_whenSortByFieldAndLegsMatchDifferentDocs_thenSameRepresentativeElected() throws IOException {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // groupA: doc 0 has the better (lower) sort value but is matched only by leg 0; doc 1 only by leg 1
         addKeywordDoc(writer, 0, "text0", 100, "groupA");
@@ -1932,7 +1932,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
     @SneakyThrows
     public void testKeywordCollapse_whenProfilerMode_thenResultsNotEmpty() {
         Directory directory = newDirectory();
-        IndexWriter writer = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter writer = new IndexWriter(directory, orderPreservingIndexWriterConfig());
 
         // setup: index 20 documents across 4 groups
         for (int i = 0; i < 20; i++) {

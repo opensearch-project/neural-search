@@ -4,6 +4,7 @@
  */
 package org.opensearch.neuralsearch.search.collector;
 
+import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.search.LeafCollector;
 import org.opensearch.neuralsearch.query.HybridSubQueryScorer;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
@@ -15,6 +16,15 @@ import java.util.List;
  * Base class for HybridCollector test cases
  */
 public class HybridCollectorTestCase extends OpenSearchQueryTestCase {
+    /**
+     * Index writer config that keeps documents in insertion order on merge. The merge policy that
+     * newIndexWriterConfig() picks at random can reverse doc order during forceMerge, which breaks
+     * tests that assign scores by doc ID. LogMergePolicy merges adjacent segments only.
+     */
+    protected static IndexWriterConfig orderPreservingIndexWriterConfig() {
+        return newIndexWriterConfig().setMergePolicy(newLogMergePolicy());
+    }
+
     /**
      * Collect docs and scores for each sub-query scorer and add them to the leaf collector
      * @param scorer HybridSubQueryScorer object
