@@ -17,6 +17,7 @@ import org.apache.lucene.search.SortField;
 import org.opensearch.common.Nullable;
 import org.opensearch.common.lucene.search.FilteredCollector;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
+import org.opensearch.neuralsearch.common.MinClusterVersionUtil;
 import org.opensearch.neuralsearch.query.HybridQuery;
 import org.opensearch.neuralsearch.search.HitsThresholdChecker;
 import org.opensearch.neuralsearch.search.collector.HybridCollapsingTopDocsCollector;
@@ -72,13 +73,15 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         if (searchContext.scrollContext() != null) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "Scroll operation is not supported in hybrid query"));
         }
+        // the sort is validated before the window size, so a request with an unsupported sort is told about its sort, not
+        // about a pagination_depth that would not make it valid
+        if (searchContext.sort() != null) {
+            validateSortCriteria(searchContext, searchContext.trackScores(), searchContext.minimumScore());
+        }
         final IndexReader reader = searchContext.searcher().getIndexReader();
         final int totalNumDocs = Math.max(0, reader.numDocs());
         int numDocs = Math.min(getSubqueryResultsRetrievalSize(searchContext, query), totalNumDocs);
         int trackTotalHitsUpTo = searchContext.trackTotalHitsUpTo();
-        if (searchContext.sort() != null) {
-            validateSortCriteria(searchContext, searchContext.trackScores(), searchContext.minimumScore());
-        }
 
         boolean isSingleShard = searchContext.numberOfShards() == 1;
         // In case of single shard, it can happen that fetch phase might execute before normalization phase. Moreover, The pagination logic
@@ -215,25 +218,24 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
             }
         }
         if (hasScoreSort && hasFieldSort) {
-            // Collapse-gated relaxation: a hybrid query with collapse may mix _score with a field so the collapse
-            // group head is deterministic (field breaks exact fused-score ties). Allowed only when _score is the
-            // primary (first) sort key AND descending; field-primary + _score, and ascending _score, stay rejected
-            // (see HybridSearchCollapseUtil#isScorePrimaryDescendingSort).
-            if (searchContext.collapse() == null) {
+            // without collapse, the page is ordered and its search_after cursor applied by the normalization processor after
+            // combination; a node from before that cannot do either, so the shape waits until every node in the cluster can
+            if (searchContext.collapse() == null
+                && MinClusterVersionUtil.isClusterOnOrAfterMinReqVersionForScoreAndFieldSortInHybridQuery() == false) {
                 throw new IllegalArgumentException(
                     "_score sort criteria cannot be applied with any other criteria unless the query uses collapse with _score as the "
                         + "primary, descending key. Please select one sort criteria out of them."
                 );
             }
+            // _score may be combined with field keys only as the primary (first), descending key: the fields then break ties
+            // between equal combined scores (a stable search_after cursor, a deterministic collapse group head). A field-primary
+            // sort would ask for an order no sub-query can collect by, and an ascending _score would put the least relevant
+            // documents first, which hybrid never collects (see HybridSearchCollapseUtil#isScorePrimaryDescendingSort).
             if (!HybridSearchCollapseUtil.isScorePrimarySort(sortFields)) {
-                throw new IllegalArgumentException(
-                    "_score must be the primary sort key when combined with a field in a hybrid query with collapse"
-                );
+                throw new IllegalArgumentException("_score must be the primary sort key when combined with a field in a hybrid query");
             }
             if (!HybridSearchCollapseUtil.isScorePrimaryDescendingSort(sortFields)) {
-                throw new IllegalArgumentException(
-                    "_score must be sorted descending when combined with a field in a hybrid query with collapse"
-                );
+                throw new IllegalArgumentException("_score must be sorted descending when combined with a field in a hybrid query");
             }
         }
         // "_score" listed more than once (core keeps every sort field, so the Sort has several SCORE fields): only the first sort
@@ -297,6 +299,16 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         if (Objects.isNull(paginationDepth) && searchContext.from() > 0) {
             throw new IllegalArgumentException(String.format(Locale.ROOT, "pagination_depth param is missing in the search request"));
         }
+        // A sort by _score and a field is ordered, and its search_after cursor applied, over the combined scores of the window the
+        // shards collect. A cursor taken from one page is only valid on a page computed over the same window, and the first page
+        // of a walk is a request without a cursor, so the window has to be stated on every such request, exactly as it has to be
+        // for from > 0. Field-sorted cursors are applied on the shard and keep their size-sized window.
+        if (Objects.isNull(paginationDepth) && isScoreAndFieldSortWithoutCollapse(searchContext)) {
+            throw new IllegalArgumentException(
+                "pagination_depth param is missing in the search request; it is required when a hybrid query is sorted by _score "
+                    + "and a field"
+            );
+        }
 
         if (Objects.nonNull(paginationDepth)) {
             return paginationDepth;
@@ -304,5 +316,13 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
 
         // Switch to from+size retrieval size during standard hybrid query execution where from is 0.
         return searchContext.size();
+    }
+
+    // validateSortCriteria has accepted the sort, so a _score-led one is [_score desc, field...]: core drops a lone descending
+    // _score, and the rest of the _score-led sorts are rejected
+    private static boolean isScoreAndFieldSortWithoutCollapse(final SearchContext searchContext) {
+        return searchContext.sort() != null
+            && searchContext.collapse() == null
+            && HybridSearchCollapseUtil.isScorePrimarySort(searchContext.sort().sort.getSort());
     }
 }

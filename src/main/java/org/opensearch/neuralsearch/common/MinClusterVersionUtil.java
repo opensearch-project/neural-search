@@ -39,6 +39,11 @@ public final class MinClusterVersionUtil {
     // the version under development moves past it without the feature having shipped (issue 2002).
     public static final Version MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY = Version.V_3_10_0;
     public static final Version MINIMAL_SUPPORTED_VERSION_SPARSE_NATIVE_ENGINE = Version.V_3_9_0;
+    // The release that ships a hybrid query sorted by _score and a field without collapse. A node before it neither orders such
+    // a page by the combined score nor applies its search_after cursor after combination, while a data node from it collects
+    // the whole window for the cursor, so a mixed cluster would page wrong both ways. Held to by
+    // HybridCollectorManagerTests#testScoreAndFieldSortMinimumVersion_isNotBehindTheVersionUnderDevelopment.
+    public static final Version MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY = Version.V_3_10_0;
 
     // Constant for neural_knn_query version check
     public static final String NEURAL_KNN_QUERY = "neural_knn_query";
@@ -62,6 +67,12 @@ public final class MinClusterVersionUtil {
 
     public static boolean isClusterOnOrAfterMinReqVersionForPaginationInHybridQuery() {
         return NeuralSearchClusterUtil.instance().getClusterMinVersion().onOrAfter(MINIMAL_SUPPORTED_VERSION_PAGINATION_IN_HYBRID_QUERY);
+    }
+
+    public static boolean isClusterOnOrAfterMinReqVersionForScoreAndFieldSortInHybridQuery() {
+        return NeuralSearchClusterUtil.instance()
+            .getClusterMinVersion()
+            .onOrAfter(MINIMAL_SUPPORTED_VERSION_SCORE_AND_FIELD_SORT_IN_HYBRID_QUERY);
     }
 
     public static boolean isClusterOnOrAfterMinReqVersionForStatCategoryFiltering() {

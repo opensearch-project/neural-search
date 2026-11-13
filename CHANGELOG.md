@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * [Hybrid Query] Allow `sort: [_score, <field>]` with `collapse`, using the field to break exact `_score` ties so the collapsed group head is deterministic ([#1984](https://github.com/opensearch-project/neural-search/issues/1984))
 * [Hybrid Query] Accept `pagination_depth` in fused hybrid query ([#2058](https://github.com/opensearch-project/neural-search/pull/2058))
 * [Hybrid Query] Accept top-level `weights` in classic and fused hybrid query modes ([#2065](https://github.com/opensearch-project/neural-search/pull/2065))
+* [Hybrid Query] Allow `sort: [_score, <field>]` without `collapse` and page it with `search_after` ([#2082](https://github.com/opensearch-project/neural-search/pull/2082))
 
 ### Bug Fixes
 * [Hybrid Query] Fix concurrent segment search changing hybrid query results: each shard now keeps at most `pagination_depth` (or `size`) hits per sub-query. Score-ordered, field-sorted and default-mode `collapse` results no longer depend on the segment layout, `rescore` runs once per shard, single-shard requests fetch only the kept hits, and pages beyond `pagination_depth` return "Reached end of result"; distinct-groups collapse not affected ([#2093](https://github.com/opensearch-project/neural-search/pull/2093))
