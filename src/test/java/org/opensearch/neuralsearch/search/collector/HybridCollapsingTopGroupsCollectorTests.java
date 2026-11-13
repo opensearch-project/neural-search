@@ -14,9 +14,7 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.IndexWriter;
-import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
-import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.search.CollectionTerminatedException;
 import org.apache.lucene.search.DocIdSetIterator;
@@ -792,9 +790,7 @@ public class HybridCollapsingTopGroupsCollectorTests extends HybridCollectorTest
 
     public void testCollapseWithMultipleSegments_whenMoreGroupsThanNumHits_thenOnlyTopKGroupsSurvive() throws IOException {
         Directory directory = newDirectory();
-        IndexWriterConfig config = newIndexWriterConfig();
-        config.setMergePolicy(NoMergePolicy.INSTANCE); // prevent auto-merging
-        IndexWriter writer = new IndexWriter(directory, config);
+        IndexWriter writer = new IndexWriter(directory, multiSegmentIndexWriterConfig());
 
         // Write docs in batches, flushing between to create separate segments
         for (int i = 0; i < 10; i++) {
