@@ -4,9 +4,13 @@
  */
 package org.opensearch.neuralsearch.search.query.util;
 
+import org.apache.lucene.search.FieldDoc;
 import org.apache.lucene.search.ScoreDoc;
+import org.apache.lucene.search.SortField;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.search.TopFieldDocs;
 import org.apache.lucene.search.TotalHits;
+import org.apache.lucene.search.grouping.CollapseTopFieldDocs;
 import org.opensearch.common.lucene.search.TopDocsAndMaxScore;
 import org.opensearch.neuralsearch.query.OpenSearchQueryTestCase;
 import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
@@ -105,5 +109,35 @@ public class HybridSearchCollectorResultUtilTests extends OpenSearchQueryTestCas
         assertEquals(MAGIC_NUMBER_DELIMITER, updatedScoreDocs[1].score, DELTA_FOR_ASSERTION);
         assertEquals(MAGIC_NUMBER_DELIMITER, updatedScoreDocs[6].score, DELTA_FOR_ASSERTION);
         assertEquals(MAGIC_NUMBER_START_STOP, updatedScoreDocs[11].score, DELTA_FOR_ASSERTION);
+    }
+
+    public void testGetCollapseTopFieldDocs_whenASubQueryResultIsNull_thenSentinelsStayAligned() {
+        final SortField[] sortFields = new SortField[] { new SortField("id", SortField.Type.DOC) };
+        final CollapseTopFieldDocs firstSubQuery = new CollapseTopFieldDocs(
+            "group",
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            new FieldDoc[] { new FieldDoc(7, 1.0f, new Object[] { 7 }) },
+            sortFields,
+            new Object[] { "g7" }
+        );
+        final List<TopFieldDocs> subQueries = new ArrayList<>();
+        subQueries.add(firstSubQuery);
+        subQueries.add(null);
+
+        final CollapseTopFieldDocs encoded = (CollapseTopFieldDocs) HybridSearchCollectorResultUtil.getCollapseTopFieldDocs(
+            "group",
+            new TotalHits(1, TotalHits.Relation.EQUAL_TO),
+            subQueries,
+            sortFields
+        );
+
+        // start, delimiter + hit, delimiter for the null sub-query, stop
+        assertEquals(5, encoded.scoreDocs.length);
+        assertEquals(encoded.scoreDocs.length, encoded.collapseValues.length);
+        assertEquals("g7", encoded.collapseValues[2]);
+        assertEquals(MAGIC_NUMBER_START_STOP, encoded.scoreDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(MAGIC_NUMBER_DELIMITER, encoded.scoreDocs[1].score, DELTA_FOR_ASSERTION);
+        assertEquals(MAGIC_NUMBER_DELIMITER, encoded.scoreDocs[3].score, DELTA_FOR_ASSERTION);
+        assertEquals(MAGIC_NUMBER_START_STOP, encoded.scoreDocs[4].score, DELTA_FOR_ASSERTION);
     }
 }

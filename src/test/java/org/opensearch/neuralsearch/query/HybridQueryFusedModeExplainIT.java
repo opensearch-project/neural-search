@@ -6,6 +6,7 @@ package org.opensearch.neuralsearch.query;
 
 import org.opensearch.neuralsearch.BaseNeuralSearchIT;
 import org.opensearch.neuralsearch.search.explain.FusedFirstPassMarker;
+import org.opensearch.neuralsearch.util.TestUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -116,12 +117,13 @@ public class HybridQueryFusedModeExplainIT extends BaseNeuralSearchIT {
             "one leg must be explained as the term query it is: " + rawDescriptions,
             rawDescriptions.stream().anyMatch(description -> description.contains(TEXT_FIELD + ":hello"))
         );
-        // Lucene explains an ANN match as the candidate set it came from ("within top N docs") rather than as a scored
-        // clause — a vector query has no term to attribute the score to. Asserted loosely for that reason: what matters is
-        // that the leg's own account of its raw score is what the tree carries, not which words Lucene chose for it.
+        // Lucene explains an ANN match as the candidate set it came from ("within top N docs", "Within top N doc(s)" from
+        // Lucene 10.6) rather than as a scored clause — a vector query has no term to attribute the score to. Asserted on the
+        // shape of that message for that reason: what matters is that the leg's own account of its raw score is what the
+        // tree carries, not which words Lucene chose for it.
         assertTrue(
             "and the other as the vector-candidate set it came from: " + rawDescriptions,
-            rawDescriptions.stream().anyMatch(description -> description.contains("docs"))
+            rawDescriptions.stream().anyMatch(TestUtils::isKnnWithinTopDocsExplanation)
         );
     }
 

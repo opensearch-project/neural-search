@@ -22,6 +22,7 @@ import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
 import org.apache.lucene.index.LeafReaderContext;
+import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.search.BulkScorer;
 import org.apache.lucene.search.Collector;
 import org.apache.lucene.search.CollectorManager;
@@ -876,29 +877,30 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         QueryShardContext mockQueryShardContext = mock(QueryShardContext.class);
         TextFieldMapper.TextFieldType fieldType = (TextFieldMapper.TextFieldType) createMapperService().fieldType(TEXT_FIELD_NAME);
         when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        // one hit per sub-query and shard, so the shard cut decides which "to" doc stays
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(1).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext),
-                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext)
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext),
+                // matches a doc in each segment
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, "to").toQuery(mockQueryShardContext)
             ),
             hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         MapperService mapperService = createMapperService();
         when(searchContext.mapperService()).thenReturn(mapperService);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
         when(searchContext.size()).thenReturn(10);
 
         Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
         when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
         when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
 
+        // one shard with two segments searched as two slices: doc bases 0 and 2 keep doc ids unique across the slices
         Directory directory = newDirectory();
-        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        IndexWriter w = new IndexWriter(directory, newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
         ft.setIndexOptions(IndexOptions.DOCS_AND_FREQS);
         ft.setOmitNorms(false);
@@ -906,56 +908,54 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
         w.addDocument(getDocument(TEXT_FIELD_NAME, 1, TEST_DOC_TEXT1, ft));
         w.addDocument(getDocument(TEXT_FIELD_NAME, 2, TEST_DOC_TEXT2, ft));
+        w.commit();
         w.addDocument(getDocument(TEXT_FIELD_NAME, 3, TEST_DOC_TEXT3, ft));
-        w.flush();
         w.commit();
 
         IndexReader reader = DirectoryReader.open(w);
+        assertEquals(2, reader.leaves().size());
         IndexSearcher searcher = new IndexSearcher(reader);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        when(indexSearcher.getIndexReader()).thenReturn(reader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQueryWithTerm);
-        HybridTopScoreDocCollector collector1 = (HybridTopScoreDocCollector) hybridCollectorManager.newCollector();
-        HybridTopScoreDocCollector collector2 = (HybridTopScoreDocCollector) hybridCollectorManager.newCollector();
-
         Weight weight = new HybridQueryWeight(hybridQueryWithTerm, searcher, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
-        collector1.setWeight(weight);
-        collector2.setWeight(weight);
+        List<LeafReaderContext> leaves = reader.leaves();
+        Collector firstSlice = collectLeaves(hybridCollectorManager, weight, List.of(leaves.get(0)));
+        Collector secondSlice = collectLeaves(hybridCollectorManager, weight, List.of(leaves.get(1)));
+        Collector oneCollector = collectLeaves(hybridCollectorManager, weight, leaves);
 
-        LeafReaderContext leafReaderContext = searcher.getIndexReader().leaves().get(0);
-        LeafCollector leafCollector1 = collector1.getLeafCollector(leafReaderContext);
-        LeafCollector leafCollector2 = collector2.getLeafCollector(leafReaderContext);
-
-        BulkScorer scorer = weight.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
-        scorer.score(leafCollector2, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
-
-        leafCollector1.finish();
-        leafCollector2.finish();
-
-        Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
-
-        assertNotNull(results);
-        ReduceableSearchResult reduceableSearchResult = ((ReduceableSearchResult) results);
-        QuerySearchResult querySearchResult = new QuerySearchResult();
-        reduceableSearchResult.reduce(querySearchResult);
-        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+        // the slices' lists are cut to one hit per sub-query, so two slices give what one collector gives
+        TopDocsAndMaxScore topDocsAndMaxScore = reduceToTopDocs(hybridCollectorManager, List.of(firstSlice, secondSlice));
+        TopDocsAndMaxScore oneCollectorTopDocs = reduceToTopDocs(hybridCollectorManager, List.of(oneCollector));
 
         assertNotNull(topDocsAndMaxScore);
-        assertEquals(2, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value());
         assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
+        assertEquals(oneCollectorTopDocs.topDocs.totalHits, topDocsAndMaxScore.topDocs.totalHits);
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
+        assertEquals(oneCollectorTopDocs.maxScore, maxScore, DELTA_FOR_ASSERTION);
 
         ScoreDoc[] scoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;
-        assertEquals(6, scoreDocs.length);
+        ScoreDoc[] oneCollectorScoreDocs = oneCollectorTopDocs.topDocs.scoreDocs;
+        assertEquals(8, scoreDocs.length);
+        assertEquals(oneCollectorScoreDocs.length, scoreDocs.length);
+        for (int i = 0; i < scoreDocs.length; i++) {
+            assertEquals(oneCollectorScoreDocs[i].doc, scoreDocs[i].doc);
+            assertEquals(oneCollectorScoreDocs[i].score, scoreDocs[i].score, DELTA_FOR_ASSERTION);
+        }
         assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, DELTA_FOR_ASSERTION);
         assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, DELTA_FOR_ASSERTION);
-        assertTrue(scoreDocs[2].score > 0);
+        assertEquals(0, scoreDocs[2].doc);
         assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[3].score, DELTA_FOR_ASSERTION);
-        assertTrue(scoreDocs[4].score > 0);
-        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[5].score, DELTA_FOR_ASSERTION);
-        // we have to assert that one of hits is max score because scores are generated for each run and order is not guaranteed
-        assertTrue(Float.compare(scoreDocs[2].score, maxScore) == 0 || Float.compare(scoreDocs[4].score, maxScore) == 0);
+        assertEquals(1, scoreDocs[4].doc);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[5].score, DELTA_FOR_ASSERTION);
+        // "to" keeps the first segment's shorter doc only; the second slice's doc 2 is cut
+        assertEquals(1, scoreDocs[6].doc);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[7].score, DELTA_FOR_ASSERTION);
+        assertEquals(maxScore, Math.max(scoreDocs[2].score, Math.max(scoreDocs[4].score, scoreDocs[6].score)), DELTA_FOR_ASSERTION);
 
         w.close();
         reader.close();
@@ -977,11 +977,6 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         MapperService mapperService = createMapperService();
         when(searchContext.mapperService()).thenReturn(mapperService);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        IndexObjects indexObjects = createIndexObjects(2);
-        IndexReader indexReader = indexObjects.indexReader();
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
         when(searchContext.size()).thenReturn(1);
 
         DocValueFormat docValueFormat[] = new DocValueFormat[] { DocValueFormat.RAW };
@@ -995,101 +990,61 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
         when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
 
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-
+        // one shard with two segments searched as two slices: doc bases 0 and 2 keep doc ids unique across the slices
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
         ft.freeze();
-
-        int docId1 = RandomizedTest.randomInt();
-        int docId2 = RandomizedTest.randomInt();
-        int docId3 = RandomizedTest.randomInt();
-        int[] docIds = new int[] { docId1, docId2, docId3 };
-        Arrays.sort(docIds);
-
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docIds[0], TEST_DOC_TEXT1, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docIds[1], TEST_DOC_TEXT3, ft));
-        w.flush();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT3, ft));
+        w.commit();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT2, ft));
         w.commit();
 
-        SearchContext searchContext2 = mock(SearchContext.class);
-
-        ContextIndexSearcher indexSearcher2 = mock(ContextIndexSearcher.class);
-        IndexObjects indexObjects2 = createIndexObjects(1);
-        IndexReader indexReader2 = indexObjects2.indexReader();
-        when(indexSearcher2.getIndexReader()).thenReturn(indexReader2);
-        when(searchContext2.searcher()).thenReturn(indexSearcher2);
-        when(searchContext2.size()).thenReturn(1);
-
-        when(searchContext2.queryCollectorManagers()).thenReturn(new HashMap<>());
-        when(searchContext2.shouldUseConcurrentSearch()).thenReturn(true);
-
-        when(mockQueryShardContext.fieldMapper(eq(TEXT_FIELD_NAME))).thenReturn(fieldType);
-
-        Directory directory2 = newDirectory();
-        final IndexWriter w2 = new IndexWriter(directory2, newIndexWriterConfig());
-        FieldType ft2 = new FieldType(TextField.TYPE_NOT_STORED);
-        ft2.setIndexOptions(random().nextBoolean() ? IndexOptions.DOCS : IndexOptions.DOCS_AND_FREQS);
-        ft2.setOmitNorms(random().nextBoolean());
-        ft2.freeze();
-
-        w2.addDocument(getDocument(TEXT_FIELD_NAME, docIds[2], TEST_DOC_TEXT2, ft));
-        w2.flush();
-        w2.commit();
-
         IndexReader reader = DirectoryReader.open(w);
+        assertEquals(2, reader.leaves().size());
         IndexSearcher searcher = new IndexSearcher(reader);
-        IndexReader reader2 = DirectoryReader.open(w2);
-        IndexSearcher searcher2 = new IndexSearcher(reader2);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        when(indexSearcher.getIndexReader()).thenReturn(reader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQueryWithTerm);
-        SimpleFieldCollector collector1 = (SimpleFieldCollector) hybridCollectorManager.newCollector();
-        SimpleFieldCollector collector2 = (SimpleFieldCollector) hybridCollectorManager.newCollector();
+        Weight weight = new HybridQueryWeight(hybridQueryWithTerm, searcher, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
+        List<LeafReaderContext> leaves = reader.leaves();
+        Collector firstSlice = collectLeaves(hybridCollectorManager, weight, List.of(leaves.get(0)));
+        Collector secondSlice = collectLeaves(hybridCollectorManager, weight, List.of(leaves.get(1)));
+        Collector oneCollector = collectLeaves(hybridCollectorManager, weight, leaves);
+        assertTrue(firstSlice instanceof SimpleFieldCollector);
 
-        Weight weight1 = new HybridQueryWeight(hybridQueryWithTerm, searcher, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
-        Weight weight2 = new HybridQueryWeight(hybridQueryWithTerm, searcher2, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
-        collector1.setWeight(weight1);
-        collector2.setWeight(weight2);
-        LeafReaderContext leafReaderContext = searcher.getIndexReader().leaves().get(0);
-        LeafCollector leafCollector1 = collector1.getLeafCollector(leafReaderContext);
-
-        LeafReaderContext leafReaderContext2 = searcher2.getIndexReader().leaves().get(0);
-        LeafCollector leafCollector2 = collector2.getLeafCollector(leafReaderContext2);
-        BulkScorer scorer = weight1.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
-        leafCollector1.finish();
-        BulkScorer scorer2 = weight2.bulkScorer(leafReaderContext2);
-        scorer2.score(leafCollector2, leafReaderContext2.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
-        leafCollector2.finish();
-
-        Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
-
-        assertNotNull(results);
-        ReduceableSearchResult reduceableSearchResult = ((ReduceableSearchResult) results);
-        QuerySearchResult querySearchResult = new QuerySearchResult();
-        reduceableSearchResult.reduce(querySearchResult);
-        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+        // each slice keeps its lowest doc id, the shard keeps the lower of the two
+        TopDocsAndMaxScore topDocsAndMaxScore = reduceToTopDocs(hybridCollectorManager, List.of(firstSlice, secondSlice));
+        TopDocsAndMaxScore oneCollectorTopDocs = reduceToTopDocs(hybridCollectorManager, List.of(oneCollector));
 
         assertNotNull(topDocsAndMaxScore);
         assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value());
         assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
+        assertEquals(oneCollectorTopDocs.topDocs.totalHits, topDocsAndMaxScore.topDocs.totalHits);
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
+        assertEquals(oneCollectorTopDocs.maxScore, maxScore, DELTA_FOR_ASSERTION);
         FieldDoc[] fieldDocs = (FieldDoc[]) topDocsAndMaxScore.topDocs.scoreDocs;
-        assertEquals(5, fieldDocs.length);
-        assertEquals(1, fieldDocs[0].fields[0]);
-        assertEquals(1, fieldDocs[1].fields[0]);
-        assertEquals(fieldDocs[2].doc, fieldDocs[2].fields[0]);
-        assertEquals(fieldDocs[3].doc, fieldDocs[3].fields[0]);
-        assertEquals(1, fieldDocs[4].fields[0]);
+        FieldDoc[] oneCollectorFieldDocs = (FieldDoc[]) oneCollectorTopDocs.topDocs.scoreDocs;
+        assertEquals(4, fieldDocs.length);
+        assertEquals(oneCollectorFieldDocs.length, fieldDocs.length);
+        for (int i = 0; i < fieldDocs.length; i++) {
+            assertEquals(oneCollectorFieldDocs[i].doc, fieldDocs[i].doc);
+            assertEquals(oneCollectorFieldDocs[i].score, fieldDocs[i].score, DELTA_FOR_ASSERTION);
+            assertArrayEquals(oneCollectorFieldDocs[i].fields, fieldDocs[i].fields);
+        }
+        assertEquals(MAGIC_NUMBER_START_STOP, fieldDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(MAGIC_NUMBER_DELIMITER, fieldDocs[1].score, DELTA_FOR_ASSERTION);
+        assertEquals(0, fieldDocs[2].doc);
+        assertEquals(0, fieldDocs[2].fields[0]);
+        assertEquals(MAGIC_NUMBER_START_STOP, fieldDocs[3].score, DELTA_FOR_ASSERTION);
 
         w.close();
         reader.close();
         directory.close();
-        w2.close();
-        reader2.close();
-        directory2.close();
     }
 
     @SneakyThrows
@@ -1226,141 +1181,125 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
             final QueryBuilder queryBuilder = invocationOnMock.getArgument(0);
             return new ParsedQuery(queryBuilder.toQuery(mockQueryShardContext), Collections.emptyMap());
         }).when(mockQueryShardContext).toQuery(any());
-        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(10).build();
+        // one hit per sub-query and shard, so the shard cut decides which "to" doc stays
+        HybridQueryContext hybridQueryContext = HybridQueryContext.builder().paginationDepth(1).build();
 
         HybridQuery hybridQueryWithTerm = new HybridQuery(
             List.of(
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY1).toQuery(mockQueryShardContext),
                 QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2).toQuery(mockQueryShardContext),
-                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY3).toQuery(mockQueryShardContext)
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY3).toQuery(mockQueryShardContext),
+                // matches a doc in each segment
+                QueryBuilders.termQuery(TEXT_FIELD_NAME, "to").toQuery(mockQueryShardContext)
             ),
             hybridQueryContext
         );
         when(searchContext.query()).thenReturn(hybridQueryWithTerm);
         MapperService mapperService = createMapperService();
         when(searchContext.mapperService()).thenReturn(mapperService);
-        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
-        IndexObjects indexObjects = createIndexObjects(2);
-        IndexReader indexReader = indexObjects.indexReader();
-        when(indexSearcher.getIndexReader()).thenReturn(indexReader);
-        when(searchContext.searcher()).thenReturn(indexSearcher);
         when(searchContext.size()).thenReturn(1);
-
-        Map<Class<?>, CollectorManager<? extends Collector, ReduceableSearchResult>> classCollectorManagerMap = new HashMap<>();
-        when(searchContext.queryCollectorManagers()).thenReturn(classCollectorManagerMap);
+        when(searchContext.queryCollectorManagers()).thenReturn(new HashMap<>());
         when(searchContext.shouldUseConcurrentSearch()).thenReturn(true);
-        // index segment 1
+
+        // one shard with two segments searched as two slices: doc bases 0 and 2 keep doc ids unique across the slices
         Directory directory = newDirectory();
-        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig());
+        final IndexWriter w = new IndexWriter(directory, newIndexWriterConfig().setMergePolicy(NoMergePolicy.INSTANCE));
         FieldType ft = new FieldType(TextField.TYPE_NOT_STORED);
         ft.freeze();
-
-        int docId1 = RandomizedTest.randomInt();
-        int docId2 = RandomizedTest.randomInt();
-        int docId3 = RandomizedTest.randomInt();
-
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId1, TEST_DOC_TEXT1, ft));
-        w.addDocument(getDocument(TEXT_FIELD_NAME, docId2, TEST_DOC_TEXT2, ft));
-        w.flush();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT1, ft));
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT2, ft));
         w.commit();
+        w.addDocument(getDocument(TEXT_FIELD_NAME, RandomizedTest.randomInt(), TEST_DOC_TEXT3, ft));
+        w.commit();
+        IndexReader reader = DirectoryReader.open(w);
+        assertEquals(2, reader.leaves().size());
+        IndexSearcher searcher = new IndexSearcher(reader);
 
-        // index segment 2
-        SearchContext searchContext2 = mock(SearchContext.class);
-
-        ContextIndexSearcher indexSearcher2 = mock(ContextIndexSearcher.class);
-        IndexObjects indexObjects2 = createIndexObjects(1);
-        IndexReader indexReader2 = indexObjects2.indexReader();
-        when(indexSearcher2.getIndexReader()).thenReturn(indexReader2);
-        when(searchContext2.searcher()).thenReturn(indexSearcher2);
-        when(searchContext2.size()).thenReturn(1);
-
-        when(searchContext2.queryCollectorManagers()).thenReturn(new HashMap<>());
-        when(searchContext2.shouldUseConcurrentSearch()).thenReturn(true);
-
-        Directory directory2 = newDirectory();
-        final IndexWriter w2 = new IndexWriter(directory2, newIndexWriterConfig());
-        FieldType ft2 = new FieldType(TextField.TYPE_NOT_STORED);
-        ft2.freeze();
-
-        w2.addDocument(getDocument(TEXT_FIELD_NAME, docId3, TEST_DOC_TEXT3, ft));
-        w2.flush();
-        w2.commit();
-
-        IndexReader reader1 = DirectoryReader.open(w);
-        IndexSearcher searcher1 = new IndexSearcher(reader1);
-        IndexReader reader2 = DirectoryReader.open(w2);
-        IndexSearcher searcher2 = new IndexSearcher(reader2);
+        ContextIndexSearcher indexSearcher = mock(ContextIndexSearcher.class);
+        when(indexSearcher.getIndexReader()).thenReturn(reader);
+        when(searchContext.searcher()).thenReturn(indexSearcher);
 
         RescorerBuilder<QueryRescorerBuilder> rescorerBuilder = new QueryRescorerBuilder(QueryBuilders.termQuery(TEXT_FIELD_NAME, QUERY2));
         RescoreContext rescoreContext = rescorerBuilder.buildContext(mockQueryShardContext);
-        List<RescoreContext> rescoreContexts = List.of(rescoreContext);
-        when(searchContext.rescore()).thenReturn(rescoreContexts);
+        when(searchContext.rescore()).thenReturn(List.of(rescoreContext));
+        // the rescore query matches the first segment's second doc (global doc 1) with score 0.9
         Weight rescoreWeight = mock(Weight.class);
         Scorer rescoreScorer = mock(Scorer.class);
-        ScorerSupplier mockScorerSupplier = mock(ScorerSupplier.class);
-        when(mockScorerSupplier.get(anyLong())).thenReturn(rescoreScorer);
-        when(mockScorerSupplier.cost()).thenReturn(1L);
         when(rescoreWeight.scorer(any(LeafReaderContext.class))).thenReturn(rescoreScorer);
-
         when(rescoreScorer.docID()).thenReturn(1);
-        DocIdSetIterator iterator = mock(DocIdSetIterator.class);
-        when(rescoreScorer.iterator()).thenReturn(iterator);
+        when(rescoreScorer.iterator()).thenReturn(mock(DocIdSetIterator.class));
         when(rescoreScorer.score()).thenReturn(0.9f);
         when(indexSearcher.createWeight(any(), eq(ScoreMode.COMPLETE), eq(1f))).thenReturn(rescoreWeight);
 
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQueryWithTerm);
-        HybridTopScoreDocCollector collector1 = (HybridTopScoreDocCollector) hybridCollectorManager.newCollector();
-        HybridTopScoreDocCollector collector2 = (HybridTopScoreDocCollector) hybridCollectorManager.newCollector();
+        Weight weight = new HybridQueryWeight(hybridQueryWithTerm, searcher, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
+        List<LeafReaderContext> leaves = reader.leaves();
+        Collector firstSlice = collectLeaves(hybridCollectorManager, weight, List.of(leaves.get(0)));
+        Collector secondSlice = collectLeaves(hybridCollectorManager, weight, List.of(leaves.get(1)));
+        Collector oneCollector = collectLeaves(hybridCollectorManager, weight, leaves);
 
-        Weight weight1 = new HybridQueryWeight(hybridQueryWithTerm, searcher1, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
-        Weight weight2 = new HybridQueryWeight(hybridQueryWithTerm, searcher2, ScoreMode.TOP_SCORES, BoostingQueryBuilder.DEFAULT_BOOST);
-        collector1.setWeight(weight1);
-        collector2.setWeight(weight2);
-
-        LeafReaderContext leafReaderContext = searcher1.getIndexReader().leaves().get(0);
-        LeafCollector leafCollector1 = collector1.getLeafCollector(leafReaderContext);
-        BulkScorer scorer = weight1.bulkScorer(leafReaderContext);
-        scorer.score(leafCollector1, leafReaderContext.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
-        leafCollector1.finish();
-
-        LeafReaderContext leafReaderContext2 = searcher2.getIndexReader().leaves().get(0);
-        LeafCollector leafCollector2 = collector2.getLeafCollector(leafReaderContext2);
-        BulkScorer scorer2 = weight2.bulkScorer(leafReaderContext2);
-        scorer2.score(leafCollector2, leafReaderContext2.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
-        leafCollector2.finish();
-
-        Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
-
-        // assert that second search hit in result has the max score due to boots from rescorer
-        assertNotNull(results);
-        ReduceableSearchResult reduceableSearchResult = ((ReduceableSearchResult) results);
-        QuerySearchResult querySearchResult = new QuerySearchResult();
-        reduceableSearchResult.reduce(querySearchResult);
-        TopDocsAndMaxScore topDocsAndMaxScore = querySearchResult.topDocs();
+        // the slices' lists are cut to one hit per sub-query, then rescored once, so two slices give what one collector gives
+        TopDocsAndMaxScore topDocsAndMaxScore = reduceToTopDocs(hybridCollectorManager, List.of(firstSlice, secondSlice));
+        TopDocsAndMaxScore oneCollectorTopDocs = reduceToTopDocs(hybridCollectorManager, List.of(oneCollector));
 
         assertNotNull(topDocsAndMaxScore);
         assertEquals(3, topDocsAndMaxScore.topDocs.totalHits.value());
         assertEquals(TotalHits.Relation.EQUAL_TO, topDocsAndMaxScore.topDocs.totalHits.relation());
+        assertEquals(oneCollectorTopDocs.topDocs.totalHits, topDocsAndMaxScore.topDocs.totalHits);
         float maxScore = topDocsAndMaxScore.maxScore;
         assertTrue(maxScore > 0);
+        assertEquals(oneCollectorTopDocs.maxScore, maxScore, DELTA_FOR_ASSERTION);
         ScoreDoc[] scoreDocs = topDocsAndMaxScore.topDocs.scoreDocs;
-        assertEquals(8, scoreDocs.length);
+        ScoreDoc[] oneCollectorScoreDocs = oneCollectorTopDocs.topDocs.scoreDocs;
+        assertEquals(10, scoreDocs.length);
+        assertEquals(oneCollectorScoreDocs.length, scoreDocs.length);
+        for (int i = 0; i < scoreDocs.length; i++) {
+            assertEquals(oneCollectorScoreDocs[i].doc, scoreDocs[i].doc);
+            assertEquals(oneCollectorScoreDocs[i].score, scoreDocs[i].score, DELTA_FOR_ASSERTION);
+        }
         assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, DELTA_FOR_ASSERTION);
         assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, DELTA_FOR_ASSERTION);
         assertTrue(maxScore > scoreDocs[2].score);
         assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[3].score, DELTA_FOR_ASSERTION);
+        // the second sub-query's hit is the rescored doc and carries the max score
+        assertEquals(1, scoreDocs[4].doc);
         assertEquals(maxScore, scoreDocs[4].score, DELTA_FOR_ASSERTION);
         assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[5].score, DELTA_FOR_ASSERTION);
         assertTrue(maxScore > scoreDocs[6].score);
-        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[7].score, DELTA_FOR_ASSERTION);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[7].score, DELTA_FOR_ASSERTION);
+        // "to" keeps the first segment's shorter doc only; the second slice's doc 2 is cut
+        assertEquals(1, scoreDocs[8].doc);
+        assertTrue(maxScore > scoreDocs[8].score);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[9].score, DELTA_FOR_ASSERTION);
 
         // release resources
         w.close();
-        reader1.close();
+        reader.close();
         directory.close();
-        w2.close();
-        reader2.close();
-        directory2.close();
+    }
+
+    private static Collector collectLeaves(
+        final CollectorManager<?, ?> collectorManager,
+        final Weight weight,
+        final List<LeafReaderContext> leaves
+    ) throws IOException {
+        Collector collector = collectorManager.newCollector();
+        collector.setWeight(weight);
+        for (LeafReaderContext leaf : leaves) {
+            LeafCollector leafCollector = collector.getLeafCollector(leaf);
+            BulkScorer bulkScorer = weight.bulkScorer(leaf);
+            bulkScorer.score(leafCollector, leaf.reader().getLiveDocs(), 0, DocIdSetIterator.NO_MORE_DOCS);
+            leafCollector.finish();
+        }
+        return collector;
+    }
+
+    private static TopDocsAndMaxScore reduceToTopDocs(final CollectorManager collectorManager, final List<Collector> collectors)
+        throws IOException {
+        ReduceableSearchResult reduceableSearchResult = (ReduceableSearchResult) collectorManager.reduce(collectors);
+        QuerySearchResult querySearchResult = new QuerySearchResult();
+        reduceableSearchResult.reduce(querySearchResult);
+        return querySearchResult.topDocs();
     }
 
     @SneakyThrows
@@ -1533,32 +1472,12 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
 
     public void testReduceCollectorResults_whenCollapseEnabledWithEmptyFieldDocsButNonZeroTotalHits_thenSuccessful() throws IOException {
         /*
-         * SCENARIO EXPLANATION:
-         * This test reproduces a specific edge case that previously caused an IllegalStateException during
-         * concurrent segment search with collapse functionality enabled.
-         *
-         * THE BUG SCENARIO:
-         * 1. Concurrent segment search creates multiple collectors, each processing different segments
-         * 2. Collector1 processes a segment where documents were initially collected (getTotalHits() > 0)
-         *    but after collapse/grouping processing, all sub-queries end up with empty FieldDoc arrays
-         * 3. Collector2 processes a segment with normal results containing actual documents
-         * 4. During reduction, the system tries to merge results from both collectors
-         *
-         * THE PREVIOUS BUG:
-         * - When processing Collector1's results, getNewTopFieldDocs() was called instead of getCollapseTopFieldDocs()
-         * - Since all FieldDoc arrays were empty, delimiterDocId became -1
-         * - The method incorrectly returned TopFieldDocs instead of CollapseTopFieldDocs
-         * - Later, TopDocsMerger.merge() failed the type check: "Collapse enabled but source TopDocs is not an instance of CollapseTopFieldDocs"
-         *
-         * THE FIX:
-         * - Modified getSortedTopDocsAndMaxScore() to check if collapse is enabled
-         * - When collapse is enabled, it now calls getCollapseTopFieldDocs() which always returns CollapseTopFieldDocs
-         * - Even when delimiterDocId = -1, it returns an empty CollapseTopFieldDocs instead of TopFieldDocs
-         * - This ensures type consistency during merge operations
-         *
-         * WHY THIS TEST SHOULD PASS:
-         * With the fix, both collectors return CollapseTopFieldDocs (even if empty), so the merge operation
-         * succeeds without type mismatch exceptions.
+         * Two default-mode collapse collectors of one shard under concurrent segment search: the first counted hits (getTotalHits() > 0)
+         * but kept none, every sub-query list is empty; the second kept hits. This shape once failed the reduce with "Collapse enabled
+         * but source TopDocs is not an instance of CollapseTopFieldDocs", because the first collector's empty result was encoded as
+         * plain TopFieldDocs. With the bounded slice merge (https://github.com/opensearch-project/neural-search/issues/2091) both
+         * collectors' lists are merged per sub-query by the collapse sort and cut to numHits (1 here: the index has one document), the
+         * first collector's hits still count in the shard total, and every kept hit keeps its collapse value.
          */
 
         // Setup search context with collapse enabled
@@ -1670,15 +1589,6 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         // Create collector manager
         CollectorManager hybridCollectorManager = HybridCollectorManager.createHybridCollectorManager(searchContext, hybridQueryWithTerm);
 
-        // WITH THE FIX:
-        // 1. Collector1 has getTotalHits() = 50 (documents were processed)
-        // 2. But topDocs() returns list with all empty FieldDoc arrays
-        // 3. getTotalHits(topDocs) will return TotalHits(50) because list is not empty
-        // 4. getCollapseTopFieldDocs() will have delimiterDocId = -1 (no valid documents)
-        // 5. Will now return CollapseTopFieldDocs instead of TopFieldDocs (FIXED!)
-        // 6. Merge with collector2 will succeed because both are CollapseTopFieldDocs
-
-        // This should now succeed without throwing an exception
         Object results = hybridCollectorManager.reduce(List.of(collector1, collector2));
         assertNotNull(results);
         assertTrue(results instanceof ReduceableSearchResult);
@@ -1692,6 +1602,22 @@ public class HybridCollectorManagerTests extends OpenSearchQueryTestCase {
         assertNotNull(topDocsAndMaxScore);
         assertTrue(topDocsAndMaxScore.topDocs instanceof CollapseTopFieldDocs);
         assertEquals(65, topDocsAndMaxScore.topDocs.totalHits.value());
+        assertEquals(1.0f, topDocsAndMaxScore.maxScore, DELTA_FOR_ASSERTION);
+        // start, delimiter, the first sub-query's lowest doc only (doc 2 is cut), delimiter, the second sub-query's doc, stop
+        CollapseTopFieldDocs collapseTopFieldDocs = (CollapseTopFieldDocs) topDocsAndMaxScore.topDocs;
+        assertEquals("family_id_v2", collapseTopFieldDocs.field);
+        ScoreDoc[] scoreDocs = collapseTopFieldDocs.scoreDocs;
+        assertEquals(6, scoreDocs.length);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[0].score, DELTA_FOR_ASSERTION);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[1].score, DELTA_FOR_ASSERTION);
+        assertEquals(1, scoreDocs[2].doc);
+        assertEquals(MAGIC_NUMBER_DELIMITER, scoreDocs[3].score, DELTA_FOR_ASSERTION);
+        assertEquals(3, scoreDocs[4].doc);
+        assertEquals(MAGIC_NUMBER_START_STOP, scoreDocs[5].score, DELTA_FOR_ASSERTION);
+        // collapse values stay aligned with the hits
+        assertEquals(scoreDocs.length, collapseTopFieldDocs.collapseValues.length);
+        assertEquals("group1", collapseTopFieldDocs.collapseValues[2]);
+        assertEquals("group3", collapseTopFieldDocs.collapseValues[4]);
     }
 
     private IndexObjects createIndexObjects(int numDocs) throws IOException {

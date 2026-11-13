@@ -27,6 +27,7 @@ import org.opensearch.neuralsearch.search.collector.HybridSearchCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopFieldDocSortCollector;
 import org.opensearch.neuralsearch.search.collector.HybridTopScoreDocCollector;
 import org.opensearch.neuralsearch.search.query.util.HybridSearchCollectorResultUtil;
+import org.opensearch.neuralsearch.search.query.util.HybridSliceResultsReducer;
 import org.opensearch.neuralsearch.search.util.HybridSearchCollapseUtil;
 import org.opensearch.search.internal.SearchContext;
 import org.opensearch.search.query.QuerySearchResult;
@@ -55,7 +56,7 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
     private final FieldDoc after;
     private final SearchContext searchContext;
 
-    private final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
+    private static final Set<Class<?>> VALID_COLLECTOR_TYPES = Set.of(
         HybridTopScoreDocCollector.class,
         HybridTopFieldDocSortCollector.class,
         HybridCollapsingTopDocsCollector.class,
@@ -142,14 +143,25 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         if (hybridSearchCollectors.isEmpty()) {
             throw new IllegalStateException("cannot collect results of hybrid search query, there are no proper collectors");
         }
-        return reduceSearchResults(getSearchResults(hybridSearchCollectors));
+        final HybridCollectorResultsUtilParams hybridCollectorResultsUtilParams = new HybridCollectorResultsUtilParams.Builder()
+            .searchContext(searchContext)
+            .build();
+        // distinct-groups collapse results cannot be merged across slices, so such a shard keeps the per-collector fold; the
+        // reducer owns that decision (see HybridSliceResultsReducer#canMerge) and is asked before any queue is drained
+        if (HybridSliceResultsReducer.canMerge(hybridCollectorResultsUtilParams, hybridSearchCollectors) == false) {
+            return reduceSearchResults(getSearchResults(hybridSearchCollectors, hybridCollectorResultsUtilParams));
+        }
+        final TopDocsAndMaxScore topDocsAndMaxScore = new HybridSliceResultsReducer(hybridCollectorResultsUtilParams, numHits).reduce(
+            hybridSearchCollectors
+        );
+        return (QuerySearchResult result) -> result.topDocs(topDocsAndMaxScore, hybridCollectorResultsUtilParams.getDocValueFormats());
     }
 
-    private List<ReduceableSearchResult> getSearchResults(final List<HybridSearchCollector> hybridSearchCollectors) throws IOException {
+    private List<ReduceableSearchResult> getSearchResults(
+        final List<HybridSearchCollector> hybridSearchCollectors,
+        final HybridCollectorResultsUtilParams hybridCollectorResultsUtilParams
+    ) throws IOException {
         List<ReduceableSearchResult> results = new ArrayList<>();
-        HybridCollectorResultsUtilParams hybridCollectorResultsUtilParams = new HybridCollectorResultsUtilParams.Builder().searchContext(
-            searchContext
-        ).build();
         for (HybridSearchCollector collector : hybridSearchCollectors) {
             HybridSearchCollectorResultUtil hybridSearchCollectorResultUtil = new HybridSearchCollectorResultUtil(
                 hybridCollectorResultsUtilParams,
@@ -166,7 +178,7 @@ public class HybridCollectorManager implements CollectorManager<Collector, Reduc
         for (final Collector collector : collectors) {
             if (collector instanceof MultiCollector) {
                 for (final Collector sub : (((MultiCollector) collector).getCollectors())) {
-                    if (sub instanceof HybridTopScoreDocCollector || sub instanceof HybridTopFieldDocSortCollector) {
+                    if (isHybridNonFilteredCollector(sub)) {
                         hybridSearchCollectors.add((HybridSearchCollector) sub);
                     }
                 }
