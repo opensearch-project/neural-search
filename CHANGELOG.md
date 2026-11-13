@@ -41,6 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Fetch test models from commit-pinned `raw.githubusercontent.com` URLs, fix ITs for secure cluster ([#2070](https://github.com/opensearch-project/neural-search/pull/2070))
 * Fix explain ITs failing on Lucene 10.6, which rewords the k-NN match explanation to `Within top N doc(s)`; assert the shape of that leaf, not Lucene's exact text ([#2077](https://github.com/opensearch-project/neural-search/pull/2077))
 * Fix flaky hybrid collapse collector tests by keeping insertion order when the test index is force-merged ([#2075](https://github.com/opensearch-project/neural-search/issues/2075))
+* Add a multi-segment index writer helper to the hybrid collapse collector tests ([#2095](https://github.com/opensearch-project/neural-search/pull/2095))
 
 ### Documentation
 
