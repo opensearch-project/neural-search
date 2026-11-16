@@ -44,6 +44,7 @@ import org.opensearch.core.action.ActionListener;
 import org.opensearch.core.common.ParsingException;
 import org.opensearch.core.common.io.stream.StreamInput;
 import org.opensearch.core.common.io.stream.StreamOutput;
+import org.opensearch.core.rest.RestStatus;
 import org.opensearch.core.xcontent.MediaTypeRegistry;
 import org.opensearch.core.xcontent.XContentBuilder;
 import org.opensearch.core.xcontent.XContentLocation;
@@ -307,13 +308,31 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     public static final String ERROR_MSG_MIXED_HYBRID_NESTING =
         "a [%s] query without [%s] cannot be nested in a [%s] query with [%s], or the other way around; use [%s] on both";
     /**
-     * What a refusal from the first round of the coordinator rewrite, and a failure of the leg fan-out, of a classic hybrid
-     * that runs with the default fusion ({@link DefaultFusion}) start with: the request never wrote {@code fusion}, so what
-     * fused mode says about it needs to say why fused mode ran.
+     * What anything fused mode says about a classic hybrid that runs with the default fusion ({@link DefaultFusion}) starts
+     * with: the request never wrote {@code fusion}, so what fused mode says about it needs to say why fused mode ran.
      */
-    private static final String ERROR_MSG_DEFAULT_FUSION =
-        "[%s] query without [%s] runs in fusion mode with the default techniques when no [%s] or [%s] applies to the request; "
-            + "attach a search pipeline with one of these processors to run it in classic mode. In fusion mode: %s";
+    private static final String DEFAULT_FUSION_EXPLANATION =
+        "[%s] query without [%s] runs in fusion mode with the default techniques when no [%s] or [%s] applies to the request";
+    /**
+     * A refusal from the first round of the coordinator rewrite: fused mode will not serve the request's shape and classic
+     * mode would have, so attaching one of those processors is a remedy.
+     */
+    private static final String ERROR_MSG_DEFAULT_FUSION = DEFAULT_FUSION_EXPLANATION
+        + "; attach a search pipeline with one of these processors to run it in classic mode. In fusion mode: %s";
+    /**
+     * A leg of the fan-out failed at a status that says the request itself is at fault — a query the shards reject, a model
+     * that is gone, an index that does not exist. The explanation without a remedy: classic mode would run the same
+     * sub-query and fail the same way, so pointing at a search pipeline would promise a cure that does not exist.
+     */
+    private static final String ERROR_MSG_DEFAULT_FUSION_LEG = DEFAULT_FUSION_EXPLANATION + ". In fusion mode: %s";
+    /**
+     * A leg of the fan-out failed at a retryable or server status — a queue rejection, a breaker trip, an unavailable
+     * shard. Fused mode searches once per sub-query where classic mode searches once, so the fan-out's own cost can be
+     * what pushed the request over, and running it in classic mode is then a real remedy rather than a false promise.
+     */
+    private static final String ERROR_MSG_DEFAULT_FUSION_FAN_OUT_COST = DEFAULT_FUSION_EXPLANATION
+        + ". Fusion mode searches once per sub-query where classic mode searches once, so this can be the fan-out's own "
+        + "cost; attach a search pipeline with one of these processors to run it in classic mode. In fusion mode: %s";
     private static final String ERROR_MSG_DEFAULT_FUSION_TURNED_OFF =
         "fusion mode was turned off on this cluster ([%s] is false) while this request was in flight; retry it";
     private static final String ERROR_MSG_DEFAULT_FUSION_OLD_NODE =
@@ -718,7 +737,7 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
             try {
                 return doRewriteFused(queryShardContext);
             } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException(defaultFusionMessage(e.getMessage()), e);
+                throw new IllegalArgumentException(defaultFusionMessage(ERROR_MSG_DEFAULT_FUSION, e.getMessage()), e);
             }
         }
         // Ahead of rewriting the sub-queries: a fused hybrid among them would register its leg fan-out in its own rewrite,
@@ -1578,11 +1597,17 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
         return isVersionOnOrAfterMinReqVersionForFusedModeInHybridQuery(NeuralSearchClusterUtil.instance().getClusterMinVersion());
     }
 
-    /** A fused-mode message, re-stated as one about a classic hybrid that runs with the default fusion. */
-    private static String defaultFusionMessage(final String message) {
+    /**
+     * A fused-mode message, re-stated as one about a classic hybrid that runs with the default fusion.
+     *
+     * @param template {@link #ERROR_MSG_DEFAULT_FUSION} for a refusal classic mode would have served,
+     *                 {@link #ERROR_MSG_DEFAULT_FUSION_FAN_OUT_COST} for a fan-out failure classic mode may avoid,
+     *                 {@link #ERROR_MSG_DEFAULT_FUSION_LEG} for one it would have hit as well
+     */
+    private static String defaultFusionMessage(final String template, final String message) {
         return String.format(
             Locale.ROOT,
-            ERROR_MSG_DEFAULT_FUSION,
+            template,
             NAME,
             FUSION_FIELD.getPreferredName(),
             NormalizationProcessor.TYPE,
@@ -1592,20 +1617,50 @@ public final class HybridQueryBuilder extends AbstractQueryBuilder<HybridQueryBu
     }
 
     /**
-     * The async fan-out's listener for a classic hybrid that runs with the default fusion: the same listener, with a failure
-     * re-stated by {@link #defaultFusionMessage} at the failure's own status, the failure itself kept as the cause.
+     * The async fan-out's listener for a classic hybrid that runs with the default fusion.
+     *
+     * <p>Re-states fused mode's own account of the fan-out, and only that: a leg's failure, which
+     * {@link HybridFusionOrchestrator} raises as an {@link OpenSearchStatusException} carrying the leg's own status. It is
+     * the only failure here that speaks of fused mode to a request that never wrote {@code fusion}, so it is the only one
+     * that has to say why fused mode ran. Which remedy the message carries follows that status: a leg rejected, a breaker
+     * tripped or a shard unavailable can be the fan-out's own cost and classic mode is then a real cure, while a leg the
+     * shards refuse outright would fail in classic mode too.
+     *
+     * <p>A failure fused mode did not author — an internal invariant, such as the orchestrator's own leg-count or
+     * {@code _index} guard — is handed back exactly as it came, keeping its own type, status and message rather than being
+     * dressed up as something a search pipeline would fix.
+     *
+     * <p>What this deliberately does not change: a leg's rejection, breaker trip or cancellation still reaches the client
+     * as {@code status_exception}, because the orchestrator flattens it to one before this listener sees it, and it does
+     * that for an explicit {@code fusion} block too. Carrying the leg's own {@code error.type} to the top level is a
+     * change to that behavior for every fused request, not something to decide here.
      */
-    private static ActionListener<Object> explainingDefaultFusion(final ActionListener<?> listener) {
+    static <T> ActionListener<T> explainingDefaultFusion(final ActionListener<T> listener) {
         return new ActionListener<>() {
             @Override
-            public void onResponse(final Object response) {
-                listener.onResponse(null);
+            public void onResponse(final T response) {
+                listener.onResponse(response);
             }
 
             @Override
             public void onFailure(final Exception e) {
+                if (e instanceof OpenSearchStatusException == false) {
+                    listener.onFailure(e);
+                    return;
+                }
+                RestStatus status = ExceptionsHelper.status(e);
+                boolean mayBeTheFanOutsOwnCost = status == RestStatus.TOO_MANY_REQUESTS || status.getStatus() >= 500;
                 // No format arguments: LoggerMessageFormat returns the message verbatim, so a {} inside it stays as it is.
-                listener.onFailure(new OpenSearchStatusException(defaultFusionMessage(e.getMessage()), ExceptionsHelper.status(e), e));
+                listener.onFailure(
+                    new OpenSearchStatusException(
+                        defaultFusionMessage(
+                            mayBeTheFanOutsOwnCost ? ERROR_MSG_DEFAULT_FUSION_FAN_OUT_COST : ERROR_MSG_DEFAULT_FUSION_LEG,
+                            e.getMessage()
+                        ),
+                        status,
+                        e
+                    )
+                );
             }
         };
     }

@@ -3106,9 +3106,13 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         assertTrue(timings.get().defaultFusion());
     }
 
-    /** A leg failure of a classic hybrid running with the default fusion is re-stated the same way, at the leg's own status. */
+    /**
+     * A rejected leg of a classic hybrid running with the default fusion is re-stated at the leg's own status, says why
+     * fused mode ran, and names the remedy: fused mode searches once per sub-query, so the rejection can be the fan-out's
+     * own cost, and running the query in classic mode is a real cure for it.
+     */
     @SneakyThrows
-    public void testDoRewriteFused_whenALegOfTheDefaultFusionIsRejected_thenThePrefixedFailureKeepsItsStatus() {
+    public void testDoRewriteFused_whenALegOfTheDefaultFusionIsRejected_thenItOffersClassicModeAsTheRemedy() {
         initClusterUtilWithMaxResultWindow(10000);
         QueryCoordinatorContext ctx = defaultFusionContext(new SearchSourceBuilder().query(classicBuilder()));
         HybridQueryBuilder defaultFusion = requestQuery(ctx);
@@ -3131,16 +3135,121 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
         java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
         captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> fail("should have failed"), failure::set));
         assertNotNull(failure.get());
+        assertTrue(
+            "fused mode's own account of the fan-out keeps the type the orchestrator raised",
+            failure.get() instanceof org.opensearch.OpenSearchStatusException
+        );
         assertThat(
             failure.get().getMessage(),
             startsWith("[hybrid] query without [fusion] runs in fusion mode with the default techniques")
         );
         assertThat(failure.get().getMessage(), containsString("In fusion mode: [hybrid] fused-mode sub-query 0 failed"));
+        assertThat(
+            "a rejection can be the fan-out's own cost, and classic mode is a cure for that",
+            failure.get().getMessage(),
+            containsString("so this can be the fan-out's own cost; attach a search pipeline")
+        );
         assertEquals(
             "a rejected fan-out stays a retryable 429",
             org.opensearch.core.rest.RestStatus.TOO_MANY_REQUESTS,
             org.opensearch.ExceptionsHelper.status(failure.get())
         );
+    }
+
+    /**
+     * A leg the shards refuse outright says why fused mode ran and stops there: classic mode would run the same sub-query
+     * and be refused the same way, so offering it as a remedy would promise a cure that does not exist.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenALegOfTheDefaultFusionIsRefused_thenItOffersNoRemedy() {
+        initClusterUtilWithMaxResultWindow(10000);
+        QueryCoordinatorContext ctx = defaultFusionContext(new SearchSourceBuilder().query(classicBuilder()));
+        HybridQueryBuilder defaultFusion = requestQuery(ctx);
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        defaultFusion.doRewrite(ctx);
+
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        doAnswer(invocation -> {
+            org.opensearch.core.action.ActionListener<org.opensearch.action.search.SearchResponse> l = invocation.getArgument(1);
+            l.onFailure(new IllegalArgumentException("[knn] requires k to be a positive integer"));
+            return null;
+        }).when(client).search(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+
+        java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> fail("should have failed"), failure::set));
+
+        assertNotNull(failure.get());
+        assertThat(
+            failure.get().getMessage(),
+            startsWith("[hybrid] query without [fusion] runs in fusion mode with the default techniques")
+        );
+        assertThat(failure.get().getMessage(), containsString("requires k to be a positive integer"));
+        assertThat(
+            "a leg the shards refuse is not cured by a pipeline",
+            failure.get().getMessage(),
+            not(containsString("attach a search"))
+        );
+        assertEquals(
+            "a refused leg stays the user's 400",
+            org.opensearch.core.rest.RestStatus.BAD_REQUEST,
+            org.opensearch.ExceptionsHelper.status(failure.get())
+        );
+    }
+
+    /**
+     * A failure fused mode did not author reaches the client as it is, keeping its own type and message, so a client that
+     * branches on the error type still reads what happened and is not told that a hybrid query needs a search pipeline.
+     * The only such failures in production are the fan-out's internal invariants; a throwing consumer stands in for one
+     * here, because an invariant that can be tripped from a request would be a bug in its own right.
+     */
+    @SneakyThrows
+    public void testDoRewriteFused_whenTheDefaultFusionBreaksAnInvariant_thenTheFailureIsPassedThroughUntouched() {
+        initClusterUtilWithMaxResultWindow(10000);
+        QueryCoordinatorContext ctx = defaultFusionContext(new SearchSourceBuilder().query(classicBuilder()));
+        HybridQueryBuilder defaultFusion = requestQuery(ctx);
+        IllegalStateException internal = new IllegalStateException("the fusion published nothing to read");
+        defaultFusion.fusionTimingConsumer(timings -> { throw internal; });
+        java.util.concurrent.atomic.AtomicReference<
+            java.util.function.BiConsumer<org.opensearch.transport.client.Client, org.opensearch.core.action.ActionListener<?>>> captured =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        doAnswer(invocation -> {
+            captured.set(invocation.getArgument(0));
+            return null;
+        }).when(ctx).registerAsyncAction(org.mockito.ArgumentMatchers.any());
+        defaultFusion.doRewrite(ctx);
+
+        org.opensearch.transport.client.Client client = mock(org.opensearch.transport.client.Client.class);
+        answerLegSearchesFrom(
+            client,
+            new org.opensearch.action.search.MultiSearchResponse(
+                new org.opensearch.action.search.MultiSearchResponse.Item[] {
+                    legItem(Map.of("1", 0.9f, "2", 0.5f)),
+                    legItem(Map.of("2", 0.8f, "3", 0.4f)) },
+                10L
+            )
+        );
+        java.util.concurrent.atomic.AtomicReference<Exception> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        captured.get().accept(client, org.opensearch.core.action.ActionListener.wrap(r -> fail("should have failed"), failure::set));
+
+        assertSame("the client is given the failure that was thrown", internal, failure.get());
+        assertThat(failure.get().getMessage(), not(containsString("runs in fusion mode with the default techniques")));
+    }
+
+    /** The default fusion's listener hands the fan-out's own answer back to core instead of substituting one. */
+    public void testExplainingDefaultFusion_whenTheFanOutAnswers_thenTheResponseIsForwarded() {
+        java.util.concurrent.atomic.AtomicReference<Object> forwarded = new java.util.concurrent.atomic.AtomicReference<>();
+        Object answer = new Object();
+        HybridQueryBuilder.explainingDefaultFusion(
+            org.opensearch.core.action.ActionListener.wrap(forwarded::set, e -> fail(e.getMessage()))
+        ).onResponse(answer);
+
+        assertSame(answer, forwarded.get());
     }
 
     /** Initialize NeuralSearchClusterUtil so getIndexMetadataList resolves the given number of concrete indices. */
@@ -3553,6 +3662,9 @@ public class HybridQueryBuilderTests extends OpenSearchQueryTestCase {
     }
 
     public void testProjectResolvedConfigOntoLegs_whenNestedLegHasPaginationDepth_thenCopyKeepsItsOwn() {
+        // copyRequestOptionsTo reads the cluster min version, so this test cannot rely on a sibling having initialized the
+        // NeuralSearchClusterUtil singleton first: without this it fails on the seeds that run it before one of them.
+        initClusterUtilWithMaxResultWindow(10000);
         FusionSpec resolved = new FusionSpec(
             FusionSpec.Shape.NORMALIZATION_PROCESSOR,
             FusionSpec.TECHNIQUE_ARITHMETIC_MEAN,
