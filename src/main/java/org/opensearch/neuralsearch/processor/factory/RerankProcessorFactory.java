@@ -14,6 +14,7 @@ import org.opensearch.neuralsearch.processor.rerank.MLOpenSearchRerankProcessor;
 import org.opensearch.neuralsearch.processor.rerank.RerankType;
 import org.opensearch.neuralsearch.processor.rerank.context.ContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.DocumentContextSourceFetcher;
+import org.opensearch.neuralsearch.processor.rerank.context.InnerHitsContextSourceFetcher;
 import org.opensearch.neuralsearch.processor.rerank.context.QueryContextSourceFetcher;
 import org.opensearch.search.pipeline.Processor;
 import org.opensearch.search.pipeline.SearchResponseProcessor;
@@ -174,9 +175,24 @@ public class RerankProcessorFactory implements Processor.Factory<SearchResponseP
                     case DocumentContextSourceFetcher.NAME:
                         fetchers.add(DocumentContextSourceFetcher.create(cfg, clusterService));
                         break;
+                    case InnerHitsContextSourceFetcher.NAME:
+                        fetchers.add(InnerHitsContextSourceFetcher.create(cfg));
+                        break;
                     default:
                         throw new IllegalArgumentException(String.format(Locale.ROOT, "unrecognized context field: %s", key));
                 }
+            }
+            boolean documentAndInnerHits = contextConfig.containsKey(DocumentContextSourceFetcher.NAME)
+                && contextConfig.containsKey(InnerHitsContextSourceFetcher.NAME);
+            if (documentAndInnerHits) {
+                throw new IllegalArgumentException(
+                    String.format(
+                        Locale.ROOT,
+                        "%s and %s cannot be combined: the first reranks documents, the second reranks nested chunks",
+                        DocumentContextSourceFetcher.NAME,
+                        InnerHitsContextSourceFetcher.NAME
+                    )
+                );
             }
             if (includeQueryContextFetcher) {
                 fetchers.add(new QueryContextSourceFetcher(clusterService));

@@ -6,10 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [Unreleased 3.x](https://github.com/opensearch-project/neural-search/compare/main...HEAD)
 
 ### Features
+* [Rerank] Add `context.inner_hits.paths` to the `ml_opensearch` rerank processor, scoring each nested chunk returned as an inner hit, re-sorting the inner hits and scoring the parent with its best chunk; chunks missing the field and parents without scored chunks rank last ([#2039](https://github.com/opensearch-project/neural-search/pull/2039))
 * [Hybrid Query] Add fusion mode to the hybrid query ([#2036](https://github.com/opensearch-project/neural-search/pull/2036))
 * [Hybrid Query] Turn fusion mode on by default; `plugins.neural_search.hybrid.fusion.enabled` becomes the switch that turns it off ([#2037](https://github.com/opensearch-project/neural-search/pull/2037))
 
 ### Enhancements
+* [Rerank] Rank hits missing all `document_fields` last with a NaN score in the `ml_opensearch` rerank processor, instead of reranking them as an empty string ([#2039](https://github.com/opensearch-project/neural-search/pull/2039))
 - [SemanticHighlighter] Support lists and scalars for semantic highlighting with per-element fragments, matching built-in highlighters ([#1813](https://github.com/opensearch-project/neural-search/issues/1813))
 * [Hybrid Query] Add opt-in index setting `index.neural_search.hybrid_collapse_distinct_groups_enabled` to make collapse return top-`size` distinct groups instead of deduplicated top-`size` documents ([#1947](https://github.com/opensearch-project/neural-search/issues/1947))
 * [Hybrid Query] Allow `sort: [_score, <field>]` with `collapse`, using the field to break exact `_score` ties so the collapsed group head is deterministic ([#1984](https://github.com/opensearch-project/neural-search/issues/1984))
