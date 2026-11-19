@@ -32,11 +32,11 @@ public final class MinClusterVersionUtil {
     public static final Version MINIMAL_SUPPORTED_VERSION_METRICS_STATS = Version.V_3_3_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_NEURAL_KNN_QUERY_BUILDER = Version.V_3_0_0;
     private static final Version MINIMAL_SUPPORTED_VERSION_AGENTIC_EMBEDDING_MODEL_ID = Version.V_3_6_0;
-    // The release that ships the hybrid query's fused mode. HybridQueryBuilder#doWriteTo writes the fusion presence flag to
-    // every peer at this stream version or later, classic hybrid included, so it has to name a release that reads it: a
-    // released 3.9 node has no fused-mode code. Held to by
-    // HybridQueryFusedFanOutTests#testFusedModeMinimumVersion_isNotBehindTheVersionUnderDevelopment, which fails as soon as
-    // the version under development moves past it without the feature having shipped (issue 2002).
+    // The release that shipped the hybrid query's fused mode. HybridQueryBuilder#doWriteTo writes the fusion presence flag
+    // to every peer at this stream version or later, classic hybrid included, so it has to name a release that reads it: a
+    // released 3.9 node has no fused-mode code. Frozen now that 3.10.0 is out — raising it refuses fused mode on 3.10 nodes
+    // that can run it, lowering it admits nodes that cannot read the presence flag. Held to by
+    // HybridQueryFusedFanOutTests#testFusedModeMinimumVersion_namesTheReleaseThatShippedFusedMode.
     public static final Version MINIMAL_SUPPORTED_VERSION_FUSED_MODE_IN_HYBRID_QUERY = Version.V_3_10_0;
     public static final Version MINIMAL_SUPPORTED_VERSION_SPARSE_NATIVE_ENGINE = Version.V_3_9_0;
 
